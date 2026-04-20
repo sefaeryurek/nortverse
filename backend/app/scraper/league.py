@@ -1,132 +1,143 @@
 """Lig sayfasından tüm maç ID'lerini çeker.
 
-URL formatı:
-- Güncel sezon: https://football.nowgoal26.com/league/{LEAGUE_ID}
-- Geçmiş sezon: https://football.nowgoal26.com/league/{SEASON}/{LEAGUE_ID}
+Yaklaşım: HTML scraping değil, doğrudan JSON API.
+Nowgoal lig sayfası verileri şu formattan yükler:
+  https://football.nowgoal26.com/jsData/matchResult/json/{SEASON}/s{LEAGUE_ID}_en.json
 
-Sayfa JS-render gerektiriyor. Playwright ile açılıp maç ID'leri çıkarılır.
+Yapı:
+  data['ScheduleList'] = {'R_1': [maç, maç, ...], 'R_2': [...], ...}
+  maç[0] = match_id (int)
+
+Sezon listesi için:
+  https://football.nowgoal26.com/jsData/leagueSeason/sea{LEAGUE_ID}.json
 """
 
 from __future__ import annotations
 
+import json
 import logging
-import re
-from datetime import datetime
-from pathlib import Path
 
 from bs4 import BeautifulSoup
 
 from app.config import SCRAPER
-from app.scraper.browser import browser_context, close_ad_overlay, goto_with_retry
+from app.scraper.browser import browser_context, goto_with_retry
 
 log = logging.getLogger(__name__)
 
-_LEAGUE_BASE = "https://football.nowgoal26.com/league"
-
-# tr id="tr_MATCHID" veya onclick="...MATCHID..." gibi pattern'lar
-_TR_ID_RE = re.compile(r"^tr_(\d+)$")
-_ONCLICK_ID_RE = re.compile(r'analysis\((\d+)\s*,')
-_H2H_HREF_RE = re.compile(r"/match/h2h-(\d+)")
+_JSON_BASE = "https://football.nowgoal26.com/jsData/matchResult/json"
+_SEASON_BASE = "https://football.nowgoal26.com/jsData/leagueSeason"
 
 
-def _extract_match_ids(html: str) -> list[str]:
-    """HTML'den maç ID'lerini çıkar. Birden fazla strateji dener."""
+async def _fetch_json(url: str, ctx=None) -> dict | list:
+    """Verilen URL'deki JSON'u Playwright ile çek ve döndür."""
+
+    async def _get(ctx_) -> str:
+        page = await ctx_.new_page()
+        await goto_with_retry(page, url)
+        await page.wait_for_timeout(2000)
+        content = await page.content()
+        await page.close()
+        return content
+
+    if ctx is not None:
+        html = await _get(ctx)
+    else:
+        async with browser_context() as new_ctx:
+            html = await _get(new_ctx)
+
     soup = BeautifulSoup(html, "lxml")
-    ids: list[str] = []
-    seen: set[str] = set()
-
-    def _add(mid: str) -> None:
-        if mid and mid not in seen:
-            seen.add(mid)
-            ids.append(mid)
-
-    # Strateji 1: <tr id="tr_XXXXXX"> pattern'ı (fixture sayfasına benzer)
-    for tr in soup.find_all("tr", id=_TR_ID_RE):
-        m = _TR_ID_RE.match(tr.get("id", ""))
-        if m:
-            _add(m.group(1))
-
-    # Strateji 2: onclick="...analysis(MATCHID, ..." gibi attribute
-    for el in soup.find_all(onclick=True):
-        m = _ONCLICK_ID_RE.search(el.get("onclick", ""))
-        if m:
-            _add(m.group(1))
-
-    # Strateji 3: /match/h2h-MATCHID linkleri
-    for a in soup.find_all("a", href=_H2H_HREF_RE):
-        m = _H2H_HREF_RE.search(a.get("href", ""))
-        if m:
-            _add(m.group(1))
-
-    # Strateji 4: data-mid veya data-id attribute'ları
-    for el in soup.find_all(attrs={"data-mid": True}):
-        _add(el.get("data-mid", ""))
-    for el in soup.find_all(attrs={"data-id": True}):
-        _add(el.get("data-id", ""))
-
-    log.info("Sayfadan %d maç ID'si çıkarıldı", len(ids))
-    return ids
+    pre = soup.find("pre")
+    raw = pre.get_text() if pre else html
+    return json.loads(raw)
 
 
-def _save_debug_html(label: str, html: str) -> Path:
-    debug_dir = SCRAPER.debug_dir
-    debug_dir.mkdir(parents=True, exist_ok=True)
-    path = debug_dir / f"league_{label}_{datetime.now():%Y%m%d_%H%M%S}.html"
-    path.write_text(html, encoding="utf-8")
-    log.info("Lig sayfası HTML debug'e kaydedildi: %s", path)
-    return path
+async def fetch_league_seasons(league_id: int, ctx=None) -> list[str]:
+    """Bir lig için mevcut sezon listesini döndür.
+
+    Örnek dönüş: ["2024-2025", "2023-2024", "2022-2023", ...]
+    """
+    url = f"{_SEASON_BASE}/sea{league_id}.json"
+    log.info("Sezon listesi çekiliyor: %s", url)
+    try:
+        data = await _fetch_json(url, ctx=ctx)
+        if isinstance(data, list):
+            # [{season: "2024-2025", ...}, ...] veya ["2024-2025", ...] olabilir
+            seasons = []
+            for item in data:
+                if isinstance(item, dict):
+                    s = item.get("season") or item.get("Season") or item.get("s")
+                    if s:
+                        seasons.append(str(s))
+                elif isinstance(item, (str, int)):
+                    seasons.append(str(item))
+            return seasons
+        elif isinstance(data, dict):
+            return [str(v) for v in data.values() if isinstance(v, str)]
+    except Exception as e:
+        log.warning("Sezon listesi alınamadı: %s", e)
+    return []
 
 
 async def fetch_league_match_ids(
     league_id: int,
     season: str | None = None,
     ctx=None,
-    save_debug: bool = False,
 ) -> list[str]:
-    """Bir lig sezonunun tüm maç ID'lerini döner.
+    """Bir lig sezonunun tüm maç ID'lerini döndür.
 
     Args:
         league_id: Nowgoal lig ID'si (örn: 36 = ENG PR)
-        season: "2024-2025" formatında sezon, None ise güncel sezon
+        season: "2024-2025" formatında sezon, None ise güncel sezon alınır
         ctx: Varolan BrowserContext. None ise yeni browser açılır.
-        save_debug: True ise ham HTML debug klasörüne kaydedilir.
 
     Returns:
-        Maç ID string listesi (sıra: sayfada göründüğü sıra)
+        Maç ID string listesi
     """
-    if season:
-        url = f"{_LEAGUE_BASE}/{season}/{league_id}"
-    else:
-        url = f"{_LEAGUE_BASE}/{league_id}"
+    if season is None:
+        # Güncel sezonu sezon listesinden al
+        seasons = await fetch_league_seasons(league_id, ctx=ctx)
+        if seasons:
+            season = seasons[0]
+            log.info("Güncel sezon: %s", season)
+        else:
+            log.error("Sezon bilgisi alınamadı, league_id=%d", league_id)
+            return []
 
-    log.info("Lig sayfası çekiliyor: %s", url)
+    url = f"{_JSON_BASE}/{season}/s{league_id}_en.json"
+    log.info("Lig maç verisi çekiliyor: %s", url)
 
-    async def _fetch(ctx_) -> str:
-        page = await ctx_.new_page()
-        await goto_with_retry(page, url)
-        # Sayfa JS ile render oluyor — maç satırları için bekle
-        await page.wait_for_timeout(int(SCRAPER.default_wait * 1000))
-        await close_ad_overlay(page)
-        await page.wait_for_timeout(1000)
+    try:
+        data = await _fetch_json(url, ctx=ctx)
+    except Exception as e:
+        log.error("JSON çekilemedi (%s): %s", url, e)
+        return []
 
-        # Maç satırları yüklenene kadar ek bekleme (table veya tr yoksa daha fazla bekle)
-        try:
-            await page.wait_for_selector("tr[id], td[onclick], a[href*='/match/h2h-']", timeout=10000)
-        except Exception:
-            log.warning("Maç satırları bulunamadı, devam ediliyor...")
+    if not isinstance(data, dict):
+        log.error("Beklenmedik JSON formatı: %s", type(data))
+        return []
 
-        html = await page.content()
-        await page.close()
-        return html
+    schedule = data.get("ScheduleList", {})
+    if not schedule:
+        log.warning("ScheduleList boş, veri yok")
+        return []
 
-    if ctx is not None:
-        html = await _fetch(ctx)
-    else:
-        async with browser_context() as new_ctx:
-            html = await _fetch(new_ctx)
+    match_ids: list[str] = []
+    for round_key, matches in schedule.items():
+        if not isinstance(matches, list):
+            continue
+        for match in matches:
+            if isinstance(match, list) and match:
+                match_ids.append(str(match[0]))
+            elif isinstance(match, dict):
+                mid = match.get("id") or match.get("matchId") or match.get("mid")
+                if mid:
+                    match_ids.append(str(mid))
 
-    if save_debug or not _extract_match_ids(html):
-        label = f"{league_id}_{season or 'current'}"
-        _save_debug_html(label, html)
-
-    return _extract_match_ids(html)
+    log.info(
+        "Lig %d / %s: %d round, %d maç ID çekildi",
+        league_id,
+        season,
+        len(schedule),
+        len(match_ids),
+    )
+    return match_ids

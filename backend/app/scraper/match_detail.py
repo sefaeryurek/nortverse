@@ -47,49 +47,44 @@ def _text_of(el: Optional[Tag]) -> str:
     return el.get_text(strip=True)
 
 
+_HT_IN_VS_RE = re.compile(r"\(\s*(\d+)\s*-\s*(\d+)\s*,")  # "( 0-0 , 1-0 )" → HT
+
+
 def _extract_main_match_score(
     soup: BeautifulSoup,
 ) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
     """Ana maçın FT ve HT skorlarını çıkar (bitmiş maçlar için).
 
-    Nowgoal h2h sayfasında bitmiş maçlarda skor .score / .fscore_v veya
-    .fbheader içindeki <span class="score"> gibi elementlerde bulunur.
-    Bitmemiş maç veya skor bulunamazsa (None, None, None, None) döner.
+    Sayfa yapısı (.fbheader içinde):
+      <div class="score">1</div>   ← home FT
+      <span class="vs/end">1 Finished ( 0-0 , 1-0 ) 0</span>  ← HT ilk parantez
+      <div class="score">0</div>   ← away FT
+
+    Bitmemiş maç: .score elementleri yoktur veya boştur.
     Returns: (ft_home, ft_away, ht_home, ht_away)
     """
     ft_home = ft_away = ht_home = ht_away = None
 
-    # Önce .score_box, .matchScore, .score, [class*="score"] gibi alanları dene
-    candidates = [
-        ".score_box",
-        ".matchScore",
-        ".score",
-        ".fscore_v",
-        "[class*='score_v']",
-        ".score",
-    ]
-    score_el = None
-    for sel in candidates:
-        score_el = soup.select_one(sel)
-        if score_el:
-            break
+    fbheader = soup.select_one(".fbheader")
+    if fbheader is None:
+        return ft_home, ft_away, ht_home, ht_away
 
-    # Fallback: fbheader içinde skor metnini ara
-    if score_el is None:
-        fbheader = soup.select_one(".fbheader")
-        if fbheader:
-            score_el = fbheader
+    # FT: iki ayrı .score div'i
+    score_divs = fbheader.select(".score")
+    if len(score_divs) >= 2:
+        try:
+            ft_home = int(score_divs[0].get_text(strip=True))
+            ft_away = int(score_divs[1].get_text(strip=True))
+        except (ValueError, IndexError):
+            ft_home = ft_away = None
 
-    if score_el:
-        text = score_el.get_text(" ", strip=True)
-        m = _SCORE_FT_RE.search(text)
+    # HT: .vs veya .end span içindeki "( HT_home-HT_away , ..." formatı
+    vs_el = fbheader.select_one(".vs, .end")
+    if vs_el:
+        m = _HT_IN_VS_RE.search(vs_el.get_text(" ", strip=True))
         if m:
-            ft_home = int(m.group(1))
-            ft_away = int(m.group(2))
-        m2 = _SCORE_HT_RE.search(text)
-        if m2:
-            ht_home = int(m2.group(1))
-            ht_away = int(m2.group(2))
+            ht_home = int(m.group(1))
+            ht_away = int(m.group(2))
 
     return ft_home, ft_away, ht_home, ht_away
 
