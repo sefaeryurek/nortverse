@@ -1,6 +1,42 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
 # Nortverse — Claude Code için Proje Brifingi
 
 Bu dosya Claude Code'un projeyi anlaması için hazırlandı. Devam eden bir proje ve önceki sohbetteki tüm kararlar burada.
+
+## Komutlar
+
+Tüm komutlar `backend/` dizininden çalıştırılır:
+
+```bash
+cd backend
+
+# Bağımlılıkları yükle (ilk kurulum)
+pip install -r requirements.txt
+python -m playwright install chromium
+
+# Testler
+python -m pytest                        # tüm testler
+python -m pytest tests/test_analysis.py::test_oran_hesaplama  # tek test
+python -m pytest -v                     # verbose
+
+# Linting
+python -m ruff check app/
+python -m ruff check app/ --fix        # otomatik düzelt
+
+# CLI
+python -m app.cli.main fetch-fixture                    # bugünün hot maçları
+python -m app.cli.main fetch-fixture --date 2026-04-20  # belirli gün
+python -m app.cli.main fetch-fixture --all              # gizli dahil tüm maçlar
+python -m app.cli.main analyze 2813084                  # tek maç analizi
+python -m app.cli.main analyze 2813084 --ratios         # 35 skorun tüm oranları
+python -m app.cli.main analyze-debug 2813084            # Excel karşılaştırma için
+python -m app.cli.main fetch-and-analyze                # çek + analiz et
+```
 
 ## Proje Nedir?
 
@@ -134,10 +170,12 @@ Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-d
 
 ## Sprint 2 Planı (Sıradaki)
 
-1. SQLite kurulumu (başlangıç), sonra Supabase Postgres'e geçiş
-2. SQLAlchemy modelleri + Alembic migration
-3. Tablolar: leagues, teams, matches, archive_1, archive_2
-4. Pipeline: fetch → analyze → persist (idempotent)
+**Karar:** Doğrudan Supabase PostgreSQL (SQLite atlanıyor — Supabase hesabı mevcut).
+
+1. `python-dotenv` + `.env` ile Supabase bağlantı dizesi
+2. SQLAlchemy modelleri (`db/models.py`) + Alembic migration
+3. Tablolar: `leagues`, `teams`, `matches`, `archive_1`, `archive_2`
+4. Pipeline: fetch → analyze → persist (idempotent, `match_id` unique constraint)
 5. `run-pipeline` CLI komutu
 6. Browser tek kere açılıp tüm maçlar için kullanılması (şu an her maç için ayrı browser açılıyor, yavaş)
 

@@ -573,6 +573,33 @@ def fetch_and_analyze_cmd(
     asyncio.run(_run())
 
 
+@app.command("run-pipeline")
+def run_pipeline_cmd(
+    target_date: Optional[str] = typer.Option(None, "--date", help="YYYY-MM-DD. Boşsa bugün."),
+    all_matches: bool = typer.Option(False, "--all", help="Hot değil, tüm maçlar"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Hot maçları çek → analiz et → Supabase'e kaydet."""
+    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+
+    dt: Optional[date] = None
+    if target_date:
+        dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+
+    from app.pipeline import run_pipeline
+
+    async def _run() -> None:
+        stats = await run_pipeline(target_date=dt, only_hot=not _flag(all_matches))
+        console.print(
+            f"\n[bold green]Pipeline tamamlandı:[/bold green] "
+            f"[green]{stats['analyzed']} kaydedildi[/green] · "
+            f"[yellow]{stats['skipped']} atlandı[/yellow] · "
+            f"[red]{stats['errors']} hata[/red]"
+        )
+
+    asyncio.run(_run())
+
+
 @app.command()
 def version() -> None:
     from app import __version__

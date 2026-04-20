@@ -241,19 +241,29 @@ def _save_debug_html(match_id: str, html: str) -> None:
     log.info("H2H HTML debug'e kaydedildi: %s", path)
 
 
-async def fetch_match_detail(match_id: str) -> MatchRawData:
-    """Verilen maç ID için H2H sayfasından detay veriyi çek."""
+async def fetch_match_detail(match_id: str, ctx=None) -> MatchRawData:
+    """Verilen maç ID için H2H sayfasından detay veriyi çek.
+
+    ctx: Varolan BrowserContext (pipeline'dan gelir). None ise yeni browser açılır.
+    """
     url = SCRAPER.base_url + SCRAPER.match_detail_path.format(match_id=match_id)
     log.info("Match detail çekiliyor: %s", url)
 
-    async with browser_context() as ctx:
-        page = await ctx.new_page()
+    async def _fetch(ctx_) -> str:
+        page = await ctx_.new_page()
         await goto_with_retry(page, url)
         await page.wait_for_timeout(int(SCRAPER.default_wait * 1000))
         await close_ad_overlay(page)
         await page.wait_for_timeout(1000)
-
         html = await page.content()
+        await page.close()
+        return html
+
+    if ctx is not None:
+        html = await _fetch(ctx)
+    else:
+        async with browser_context() as new_ctx:
+            html = await _fetch(new_ctx)
 
     soup = BeautifulSoup(html, "lxml")
 

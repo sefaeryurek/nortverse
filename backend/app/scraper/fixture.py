@@ -165,45 +165,62 @@ def _parse_fixture_html(html: str, only_hot: bool = True) -> list[FixtureMatch]:
     return matches
 
 
+async def _fetch_fixture_with_ctx(
+    ctx,
+    url: str,
+    only_hot: bool,
+) -> str:
+    """Verilen browser context ile fixture sayfasının HTML'ini çeker."""
+    page = await ctx.new_page()
+    await goto_with_retry(page, url)
+
+    try:
+        await page.wait_for_selector('tr[id^="tr1_"]', timeout=10000)
+    except Exception:
+        log.warning("Maç satırları beklenen sürede yüklenmedi, devam ediliyor")
+    await page.wait_for_timeout(int(SCRAPER.default_wait * 1000))
+
+    await close_ad_overlay(page)
+
+    if only_hot:
+        try:
+            await page.click("#li_FilterHot")
+            await page.wait_for_timeout(2000)
+            log.debug("Hot filtresi aktive edildi")
+        except Exception as e:
+            log.warning("Hot filtresi tıklanamadı: %s", e)
+
+    html = await page.content()
+    await page.close()
+
+    if SCRAPER.save_html_on_error:
+        SCRAPER.debug_dir.mkdir(parents=True, exist_ok=True)
+        debug_path = (
+            SCRAPER.debug_dir / f"fixture_{datetime.now():%Y%m%d_%H%M%S}.html"
+        )
+        debug_path.write_text(html, encoding="utf-8")
+        log.debug("HTML kaydedildi: %s", debug_path)
+
+    return html
+
+
 async def fetch_fixture(
     target_date: Optional[date] = None,
     only_hot: bool = True,
+    ctx=None,
 ) -> list[FixtureMatch]:
-    """Nowgoal26 fixture sayfasından maç listesini çeker."""
+    """Nowgoal26 fixture sayfasından maç listesini çeker.
+
+    ctx: Varolan BrowserContext (pipeline'dan gelir). None ise yeni browser açılır.
+    """
     url = _build_fixture_url(target_date)
     log.info("Fixture çekiliyor: %s (only_hot=%s)", url, only_hot)
 
-    async with browser_context() as ctx:
-        page = await ctx.new_page()
-        await goto_with_retry(page, url)
-
-        # Maç listesinin yüklenmesini bekle (AJAX ile geliyor olabilir)
-        try:
-            await page.wait_for_selector('tr[id^="tr1_"]', timeout=10000)
-        except Exception:
-            log.warning("Maç satırları beklenen sürede yüklenmedi, devam ediliyor")
-        await page.wait_for_timeout(int(SCRAPER.default_wait * 1000))
-
-        await close_ad_overlay(page)
-
-        if only_hot:
-            # Sayfa "Show All" modunda açılıyor; Hot filtresini aktive et.
-            try:
-                await page.click("#li_FilterHot")
-                await page.wait_for_timeout(2000)  # JS'nin display:none uygulaması için
-                log.debug("Hot filtresi aktive edildi")
-            except Exception as e:
-                log.warning("Hot filtresi tıklanamadı: %s", e)
-
-        html = await page.content()
-
-        if SCRAPER.save_html_on_error:
-            SCRAPER.debug_dir.mkdir(parents=True, exist_ok=True)
-            debug_path = (
-                SCRAPER.debug_dir / f"fixture_{datetime.now():%Y%m%d_%H%M%S}.html"
-            )
-            debug_path.write_text(html, encoding="utf-8")
-            log.debug("HTML kaydedildi: %s", debug_path)
+    if ctx is not None:
+        html = await _fetch_fixture_with_ctx(ctx, url, only_hot)
+    else:
+        async with browser_context() as new_ctx:
+            html = await _fetch_fixture_with_ctx(new_ctx, url, only_hot)
 
     matches = _parse_fixture_html(html, only_hot=only_hot)
     log.info("Fixture: %d maç bulundu (only_hot=%s)", len(matches), only_hot)
