@@ -52,18 +52,19 @@ python -m app.cli.main build-archive --league 36 --season 2024-2025 --season 202
 ## Git & GitHub — Claude Code için Zorunlu Kurallar
 
 > **Bu kurallar Claude Code'a yöneliktir. Her çalışma seansında eksiksiz uygulanacak.**
+> **Hiçbir çalışma sadece local'de kalmamalı. Commit atılmadan ve push yapılmadan seans bitirilmez.**
 
-### Commit + Push Sıklığı
+### Ne Zaman Commit + Push Yapılır
 
-Claude Code çalışırken **aşağıdaki her durumda** commit atıp `git push origin master` ile GitHub'a gönderecek:
+Claude Code çalışırken **aşağıdaki her durumda** commit atıp `git push origin master` ile GitHub'a gönder:
 
-- Bir özellik veya düzeltme çalışır hale geldiğinde
-- Bir bug giderildiğinde
-- Sprint tamamlandığında
-- CLAUDE.md güncellendiğinde
-- Uzun bir çalışma seansının sonunda
+- Bir özellik veya düzeltme çalışır hale geldiğinde → hemen commit + push
+- Bir bug giderildiğinde → hemen commit + push
+- Sprint tamamlandığında → commit + push
+- CLAUDE.md güncellendiğinde → commit + push
+- Uzun bir çalışma seansının sonunda → mutlaka commit + push
 
-**Hiçbir çalışma sadece local'de kalmamalı.** Commit atılmadan seans bitirilmez.
+Sebep: "Yaptığımız çalışmaları ve durumu asla kaybetmeyelim." Her commit GitHub'da kalıcı bir kontrol noktasıdır.
 
 ### Remote
 
@@ -71,16 +72,21 @@ Claude Code çalışırken **aşağıdaki her durumda** commit atıp `git push o
 https://github.com/sefaeryurek/nortverse.git  (branch: master)
 ```
 
-### Commit Mesajı Formatı
+### Commit Mesajı Formatı — TEMİZ ve AÇIK Olmalı
+
+Commit mesajı, 6 ay sonra bakıldığında ne yapıldığını tek satırda anlatmalı:
 
 ```
-Sprint X: Kısa başlık (ne yapıldı)
+Sprint X: Ne yapıldı (kısa, Türkçe)
 
-- Değişiklik 1
-- Değişiklik 2
+- Değişiklik 1 — neden yapıldı
+- Değişiklik 2 — neden yapıldı
 
-Durum: Tamamlandı / Devam ediyor
+Durum: Tamamlandı / Devam ediyor / Test bekleniyor
 ```
+
+**Kötü mesaj:** `fix`, `update`, `değişiklik`
+**İyi mesaj:** `Sprint 3: league.py JSON API ile yeniden yazıldı — HTML scraping çalışmıyordu`
 
 ### Git Komutları
 
