@@ -19,6 +19,10 @@ cd backend
 pip install -r requirements.txt
 python -m playwright install chromium
 
+# Veritabanı migration
+alembic upgrade head          # son migration'ı uygula
+alembic revision --autogenerate -m "aciklama"  # yeni migration oluştur
+
 # Testler
 python -m pytest                        # tüm testler
 python -m pytest tests/test_analysis.py::test_oran_hesaplama  # tek test
@@ -36,7 +40,41 @@ python -m app.cli.main analyze 2813084                  # tek maç analizi
 python -m app.cli.main analyze 2813084 --ratios         # 35 skorun tüm oranları
 python -m app.cli.main analyze-debug 2813084            # Excel karşılaştırma için
 python -m app.cli.main fetch-and-analyze                # çek + analiz et
+python -m app.cli.main run-pipeline                     # fetch → analiz → Supabase'e kaydet
+python -m app.cli.main run-pipeline --date 2026-04-20   # belirli gün için pipeline
 ```
+
+## Git & GitHub Kuralları
+
+**Her anlamlı değişiklikten sonra commit + push zorunludur.** Hiçbir çalışma kaybolmamalı.
+
+```bash
+# Çalışma sırasında sık commit at
+git add <dosyalar>
+git commit -m "Sprint X: kısa açıklama"
+git push origin main
+
+# Push için remote yoksa bir kere kur
+git remote add origin https://github.com/sefaeryurek/nortverse.git
+git push -u origin main
+```
+
+**Commit mesajı formatı:**
+```
+Sprint X: Ne yapıldı (özet)
+
+- Madde 1
+- Madde 2
+
+Durum: Tamamlandı / Devam ediyor
+```
+
+**Ne zaman commit atılır:**
+- Yeni bir özellik çalışır hale geldiğinde
+- Bir bug düzeltildiğinde
+- Sprint tamamlandığında (mutlaka push)
+- Uzun çalışma seansı öncesi ve sonrası
+- CLAUDE.md güncellendiğinde
 
 ## Proje Nedir?
 
@@ -159,8 +197,6 @@ Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-d
 - ✅ 8/8 unit test geçiyor
 
 **Henüz Yok:**
-- ❌ Persistence (SQLite/PostgreSQL) — Sprint 2
-- ❌ ARŞIV-2 tam oran tablosu — Sprint 2
 - ❌ Katman B pattern matching — Sprint 3
 - ❌ Katman C pattern matching — Sprint 3
 - ❌ FastAPI REST endpoints — Sprint 4
@@ -168,16 +204,24 @@ Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-d
 - ❌ Premium/Auth — sonraki fazlar
 - ❌ Canlı maç + trend motoru — sonraki fazlar
 
-## Sprint 2 Planı (Sıradaki)
+## Sprint 2 — TAMAMLANDI ✅
 
-**Karar:** Doğrudan Supabase PostgreSQL (SQLite atlanıyor — Supabase hesabı mevcut).
+- Supabase PostgreSQL (eu-west-1, session pooler port 5432)
+- SQLAlchemy 2.x async + asyncpg — `app/db/`
+- `matches` tablosu: JSONB sütunlarla Katman A sonuçları + gerçek sonuç alanları
+- Alembic migration: `641438be3ff8_initial_schema`
+- Pipeline: tek browser, fetch → analiz → upsert (idempotent)
+- `run-pipeline` CLI komutu
+- İlk çalışma: 43 maçtan 35 kayıt, 8 kural dışı, 0 hata
 
-1. `python-dotenv` + `.env` ile Supabase bağlantı dizesi
-2. SQLAlchemy modelleri (`db/models.py`) + Alembic migration
-3. Tablolar: `leagues`, `teams`, `matches`, `archive_1`, `archive_2`
-4. Pipeline: fetch → analyze → persist (idempotent, `match_id` unique constraint)
-5. `run-pipeline` CLI komutu
-6. Browser tek kere açılıp tüm maçlar için kullanılması (şu an her maç için ayrı browser açılıyor, yavaş)
+## Sprint 3 Planı (Sıradaki)
+
+Katman B — Pattern Matching (ARŞIV-1):
+1. `matches` tablosundaki MS1+MSX+MS2 setlerini yeni maçla karşılaştır
+2. JSONB containment sorgusu: `ft_scores_1 @> '["1-0"]'`
+3. En az 5 eşleşme şartı
+4. Gerçek sonuçlardan istatistik: KG var %, 2.5 üst %, 1X2 dağılımı
+5. `analyze` komutuna Katman B çıktısı ekle
 
 ## Bilinen Teknik Notlar
 
