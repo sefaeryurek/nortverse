@@ -97,6 +97,12 @@ class MatchRawData(BaseModel):
     # H2H maçları
     h2h_matches: list[HistoricalMatch] = Field(default_factory=list)
 
+    # Bitmiş maç için gerçek skor (arşiv için)
+    actual_ft_home: Optional[int] = None
+    actual_ft_away: Optional[int] = None
+    actual_ht_home: Optional[int] = None
+    actual_ht_away: Optional[int] = None
+
 
 class PeriodAnalysis(BaseModel):
     """Bir periyodun (HT/2H/FT) analiz sonucu."""

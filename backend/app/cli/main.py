@@ -25,6 +25,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from app.analysis import analyze_match, check_match_filters
+from app.analysis.pattern_b import PatternBResult, find_pattern_b_matches
 from app.analysis.scores import ALL_SCORES, MS1_SCORES, MSX_SCORES, MS2_SCORES
 from app.models import MatchAnalysisResult, MatchRawData, Period, PeriodAnalysis
 from app.scraper import fetch_fixture, fetch_match_detail
@@ -129,6 +130,23 @@ def _render_all_ratios(result: MatchAnalysisResult) -> Table:
         _row("MS2", h, a)
 
     return t
+
+
+def _render_pattern_b(b: PatternBResult, con: Optional[Console] = None) -> None:
+    """Katman B istatistiklerini konsola yazdır."""
+    c = con or console
+    c.print(
+        Panel(
+            f"Eşleşen geçmiş maç: [bold]{b.match_count}[/bold]\n"
+            f"KG Var: [cyan]{b.kg_var_pct:.0f}%[/cyan]  |  "
+            f"2.5 Üst: [cyan]{b.over_25_pct:.0f}%[/cyan]\n"
+            f"[green]1: {b.result_1_pct:.0f}%[/green]  |  "
+            f"[yellow]X: {b.result_x_pct:.0f}%[/yellow]  |  "
+            f"[red]2: {b.result_2_pct:.0f}%[/red]",
+            title="[magenta]Katman B — Pattern Matching[/magenta]",
+            border_style="magenta",
+        )
+    )
 
 
 def _render_result(result: MatchAnalysisResult, show_all_ratios: bool = False, con: Optional[Console] = None) -> None:
@@ -321,6 +339,20 @@ def analyze(
         result = analyze_match(raw, n_matches=n, threshold=threshold)
         _render_result(result, show_all_ratios=_flag(ratios), con=con)
 
+        # Katman B — pattern matching
+        try:
+            b_result = await find_pattern_b_matches(
+                ft_scores_1=result.ft.scores_1,
+                ft_scores_x=result.ft.scores_x,
+                ft_scores_2=result.ft.scores_2,
+            )
+            if b_result:
+                _render_pattern_b(b_result, con=con)
+            else:
+                con.print("[dim]Katman B: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
+        except Exception as e:
+            con.print(f"[dim]Katman B sorgusu yapılamadı: {e}[/dim]")
+
         if _flag(save):
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             txt_path = _save_text(con.export_text(), f"analyze_{match_id}_{ts}.txt")
@@ -383,6 +415,20 @@ def analyze_debug(
         # 4. Analiz + tüm oranlar (filtre fail olsa da çalışır)
         result = analyze_match(raw, n_matches=n, threshold=threshold)
         _render_result(result, show_all_ratios=True, con=con)
+
+        # Katman B — pattern matching
+        try:
+            b_result = await find_pattern_b_matches(
+                ft_scores_1=result.ft.scores_1,
+                ft_scores_x=result.ft.scores_x,
+                ft_scores_2=result.ft.scores_2,
+            )
+            if b_result:
+                _render_pattern_b(b_result, con=con)
+            else:
+                con.print("[dim]Katman B: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
+        except Exception as e:
+            con.print(f"[dim]Katman B sorgusu yapılamadı: {e}[/dim]")
 
         if _flag(save):
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -569,6 +615,82 @@ def fetch_and_analyze_cmd(
                 encoding="utf-8",
             )
             console.print(f"[dim]Kaydedildi: {txt_path}  |  {json_path}[/dim]")
+
+    asyncio.run(_run())
+
+
+@app.command("build-archive")
+def build_archive_cmd(
+    league: int = typer.Option(..., "--league", help="Nowgoal lig ID'si (örn: 36 = ENG PR)"),
+    season: list[str] = typer.Option([], "--season", help="Sezon (örn: 2024-2025). Çoklu kullanılabilir."),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Geçmiş sezon maçlarını çekip DB'ye arşivle.
+
+    Örnekler:
+        build-archive --league 36 --season 2024-2025
+        build-archive --league 36 --season 2024-2025 --season 2023-2024
+        build-archive --league 36   (güncel sezon)
+    """
+    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+
+    from app.analysis.pattern_b import find_pattern_b_matches  # noqa (already imported)
+    from app.pipeline.runner import _upsert
+    from app.scraper.browser import browser_context
+    from app.scraper.league import fetch_league_match_ids
+
+    seasons = season if season else [None]  # type: ignore[list-item]
+
+    async def _run() -> None:
+        stats = {"analyzed": 0, "skipped": 0, "errors": 0}
+        total_ids: list[tuple[str, str | None]] = []
+
+        async with browser_context() as ctx:
+            # Sezon(lar) için maç ID'lerini topla
+            for s in seasons:
+                label = s or "güncel sezon"
+                console.print(f"[cyan]Lig {league} / {label} maç ID'leri çekiliyor...[/cyan]")
+                ids = await fetch_league_match_ids(league_id=league, season=s, ctx=ctx)
+                console.print(f"  → {len(ids)} maç bulundu")
+                for mid in ids:
+                    total_ids.append((mid, s))
+
+            if not total_ids:
+                console.print("[yellow]Hiç maç ID'si bulunamadı. Debug HTML'ini inceleyin.[/yellow]")
+                return
+
+            console.print(f"\n[bold]{len(total_ids)} maç arşivlenecek...[/bold]\n")
+
+            for i, (mid, s) in enumerate(total_ids, 1):
+                try:
+                    console.print(f"[dim]({i}/{len(total_ids)}) {mid}...[/dim]", end="")
+                    raw = await fetch_match_detail(mid, ctx=ctx)
+                    check = check_match_filters(raw)
+                    if not check.passed:
+                        console.print(f" [yellow]atlandı ({check.reason.value})[/yellow]")
+                        stats["skipped"] += 1
+                        continue
+
+                    result = analyze_match(raw)
+                    await _upsert(result, raw)
+                    stats["analyzed"] += 1
+                    score_str = ""
+                    if raw.actual_ft_home is not None:
+                        score_str = f" | Skor: {raw.actual_ft_home}-{raw.actual_ft_away}"
+                    console.print(
+                        f" [green]kaydedildi[/green] — "
+                        f"{raw.home_team} vs {raw.away_team}{score_str}"
+                    )
+                except Exception as e:
+                    console.print(f" [red]hata: {e}[/red]")
+                    stats["errors"] += 1
+
+        console.print(
+            f"\n[bold green]Arşiv tamamlandı:[/bold green] "
+            f"[green]{stats['analyzed']} kaydedildi[/green] · "
+            f"[yellow]{stats['skipped']} atlandı[/yellow] · "
+            f"[red]{stats['errors']} hata[/red]"
+        )
 
     asyncio.run(_run())
 

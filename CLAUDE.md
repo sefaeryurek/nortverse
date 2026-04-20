@@ -42,6 +42,11 @@ python -m app.cli.main analyze-debug 2813084            # Excel karşılaştırm
 python -m app.cli.main fetch-and-analyze                # çek + analiz et
 python -m app.cli.main run-pipeline                     # fetch → analiz → Supabase'e kaydet
 python -m app.cli.main run-pipeline --date 2026-04-20   # belirli gün için pipeline
+
+# Arşiv oluşturma (Sprint 3)
+python -m app.cli.main build-archive --league 36 --season 2024-2025   # ENG PR geçmiş sezon
+python -m app.cli.main build-archive --league 36                        # güncel sezon
+python -m app.cli.main build-archive --league 36 --season 2024-2025 --season 2023-2024
 ```
 
 ## Git & GitHub — Claude Code için Zorunlu Kurallar
@@ -150,17 +155,25 @@ nortverse/
 │   ├── app/
 │   │   ├── __init__.py
 │   │   ├── config.py              # ScraperConfig, AnalysisConfig (frozen dataclass)
-│   │   ├── models.py              # Pydantic: FixtureMatch, HistoricalMatch, MatchRawData, ...
+│   │   ├── models.py              # Pydantic: FixtureMatch, HistoricalMatch, MatchRawData (+actual skorlar), ...
+│   │   ├── db/
+│   │   │   ├── connection.py      # SQLAlchemy async engine + get_session()
+│   │   │   └── models.py          # Match ORM (JSONB Katman A + actual skor alanları)
 │   │   ├── scraper/
 │   │   │   ├── browser.py         # Playwright wrapper
-│   │   │   ├── fixture.py         # Günlük bülten
-│   │   │   └── match_detail.py    # H2H sayfası parse
+│   │   │   ├── fixture.py         # Günlük bülten (Hot filtreli)
+│   │   │   ├── match_detail.py    # H2H sayfası parse + gerçek skor çıkarımı
+│   │   │   └── league.py          # Lig sayfasından maç ID listesi (arşiv için)
 │   │   ├── analysis/
 │   │   │   ├── scores.py          # ALL_SCORES sabiti, yardımcılar
 │   │   │   ├── filtering.py       # check_match_filters
-│   │   │   └── engine.py          # analyze_match (Katman A)
+│   │   │   ├── engine.py          # analyze_match (Katman A)
+│   │   │   └── pattern_b.py       # find_pattern_b_matches (Katman B, JSONB equality)
+│   │   ├── pipeline/
+│   │   │   └── runner.py          # run_pipeline: fetch → analiz → upsert
 │   │   └── cli/
-│   │       └── main.py            # Typer + Rich CLI
+│   │       └── main.py            # Typer + Rich CLI (fetch-fixture, analyze, build-archive, ...)
+│   ├── alembic/                   # DB migration
 │   ├── tests/
 │   │   └── test_analysis.py       # 8 test (hepsi geçiyor)
 │   ├── requirements.txt
@@ -200,21 +213,22 @@ nortverse/
 
 Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-detect**: h2h ve ev maçları tablolarındaki lig kodları sayılır, en çok görülen kupa/friendly olmayan kod ana maçın lig kodudur.
 
-## Mevcut Durum (Sprint 1.3)
+## Mevcut Durum (Sprint 3)
 
 **Çalışan:**
 - ✅ Fixture parser: Hot modunu aktive edip maçları doğru çekiyor (43 hot / ~252 toplam)
-- ✅ Match detail parser: takım, lig kodu, form/H2H maçları parse
+- ✅ Match detail parser: takım, lig kodu, form/H2H maçları parse + gerçek skor çıkarımı
 - ✅ İY/2Y/MS gol dağılımları doğru
 - ✅ Analiz motoru (Katman A): 105 oran hesaplaması
 - ✅ 3.5+ filtresi → MS1/MSX/MS2 listeleri
 - ✅ Kural dışı tespiti (lig/5 maç/h2h 5 maç)
-- ✅ CLI: `fetch-fixture`, `analyze`, `analyze-debug`, `fetch-and-analyze`
+- ✅ CLI: `fetch-fixture`, `analyze`, `analyze-debug`, `fetch-and-analyze`, `run-pipeline`, `build-archive`
 - ✅ 8/8 unit test geçiyor
+- ✅ Katman B pattern matching: `analyze` komutunda DB eşleşme istatistiği gösterilir
+- ✅ `build-archive`: lig sayfasından geçmiş maç ID'leri → analiz → DB (gerçek skor dahil)
 
 **Henüz Yok:**
-- ❌ Katman B pattern matching — Sprint 3
-- ❌ Katman C pattern matching — Sprint 3
+- ❌ Katman C pattern matching (ARŞIV-2, 105 ham oran ±0.5 eşleşme) — Sprint 4
 - ❌ FastAPI REST endpoints — Sprint 4
 - ❌ Frontend (Next.js) — Sprint 5
 - ❌ Premium/Auth — sonraki fazlar
@@ -230,19 +244,20 @@ Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-d
 - `run-pipeline` CLI komutu
 - İlk çalışma: 43 maçtan 35 kayıt, 8 kural dışı, 0 hata
 
-## Sprint 3 Planı (Sıradaki)
+## Sprint 3 — TAMAMLANDI ✅
 
-Katman B — Pattern Matching (ARŞIV-1):
-1. `matches` tablosundaki MS1+MSX+MS2 setlerini yeni maçla karşılaştır
-2. JSONB containment sorgusu: `ft_scores_1 @> '["1-0"]'`
-3. En az 5 eşleşme şartı
-4. Gerçek sonuçlardan istatistik: KG var %, 2.5 üst %, 1X2 dağılımı
-5. `analyze` komutuna Katman B çıktısı ekle
+- `_extract_main_match_score()`: bitmiş maçların gerçek skorunu h2h sayfasından çıkarır
+- `MatchRawData`'ya `actual_ft_home/away`, `actual_ht_home/away` alanları eklendi
+- `app/scraper/league.py`: `fetch_league_match_ids(league_id, season, ctx)` — lig sayfasından maç ID listesi
+- `app/analysis/pattern_b.py`: `find_pattern_b_matches()` — JSONB equality sorgusu, `PatternBResult` dataclass
+- `build-archive` CLI komutu: lig+sezon → tüm maç ID → fetch+analiz+upsert (gerçek skor dahil)
+- `analyze` ve `analyze-debug` komutları Katman B panelini gösteriyor
 
 ## Bilinen Teknik Notlar
 
 - **Typer 0.12.5 + Python 3.11 bug:** `bool` type annotation'lı Option'lar string `'False'` veya `None` dönebiliyor. `cli/main.py`'de `_flag()` yardımcısı bu sorunu çözüyor. Typer güncellenirse `_flag()` kaldırılabilir.
-- **Playwright tarayıcısı:** Her `fetch_fixture` çağrısında yeni browser açılıp kapanıyor. Sprint 2'de tek browser ile tüm maçlar işlenecek (şu an yavaş).
+- **Playwright tarayıcısı:** `browser_context()` context manager ile tek browser açılıp kapanıyor. Pipeline ve `build-archive` bu context'i tüm maçlarda paylaşır (tek seferlik browser).
+- **Lig sayfası HTML yapısı:** `football.nowgoal26.com/league/{ID}` sayfası JS-render. `league.py` 4 farklı stratejiyle maç ID çıkarır; hiç bulamazsa debug HTML kaydeder — ID'lerin nasıl gömüldüğünü oradan kontrol et.
 
 ## Teknoloji Kararları
 

@@ -47,6 +47,53 @@ def _text_of(el: Optional[Tag]) -> str:
     return el.get_text(strip=True)
 
 
+def _extract_main_match_score(
+    soup: BeautifulSoup,
+) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
+    """Ana maçın FT ve HT skorlarını çıkar (bitmiş maçlar için).
+
+    Nowgoal h2h sayfasında bitmiş maçlarda skor .score / .fscore_v veya
+    .fbheader içindeki <span class="score"> gibi elementlerde bulunur.
+    Bitmemiş maç veya skor bulunamazsa (None, None, None, None) döner.
+    Returns: (ft_home, ft_away, ht_home, ht_away)
+    """
+    ft_home = ft_away = ht_home = ht_away = None
+
+    # Önce .score_box, .matchScore, .score, [class*="score"] gibi alanları dene
+    candidates = [
+        ".score_box",
+        ".matchScore",
+        ".score",
+        ".fscore_v",
+        "[class*='score_v']",
+        ".score",
+    ]
+    score_el = None
+    for sel in candidates:
+        score_el = soup.select_one(sel)
+        if score_el:
+            break
+
+    # Fallback: fbheader içinde skor metnini ara
+    if score_el is None:
+        fbheader = soup.select_one(".fbheader")
+        if fbheader:
+            score_el = fbheader
+
+    if score_el:
+        text = score_el.get_text(" ", strip=True)
+        m = _SCORE_FT_RE.search(text)
+        if m:
+            ft_home = int(m.group(1))
+            ft_away = int(m.group(2))
+        m2 = _SCORE_HT_RE.search(text)
+        if m2:
+            ht_home = int(m2.group(1))
+            ht_away = int(m2.group(2))
+
+    return ft_home, ft_away, ht_home, ht_away
+
+
 def _extract_main_match_info(soup: BeautifulSoup) -> tuple[str, str, str, str]:
     """Ana maç bilgisi: home, away, league_code, league_full_name.
 
@@ -269,6 +316,7 @@ async def fetch_match_detail(match_id: str, ctx=None) -> MatchRawData:
 
     # Ana maç bilgisi
     home, away, _, league_full = _extract_main_match_info(soup)
+    actual_ft_home, actual_ft_away, actual_ht_home, actual_ht_away = _extract_main_match_score(soup)
 
     if not home or not away:
         log.warning("Takım isimleri çıkarılamadı (match_id=%s)", match_id)
@@ -302,6 +350,10 @@ async def fetch_match_detail(match_id: str, ctx=None) -> MatchRawData:
         h2h_matches=h2h,
         home_league_match_count=home_league_count,
         away_league_match_count=away_league_count,
+        actual_ft_home=actual_ft_home,
+        actual_ft_away=actual_ft_away,
+        actual_ht_home=actual_ht_home,
+        actual_ht_away=actual_ht_away,
     )
 
     log.info(
