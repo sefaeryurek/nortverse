@@ -44,9 +44,9 @@ python -m app.cli.main run-pipeline                     # fetch → analiz → S
 python -m app.cli.main run-pipeline --date 2026-04-20   # belirli gün için pipeline
 
 # Arşiv oluşturma (Sprint 3)
-python -m app.cli.main build-archive --league 36 --season 2024-2025   # ENG PR geçmiş sezon
-python -m app.cli.main build-archive --league 36                        # güncel sezon
-python -m app.cli.main build-archive --league 36 --season 2024-2025 --season 2023-2024
+# Syntax: build-archive <LEAGUE_ID> [SEZON]
+python -m app.cli.main build-archive 36 2024-2025   # ENG PR 2024-2025 sezonu
+python -m app.cli.main build-archive 36              # güncel sezon
 ```
 
 ## Git & GitHub — Claude Code için Zorunlu Kurallar

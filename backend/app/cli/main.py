@@ -621,36 +621,34 @@ def fetch_and_analyze_cmd(
 
 @app.command("build-archive")
 def build_archive_cmd(
-    league: int = typer.Option(..., "--league", help="Nowgoal lig ID'si (örn: 36 = ENG PR)"),
-    season: list[str] = typer.Option([], "--season", help="Sezon (örn: 2024-2025). Çoklu kullanılabilir."),
+    league: str = typer.Argument(..., help="Nowgoal lig ID'si (örn: 36 = ENG PR)"),
+    season: Optional[str] = typer.Argument(None, help="Sezon (örn: 2024-2025). Boşsa güncel sezon."),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Geçmiş sezon maçlarını çekip DB'ye arşivle.
 
     Örnekler:
-        build-archive --league 36 --season 2024-2025
-        build-archive --league 36 --season 2024-2025 --season 2023-2024
-        build-archive --league 36   (güncel sezon)
+        build-archive 36 2024-2025
+        build-archive 36   (güncel sezon)
     """
     _setup_logging("DEBUG" if _flag(verbose) else "INFO")
 
-    from app.analysis.pattern_b import find_pattern_b_matches  # noqa (already imported)
     from app.pipeline.runner import _upsert
     from app.scraper.browser import browser_context
     from app.scraper.league import fetch_league_match_ids
 
-    seasons = season if season else [None]  # type: ignore[list-item]
+    league_id = int(league)
+    seasons = [season] if season else [None]
 
     async def _run() -> None:
         stats = {"analyzed": 0, "skipped": 0, "errors": 0}
         total_ids: list[tuple[str, str | None]] = []
 
         async with browser_context() as ctx:
-            # Sezon(lar) için maç ID'lerini topla
             for s in seasons:
                 label = s or "güncel sezon"
-                console.print(f"[cyan]Lig {league} / {label} maç ID'leri çekiliyor...[/cyan]")
-                ids = await fetch_league_match_ids(league_id=league, season=s, ctx=ctx)
+                console.print(f"[cyan]Lig {league_id} / {label} maç ID'leri çekiliyor...[/cyan]")
+                ids = await fetch_league_match_ids(league_id=league_id, season=s, ctx=ctx)
                 console.print(f"  → {len(ids)} maç bulundu")
                 for mid in ids:
                     total_ids.append((mid, s))
