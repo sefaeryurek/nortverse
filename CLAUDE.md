@@ -44,37 +44,53 @@ python -m app.cli.main run-pipeline                     # fetch → analiz → S
 python -m app.cli.main run-pipeline --date 2026-04-20   # belirli gün için pipeline
 ```
 
-## Git & GitHub Kuralları
+## Git & GitHub — Claude Code için Zorunlu Kurallar
 
-**Her anlamlı değişiklikten sonra commit + push zorunludur.** Hiçbir çalışma kaybolmamalı.
+> **Bu kurallar Claude Code'a yöneliktir. Her çalışma seansında eksiksiz uygulanacak.**
 
-```bash
-# Çalışma sırasında sık commit at
-git add <dosyalar>
-git commit -m "Sprint X: kısa açıklama"
-git push origin main
+### Commit + Push Sıklığı
 
-# Push için remote yoksa bir kere kur
-git remote add origin https://github.com/sefaeryurek/nortverse.git
-git push -u origin main
+Claude Code çalışırken **aşağıdaki her durumda** commit atıp `git push origin master` ile GitHub'a gönderecek:
+
+- Bir özellik veya düzeltme çalışır hale geldiğinde
+- Bir bug giderildiğinde
+- Sprint tamamlandığında
+- CLAUDE.md güncellendiğinde
+- Uzun bir çalışma seansının sonunda
+
+**Hiçbir çalışma sadece local'de kalmamalı.** Commit atılmadan seans bitirilmez.
+
+### Remote
+
+```
+https://github.com/sefaeryurek/nortverse.git  (branch: master)
 ```
 
-**Commit mesajı formatı:**
-```
-Sprint X: Ne yapıldı (özet)
+### Commit Mesajı Formatı
 
-- Madde 1
-- Madde 2
+```
+Sprint X: Kısa başlık (ne yapıldı)
+
+- Değişiklik 1
+- Değişiklik 2
 
 Durum: Tamamlandı / Devam ediyor
 ```
 
-**Ne zaman commit atılır:**
-- Yeni bir özellik çalışır hale geldiğinde
-- Bir bug düzeltildiğinde
-- Sprint tamamlandığında (mutlaka push)
-- Uzun çalışma seansı öncesi ve sonrası
-- CLAUDE.md güncellendiğinde
+### Git Komutları
+
+```bash
+# Değişiklikleri stage'e al ve commit at
+git add <dosyalar>
+git commit -m "Sprint X: açıklama"
+
+# GitHub'a push et (her commit sonrası)
+git push origin master
+
+# Durum kontrolü
+git log --oneline -5
+git status
+```
 
 ## Proje Nedir?
 
