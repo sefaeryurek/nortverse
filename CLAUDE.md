@@ -56,19 +56,24 @@ python -m app.cli.main serve --reload               # geliştirme modu
 ## Git & GitHub — Claude Code için Zorunlu Kurallar
 
 > **Bu kurallar Claude Code'a yöneliktir. Her çalışma seansında eksiksiz uygulanacak.**
-> **Hiçbir çalışma sadece local'de kalmamalı. Commit atılmadan ve push yapılmadan seans bitirilmez.**
+> **Hiçbir çalışma sadece local'de kalmamalı. Her anlamlı adımdan sonra commit + push yapılır.**
 
-### Ne Zaman Commit + Push Yapılır
+### Temel Kural
 
-Claude Code çalışırken **aşağıdaki her durumda** commit atıp `git push origin master` ile GitHub'a gönder:
+**Çalışma SIRASINDA** commit + push yapılır — sadece sonunda değil.
 
-- Bir özellik veya düzeltme çalışır hale geldiğinde → hemen commit + push
-- Bir bug giderildiğinde → hemen commit + push
-- Sprint tamamlandığında → commit + push
-- CLAUDE.md güncellendiğinde → commit + push
-- Uzun bir çalışma seansının sonunda → mutlaka commit + push
+Her küçük ilerleme bile commit'e layık:
+- Yeni bir dosya yazıldı → commit + push
+- Bir bug düzeltildi → commit + push  
+- Bir özellik çalışır hale geldi → commit + push
+- Test geçti → commit + push
+- Migration uygulandı → commit + push
+- CLAUDE.md güncellendi → commit + push
+- Sprint tamamlandı → commit + push
+- Seans bitmek üzere → mutlaka commit + push
 
-Sebep: "Yaptığımız çalışmaları ve durumu asla kaybetmeyelim." Her commit GitHub'da kalıcı bir kontrol noktasıdır.
+**Sebep:** "Yaptığımız çalışmaları ve durumu asla kaybetmeyelim."  
+Her commit GitHub'da kalıcı bir kontrol noktasıdır. Seans kapanınca local değişiklikler kaybolabilir — GitHub'da olan kaybolmaz.
 
 ### Remote
 
@@ -78,34 +83,44 @@ https://github.com/sefaeryurek/nortverse.git  (branch: master)
 
 ### Commit Mesajı Formatı — TEMİZ ve AÇIK Olmalı
 
-Commit mesajı, 6 ay sonra bakıldığında ne yapıldığını tek satırda anlatmalı:
+Commit mesajı 6 ay sonra bakıldığında ne yapıldığını tek satırda anlatmalı. Belirsiz mesaj kabul edilmez.
 
 ```
-Sprint X: Ne yapıldı (kısa, Türkçe)
+Sprint X: Ne yapıldı — neden yapıldı (Türkçe, kısa)
 
-- Değişiklik 1 — neden yapıldı
-- Değişiklik 2 — neden yapıldı
+- Değişiklik 1: dosya.py — açıklama
+- Değişiklik 2: dosya.py — açıklama
 
 Durum: Tamamlandı / Devam ediyor / Test bekleniyor
 ```
 
-**Kötü mesaj:** `fix`, `update`, `değişiklik`
-**İyi mesaj:** `Sprint 3: league.py JSON API ile yeniden yazıldı — HTML scraping çalışmıyordu`
+**KABUL EDİLMEZ:** `fix`, `update`, `wip`, `değişiklik`, `güncelleme`  
+**DOĞRU:**
+- `Sprint 4: Katman C pattern matching eklendi — FT oranları ±0.5 fuzzy match`
+- `Sprint 4: DB şemasına actual_h2 ve kickoff_time eklendi — tabloda eksik alanlar`
+- `Sprint 4: build-multi-archive Typer int bug düzeltildi — seasons None geliyordu`
+- `CLAUDE.md: git commit kuralları güçlendirildi — çalışma sırasında push zorunlu`
 
 ### Git Komutları
 
 ```bash
 # Değişiklikleri stage'e al ve commit at
 git add <dosyalar>
-git commit -m "Sprint X: açıklama"
+git commit -m "Sprint X: açıklama — neden"
 
-# GitHub'a push et (her commit sonrası)
+# GitHub'a push et (HER commit sonrası, bekletme)
 git push origin master
 
 # Durum kontrolü
 git log --oneline -5
 git status
 ```
+
+### Kontrol Listesi (her commit öncesi)
+
+- [ ] Mesaj Türkçe ve 6 ay sonra anlaşılır mı?
+- [ ] Ne yapıldığı VE neden yapıldığı açık mı?
+- [ ] `git push origin master` yapıldı mı?
 
 ## Proje Nedir?
 
