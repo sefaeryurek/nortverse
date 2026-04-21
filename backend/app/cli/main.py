@@ -819,11 +819,16 @@ def build_multi_archive_cmd(
            → ENG PR, TUR D1, ... için son 4 sezon
     """
     _setup_logging("DEBUG" if _flag(verbose) else "INFO")
-    from app.analysis import analyze_match, check_match_filters
     from app.pipeline.runner import _upsert
     from app.scraper.browser import browser_context
     from app.scraper.league import fetch_league_match_ids, fetch_league_seasons
     from app.scraper.match_detail import fetch_match_detail as _fetch_detail
+
+    def _recent_seasons(n: int) -> list[str]:
+        """Güncel tarihten geriye n sezon üret (ör. 2024-2025, 2023-2024 ...)."""
+        now = datetime.now()
+        start_year = now.year if now.month >= 8 else now.year - 1
+        return [f"{start_year - i}-{start_year - i + 1}" for i in range(n)]
 
     async def _run() -> None:
         total_stats = {"analyzed": 0, "skipped": 0, "errors": 0, "leagues": 0}
@@ -838,8 +843,11 @@ def build_multi_archive_cmd(
 
                 season_list = await fetch_league_seasons(lid, ctx=ctx)
                 if not season_list:
-                    console.print(f"[yellow]Lig {lid}: sezon listesi alınamadı — atlandı[/yellow]")
-                    continue
+                    season_list = _recent_seasons(seasons)
+                    console.print(
+                        f"[dim]Lig {lid}: sezon API başarısız, son {seasons} sezon kullanılıyor: "
+                        f"{', '.join(season_list)}[/dim]"
+                    )
 
                 to_process = season_list[:seasons]
                 console.print(

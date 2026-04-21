@@ -102,6 +102,8 @@ class MatchRawData(BaseModel):
     actual_ft_away: Optional[int] = None
     actual_ht_home: Optional[int] = None
     actual_ht_away: Optional[int] = None
+    actual_h2_home: Optional[int] = None
+    actual_h2_away: Optional[int] = None
 
 
 class PeriodAnalysis(BaseModel):

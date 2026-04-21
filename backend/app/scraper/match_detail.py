@@ -50,24 +50,44 @@ def _text_of(el: Optional[Tag]) -> str:
 _HT_IN_VS_RE = re.compile(r"\(\s*(\d+)\s*-\s*(\d+)\s*,")  # "( 0-0 , 1-0 )" → HT
 
 
+def _extract_main_match_kickoff(soup: BeautifulSoup) -> Optional[datetime]:
+    """Ana maçın kickoff tarih/saatini çıkar.
+
+    Yapı: <span class="time" data-t="3/3/2026 7:30:00 PM" ...>
+    Format: M/D/YYYY H:MM:SS AM/PM
+    """
+    el = soup.select_one("span.time[data-t]")
+    if el is None:
+        el = soup.select_one("[data-t]")
+    if el is None:
+        return None
+    data_t = el.get("data-t", "").strip()
+    for fmt in ("%m/%d/%Y %I:%M:%S %p", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
+        try:
+            return datetime.strptime(data_t, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def _extract_main_match_score(
     soup: BeautifulSoup,
-) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
-    """Ana maçın FT ve HT skorlarını çıkar (bitmiş maçlar için).
+) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int], Optional[int], Optional[int]]:
+    """Ana maçın FT, HT ve 2Y skorlarını çıkar (bitmiş maçlar için).
 
-    Sayfa yapısı (.fbheader içinde):
-      <div class="score">1</div>   ← home FT
-      <span class="vs/end">1 Finished ( 0-0 , 1-0 ) 0</span>  ← HT ilk parantez
-      <div class="score">0</div>   ← away FT
+    Yeni yapı (.fbheader > .end içinde):
+      <div class="score">0</div>          ← home FT
+      <span title="Score 1st Half">0-0</span>
+      <span title="Score 2nd Half">0-0</span>
+      <div class="score">0</div>          ← away FT
 
-    Bitmemiş maç: .score elementleri yoktur veya boştur.
-    Returns: (ft_home, ft_away, ht_home, ht_away)
+    Returns: (ft_home, ft_away, ht_home, ht_away, h2_home, h2_away)
     """
-    ft_home = ft_away = ht_home = ht_away = None
+    ft_home = ft_away = ht_home = ht_away = h2_home = h2_away = None
 
     fbheader = soup.select_one(".fbheader")
     if fbheader is None:
-        return ft_home, ft_away, ht_home, ht_away
+        return ft_home, ft_away, ht_home, ht_away, h2_home, h2_away
 
     # FT: iki ayrı .score div'i
     score_divs = fbheader.select(".score")
@@ -78,15 +98,31 @@ def _extract_main_match_score(
         except (ValueError, IndexError):
             ft_home = ft_away = None
 
-    # HT: .vs veya .end span içindeki "( HT_home-HT_away , ..." formatı
-    vs_el = fbheader.select_one(".vs, .end")
-    if vs_el:
-        m = _HT_IN_VS_RE.search(vs_el.get_text(" ", strip=True))
-        if m:
-            ht_home = int(m.group(1))
-            ht_away = int(m.group(2))
+    # HT ve 2Y: title attribute ile doğrudan çek
+    ht_el = fbheader.select_one('[title="Score 1st Half"]')
+    h2_el = fbheader.select_one('[title="Score 2nd Half"]')
 
-    return ft_home, ft_away, ht_home, ht_away
+    def _parse_half_score(el: Optional[Tag]) -> tuple[Optional[int], Optional[int]]:
+        if el is None:
+            return None, None
+        m = _SCORE_FT_RE.search(el.get_text(strip=True))
+        if m:
+            return int(m.group(1)), int(m.group(2))
+        return None, None
+
+    ht_home, ht_away = _parse_half_score(ht_el)
+    h2_home, h2_away = _parse_half_score(h2_el)
+
+    # Fallback: eski yöntem — .vs/.end text içinden regex
+    if ht_home is None:
+        vs_el = fbheader.select_one(".vs, .end")
+        if vs_el:
+            m = _HT_IN_VS_RE.search(vs_el.get_text(" ", strip=True))
+            if m:
+                ht_home = int(m.group(1))
+                ht_away = int(m.group(2))
+
+    return ft_home, ft_away, ht_home, ht_away, h2_home, h2_away
 
 
 def _extract_main_match_info(soup: BeautifulSoup) -> tuple[str, str, str, str]:
@@ -311,7 +347,8 @@ async def fetch_match_detail(match_id: str, ctx=None) -> MatchRawData:
 
     # Ana maç bilgisi
     home, away, _, league_full = _extract_main_match_info(soup)
-    actual_ft_home, actual_ft_away, actual_ht_home, actual_ht_away = _extract_main_match_score(soup)
+    kickoff_time = _extract_main_match_kickoff(soup)
+    actual_ft_home, actual_ft_away, actual_ht_home, actual_ht_away, actual_h2_home, actual_h2_away = _extract_main_match_score(soup)
 
     if not home or not away:
         log.warning("Takım isimleri çıkarılamadı (match_id=%s)", match_id)
@@ -340,6 +377,7 @@ async def fetch_match_detail(match_id: str, ctx=None) -> MatchRawData:
         away_team=away or "?",
         league_code=main_league_code or league_full or "?",
         league_name=league_full or None,
+        kickoff_time=kickoff_time,
         home_recent_matches=home_recent,
         away_recent_matches=away_recent,
         h2h_matches=h2h,
@@ -349,6 +387,8 @@ async def fetch_match_detail(match_id: str, ctx=None) -> MatchRawData:
         actual_ft_away=actual_ft_away,
         actual_ht_home=actual_ht_home,
         actual_ht_away=actual_ht_away,
+        actual_h2_home=actual_h2_home,
+        actual_h2_away=actual_h2_away,
     )
 
     log.info(

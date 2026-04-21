@@ -43,10 +43,13 @@ def _result_to_row(r: MatchAnalysisResult, raw: MatchRawData | None = None) -> d
         "ft_scores_x": r.ft.scores_x,
         "ft_scores_2": r.ft.scores_2,
         "ft_all_ratios": r.ft.all_ratios,
+        "kickoff_time": raw.kickoff_time if raw else None,
         "actual_ft_home": raw.actual_ft_home if raw else None,
         "actual_ft_away": raw.actual_ft_away if raw else None,
         "actual_ht_home": raw.actual_ht_home if raw else None,
         "actual_ht_away": raw.actual_ht_away if raw else None,
+        "actual_h2_home": raw.actual_h2_home if raw else None,
+        "actual_h2_away": raw.actual_h2_away if raw else None,
     }
 
 

@@ -47,9 +47,11 @@ class Match(Base):
     ft_scores_2: Mapped[dict | None] = mapped_column(JSONB)
     ft_all_ratios: Mapped[dict | None] = mapped_column(JSONB)
 
-    # Gerçek sonuç (Sprint 3'te doldurulacak)
+    # Gerçek sonuç
     actual_ht_home: Mapped[int | None] = mapped_column(Integer)
     actual_ht_away: Mapped[int | None] = mapped_column(Integer)
+    actual_h2_home: Mapped[int | None] = mapped_column(Integer)
+    actual_h2_away: Mapped[int | None] = mapped_column(Integer)
     actual_ft_home: Mapped[int | None] = mapped_column(Integer)
     actual_ft_away: Mapped[int | None] = mapped_column(Integer)
     result_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
