@@ -810,7 +810,7 @@ def list_leagues_cmd(
 @app.command("build-multi-archive")
 def build_multi_archive_cmd(
     league_ids: list[str] = typer.Argument(..., help="Lig ID listesi (boşlukla ayırın: 36 60 65)"),
-    seasons: int = typer.Option(3, "--seasons", "-s", help="Her lig için kaç sezon geriye git"),
+    seasons: Optional[str] = typer.Option(None, "--seasons", "-s", help="Her lig için kaç sezon geriye git (varsayılan: 5)"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Birden fazla lig için arşiv oluşturur — her ligi son N sezonda çeker.
@@ -819,6 +819,8 @@ def build_multi_archive_cmd(
            → ENG PR, TUR D1, ... için son 4 sezon
     """
     _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    # Typer 0.12.5: int option'lar None dönebiliyor, str olarak alıp çeviriyoruz
+    n_seasons = int(seasons) if seasons and str(seasons).isdigit() else 5
     from app.pipeline.runner import _upsert
     from app.scraper.browser import browser_context
     from app.scraper.league import fetch_league_match_ids, fetch_league_seasons
@@ -835,6 +837,8 @@ def build_multi_archive_cmd(
 
         async with browser_context() as ctx:
             for lid_str in league_ids:
+                if lid_str.startswith("-"):
+                    continue  # option artefact'ı atla
                 try:
                     lid = int(lid_str)
                 except ValueError:
@@ -843,16 +847,16 @@ def build_multi_archive_cmd(
 
                 season_list = await fetch_league_seasons(lid, ctx=ctx)
                 if not season_list:
-                    season_list = _recent_seasons(seasons)
+                    season_list = _recent_seasons(n_seasons)
                     console.print(
-                        f"[dim]Lig {lid}: sezon API başarısız, son {seasons} sezon kullanılıyor: "
+                        f"[dim]Lig {lid}: sezon API basarisiz, son {n_seasons} sezon: "
                         f"{', '.join(season_list)}[/dim]"
                     )
 
-                to_process = season_list[:seasons]
+                to_process = season_list[:n_seasons]
                 console.print(
-                    f"\n[bold cyan]Lig {lid}[/bold cyan] → "
-                    f"{len(to_process)} sezon: {', '.join(to_process)}"
+                    f"\n[bold cyan]Lig {lid}[/bold cyan]: "
+                    f"{len(to_process)} sezon — {', '.join(to_process)}"
                 )
                 total_stats["leagues"] += 1
 
