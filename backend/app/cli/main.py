@@ -29,7 +29,8 @@ from app.analysis.pattern_b import PatternBResult, find_pattern_b_matches
 from app.analysis.pattern_c import PatternCResult, find_pattern_c_matches
 from app.analysis.scores import ALL_SCORES, MS1_SCORES, MSX_SCORES, MS2_SCORES
 from app.models import MatchAnalysisResult, MatchRawData, Period, PeriodAnalysis
-from app.scraper import fetch_fixture, fetch_match_detail
+from app.scraper import fetch_fixture, fetch_leagues, fetch_match_detail
+from app.scraper.league import fetch_league_seasons
 
 app = typer.Typer(help="Nortverse - futbol tahmin sistemi CLI", no_args_is_help=True)
 console = Console()
@@ -776,6 +777,127 @@ def serve(
         port=port,
         reload=_flag(reload),
     )
+
+
+@app.command("list-leagues")
+def list_leagues_cmd(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Bugünkü fixture sayfasındaki tüm ligleri listeler (ID + ad).
+
+    Çıkan ID'leri build-archive veya build-multi-archive komutlarında kullanın.
+    """
+    _setup_logging("DEBUG" if _flag(verbose) else "WARNING")
+
+    async def _run() -> None:
+        console.print("[cyan]Fixture sayfasından lig listesi çekiliyor...[/cyan]")
+        leagues = await fetch_leagues()
+        if not leagues:
+            console.print("[red]Lig bulunamadı.[/red]")
+            return
+
+        t = Table(title=f"Ligler ({len(leagues)} adet)", show_header=True)
+        t.add_column("ID", style="cyan", width=8)
+        t.add_column("Lig Adı", style="white")
+        for lid, name in sorted(leagues.items(), key=lambda x: x[1]):
+            t.add_row(lid, name)
+        console.print(t)
+        console.print("[dim]İpucu: build-archive <ID> <sezon> veya build-multi-archive <ID1> <ID2> ...[/dim]")
+
+    asyncio.run(_run())
+
+
+@app.command("build-multi-archive")
+def build_multi_archive_cmd(
+    league_ids: list[str] = typer.Argument(..., help="Lig ID listesi (boşlukla ayırın: 36 60 65)"),
+    seasons: int = typer.Option(3, "--seasons", "-s", help="Her lig için kaç sezon geriye git"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Birden fazla lig için arşiv oluşturur — her ligi son N sezonda çeker.
+
+    Örnek: build-multi-archive 36 60 65 --seasons 4
+           → ENG PR, TUR D1, ... için son 4 sezon
+    """
+    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    from app.analysis import analyze_match, check_match_filters
+    from app.pipeline.runner import _upsert
+    from app.scraper.browser import browser_context
+    from app.scraper.league import fetch_league_match_ids, fetch_league_seasons
+    from app.scraper.match_detail import fetch_match_detail as _fetch_detail
+
+    async def _run() -> None:
+        total_stats = {"analyzed": 0, "skipped": 0, "errors": 0, "leagues": 0}
+
+        async with browser_context() as ctx:
+            for lid_str in league_ids:
+                try:
+                    lid = int(lid_str)
+                except ValueError:
+                    console.print(f"[red]Geçersiz lig ID: {lid_str}[/red]")
+                    continue
+
+                season_list = await fetch_league_seasons(lid, ctx=ctx)
+                if not season_list:
+                    console.print(f"[yellow]Lig {lid}: sezon listesi alınamadı — atlandı[/yellow]")
+                    continue
+
+                to_process = season_list[:seasons]
+                console.print(
+                    f"\n[bold cyan]Lig {lid}[/bold cyan] → "
+                    f"{len(to_process)} sezon: {', '.join(to_process)}"
+                )
+                total_stats["leagues"] += 1
+
+                for season in to_process:
+                    match_ids = await fetch_league_match_ids(lid, season, ctx=ctx)
+                    if not match_ids:
+                        console.print(f"  [yellow]{season}: maç ID bulunamadı — atlandı[/yellow]")
+                        continue
+
+                    console.print(
+                        f"  [cyan]{season}[/cyan]: {len(match_ids)} maç işlenecek"
+                    )
+                    stats = {"analyzed": 0, "skipped": 0, "errors": 0}
+
+                    for i, mid in enumerate(match_ids, 1):
+                        try:
+                            raw = await _fetch_detail(mid, ctx=ctx)
+                            check = check_match_filters(raw)
+                            if not check.passed:
+                                stats["skipped"] += 1
+                                continue
+                            result = analyze_match(raw)
+                            await _upsert(result, raw)
+                            stats["analyzed"] += 1
+                            if i % 20 == 0:
+                                console.print(
+                                    f"  ({i}/{len(match_ids)}) "
+                                    f"[green]{stats['analyzed']} kayıt[/green] · "
+                                    f"[yellow]{stats['skipped']} atlandı[/yellow]"
+                                )
+                        except Exception as e:
+                            stats["errors"] += 1
+                            if _flag(verbose):
+                                console.print(f"  [red]Hata [{mid}]: {e}[/red]")
+
+                    console.print(
+                        f"  [bold]{season} bitti:[/bold] "
+                        f"[green]{stats['analyzed']} kayıt[/green] · "
+                        f"[yellow]{stats['skipped']} atlandı[/yellow] · "
+                        f"[red]{stats['errors']} hata[/red]"
+                    )
+                    for k in ("analyzed", "skipped", "errors"):
+                        total_stats[k] += stats[k]
+
+        console.print(
+            f"\n[bold green]Tüm arşivler tamamlandı:[/bold green] "
+            f"{total_stats['leagues']} lig · "
+            f"[green]{total_stats['analyzed']} kayıt[/green] · "
+            f"[yellow]{total_stats['skipped']} atlandı[/yellow] · "
+            f"[red]{total_stats['errors']} hata[/red]"
+        )
+
+    asyncio.run(_run())
 
 
 @app.command()

@@ -227,6 +227,39 @@ async def fetch_fixture(
     return matches
 
 
+async def fetch_leagues(ctx=None) -> dict[str, str]:
+    """Bugünkü fixture sayfasındaki tüm ligleri döndür: {sclassid: league_name}.
+
+    Tüm maçlar (--all modu) yüklenerek sayfadaki her lig başlığı parse edilir.
+    Dönen sclassid değerleri build-archive komutunun league_id parametresidir.
+    """
+    url = _build_fixture_url(None)
+
+    async def _get(ctx_) -> str:
+        page = await ctx_.new_page()
+        await goto_with_retry(page, url)
+        try:
+            await page.wait_for_selector('tr[id^="tr1_"]', timeout=10000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(int(SCRAPER.default_wait * 1000))
+        await close_ad_overlay(page)
+        html = await page.content()
+        await page.close()
+        return html
+
+    if ctx is not None:
+        html = await _get(ctx)
+    else:
+        async with browser_context() as new_ctx:
+            html = await _get(new_ctx)
+
+    soup = BeautifulSoup(html, "lxml")
+    leagues = _build_league_map(soup)
+    log.info("Toplam %d lig bulundu", len(leagues))
+    return leagues
+
+
 async def fetch_fixture_for_tomorrow(only_hot: bool = True) -> list[FixtureMatch]:
     """Yarının fixture'ını çek (günlük cron için kısayol)."""
     return await fetch_fixture(
