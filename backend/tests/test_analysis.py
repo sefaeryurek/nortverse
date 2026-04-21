@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from app.analysis.engine import analyze_match
 from app.analysis.filtering import check_match_filters
+from app.analysis.pattern_c import _ratios_match
 from app.analysis.scores import ALL_SCORES
 from app.models import HistoricalMatch, MatchRawData, Period, SkipReason
 
@@ -184,6 +185,19 @@ def test_oran_hep_0_5_kati():
             # Her değer 0.5'in katı olmalı
             doubled = ratio * 2
             assert abs(doubled - round(doubled)) < 1e-9, f"{key} = {ratio}"
+
+
+def test_pattern_c_ratios_match_tolerans():
+    """_ratios_match tolerans mantığını doğrular."""
+    target = {"1-0": 5.0, "0-1": 3.0, "0-0": 2.5}
+    # Tam eşleşme
+    assert _ratios_match(target, {"1-0": 5.0, "0-1": 3.0, "0-0": 2.5}, 0.5)
+    # Tolerans sınırında (±0.5)
+    assert _ratios_match(target, {"1-0": 5.5, "0-1": 2.5, "0-0": 2.0}, 0.5)
+    # Tolerans aşıldı
+    assert not _ratios_match(target, {"1-0": 5.6, "0-1": 3.0, "0-0": 2.5}, 0.5)
+    # Eksik anahtar → eşleşme yok
+    assert not _ratios_match(target, {"1-0": 5.0, "0-1": 3.0}, 0.5)
 
 
 def test_iy_ve_ms_farkli_sonuclar():

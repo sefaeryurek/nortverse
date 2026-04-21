@@ -18,6 +18,10 @@ asyncpg==0.29.0
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
 
+# API
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+
 # Dev
 pytest==8.3.3
 pytest-asyncio==0.24.0

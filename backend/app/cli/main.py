@@ -26,6 +26,7 @@ from rich.table import Table
 
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.pattern_b import PatternBResult, find_pattern_b_matches
+from app.analysis.pattern_c import PatternCResult, find_pattern_c_matches
 from app.analysis.scores import ALL_SCORES, MS1_SCORES, MSX_SCORES, MS2_SCORES
 from app.models import MatchAnalysisResult, MatchRawData, Period, PeriodAnalysis
 from app.scraper import fetch_fixture, fetch_match_detail
@@ -145,6 +146,23 @@ def _render_pattern_b(b: PatternBResult, con: Optional[Console] = None) -> None:
             f"[red]2: {b.result_2_pct:.0f}%[/red]",
             title="[magenta]Katman B — Pattern Matching[/magenta]",
             border_style="magenta",
+        )
+    )
+
+
+def _render_pattern_c(c_res: PatternCResult, con: Optional[Console] = None) -> None:
+    """Katman C istatistiklerini konsola yazdır."""
+    c = con or console
+    c.print(
+        Panel(
+            f"Eşleşen geçmiş maç: [bold]{c_res.match_count}[/bold]\n"
+            f"KG Var: [cyan]{c_res.kg_var_pct:.0f}%[/cyan]  |  "
+            f"2.5 Üst: [cyan]{c_res.over_25_pct:.0f}%[/cyan]\n"
+            f"[green]1: {c_res.result_1_pct:.0f}%[/green]  |  "
+            f"[yellow]X: {c_res.result_x_pct:.0f}%[/yellow]  |  "
+            f"[red]2: {c_res.result_2_pct:.0f}%[/red]",
+            title="[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]",
+            border_style="blue",
         )
     )
 
@@ -353,6 +371,16 @@ def analyze(
         except Exception as e:
             con.print(f"[dim]Katman B sorgusu yapılamadı: {e}[/dim]")
 
+        # Katman C — oran eşleşmesi
+        try:
+            c_result = await find_pattern_c_matches(ft_all_ratios=result.ft.all_ratios)
+            if c_result:
+                _render_pattern_c(c_result, con=con)
+            else:
+                con.print("[dim]Katman C: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
+        except Exception as e:
+            con.print(f"[dim]Katman C sorgusu yapılamadı: {e}[/dim]")
+
         if _flag(save):
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             txt_path = _save_text(con.export_text(), f"analyze_{match_id}_{ts}.txt")
@@ -429,6 +457,16 @@ def analyze_debug(
                 con.print("[dim]Katman B: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
         except Exception as e:
             con.print(f"[dim]Katman B sorgusu yapılamadı: {e}[/dim]")
+
+        # Katman C — oran eşleşmesi
+        try:
+            c_result = await find_pattern_c_matches(ft_all_ratios=result.ft.all_ratios)
+            if c_result:
+                _render_pattern_c(c_result, con=con)
+            else:
+                con.print("[dim]Katman C: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
+        except Exception as e:
+            con.print(f"[dim]Katman C sorgusu yapılamadı: {e}[/dim]")
 
         if _flag(save):
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -649,7 +687,7 @@ def build_archive_cmd(
                 label = s or "güncel sezon"
                 console.print(f"[cyan]Lig {league_id} / {label} maç ID'leri çekiliyor...[/cyan]")
                 ids = await fetch_league_match_ids(league_id=league_id, season=s, ctx=ctx)
-                console.print(f"  → {len(ids)} maç bulundu")
+                console.print(f"  {len(ids)} mac bulundu")
                 for mid in ids:
                     total_ids.append((mid, s))
 
@@ -718,6 +756,26 @@ def run_pipeline_cmd(
         )
 
     asyncio.run(_run())
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("0.0.0.0", "--host", help="Dinlenecek adres"),
+    port: int = typer.Option(8000, "--port", help="Port"),
+    reload: bool = typer.Option(False, "--reload", help="Geliştirme modu (dosya değişikliğinde yeniden yükle)"),
+) -> None:
+    """FastAPI sunucusunu başlatır.
+
+    Örnek: python -m app.cli.main serve
+           python -m app.cli.main serve --reload  # geliştirme modu
+    """
+    import uvicorn
+    uvicorn.run(
+        "app.api.main:app",
+        host=host,
+        port=port,
+        reload=_flag(reload),
+    )
 
 
 @app.command()

@@ -47,6 +47,10 @@ python -m app.cli.main run-pipeline --date 2026-04-20   # belirli gün için pip
 # Syntax: build-archive <LEAGUE_ID> [SEZON]
 python -m app.cli.main build-archive 36 2024-2025   # ENG PR 2024-2025 sezonu
 python -m app.cli.main build-archive 36              # güncel sezon
+
+# FastAPI sunucusu (Sprint 4)
+python -m app.cli.main serve                         # http://localhost:8000
+python -m app.cli.main serve --reload               # geliştirme modu
 ```
 
 ## Git & GitHub — Claude Code için Zorunlu Kurallar
@@ -219,7 +223,7 @@ nortverse/
 
 Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-detect**: h2h ve ev maçları tablolarındaki lig kodları sayılır, en çok görülen kupa/friendly olmayan kod ana maçın lig kodudur.
 
-## Mevcut Durum (Sprint 3)
+## Mevcut Durum (Sprint 4 — Devam Ediyor)
 
 **Çalışan:**
 - ✅ Fixture parser: Hot modunu aktive edip maçları doğru çekiyor (43 hot / ~252 toplam)
@@ -228,14 +232,14 @@ Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-d
 - ✅ Analiz motoru (Katman A): 105 oran hesaplaması
 - ✅ 3.5+ filtresi → MS1/MSX/MS2 listeleri
 - ✅ Kural dışı tespiti (lig/5 maç/h2h 5 maç)
-- ✅ CLI: `fetch-fixture`, `analyze`, `analyze-debug`, `fetch-and-analyze`, `run-pipeline`, `build-archive`
-- ✅ 8/8 unit test geçiyor
+- ✅ CLI: `fetch-fixture`, `analyze`, `analyze-debug`, `fetch-and-analyze`, `run-pipeline`, `build-archive`, `serve`
+- ✅ 9/9 unit test geçiyor
 - ✅ Katman B pattern matching: `analyze` komutunda DB eşleşme istatistiği gösterilir
 - ✅ `build-archive`: lig sayfasından geçmiş maç ID'leri → analiz → DB (gerçek skor dahil)
+- ✅ Katman C pattern matching: `app/analysis/pattern_c.py` — FT oranlarıyla ±0.5 fuzzy match
+- ✅ FastAPI REST endpoints: `app/api/main.py` — /api/health, /api/fixture, /api/analyze, /api/matches, /api/match
 
 **Henüz Yok:**
-- ❌ Katman C pattern matching (ARŞIV-2, 105 ham oran ±0.5 eşleşme) — Sprint 4
-- ❌ FastAPI REST endpoints — Sprint 4
 - ❌ Frontend (Next.js) — Sprint 5
 - ❌ Premium/Auth — sonraki fazlar
 - ❌ Canlı maç + trend motoru — sonraki fazlar
@@ -249,6 +253,15 @@ Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-d
 - Pipeline: tek browser, fetch → analiz → upsert (idempotent)
 - `run-pipeline` CLI komutu
 - İlk çalışma: 43 maçtan 35 kayıt, 8 kural dışı, 0 hata
+
+## Sprint 4 — DEVAM EDİYOR 🔄
+
+- `app/analysis/pattern_c.py`: `find_pattern_c_matches()` — FT oranlarıyla ±0.5 fuzzy match, `PatternCResult` dataclass
+- `app/api/main.py`: FastAPI app — 5 endpoint (health, fixture, analyze, matches, match)
+- `analyze` ve `analyze-debug` komutlarına Katman C paneli eklendi
+- CLI'ye `serve` komutu eklendi (`uvicorn` ile API başlatır)
+- `requirements.txt`'e `fastapi==0.115.12` ve `uvicorn[standard]==0.34.2` eklendi
+- ENG PR 2024-2025 arşivi DB'ye yazılıyor (`build-archive 36 2024-2025` — devam ediyor)
 
 ## Sprint 3 — TAMAMLANDI ✅
 
