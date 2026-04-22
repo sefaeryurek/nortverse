@@ -1,6 +1,8 @@
 import type { AnalyzeResponse, FixtureMatch, MatchSummary } from "./types";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Geliştirme: boş string → Next.js rewrite proxy (/api/* → localhost:8000)
+// Üretim: NEXT_PUBLIC_API_URL env var ile tam URL ver
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export async function getFixture(date: string): Promise<FixtureMatch[]> {
   const res = await fetch(`${BASE}/api/fixture?date=${date}`, {

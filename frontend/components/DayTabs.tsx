@@ -13,8 +13,8 @@ function getWeekDates(): { label: string; date: string; today: boolean }[] {
   return DAYS.map((label, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const iso = d.toISOString().split("T")[0];
-    const todayIso = now.toISOString().split("T")[0];
+    const iso = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+    const todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
     return { label, date: iso, today: iso === todayIso };
   });
 }

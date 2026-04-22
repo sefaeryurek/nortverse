@@ -9,14 +9,10 @@ interface Props {
   searchParams: Promise<{ date?: string }>;
 }
 
-function formatTime(iso: string | null, targetDateStr: string): string {
+function formatTime(iso: string | null): string {
   if (!iso) return "--:--";
   try {
-    const d = new Date(iso);
-    // Tarih kontrolü: kickoff'un tarihi bülten tarihiyle aynı mı?
-    const kickoffDate = d.toISOString().split("T")[0];
-    if (kickoffDate !== targetDateStr) return "--:--";
-    return d.toLocaleTimeString("tr-TR", {
+    return new Date(iso).toLocaleTimeString("tr-TR", {
       hour: "2-digit",
       minute: "2-digit",
       timeZone: "Europe/Istanbul",
@@ -28,11 +24,10 @@ function formatTime(iso: string | null, targetDateStr: string): string {
 
 function sortMatches(
   matches: FixtureMatch[],
-  dateStr: string
 ): { match: FixtureMatch; timeStr: string }[] {
   const withTime = matches.map((m) => ({
     match: m,
-    timeStr: formatTime(m.kickoff_time, dateStr),
+    timeStr: formatTime(m.kickoff_time),
     ts: m.kickoff_time ? new Date(m.kickoff_time).getTime() : Infinity,
   }));
 
@@ -77,7 +72,7 @@ async function MatchList({ date }: { date: string }) {
     );
   }
 
-  const sorted = sortMatches(matches, date);
+  const sorted = sortMatches(matches);
   const matchIds = matches.map((m) => m.match_id);
 
   return (
@@ -102,7 +97,7 @@ async function MatchList({ date }: { date: string }) {
 
 export default async function BultenPage({ searchParams }: Props) {
   const params = await searchParams;
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   const date = params.date ?? today;
 
   return (
