@@ -3,13 +3,15 @@
 Endpoints:
     GET  /api/health
     GET  /api/fixture?date=YYYY-MM-DD
-    POST /api/analyze/{match_id}
+    GET  /api/analyze/{match_id}   — DB cache, ilk seferde scrape
+    POST /api/analyze/{match_id}   — Her zaman scrape (cache'i yeniler)
     GET  /api/matches?league=ENG PR&limit=50
     GET  /api/match/{match_id}
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date
 from typing import Optional
@@ -20,8 +22,9 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.analysis import analyze_match, check_match_filters
-from app.analysis.pattern_b import PatternBResult, find_pattern_b_matches
-from app.analysis.pattern_c import PatternCResult, find_pattern_c_matches
+from app.analysis.pattern_b import find_pattern_b_matches
+from app.analysis.pattern_c import find_pattern_c_matches
+from app.analysis.pattern_stats import PatternResult
 from app.db.connection import get_session
 from app.db.models import Match
 from app.scraper import fetch_fixture, fetch_match_detail
@@ -31,7 +34,7 @@ log = logging.getLogger(__name__)
 app = FastAPI(
     title="Nortverse API",
     description="Futbol maçı istatistik ve analiz sistemi",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -41,12 +44,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# In-memory cache: match_id → AnalyzeResponse
+_analysis_cache: dict[str, "AnalyzeResponse"] = {}
+# Concurrency kontrolü: aynı match_id için tek seferde scrape
+_analysis_locks: dict[str, asyncio.Lock] = {}
+
 
 # --- Response şemaları ---
 
 class HealthResponse(BaseModel):
     status: str
-    version: str = "0.1.0"
+    version: str = "0.2.0"
 
 
 class FixtureMatchOut(BaseModel):
@@ -73,8 +81,13 @@ class AnalyzeResponse(BaseModel):
     ht: PeriodOut
     half2: PeriodOut
     ft: PeriodOut
-    pattern_b: Optional[PatternBResult] = None
-    pattern_c: Optional[PatternCResult] = None
+    # 6 pattern sonucu — periyot × arşiv
+    ht_b: Optional[PatternResult] = None
+    ht_c: Optional[PatternResult] = None
+    h2_b: Optional[PatternResult] = None
+    h2_c: Optional[PatternResult] = None
+    ft_b: Optional[PatternResult] = None
+    ft_c: Optional[PatternResult] = None
     skipped: bool = False
     skip_reason: Optional[str] = None
 
@@ -92,6 +105,68 @@ class MatchSummary(BaseModel):
     ft_scores_1: Optional[list]
     ft_scores_x: Optional[list]
     ft_scores_2: Optional[list]
+
+
+# --- Ortak analiz fonksiyonu ---
+
+async def _do_analyze(match_id: str) -> AnalyzeResponse:
+    """Maçı scrape et, 6 periyot × arşiv pattern hesapla."""
+    raw = await fetch_match_detail(match_id)
+    check = check_match_filters(raw)
+
+    if not check.passed:
+        return AnalyzeResponse(
+            match_id=match_id,
+            home_team=raw.home_team,
+            away_team=raw.away_team,
+            league_code=raw.league_code or "",
+            season="",
+            ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+            half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+            ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+            skipped=True,
+            skip_reason=check.reason.value if check.reason else None,
+        )
+
+    result = analyze_match(raw)
+
+    # 6 pattern sorgusu (hata olursa None bırak)
+    async def _b(period: str, s1: list, sx: list, s2: list) -> Optional[PatternResult]:
+        try:
+            return await find_pattern_b_matches(period, s1, sx, s2)
+        except Exception as e:
+            log.warning("Katman B [%s] sorgusu başarısız [%s]: %s", period, match_id, e)
+            return None
+
+    async def _c(period: str, ratios: dict) -> Optional[PatternResult]:
+        try:
+            return await find_pattern_c_matches(period, ratios)
+        except Exception as e:
+            log.warning("Katman C [%s] sorgusu başarısız [%s]: %s", period, match_id, e)
+            return None
+
+    ht_b, ht_c, h2_b, h2_c, ft_b, ft_c = await asyncio.gather(
+        _b("ht", result.ht.scores_1, result.ht.scores_x, result.ht.scores_2),
+        _c("ht", result.ht.all_ratios),
+        _b("h2", result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
+        _c("h2", result.half2.all_ratios),
+        _b("ft", result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
+        _c("ft", result.ft.all_ratios),
+    )
+
+    return AnalyzeResponse(
+        match_id=result.match_id,
+        home_team=result.home_team,
+        away_team=result.away_team,
+        league_code=result.league_code,
+        season=result.season,
+        ht=PeriodOut(scores_1=result.ht.scores_1, scores_x=result.ht.scores_x, scores_2=result.ht.scores_2),
+        half2=PeriodOut(scores_1=result.half2.scores_1, scores_x=result.half2.scores_x, scores_2=result.half2.scores_2),
+        ft=PeriodOut(scores_1=result.ft.scores_1, scores_x=result.ft.scores_x, scores_2=result.ft.scores_2),
+        ht_b=ht_b, ht_c=ht_c,
+        h2_b=h2_b, h2_c=h2_c,
+        ft_b=ft_b, ft_c=ft_c,
+    )
 
 
 # --- Endpoints ---
@@ -125,56 +200,31 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
     ]
 
 
+@app.get("/api/analyze/{match_id}", response_model=AnalyzeResponse)
+async def get_analyze(match_id: str) -> AnalyzeResponse:
+    """Maçı analiz eder. Cache'te varsa anında döner, yoksa scrape eder."""
+    if match_id in _analysis_cache:
+        log.info("Cache hit: %s", match_id)
+        return _analysis_cache[match_id]
+
+    # Aynı match_id için tek seferde scrape (concurrent request koruması)
+    if match_id not in _analysis_locks:
+        _analysis_locks[match_id] = asyncio.Lock()
+    async with _analysis_locks[match_id]:
+        # Lock alındıktan sonra tekrar kontrol
+        if match_id in _analysis_cache:
+            return _analysis_cache[match_id]
+        response = await _do_analyze(match_id)
+        _analysis_cache[match_id] = response
+        return response
+
+
 @app.post("/api/analyze/{match_id}", response_model=AnalyzeResponse)
-async def analyze(match_id: str) -> AnalyzeResponse:
-    """Tek maçı analiz eder: Katman A + B + C."""
-    raw = await fetch_match_detail(match_id)
-    check = check_match_filters(raw)
-
-    if not check.passed:
-        return AnalyzeResponse(
-            match_id=match_id,
-            home_team=raw.home_team,
-            away_team=raw.away_team,
-            league_code=raw.league_code or "",
-            season="",
-            ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-            half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-            ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-            skipped=True,
-            skip_reason=check.reason.value if check.reason else None,
-        )
-
-    result = analyze_match(raw)
-
-    b_result = None
-    try:
-        b_result = await find_pattern_b_matches(
-            ft_scores_1=result.ft.scores_1,
-            ft_scores_x=result.ft.scores_x,
-            ft_scores_2=result.ft.scores_2,
-        )
-    except Exception as e:
-        log.warning("Katman B sorgusu başarısız [%s]: %s", match_id, e)
-
-    c_result = None
-    try:
-        c_result = await find_pattern_c_matches(ft_all_ratios=result.ft.all_ratios)
-    except Exception as e:
-        log.warning("Katman C sorgusu başarısız [%s]: %s", match_id, e)
-
-    return AnalyzeResponse(
-        match_id=result.match_id,
-        home_team=result.home_team,
-        away_team=result.away_team,
-        league_code=result.league_code,
-        season=result.season,
-        ht=PeriodOut(scores_1=result.ht.scores_1, scores_x=result.ht.scores_x, scores_2=result.ht.scores_2),
-        half2=PeriodOut(scores_1=result.half2.scores_1, scores_x=result.half2.scores_x, scores_2=result.half2.scores_2),
-        ft=PeriodOut(scores_1=result.ft.scores_1, scores_x=result.ft.scores_x, scores_2=result.ft.scores_2),
-        pattern_b=b_result,
-        pattern_c=c_result,
-    )
+async def post_analyze(match_id: str) -> AnalyzeResponse:
+    """Maçı her zaman scrape eder ve cache'i günceller."""
+    response = await _do_analyze(match_id)
+    _analysis_cache[match_id] = response
+    return response
 
 
 @app.get("/api/matches", response_model=list[MatchSummary])

@@ -1,32 +1,20 @@
 """Katman C — Tam Oran Pattern Matching (ARŞIV-2).
 
-Bülten maçının FT ham oranlarını DB'deki geçmiş maçlarla ±0.5 aralığında karşılaştırır.
+Bülten maçının ham oranlarını DB'deki geçmiş maçlarla ±0.5 aralığında karşılaştırır.
 Tüm 35 skorda tolerans içinde kalan geçmiş maçların gerçek sonuçlarından istatistik çıkarır.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 
 from sqlalchemy import select
 
+from app.analysis.pattern_stats import PatternResult, compute_stats
 from app.db.connection import get_session
 from app.db.models import Match
 
 log = logging.getLogger(__name__)
-
-
-@dataclass
-class PatternCResult:
-    """Katman C istatistik sonucu."""
-
-    match_count: int
-    kg_var_pct: float    # Her iki takım da gol attı (%)
-    over_25_pct: float   # Toplam gol ≥ 3 (%)
-    result_1_pct: float  # Ev galibiyeti (%)
-    result_x_pct: float  # Beraberlik (%)
-    result_2_pct: float  # Deplasman galibiyeti (%)
 
 
 def _ratios_match(
@@ -45,82 +33,60 @@ def _ratios_match(
 
 
 async def find_pattern_c_matches(
-    ft_all_ratios: dict[str, float],
+    period: str,
+    all_ratios: dict[str, float],
     min_matches: int = 5,
     tolerance: float = 0.5,
-) -> PatternCResult | None:
-    """FT oranlarıyla ±tolerance eşleşen geçmiş maçları bul ve istatistik üret.
-
-    DB'den gerçek sonucu olan tüm maçları çeker, Python tarafında fuzzy matching yapar.
-    35 skorun tamamında tolerans sağlanması gerekir (katı eşleşme).
+) -> PatternResult | None:
+    """Belirtilen periyot oranlarıyla ±tolerance eşleşen geçmiş maçları bul.
 
     Args:
-        ft_all_ratios: Bülten maçının 35 FT oranı {"1-0": 5.5, "0-1": 4.0, ...}
-        min_matches: Minimum eşleşme sayısı (default 5)
-        tolerance: Her skor için izin verilen oran farkı (default ±0.5)
+        period: "ht", "h2" veya "ft"
+        all_ratios: Bülten maçının 35 oranı {"1-0": 5.5, ...}
+        min_matches: Minimum eşleşme sayısı
+        tolerance: Her skor için izin verilen oran farkı (±0.5)
 
     Returns:
-        PatternCResult veya None (eşleşme < min_matches ise)
+        PatternResult veya None (eşleşme < min_matches ise)
     """
+    if period == "ht":
+        ratios_col = Match.ht_all_ratios
+        actual_check = Match.actual_ht_home.isnot(None)
+        ratios_attr = "ht_all_ratios"
+    elif period == "h2":
+        ratios_col = Match.h2_all_ratios
+        actual_check = Match.actual_h2_home.isnot(None)
+        ratios_attr = "h2_all_ratios"
+    else:
+        ratios_col = Match.ft_all_ratios
+        actual_check = Match.actual_ft_home.isnot(None)
+        ratios_attr = "ft_all_ratios"
+
     async with get_session() as session:
         stmt = (
             select(Match)
             .where(
-                Match.ft_all_ratios.isnot(None),
-                Match.actual_ft_home.isnot(None),
-                Match.actual_ft_away.isnot(None),
+                ratios_col.isnot(None),
+                actual_check,
             )
         )
         rows = (await session.execute(stmt)).scalars().all()
 
     matched = [
         row for row in rows
-        if row.ft_all_ratios and _ratios_match(ft_all_ratios, row.ft_all_ratios, tolerance)
+        if getattr(row, ratios_attr)
+        and _ratios_match(all_ratios, getattr(row, ratios_attr), tolerance)
     ]
 
     if len(matched) < min_matches:
         log.info(
-            "Katman C: %d eşleşme (minimum %d gerekli, tolerans ±%.1f) — atlandı",
+            "Katman C [%s]: %d eşleşme (minimum %d, tolerans ±%.1f) — atlandı",
+            period,
             len(matched),
             min_matches,
             tolerance,
         )
         return None
 
-    total = len(matched)
-    kg_var = 0
-    over_25 = 0
-    win_1 = 0
-    draw_x = 0
-    win_2 = 0
-
-    for row in matched:
-        h = row.actual_ft_home
-        a = row.actual_ft_away
-        if h > 0 and a > 0:
-            kg_var += 1
-        if h + a >= 3:
-            over_25 += 1
-        if h > a:
-            win_1 += 1
-        elif h == a:
-            draw_x += 1
-        else:
-            win_2 += 1
-
-    log.info(
-        "Katman C: %d eşleşme — 1:%.0f%% X:%.0f%% 2:%.0f%%",
-        total,
-        win_1 / total * 100,
-        draw_x / total * 100,
-        win_2 / total * 100,
-    )
-
-    return PatternCResult(
-        match_count=total,
-        kg_var_pct=round(kg_var / total * 100, 1),
-        over_25_pct=round(over_25 / total * 100, 1),
-        result_1_pct=round(win_1 / total * 100, 1),
-        result_x_pct=round(draw_x / total * 100, 1),
-        result_2_pct=round(win_2 / total * 100, 1),
-    )
+    log.info("Katman C [%s]: %d eşleşme bulundu", period, len(matched))
+    return compute_stats(matched, period)

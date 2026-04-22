@@ -19,8 +19,11 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
+
+# Nowgoal sitesi Beijing/Çin saatiyle çalışır (UTC+8)
+_BEIJING_TZ = timezone(timedelta(hours=8))
 
 from bs4 import BeautifulSoup
 from bs4.element import Tag
@@ -98,9 +101,10 @@ def _extract_match_info(tr: Tag) -> Optional[dict]:
                 kickoff_text = time_el.get_text(strip=True)
                 if data_t:
                     # Format: "2026-4-17 16:30:00" — tek haneli ay/gün olabilir
+                    # Nowgoal UTC+8 (Beijing) saatiyle çalışır
                     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%#m-%#d %H:%M:%S"):
                         try:
-                            kickoff = datetime.strptime(data_t, fmt)
+                            kickoff = datetime.strptime(data_t, fmt).replace(tzinfo=_BEIJING_TZ)
                             break
                         except (ValueError, Exception):
                             continue

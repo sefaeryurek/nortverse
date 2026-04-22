@@ -25,8 +25,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from app.analysis import analyze_match, check_match_filters
-from app.analysis.pattern_b import PatternBResult, find_pattern_b_matches
-from app.analysis.pattern_c import PatternCResult, find_pattern_c_matches
+from app.analysis.pattern_b import find_pattern_b_matches
+from app.analysis.pattern_c import find_pattern_c_matches
+from app.analysis.pattern_stats import PatternResult
 from app.analysis.scores import ALL_SCORES, MS1_SCORES, MSX_SCORES, MS2_SCORES
 from app.models import MatchAnalysisResult, MatchRawData, Period, PeriodAnalysis
 from app.scraper import fetch_fixture, fetch_leagues, fetch_match_detail
@@ -134,36 +135,19 @@ def _render_all_ratios(result: MatchAnalysisResult) -> Table:
     return t
 
 
-def _render_pattern_b(b: PatternBResult, con: Optional[Console] = None) -> None:
-    """Katman B istatistiklerini konsola yazdır."""
+def _render_pattern(p: PatternResult, title: str, style: str, con: Optional[Console] = None) -> None:
+    """Pattern istatistiklerini konsola yazdır."""
     c = con or console
     c.print(
         Panel(
-            f"Eşleşen geçmiş maç: [bold]{b.match_count}[/bold]\n"
-            f"KG Var: [cyan]{b.kg_var_pct:.0f}%[/cyan]  |  "
-            f"2.5 Üst: [cyan]{b.over_25_pct:.0f}%[/cyan]\n"
-            f"[green]1: {b.result_1_pct:.0f}%[/green]  |  "
-            f"[yellow]X: {b.result_x_pct:.0f}%[/yellow]  |  "
-            f"[red]2: {b.result_2_pct:.0f}%[/red]",
-            title="[magenta]Katman B — Pattern Matching[/magenta]",
-            border_style="magenta",
-        )
-    )
-
-
-def _render_pattern_c(c_res: PatternCResult, con: Optional[Console] = None) -> None:
-    """Katman C istatistiklerini konsola yazdır."""
-    c = con or console
-    c.print(
-        Panel(
-            f"Eşleşen geçmiş maç: [bold]{c_res.match_count}[/bold]\n"
-            f"KG Var: [cyan]{c_res.kg_var_pct:.0f}%[/cyan]  |  "
-            f"2.5 Üst: [cyan]{c_res.over_25_pct:.0f}%[/cyan]\n"
-            f"[green]1: {c_res.result_1_pct:.0f}%[/green]  |  "
-            f"[yellow]X: {c_res.result_x_pct:.0f}%[/yellow]  |  "
-            f"[red]2: {c_res.result_2_pct:.0f}%[/red]",
-            title="[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]",
-            border_style="blue",
+            f"Eşleşen geçmiş maç: [bold]{p.match_count}[/bold]\n"
+            f"KG Var: [cyan]{p.kg_var_pct:.0f}%[/cyan]  |  "
+            f"2.5 Üst: [cyan]{p.ust_25_pct:.0f}%[/cyan]\n"
+            f"[green]1: {p.result_1_pct:.0f}%[/green]  |  "
+            f"[yellow]X: {p.result_x_pct:.0f}%[/yellow]  |  "
+            f"[red]2: {p.result_2_pct:.0f}%[/red]",
+            title=title,
+            border_style=style,
         )
     )
 
@@ -358,25 +342,26 @@ def analyze(
         result = analyze_match(raw, n_matches=n, threshold=threshold)
         _render_result(result, show_all_ratios=_flag(ratios), con=con)
 
-        # Katman B — pattern matching
+        # Katman B — pattern matching (FT)
         try:
             b_result = await find_pattern_b_matches(
-                ft_scores_1=result.ft.scores_1,
-                ft_scores_x=result.ft.scores_x,
-                ft_scores_2=result.ft.scores_2,
+                period="ft",
+                scores_1=result.ft.scores_1,
+                scores_x=result.ft.scores_x,
+                scores_2=result.ft.scores_2,
             )
             if b_result:
-                _render_pattern_b(b_result, con=con)
+                _render_pattern(b_result, "[magenta]Katman B — Pattern Matching[/magenta]", "magenta", con=con)
             else:
                 con.print("[dim]Katman B: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
         except Exception as e:
             con.print(f"[dim]Katman B sorgusu yapılamadı: {e}[/dim]")
 
-        # Katman C — oran eşleşmesi
+        # Katman C — oran eşleşmesi (FT)
         try:
-            c_result = await find_pattern_c_matches(ft_all_ratios=result.ft.all_ratios)
+            c_result = await find_pattern_c_matches(period="ft", all_ratios=result.ft.all_ratios)
             if c_result:
-                _render_pattern_c(c_result, con=con)
+                _render_pattern(c_result, "[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]", "blue", con=con)
             else:
                 con.print("[dim]Katman C: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
         except Exception as e:
@@ -445,25 +430,26 @@ def analyze_debug(
         result = analyze_match(raw, n_matches=n, threshold=threshold)
         _render_result(result, show_all_ratios=True, con=con)
 
-        # Katman B — pattern matching
+        # Katman B — pattern matching (FT, debug)
         try:
             b_result = await find_pattern_b_matches(
-                ft_scores_1=result.ft.scores_1,
-                ft_scores_x=result.ft.scores_x,
-                ft_scores_2=result.ft.scores_2,
+                period="ft",
+                scores_1=result.ft.scores_1,
+                scores_x=result.ft.scores_x,
+                scores_2=result.ft.scores_2,
             )
             if b_result:
-                _render_pattern_b(b_result, con=con)
+                _render_pattern(b_result, "[magenta]Katman B — Pattern Matching[/magenta]", "magenta", con=con)
             else:
                 con.print("[dim]Katman B: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
         except Exception as e:
             con.print(f"[dim]Katman B sorgusu yapılamadı: {e}[/dim]")
 
-        # Katman C — oran eşleşmesi
+        # Katman C — oran eşleşmesi (FT, debug)
         try:
-            c_result = await find_pattern_c_matches(ft_all_ratios=result.ft.all_ratios)
+            c_result = await find_pattern_c_matches(period="ft", all_ratios=result.ft.all_ratios)
             if c_result:
-                _render_pattern_c(c_result, con=con)
+                _render_pattern(c_result, "[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]", "blue", con=con)
             else:
                 con.print("[dim]Katman C: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
         except Exception as e:

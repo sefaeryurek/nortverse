@@ -1,14 +1,48 @@
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import BultenRow from "@/components/BultenRow";
+import BultenPrefetcher from "@/components/BultenPrefetcher";
 import { getFixture } from "@/lib/api";
+import type { FixtureMatch } from "@/lib/types";
 
 interface Props {
   searchParams: Promise<{ date?: string }>;
 }
 
+function formatTime(iso: string | null, targetDateStr: string): string {
+  if (!iso) return "--:--";
+  try {
+    const d = new Date(iso);
+    // Tarih kontrolü: kickoff'un tarihi bülten tarihiyle aynı mı?
+    const kickoffDate = d.toISOString().split("T")[0];
+    if (kickoffDate !== targetDateStr) return "--:--";
+    return d.toLocaleTimeString("tr-TR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Istanbul",
+    });
+  } catch {
+    return "--:--";
+  }
+}
+
+function sortMatches(
+  matches: FixtureMatch[],
+  dateStr: string
+): { match: FixtureMatch; timeStr: string }[] {
+  const withTime = matches.map((m) => ({
+    match: m,
+    timeStr: formatTime(m.kickoff_time, dateStr),
+    ts: m.kickoff_time ? new Date(m.kickoff_time).getTime() : Infinity,
+  }));
+
+  return withTime
+    .sort((a, b) => a.ts - b.ts)
+    .map(({ match, timeStr }) => ({ match, timeStr }));
+}
+
 async function MatchList({ date }: { date: string }) {
-  let matches = [];
+  let matches: FixtureMatch[] = [];
   let error = "";
   try {
     matches = await getFixture(date);
@@ -18,13 +52,11 @@ async function MatchList({ date }: { date: string }) {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="text-4xl mb-3">⚠️</div>
-          <p className="text-sm" style={{ color: "#ef4444" }}>
-            {error}
-          </p>
-          <p className="text-xs mt-1" style={{ color: "#475569" }}>
+      <div className="flex items-center justify-center py-24">
+        <div className="text-center space-y-3">
+          <div className="text-5xl">⚠️</div>
+          <p className="text-sm font-medium" style={{ color: "#ef4444" }}>{error}</p>
+          <p className="text-xs" style={{ color: "#475569" }}>
             Backend sunucusunun çalıştığından emin olun
           </p>
         </div>
@@ -34,29 +66,37 @@ async function MatchList({ date }: { date: string }) {
 
   if (matches.length === 0) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="text-4xl mb-3">📭</div>
-          <p className="text-sm" style={{ color: "#64748b" }}>
-            Bu tarihte Hot maç bulunamadı.
+      <div className="flex items-center justify-center py-24">
+        <div className="text-center space-y-3">
+          <div className="text-5xl">📭</div>
+          <p className="text-sm font-medium" style={{ color: "#64748b" }}>
+            Bu tarihte maç bulunamadı.
           </p>
         </div>
       </div>
     );
   }
 
+  const sorted = sortMatches(matches, date);
+  const matchIds = matches.map((m) => m.match_id);
+
   return (
-    <div>
+    <>
+      <BultenPrefetcher matchIds={matchIds} />
       <div
-        className="px-4 py-2 text-xs font-medium border-b"
-        style={{ color: "#64748b", borderColor: "#2d3748" }}
+        className="flex items-center gap-2 px-4 py-2 text-xs border-b"
+        style={{ borderColor: "#1e293b", color: "#475569" }}
       >
-        {matches.length} maç bulundu
+        <span
+          className="w-2 h-2 rounded-full flex-shrink-0"
+          style={{ backgroundColor: "#22c55e" }}
+        />
+        {matches.length} maç
       </div>
-      {matches.map((m) => (
-        <BultenRow key={m.match_id} match={m} />
+      {sorted.map(({ match, timeStr }) => (
+        <BultenRow key={match.match_id} match={match} timeStr={timeStr} />
       ))}
-    </div>
+    </>
   );
 }
 
@@ -69,23 +109,20 @@ export default async function BultenPage({ searchParams }: Props) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div
-        className="px-6 py-4 border-b flex items-center justify-between"
+        className="px-6 py-4 border-b"
         style={{ borderColor: "#2d3748" }}
       >
-        <div>
+        <div className="flex items-center justify-between">
           <h1 className="text-lg font-bold" style={{ color: "#e2e8f0" }}>
             Günlük Bülten
           </h1>
-          <p className="text-xs mt-0.5" style={{ color: "#64748b" }}>
-            Hot maçlar — Nowgoal verisi
-          </p>
+          <span
+            className="text-xs font-mono px-2.5 py-1 rounded-full"
+            style={{ backgroundColor: "#1e293b", color: "#64748b" }}
+          >
+            {date}
+          </span>
         </div>
-        <span
-          className="text-xs px-2.5 py-1 rounded-full"
-          style={{ backgroundColor: "#1e3a5f", color: "#93c5fd" }}
-        >
-          {date}
-        </span>
       </div>
 
       {/* Gün sekmeleri */}
@@ -95,7 +132,7 @@ export default async function BultenPage({ searchParams }: Props) {
       <div className="flex-1 overflow-y-auto">
         <Suspense
           fallback={
-            <div className="flex items-center justify-center py-20">
+            <div className="flex items-center justify-center py-24">
               <p className="text-sm animate-pulse" style={{ color: "#64748b" }}>
                 Yükleniyor...
               </p>

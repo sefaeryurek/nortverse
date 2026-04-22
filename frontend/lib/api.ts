@@ -12,11 +12,18 @@ export async function getFixture(date: string): Promise<FixtureMatch[]> {
 
 export async function analyzeMatch(matchId: string): Promise<AnalyzeResponse> {
   const res = await fetch(`${BASE}/api/analyze/${matchId}`, {
-    method: "POST",
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Analiz başarısız: ${res.status}`);
   return res.json();
+}
+
+export async function prefetchAnalyze(matchId: string): Promise<void> {
+  try {
+    await fetch(`${BASE}/api/analyze/${matchId}`, { cache: "no-store" });
+  } catch {
+    // sessiz başarısızlık — prefetch arka planda çalışır
+  }
 }
 
 export async function getMatches(
