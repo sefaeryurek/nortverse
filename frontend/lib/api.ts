@@ -1,0 +1,33 @@
+import type { AnalyzeResponse, FixtureMatch, MatchSummary } from "./types";
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export async function getFixture(date: string): Promise<FixtureMatch[]> {
+  const res = await fetch(`${BASE}/api/fixture?date=${date}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Fixture alınamadı: ${res.status}`);
+  return res.json();
+}
+
+export async function analyzeMatch(matchId: string): Promise<AnalyzeResponse> {
+  const res = await fetch(`${BASE}/api/analyze/${matchId}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Analiz başarısız: ${res.status}`);
+  return res.json();
+}
+
+export async function getMatches(
+  league?: string,
+  limit = 100
+): Promise<MatchSummary[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (league) params.set("league", league);
+  const res = await fetch(`${BASE}/api/matches?${params}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Maçlar alınamadı: ${res.status}`);
+  return res.json();
+}
