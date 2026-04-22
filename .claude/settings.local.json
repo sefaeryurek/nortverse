@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m app.cli.main fetch-fixture)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python -m app.cli.main build-multi-archive 34 31 8 11 23 16 30 --seasons 5)",
+      "Bash(tee /tmp/multi_archive_log.txt)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -m alembic revision --autogenerate -m \"add_h2_scores_and_kickoff_time\")",
+      "Bash(python -m alembic upgrade head)",
+      "Bash(python -c \"from app.cli.main import app; print\\('OK'\\)\")",
+      "Bash(python -m pytest tests/test_analysis.py -q)",
+      "Bash(grep -v \"^$\")",
+      "Bash(python -m app.cli.main list-leagues)",
+      "Read(//c/c/Users/Sefa/Desktop/**)",
+      "Bash(python -c ' *)",
+      "Bash(python -m app.cli.main build-multi-archive 34 8 11 23 16 30 --seasons 5)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(python -m app.cli.main build-multi-archive 31 --seasons 5)",
+      "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
+      "Bash(npm --version)",
+      "Bash(npx create-next-app@latest frontend --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --yes)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/bulten)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}
