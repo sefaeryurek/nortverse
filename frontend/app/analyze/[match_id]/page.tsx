@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import type { AnalyzeResponse } from "@/lib/types";
 import { analyzeMatch } from "@/lib/api";
 import IddaaCoupon from "@/components/IddaaCoupon";
+import ScoreList from "@/components/ScoreList";
 
 type Period = "ht" | "h2" | "ft";
 
@@ -19,6 +20,11 @@ function patternFor(data: AnalyzeResponse, period: Period) {
     b: period === "ht" ? data.ht_b : period === "h2" ? data.h2_b : data.ft_b,
     c: period === "ht" ? data.ht_c : period === "h2" ? data.h2_c : data.ft_c,
   };
+}
+
+function scoresFor(data: AnalyzeResponse, period: Period) {
+  const p = period === "ht" ? data.ht : period === "h2" ? data.half2 : data.ft;
+  return { scores_1: p.scores_1, scores_x: p.scores_x, scores_2: p.scores_2 };
 }
 
 export default function AnalyzePage() {
@@ -39,6 +45,7 @@ export default function AnalyzePage() {
   const { b: patternB, c: patternC } = data
     ? patternFor(data, activePeriod)
     : { b: null, c: null };
+  const scores = data ? scoresFor(data, activePeriod) : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -155,7 +162,33 @@ export default function AnalyzePage() {
                   ))}
                 </div>
 
-                {/* Kupon */}
+                {/* Katman A — 3.5+ skor dağılımı */}
+                {scores && (scores.scores_1.length > 0 || scores.scores_x.length > 0 || scores.scores_2.length > 0) && (
+                  <div
+                    className="rounded-xl p-4 border space-y-3"
+                    style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#38bdf8" }} />
+                      <h3 className="text-sm font-bold tracking-wide" style={{ color: "#38bdf8" }}>
+                        Katman A — 3.5+ Oranı Olan Skorlar
+                      </h3>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full font-mono ml-auto"
+                        style={{ backgroundColor: "#1e293b", color: "#64748b" }}
+                      >
+                        {scores.scores_1.length + scores.scores_x.length + scores.scores_2.length} skor
+                      </span>
+                    </div>
+                    <div className="flex gap-3">
+                      <ScoreList scores={scores.scores_1} type="1" label="Ev Kazanır" />
+                      <ScoreList scores={scores.scores_x} type="x" label="Berabere" />
+                      <ScoreList scores={scores.scores_2} type="2" label="Dep. Kazanır" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Arşiv İstatistikleri */}
                 <IddaaCoupon
                   patternB={patternB}
                   patternC={patternC}
