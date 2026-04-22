@@ -122,16 +122,25 @@ async def fetch_league_match_ids(
         return []
 
     match_ids: list[str] = []
-    for round_key, matches in schedule.items():
-        if not isinstance(matches, list):
+    for round_key, round_val in schedule.items():
+        # ITA D1 gibi liglerde: {sub_XXXX: {R_1: [...], R_2: [...]}} iç içe yapı
+        if isinstance(round_val, dict):
+            round_lists = round_val.values()
+        elif isinstance(round_val, list):
+            round_lists = [round_val]
+        else:
             continue
-        for match in matches:
-            if isinstance(match, list) and match:
-                match_ids.append(str(match[0]))
-            elif isinstance(match, dict):
-                mid = match.get("id") or match.get("matchId") or match.get("mid")
-                if mid:
-                    match_ids.append(str(mid))
+
+        for matches in round_lists:
+            if not isinstance(matches, list):
+                continue
+            for match in matches:
+                if isinstance(match, list) and match:
+                    match_ids.append(str(match[0]))
+                elif isinstance(match, dict):
+                    mid = match.get("id") or match.get("matchId") or match.get("mid")
+                    if mid:
+                        match_ids.append(str(mid))
 
     log.info(
         "Lig %d / %s: %d round, %d maç ID çekildi",
