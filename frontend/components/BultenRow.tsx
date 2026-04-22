@@ -30,7 +30,7 @@ export default function BultenRow({ match, timeStr }: Props) {
 
   return (
     <Link
-      href={`/analyze/${match.match_id}`}
+      href={`/analyze/${match.match_id}?home=${encodeURIComponent(match.home_team)}&away=${encodeURIComponent(match.away_team)}`}
       className="group flex items-center gap-0 border-b transition-all"
       style={{ borderColor: "#1e293b" }}
     >

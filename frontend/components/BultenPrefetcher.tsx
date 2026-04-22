@@ -9,11 +9,8 @@ interface Props {
 
 export default function BultenPrefetcher({ matchIds }: Props) {
   useEffect(() => {
-    // Tüm maçların analizini arka planda başlat
-    // Kullanıcı bir maça tıkladığında cache'ten anında gelir
-    for (const id of matchIds) {
-      prefetchAnalyze(id);
-    }
+    // Sadece ilk 3 maçı prefetch et — daha fazlası eşzamanlı Playwright yükü oluşturur
+    matchIds.slice(0, 3).forEach((id) => prefetchAnalyze(id));
   }, [matchIds]);
 
   return null;

@@ -50,7 +50,7 @@ def _build_fixture_url(target_date: Optional[date] = None) -> str:
     if target_date is None:
         return base
 
-    today = date.today()
+    today = datetime.now(_BEIJING_TZ).date()
     diff = (target_date - today).days
 
     if diff == 0:

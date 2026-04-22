@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { AnalyzeResponse } from "@/lib/types";
 import { analyzeMatch } from "@/lib/api";
 import IddaaCoupon from "@/components/IddaaCoupon";
@@ -30,6 +30,9 @@ function scoresFor(data: AnalyzeResponse, period: Period) {
 export default function AnalyzePage() {
   const { match_id } = useParams<{ match_id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlHome = searchParams.get("home") ?? "";
+  const urlAway = searchParams.get("away") ?? "";
   const [data, setData] = useState<AnalyzeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -84,6 +87,12 @@ export default function AnalyzePage() {
                 {data.league_code} · {data.season}
               </p>
             </>
+          ) : urlHome && urlAway ? (
+            <h1 className="text-base font-bold truncate" style={{ color: "#e2e8f0" }}>
+              {urlHome}
+              <span className="mx-2" style={{ color: "#475569" }}>vs</span>
+              {urlAway}
+            </h1>
           ) : (
             <h1 className="text-base font-bold" style={{ color: "#e2e8f0" }}>
               Maç #{match_id}
