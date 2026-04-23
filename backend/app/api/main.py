@@ -1,25 +1,18 @@
-"""Nortverse FastAPI uygulaması.
-
-Endpoints:
-    GET  /api/health
-    GET  /api/fixture?date=YYYY-MM-DD
-    GET  /api/analyze/{match_id}   — DB cache, ilk seferde scrape
-    POST /api/analyze/{match_id}   — Her zaman scrape (cache'i yeniler)
-    GET  /api/matches?league=ENG PR&limit=50
-    GET  /api/match/{match_id}
-"""
+"""Nortverse FastAPI uygulaması."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import sys
+import time
+from contextlib import asynccontextmanager
+from datetime import date
+from typing import Optional
 
 # Windows'ta Playwright subprocess için ProactorEventLoop gerekiyor
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-from datetime import date
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,10 +29,76 @@ from app.scraper import fetch_fixture, fetch_match_detail
 
 log = logging.getLogger(__name__)
 
+# ─── Cache & eşzamanlılık ────────────────────────────────────────────────────
+
+# Analiz sonuçları: match_id → AnalyzeResponse
+_analysis_cache: dict[str, "AnalyzeResponse"] = {}
+# Aynı match için tek seferde scrape garantisi
+_analysis_locks: dict[str, asyncio.Lock] = {}
+
+# Fixture cache: "YYYY-MM-DD" → (fetch_timestamp, [FixtureMatchOut])
+_fixture_cache: dict[str, tuple[float, list]] = {}
+FIXTURE_CACHE_TTL = 300.0  # 5 dakika
+
+# Arka plan analiz kuyruğu (lifespan ile başlatılır)
+_bg_queue: asyncio.Queue[str] | None = None
+_bg_queued: set[str] = set()  # kuyruğa girmiş ama henüz tamamlanmamış match_id'ler
+
+
+# ─── Ortak analiz yardımcısı ─────────────────────────────────────────────────
+
+async def _analyze_and_cache(match_id: str) -> "AnalyzeResponse":
+    """Maçı analiz et, cache'e yaz, sonucu döndür (lock ile)."""
+    if match_id in _analysis_cache:
+        return _analysis_cache[match_id]
+    if match_id not in _analysis_locks:
+        _analysis_locks[match_id] = asyncio.Lock()
+    async with _analysis_locks[match_id]:
+        if match_id in _analysis_cache:
+            return _analysis_cache[match_id]
+        response = await _do_analyze(match_id)
+        _analysis_cache[match_id] = response
+        return response
+
+
+# ─── Arka plan kuyruğu ───────────────────────────────────────────────────────
+
+async def _bg_worker() -> None:
+    """Fixture yüklendikten sonra tüm maçları sırayla arka planda analiz eder."""
+    assert _bg_queue is not None
+    while True:
+        match_id = await _bg_queue.get()
+        try:
+            if match_id not in _analysis_cache:
+                await _analyze_and_cache(match_id)
+                log.info("Arka plan analizi tamamlandı: %s", match_id)
+        except Exception as exc:
+            log.warning("Arka plan analizi başarısız [%s]: %s", match_id, exc)
+        finally:
+            _bg_queued.discard(match_id)
+            _bg_queue.task_done()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _bg_queue
+    _bg_queue = asyncio.Queue()
+    task = asyncio.create_task(_bg_worker())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+# ─── FastAPI uygulaması ───────────────────────────────────────────────────────
+
 app = FastAPI(
     title="Nortverse API",
     description="Futbol maçı istatistik ve analiz sistemi",
     version="0.2.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -49,13 +108,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory cache: match_id → AnalyzeResponse
-_analysis_cache: dict[str, "AnalyzeResponse"] = {}
-# Concurrency kontrolü: aynı match_id için tek seferde scrape
-_analysis_locks: dict[str, asyncio.Lock] = {}
 
-
-# --- Response şemaları ---
+# ─── Response şemaları ────────────────────────────────────────────────────────
 
 class HealthResponse(BaseModel):
     status: str
@@ -86,7 +140,6 @@ class AnalyzeResponse(BaseModel):
     ht: PeriodOut
     half2: PeriodOut
     ft: PeriodOut
-    # 6 pattern sonucu — periyot × arşiv
     ht_b: Optional[PatternResult] = None
     ht_c: Optional[PatternResult] = None
     h2_b: Optional[PatternResult] = None
@@ -112,10 +165,9 @@ class MatchSummary(BaseModel):
     ft_scores_2: Optional[list]
 
 
-# --- Ortak analiz fonksiyonu ---
+# ─── Ortak analiz fonksiyonu ──────────────────────────────────────────────────
 
 async def _do_analyze(match_id: str) -> AnalyzeResponse:
-    """Maçı scrape et, 6 periyot × arşiv pattern hesapla."""
     raw = await fetch_match_detail(match_id)
     check = check_match_filters(raw)
 
@@ -135,7 +187,6 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
 
     result = analyze_match(raw)
 
-    # 6 pattern sorgusu (hata olursa None bırak)
     async def _b(period: str, s1: list, sx: list, s2: list) -> Optional[PatternResult]:
         try:
             return await find_pattern_b_matches(period, s1, sx, s2)
@@ -175,7 +226,7 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
     )
 
 
-# --- Endpoints ---
+# ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
@@ -184,7 +235,7 @@ async def health() -> HealthResponse:
 
 @app.get("/api/fixture", response_model=list[FixtureMatchOut])
 async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> list[FixtureMatchOut]:
-    """Günlük Hot maçları döndürür. date parametresi: YYYY-MM-DD. Boşsa bugün."""
+    """Günlük Hot maçları döndürür. 5 dakika cache'lenir, tüm maçlar arka planda analiz kuyruğuna alınır."""
     parsed_date: Optional[date] = None
     if target_date:
         try:
@@ -192,8 +243,17 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz tarih formatı. Kullanım: YYYY-MM-DD")
 
+    cache_key = parsed_date.isoformat() if parsed_date else date.today().isoformat()
+
+    # Fixture cache kontrolü
+    if cache_key in _fixture_cache:
+        ts, cached_result = _fixture_cache[cache_key]
+        if time.time() - ts < FIXTURE_CACHE_TTL:
+            log.info("Fixture cache hit: %s", cache_key)
+            return cached_result
+
     matches = await fetch_fixture(target_date=parsed_date, only_hot=True)
-    return [
+    result = [
         FixtureMatchOut(
             match_id=m.match_id,
             home_team=m.home_team,
@@ -204,25 +264,23 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
         )
         for m in matches
     ]
+    _fixture_cache[cache_key] = (time.time(), result)
+
+    # Arka planda tüm maçları analiz kuyruğuna ekle
+    if _bg_queue is not None:
+        for m in matches:
+            if m.match_id not in _analysis_cache and m.match_id not in _bg_queued:
+                _bg_queued.add(m.match_id)
+                await _bg_queue.put(m.match_id)
+        log.info("Arka plan kuyruğu: %d maç eklendi (%s)", _bg_queue.qsize(), cache_key)
+
+    return result
 
 
 @app.get("/api/analyze/{match_id}", response_model=AnalyzeResponse)
 async def get_analyze(match_id: str) -> AnalyzeResponse:
     """Maçı analiz eder. Cache'te varsa anında döner, yoksa scrape eder."""
-    if match_id in _analysis_cache:
-        log.info("Cache hit: %s", match_id)
-        return _analysis_cache[match_id]
-
-    # Aynı match_id için tek seferde scrape (concurrent request koruması)
-    if match_id not in _analysis_locks:
-        _analysis_locks[match_id] = asyncio.Lock()
-    async with _analysis_locks[match_id]:
-        # Lock alındıktan sonra tekrar kontrol
-        if match_id in _analysis_cache:
-            return _analysis_cache[match_id]
-        response = await _do_analyze(match_id)
-        _analysis_cache[match_id] = response
-        return response
+    return await _analyze_and_cache(match_id)
 
 
 @app.post("/api/analyze/{match_id}", response_model=AnalyzeResponse)
@@ -238,7 +296,6 @@ async def list_matches(
     league: Optional[str] = Query(None, description="Lig kodu (örn: ENG PR)"),
     limit: int = Query(50, le=200),
 ) -> list[MatchSummary]:
-    """DB'deki analiz edilmiş maçları listeler."""
     async with get_session() as session:
         stmt = select(Match).order_by(Match.analyzed_at.desc()).limit(limit)
         if league:
@@ -266,7 +323,6 @@ async def list_matches(
 
 @app.get("/api/match/{match_id}", response_model=MatchSummary)
 async def get_match(match_id: str) -> MatchSummary:
-    """DB'den tek maç detayı döndürür."""
     async with get_session() as session:
         row = (
             await session.execute(select(Match).where(Match.match_id == match_id))

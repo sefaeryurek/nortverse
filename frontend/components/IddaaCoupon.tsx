@@ -33,7 +33,7 @@ function OddCell({ label, value, sub }: OddCellProps) {
           {sub}
         </span>
       )}
-      <span className="text-xs font-bold font-mono" style={{ color }}>
+      <span className="text-sm font-extrabold font-mono leading-none" style={{ color }}>
         %{pct}
       </span>
     </div>

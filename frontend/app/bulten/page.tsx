@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import BultenRow from "@/components/BultenRow";
-import BultenPrefetcher from "@/components/BultenPrefetcher";
 import { getFixture } from "@/lib/api";
 import type { FixtureMatch } from "@/lib/types";
 
@@ -73,11 +72,9 @@ async function MatchList({ date }: { date: string }) {
   }
 
   const sorted = sortMatches(matches);
-  const matchIds = matches.map((m) => m.match_id);
 
   return (
     <>
-      <BultenPrefetcher matchIds={matchIds} />
       <div
         className="flex items-center gap-2 px-4 py-2 text-xs border-b"
         style={{ borderColor: "#1e293b", color: "#475569" }}
