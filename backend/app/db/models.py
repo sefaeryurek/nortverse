@@ -1,9 +1,4 @@
-"""SQLAlchemy ORM modelleri.
-
-Tek tablo: matches
-- Katman A sonuçları (JSONB sütunlar)
-- Gerçek sonuç alanları (Sprint 3'te doldurulacak)
-"""
+"""SQLAlchemy ORM modelleri."""
 
 from datetime import datetime
 
@@ -62,3 +57,17 @@ class Match(Base):
 
     def __repr__(self) -> str:
         return f"<Match {self.match_id}: {self.home_team} vs {self.away_team}>"
+
+
+class FixtureCache(Base):
+    """Günlük bülten listesi cache tablosu.
+
+    Playwright scrape sonucu burada saklanır. Server restart'larından etkilenmez.
+    Geçmiş tarihler kalıcı, bugün/gelecek için 1 saatlik TTL uygulanır.
+    """
+
+    __tablename__ = "fixture_cache"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # "YYYY-MM-DD"
+    matches_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    cached_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

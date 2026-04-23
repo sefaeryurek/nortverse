@@ -24,7 +24,7 @@ from app.analysis.pattern_b import find_pattern_b_matches
 from app.analysis.pattern_c import find_pattern_c_all_periods
 from app.analysis.pattern_stats import PatternResult
 from app.db.connection import get_session
-from app.db.models import Match
+from app.db.models import FixtureCache, Match
 from app.scraper import fetch_fixture, fetch_match_detail
 
 log = logging.getLogger(__name__)
@@ -323,7 +323,15 @@ async def health() -> HealthResponse:
 
 @app.get("/api/fixture", response_model=list[FixtureMatchOut])
 async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> list[FixtureMatchOut]:
-    """Günlük Hot maçları döndürür. 5 dakika cache'lenir, tüm maçlar arka planda analiz kuyruğuna alınır."""
+    """Günlük Hot maçları döndürür.
+
+    3 katmanlı cache:
+    1. Memory cache (5 dk TTL) — aynı istek tekrarı
+    2. DB cache (kalıcı, geçmiş tarihler; bugün için 1 saat) — server restart'larına dayanıklı
+    3. Playwright scrape — ilk kez veya cache süresi dolmuşsa
+    """
+    from datetime import datetime, timezone
+
     parsed_date: Optional[date] = None
     if target_date:
         try:
@@ -331,15 +339,37 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz tarih formatı. Kullanım: YYYY-MM-DD")
 
-    cache_key = parsed_date.isoformat() if parsed_date else date.today().isoformat()
+    today = date.today()
+    cache_key = parsed_date.isoformat() if parsed_date else today.isoformat()
+    req_date = parsed_date or today
 
-    # Fixture cache kontrolü
+    # 1. Memory cache
     if cache_key in _fixture_cache:
         ts, cached_result = _fixture_cache[cache_key]
         if time.time() - ts < FIXTURE_CACHE_TTL:
-            log.info("Fixture cache hit: %s", cache_key)
+            log.info("Fixture memory cache hit: %s", cache_key)
             return cached_result
 
+    # 2. DB cache — geçmiş tarihler kalıcı, bugün/gelecek 1 saat
+    db_row = None
+    try:
+        async with get_session() as session:
+            db_row = await session.get(FixtureCache, cache_key)
+    except Exception as exc:
+        log.warning("Fixture DB cache okunamadı (migration uygulanmamış olabilir): %s", exc)
+
+    if db_row is not None:
+        age = (datetime.now(timezone.utc) - db_row.cached_at).total_seconds()
+        is_stale = req_date >= today and age >= 3600  # geçmiş tarih = kalıcı, diğerleri 1 saat
+        if not is_stale:
+            result = [FixtureMatchOut(**m) for m in db_row.matches_json]
+            _fixture_cache[cache_key] = (time.time(), result)
+            log.info("Fixture DB cache hit: %s (%.0f sn önce)", cache_key, age)
+            _enqueue_bg_analysis(result)
+            return result
+
+    # 3. Playwright scrape
+    log.info("Fixture Playwright scrape başlıyor: %s", cache_key)
     matches = await fetch_fixture(target_date=parsed_date, only_hot=True)
     result = [
         FixtureMatchOut(
@@ -352,17 +382,34 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
         )
         for m in matches
     ]
+
+    # DB'ye kaydet
+    try:
+        async with get_session() as session:
+            row = FixtureCache(
+                date=cache_key,
+                matches_json=[m.model_dump() for m in result],
+                cached_at=datetime.now(timezone.utc),
+            )
+            await session.merge(row)
+        log.info("Fixture DB'ye kaydedildi: %s (%d maç)", cache_key, len(result))
+    except Exception as exc:
+        log.warning("Fixture DB'ye kaydedilemedi: %s", exc)
+
     _fixture_cache[cache_key] = (time.time(), result)
-
-    # Arka planda tüm maçları analiz kuyruğuna ekle
-    if _bg_queue is not None:
-        for m in matches:
-            if m.match_id not in _analysis_cache and m.match_id not in _bg_queued:
-                _bg_queued.add(m.match_id)
-                await _bg_queue.put(m.match_id)
-        log.info("Arka plan kuyruğu: %d maç eklendi (%s)", _bg_queue.qsize(), cache_key)
-
+    _enqueue_bg_analysis(result)
     return result
+
+
+def _enqueue_bg_analysis(matches: list[FixtureMatchOut]) -> None:
+    """Arka plan analiz kuyruğuna maçları ekler."""
+    if _bg_queue is None:
+        return
+    for m in matches:
+        if m.match_id not in _analysis_cache and m.match_id not in _bg_queued:
+            _bg_queued.add(m.match_id)
+            _bg_queue.put_nowait(m.match_id)
+    log.info("Arka plan kuyruğu: %d bekleyen maç", _bg_queue.qsize())
 
 
 @app.get("/api/analyze/{match_id}", response_model=AnalyzeResponse)
