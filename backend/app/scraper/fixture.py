@@ -22,8 +22,8 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-# Nowgoal sitesi Beijing/Çin saatiyle çalışır (UTC+8)
-_BEIJING_TZ = timezone(timedelta(hours=8))
+# Nowgoal data-t attribute'u UTC saatiyle çalışır
+_SITE_TZ = timezone.utc
 
 from bs4 import BeautifulSoup
 from bs4.element import Tag
@@ -50,7 +50,7 @@ def _build_fixture_url(target_date: Optional[date] = None) -> str:
     if target_date is None:
         return base
 
-    today = datetime.now(_BEIJING_TZ).date()
+    today = datetime.now(timezone.utc).date()
     diff = (target_date - today).days
 
     if diff == 0:
@@ -104,7 +104,7 @@ def _extract_match_info(tr: Tag) -> Optional[dict]:
                     # Nowgoal UTC+8 (Beijing) saatiyle çalışır
                     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%#m-%#d %H:%M:%S"):
                         try:
-                            kickoff = datetime.strptime(data_t, fmt).replace(tzinfo=_BEIJING_TZ)
+                            kickoff = datetime.strptime(data_t, fmt).replace(tzinfo=_SITE_TZ)
                             break
                         except (ValueError, Exception):
                             continue

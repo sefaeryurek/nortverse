@@ -94,6 +94,12 @@ function ScoreFreq({ freq }: ScoreFreqProps) {
   );
 }
 
+function periodLabels(period: "ht" | "h2" | "ft") {
+  if (period === "ht") return { prefix: "İY", sonuc: "1. Yarı Sonucu", hnd: "Handikaplı 1. Yarı", combo15: "1. Yarı Sonucu ve 1.5 Alt/Üst", comboKg: "1. Yarı Sonucu ve KG" };
+  if (period === "h2") return { prefix: "2Y", sonuc: "2. Yarı Sonucu", hnd: "Handikaplı 2. Yarı", combo15: "2. Yarı Sonucu ve 1.5 Alt/Üst", comboKg: "2. Yarı Sonucu ve KG" };
+  return { prefix: "MS", sonuc: "Maç Sonucu", hnd: "Handikaplı MS", combo15: "MS Sonucu ve 1.5 Alt/Üst", comboKg: "MS Sonucu ve Karşılıklı Gol" };
+}
+
 function ArchiveCoupon({
   result,
   title,
@@ -106,6 +112,7 @@ function ArchiveCoupon({
   period: "ht" | "h2" | "ft";
 }) {
   const showYariSonucu = period === "ft";
+  const lbl = periodLabels(period);
 
   return (
     <div
@@ -128,12 +135,12 @@ function ArchiveCoupon({
         </span>
       </div>
 
-      {/* Maç Sonucu */}
-      <Section title="Maç Sonucu">
+      {/* Sonuç */}
+      <Section title={lbl.sonuc}>
         <Row items={[
-          { label: "MS 1", value: result.result_1_pct },
-          { label: "MS X", value: result.result_x_pct },
-          { label: "MS 2", value: result.result_2_pct },
+          { label: `${lbl.prefix} 1`, value: result.result_1_pct },
+          { label: `${lbl.prefix} X`, value: result.result_x_pct },
+          { label: `${lbl.prefix} 2`, value: result.result_2_pct },
         ]} />
         <Row items={[
           { label: "1X", sub: "Çifte Şans", value: result.dc_1x_pct },
@@ -143,7 +150,7 @@ function ArchiveCoupon({
       </Section>
 
       {/* Handikap */}
-      <Section title="Handikaplı MS">
+      <Section title={lbl.hnd}>
         <Row items={[
           { label: "1", sub: "Hnd (2:0)", value: result.hnd_h20_1_pct },
           { label: "X", sub: "Hnd (2:0)", value: result.hnd_h20_x_pct },
@@ -178,8 +185,8 @@ function ArchiveCoupon({
         ]} />
       </Section>
 
-      {/* MS + 1.5 Alt/Üst */}
-      <Section title="MS Sonucu ve 1.5 Alt/Üst">
+      {/* Sonuç + 1.5 Alt/Üst */}
+      <Section title={lbl.combo15}>
         <Row items={[
           { label: "1 + Alt", value: result.ms1_alt15_pct },
           { label: "1 + Üst", value: result.ms1_ust15_pct },
@@ -190,8 +197,8 @@ function ArchiveCoupon({
         ]} />
       </Section>
 
-      {/* MS + KG */}
-      <Section title="MS Sonucu ve Karşılıklı Gol">
+      {/* Sonuç + KG */}
+      <Section title={lbl.comboKg}>
         <Row items={[
           { label: "1 + Var", value: result.ms1_kg_var_pct },
           { label: "1 + Yok", value: result.ms1_kg_yok_pct },

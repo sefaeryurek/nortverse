@@ -9,6 +9,14 @@ import ScoreList from "@/components/ScoreList";
 
 type Period = "ht" | "h2" | "ft";
 
+const SKIP_REASON_LABELS: Record<string, string> = {
+  not_league_match: "Bu maç lig maçı değil (kupa veya özel maç). Tahmin üretilemez.",
+  home_team_insufficient: "Ev sahibi takım bu sezonda yeterli lig maçı oynamamış (minimum 5 gerekiyor).",
+  away_team_insufficient: "Deplasman takımı bu sezonda yeterli lig maçı oynamamış (minimum 5 gerekiyor).",
+  h2h_insufficient: "Bu iki takım arasında yeterli karşılaşma geçmişi bulunamadı (minimum 5 lig maçı gerekiyor).",
+  data_fetch_failed: "Maç verisi alınırken bir hata oluştu. Lütfen daha sonra tekrar deneyin.",
+};
+
 const PERIODS: { key: Period; label: string; short: string }[] = [
   { key: "ht", label: "1. Yarı (İY)", short: "İY" },
   { key: "h2", label: "2. Yarı (2Y)", short: "2Y" },
@@ -139,10 +147,10 @@ export default function AnalyzePage() {
                 style={{ backgroundColor: "#1c1109", borderColor: "#92400e" }}
               >
                 <p className="text-sm font-semibold" style={{ color: "#fcd34d" }}>
-                  Bu maç filtreleme kuralına takıldı
+                  Bu maç için tahmin üretilemedi
                 </p>
                 <p className="text-xs mt-1" style={{ color: "#78716c" }}>
-                  {data.skip_reason}
+                  {(data.skip_reason && SKIP_REASON_LABELS[data.skip_reason]) ?? data.skip_reason}
                 </p>
               </div>
             )}
