@@ -1,9 +1,23 @@
-name: Günlük Pipeline
+name: Pipeline & Sonuç Güncelleme
 
 on:
   schedule:
-    - cron: "0 5 * * *"  # Her sabah 05:00 UTC = 08:00 İstanbul
-  workflow_dispatch:       # GitHub üzerinden el ile de tetiklenebilir
+    - cron: "0 5 * * *"    # 08:00 İstanbul — sabah analiz (run-pipeline)
+    - cron: "30 21 * * *"  # 00:30 İstanbul — gece sonuç güncelleme (update-scores)
+    - cron: "0 23 * * *"   # 02:00 İstanbul — geç maçlar sonuç güncelleme (update-scores)
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Çalıştırılacak komut'
+        required: false
+        default: 'run-pipeline'
+        type: choice
+        options:
+          - run-pipeline
+          - update-scores
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   pipeline:
@@ -30,9 +44,18 @@ jobs:
           python -m playwright install chromium
           python -m playwright install-deps chromium
 
-      - name: Pipeline çalıştır (bugünün maçlarını çek, analiz et, DB'ye yaz)
+      - name: Komut çalıştır
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
-          python -m app.cli.main run-pipeline
+          SCHEDULE="${{ github.event.schedule }}"
+          CMD="${{ github.event.inputs.command }}"
+
+          if [ "$SCHEDULE" = "0 5 * * *" ] || [ "$CMD" = "run-pipeline" ] || ([ -z "$CMD" ] && [ -z "$SCHEDULE" ]); then
+            echo "Sabah pipeline çalışıyor (run-pipeline)..."
+            python -m app.cli.main run-pipeline
+          else
+            echo "Sonuç güncellemesi çalışıyor (update-scores)..."
+            python -m app.cli.main update-scores
+          fi

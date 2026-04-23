@@ -5,10 +5,10 @@ Idempotent: aynı match_id için tekrar çalıştırılırsa günceller (upsert)
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.dialects.postgresql import insert
 
 from app.analysis import analyze_match, check_match_filters
@@ -110,5 +110,73 @@ async def run_pipeline(
         stats["analyzed"],
         stats["skipped"],
         stats["errors"],
+    )
+    return stats
+
+
+async def update_results(target_date: Optional[date] = None) -> dict:
+    """DB'deki maçların gerçek sonuçlarını günceller — Katman A/B/C verisi dokunulmaz.
+
+    Gece çalıştırılır: sabah pipeline'ının kaydettiği maçları tekrar scrape eder,
+    actual_ft/ht skorlarını doldurur → /sonuclar sayfasında görünür hale gelir.
+    """
+    istanbul_tz = timezone(timedelta(hours=3))
+
+    if target_date:
+        d = target_date
+    else:
+        now_ist = datetime.now(istanbul_tz)
+        # Gece 00:00–04:00 İstanbul'da çalışırsa önceki günün maçlarını güncelle
+        d = (now_ist - timedelta(days=1)).date() if now_ist.hour < 4 else now_ist.date()
+
+    day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=istanbul_tz)
+    day_end = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=istanbul_tz)
+
+    async with get_session() as session:
+        match_ids = list(
+            (await session.execute(
+                select(Match.match_id)
+                .where(Match.kickoff_time >= day_start, Match.kickoff_time <= day_end)
+            )).scalars().all()
+        )
+
+    log.info("Sonuç güncellemesi: %s için %d maç bulundu", d, len(match_ids))
+    stats = {"updated": 0, "not_finished": 0, "errors": 0}
+
+    async with browser_context() as ctx:
+        for match_id in match_ids:
+            try:
+                raw = await fetch_match_detail(match_id, ctx=ctx)
+                if raw.actual_ft_home is None:
+                    stats["not_finished"] += 1
+                    continue
+
+                async with get_session() as session:
+                    await session.execute(
+                        sa_update(Match)
+                        .where(Match.match_id == match_id)
+                        .values(
+                            actual_ft_home=raw.actual_ft_home,
+                            actual_ft_away=raw.actual_ft_away,
+                            actual_ht_home=raw.actual_ht_home,
+                            actual_ht_away=raw.actual_ht_away,
+                            actual_h2_home=raw.actual_h2_home,
+                            actual_h2_away=raw.actual_h2_away,
+                            result_fetched_at=datetime.now(timezone.utc),
+                        )
+                    )
+                stats["updated"] += 1
+                log.info(
+                    "Güncellendi [%s]: %s vs %s | %d-%d",
+                    match_id, raw.home_team, raw.away_team,
+                    raw.actual_ft_home, raw.actual_ft_away,
+                )
+            except Exception as e:
+                log.error("Güncelleme hatası [%s]: %s", match_id, e, exc_info=True)
+                stats["errors"] += 1
+
+    log.info(
+        "Sonuç güncellemesi tamamlandı: %d güncellendi, %d bitmemiş, %d hata",
+        stats["updated"], stats["not_finished"], stats["errors"],
     )
     return stats

@@ -904,6 +904,36 @@ def build_multi_archive_cmd(
     asyncio.run(_run())
 
 
+@app.command("update-scores")
+def update_scores_cmd(
+    target_date: Optional[str] = typer.Option(None, "--date", help="YYYY-MM-DD. Boşsa bugün (gece 00-04 arası ise dün)."),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """DB'deki maçların gerçek sonuçlarını günceller.
+
+    Gece çalıştırılır: sabah pipeline ile kaydedilen maçları scrape edip
+    actual_ft/ht skorlarını doldurur. Sonuçlar sayfasında görünür hale gelir.
+    """
+    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+
+    dt: Optional[date] = None
+    if target_date:
+        dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+
+    from app.pipeline import update_results
+
+    async def _run() -> None:
+        stats = await update_results(target_date=dt)
+        console.print(
+            f"\n[bold green]Sonuç güncellemesi tamamlandı:[/bold green] "
+            f"[green]{stats['updated']} güncellendi[/green] · "
+            f"[yellow]{stats['not_finished']} bitmemiş[/yellow] · "
+            f"[red]{stats['errors']} hata[/red]"
+        )
+
+    asyncio.run(_run())
+
+
 @app.command()
 def version() -> None:
     from app import __version__
