@@ -40,17 +40,21 @@ python -m app.cli.main analyze 2813084                  # tek maç analizi
 python -m app.cli.main analyze 2813084 --ratios         # 35 skorun tüm oranları
 python -m app.cli.main analyze-debug 2813084            # Excel karşılaştırma için
 python -m app.cli.main fetch-and-analyze                # çek + analiz et
-python -m app.cli.main run-pipeline                     # fetch → analiz → Supabase'e kaydet
+python -m app.cli.main run-pipeline                     # fetch → analiz → DB'ye kaydet (GÜNLÜK ÇALIŞMALI)
 python -m app.cli.main run-pipeline --date 2026-04-20   # belirli gün için pipeline
 
-# Arşiv oluşturma (Sprint 3)
+# Arşiv oluşturma
 # Syntax: build-archive <LEAGUE_ID> [SEZON]
 python -m app.cli.main build-archive 36 2024-2025   # ENG PR 2024-2025 sezonu
 python -m app.cli.main build-archive 36              # güncel sezon
 
-# FastAPI sunucusu (Sprint 4)
+# FastAPI sunucusu
 python -m app.cli.main serve                         # http://localhost:8000
-python -m app.cli.main serve --reload               # geliştirme modu
+python -m app.cli.main serve --reload               # geliştirme modu (Windows'ta çalışır)
+
+# Frontend (ayrı terminalde, frontend/ dizininden)
+cd ../frontend
+npm run dev                                          # http://localhost:3000
 ```
 
 ## Git & GitHub — Claude Code için Zorunlu Kurallar
@@ -64,7 +68,7 @@ python -m app.cli.main serve --reload               # geliştirme modu
 
 Her küçük ilerleme bile commit'e layık:
 - Yeni bir dosya yazıldı → commit + push
-- Bir bug düzeltildi → commit + push  
+- Bir bug düzeltildi → commit + push
 - Bir özellik çalışır hale geldi → commit + push
 - Test geçti → commit + push
 - Migration uygulandı → commit + push
@@ -72,7 +76,7 @@ Her küçük ilerleme bile commit'e layık:
 - Sprint tamamlandı → commit + push
 - Seans bitmek üzere → mutlaka commit + push
 
-**Sebep:** "Yaptığımız çalışmaları ve durumu asla kaybetmeyelim."  
+**Sebep:** "Yaptığımız çalışmaları ve durumu asla kaybetmeyelim."
 Her commit GitHub'da kalıcı bir kontrol noktasıdır. Seans kapanınca local değişiklikler kaybolabilir — GitHub'da olan kaybolmaz.
 
 ### Remote
@@ -81,58 +85,44 @@ Her commit GitHub'da kalıcı bir kontrol noktasıdır. Seans kapanınca local d
 https://github.com/sefaeryurek/nortverse.git  (branch: master)
 ```
 
-### Commit Mesajı Formatı — TEMİZ ve AÇIK Olmalı
+### Commit ve Push Komutu
 
-Commit mesajı 6 ay sonra bakıldığında ne yapıldığını tek satırda anlatmalı. Belirsiz mesaj kabul edilmez.
+Her değişiklik sonrası şu sıra izlenir — istisnasız:
+
+```bash
+git add <değişen dosyalar>
+git commit -m "Sprint X: Ne yapıldı — neden yapıldı"
+git push origin master
+```
+
+### Commit Mesajı Formatı — TEMİZ ve AÇIK Olmalı
 
 ```
 Sprint X: Ne yapıldı — neden yapıldı (Türkçe, kısa)
-
-- Değişiklik 1: dosya.py — açıklama
-- Değişiklik 2: dosya.py — açıklama
-
-Durum: Tamamlandı / Devam ediyor / Test bekleniyor
 ```
 
-**KABUL EDİLMEZ:** `fix`, `update`, `wip`, `değişiklik`, `güncelleme`  
-**DOĞRU:**
-- `Sprint 4: Katman C pattern matching eklendi — FT oranları ±0.5 fuzzy match`
-- `Sprint 4: DB şemasına actual_h2 ve kickoff_time eklendi — tabloda eksik alanlar`
-- `Sprint 4: build-multi-archive Typer int bug düzeltildi — seasons None geliyordu`
-- `CLAUDE.md: git commit kuralları güçlendirildi — çalışma sırasında push zorunlu`
+**KABUL EDİLMEZ:** `fix`, `update`, `wip`, `değişiklik`, `güncelleme`
 
-### Git Komutları
+**DOĞRU ÖRNEKLER:**
+- `Sprint 6: EXPOSE 8000 kaldırıldı — Railway PORT env var ile çakışıyordu`
+- `Sprint 6: DATABASE_URL_SYNC opsiyonel yapıldı — production'da gereksiz`
+- `Sprint 5: DB-first analiz — Playwright sadece DB'de olmayan maçlar için açılıyor`
 
-```bash
-# Değişiklikleri stage'e al ve commit at
-git add <dosyalar>
-git commit -m "Sprint X: açıklama — neden"
-
-# GitHub'a push et (HER commit sonrası, bekletme)
-git push origin master
-
-# Durum kontrolü
-git log --oneline -5
-git status
-```
-
-### Kontrol Listesi (her commit öncesi)
-
-- [ ] Mesaj Türkçe ve 6 ay sonra anlaşılır mı?
-- [ ] Ne yapıldığı VE neden yapıldığı açık mı?
-- [ ] `git push origin master` yapıldı mı?
+---
 
 ## Proje Nedir?
 
 **Nortverse**, nowgoal26.com'dan futbol maçı verilerini çekip istatistiksel analiz yapan bir sistem. Son hedef: web uygulaması + premium üyelik. Sahip: Sefa, kod tecrübesi az ama öğrenmeye açık.
 
-Excel'de çalışan mevcut analiz sistemini web tabanlı yapıyoruz. Excel sahibinin önceki yaptığı başka bir projesi bug'lıydı, **sıfırdan ve temiz** başlıyoruz.
+Excel'de çalışan mevcut analiz sistemini web tabanlı yapıyoruz. Sıfırdan ve temiz başlandı.
+
+---
 
 ## Sistemin Özü
 
 ### 3 Katmanlı Analiz
 
-**Katman A — Klasik Skor Hesaplama (TAMAMLANDI)**
+**Katman A — Klasik Skor Hesaplama (TAMAMLANDI ✅)**
 ```
 oran(hg, ag, periyot) = (
     (h2h_ev_periyot[hg] + form_ev_periyot[hg])
@@ -140,18 +130,20 @@ oran(hg, ag, periyot) = (
 ) / 2
 ```
 - 35 skor × 3 periyot (İY/2Y/MS) = 105 hesaplama
-- Formül sonucu her zaman 0.5 katı (0, 0.5, 1.0, 1.5, ..., 10.0)
-- 3.5+ çıkan skorlar ARŞIV-1'e MS1/MSX/MS2 olarak gruplanır
+- Formül sonucu her zaman 0.5 katı (0, 0.5, 1.0, ..., 10.0)
+- 3.5+ çıkan skorlar → MS1/MSX/MS2 olarak gruplanır, frontend'de Katman A bölümünde gösterilir
+- Periyotta hiç 3.5+ skor yoksa o periyot için tahmin gösterilmez
 
-**Katman B — Pattern Matching (ARŞIV-1)** (henüz yapılmadı)
-- Bülten maçının MS1+MSX+MS2 skor setini ARŞIV-1'de tara
-- **Tam aynı set'e sahip** geçmiş maçları bul
-- En az 5 eşleşme varsa → gerçek sonuçlardan istatistik (KG var %60, 2.5 üst %80 gibi)
+**Katman B — Pattern Matching / Arşiv-1 (TAMAMLANDI ✅)**
+- Bülten maçının MS1+MSX+MS2 skor setini DB'deki geçmiş maçlarla karşılaştırır
+- **Tam aynı set** → eşleşme. En az 5 eşleşme varsa istatistik üretilir
+- `app/analysis/pattern_b.py` → `find_pattern_b_matches(period, s1, sx, s2)`
 
-**Katman C — Tam Oran Pattern Matching (ARŞIV-2)** (henüz yapılmadı)
-- Bülten maçının 105 ham oranını ARŞIV-2'de tara
-- 35 skorun ±0.5 aralığında eşleşen maçları bul
-- Eşleşen maçların gerçek sonuçlarından istatistik
+**Katman C — Tam Oran Pattern Matching / Arşiv-2 (TAMAMLANDI ✅)**
+- Bülten maçının FT oranlarını DB'deki geçmiş maçlarla ±0.5 aralığında karşılaştırır
+- **Kritik tasarım kararı:** FT oranlarıyla tek sorgu yapılır, aynı eşleşme seti İY/2Y/MS için kullanılır
+  - Sebep: Bir maçın İY oran benzerliği varsa 2Y ve MS için de vardır. Periyot başına ayrı sorgu yapılsaydı "İY var, MS yok" gibi tutarsız sonuçlar çıkardı
+- `app/analysis/pattern_c.py` → `find_pattern_c_all_periods(ft_ratios)` → `(ht_result, h2_result, ft_result)`
 
 ### 35 Skor Listesi (Sıra Sabit)
 
@@ -170,7 +162,7 @@ Maç atlanır eğer:
 2. Ev veya deplasman takımı ligde < 5 maç oynamışsa
 3. H2H'ta < 5 lig maçı varsa
 
-Lig maçı tespit: h2h sayfasındaki her satırın başında lig kısa kodu var (TUR D1, ENG PR, TUR Cup, INT CF). Ana maçın kısa koduyla **birebir eşleşen** satırlar lig maçı.
+---
 
 ## Kod Yapısı
 
@@ -178,128 +170,204 @@ Lig maçı tespit: h2h sayfasındaki her satırın başında lig kısa kodu var 
 nortverse/
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py
 │   │   ├── config.py              # ScraperConfig, AnalysisConfig (frozen dataclass)
-│   │   ├── models.py              # Pydantic: FixtureMatch, HistoricalMatch, MatchRawData (+actual skorlar), ...
+│   │   ├── models.py              # Pydantic: FixtureMatch, HistoricalMatch, MatchRawData
 │   │   ├── db/
 │   │   │   ├── connection.py      # SQLAlchemy async engine + get_session()
-│   │   │   └── models.py          # Match ORM (JSONB Katman A + actual skor alanları)
+│   │   │   └── models.py          # Match ORM — JSONB: ht/h2/ft_scores_*, *_all_ratios, actual skorlar
 │   │   ├── scraper/
-│   │   │   ├── browser.py         # Playwright wrapper
-│   │   │   ├── fixture.py         # Günlük bülten (Hot filtreli)
+│   │   │   ├── browser.py         # Playwright wrapper (browser_context context manager)
+│   │   │   ├── fixture.py         # Günlük bülten — Hot filtreli, kickoff UTC timezone
 │   │   │   ├── match_detail.py    # H2H sayfası parse + gerçek skor çıkarımı
 │   │   │   └── league.py          # Lig sayfasından maç ID listesi (arşiv için)
 │   │   ├── analysis/
-│   │   │   ├── scores.py          # ALL_SCORES sabiti, yardımcılar
+│   │   │   ├── scores.py          # ALL_SCORES sabiti
 │   │   │   ├── filtering.py       # check_match_filters
 │   │   │   ├── engine.py          # analyze_match (Katman A)
-│   │   │   └── pattern_b.py       # find_pattern_b_matches (Katman B, JSONB equality)
+│   │   │   ├── pattern_b.py       # find_pattern_b_matches — JSONB equality
+│   │   │   ├── pattern_c.py       # find_pattern_c_all_periods — FT oranları ±0.5 fuzzy, TEK sorgu
+│   │   │   └── pattern_stats.py   # PatternResult model + compute_stats — ~130 istatistik alanı
+│   │   ├── api/
+│   │   │   └── main.py            # FastAPI — fixture cache, bg queue, DB-first analiz
 │   │   ├── pipeline/
 │   │   │   └── runner.py          # run_pipeline: fetch → analiz → upsert
 │   │   └── cli/
-│   │       └── main.py            # Typer + Rich CLI (fetch-fixture, analyze, build-archive, ...)
+│   │       └── main.py            # Typer + Rich CLI
 │   ├── alembic/                   # DB migration
 │   ├── tests/
-│   │   └── test_analysis.py       # 8 test (hepsi geçiyor)
-│   ├── requirements.txt
-│   └── pytest.ini
-├── docs/
-└── README.md
+│   │   └── test_analysis.py
+│   └── requirements.txt
+├── frontend/
+│   ├── app/
+│   │   ├── layout.tsx             # Root layout (dark tema, sidebar)
+│   │   ├── bulten/
+│   │   │   └── page.tsx           # Server component — fixture listesi (Suspense)
+│   │   └── analyze/[match_id]/
+│   │       └── page.tsx           # Client component — maç analiz sayfası
+│   ├── components/
+│   │   ├── BultenRow.tsx          # Maç satırı (link ?home=&away= param ile)
+│   │   ├── DayTabs.tsx            # 8 günlük kayan pencere (dün + bugün + 6 gün)
+│   │   ├── IddaaCoupon.tsx        # Arşiv istatistik kartları (Katman B + C)
+│   │   └── ScoreList.tsx          # Katman A 3.5+ skor listesi
+│   ├── lib/
+│   │   ├── api.ts                 # Backend API çağrıları (BASE = "" → Next.js proxy)
+│   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
+│   └── next.config.ts             # Rewrite proxy: /api/* → localhost:8000/api/*
+└── CLAUDE.md
 ```
 
-## Önemli Teknik Detaylar
+---
 
-### Nowgoal HTML Yapısı
+## API Performans Mimarisi
 
-**Fixture sayfası** (`https://live5.nowgoal26.com/football/fixture`):
-- Tarih parametresi: `?f=sc1` (+1 gün), `?f=ft1` (-1 gün)
-- Reklam selector: `.closebtn` (açılır açılmaz kapatılmalı)
-- Maç satırı: `<tr id="tr1_XXXXXX" class="b2" sclassid="XX" style="...">`
-  - `style="display: none;"` → site Hot modunda gizliyor → atla
-  - `style=""` → görünür → al
-- Lig başlığı: `<tr id="tr_XX" class="Leaguestitle" sclassid="XX">` → `.LGname` içinde ad
-- Maç bilgisi: TD içindeki `onclick="soccerInPage.analysis(2784810,"Sassuolo","Como","Italy Serie A")"` regex ile çıkarılır
-- Kick-off: `td.time[data-t="2026-4-17 16:30:00"]`
+### Anlık Analiz için 3 Katmanlı Cache
 
-**Hot filtresi**: Site **Show All** modunda açılıyor (`li_ShowAll class="on"`). Maç satırları JavaScript tarafından dinamik olarak `#mintable` div'ine ekleniyor — statik HTML'de `tr1_` satırı yok. Playwright sayfayı açtıktan sonra `#li_FilterHot` butonuna tıklanıyor, 2 sn bekleniyor; JS hot olmayan satırlara `display:none` uyguluyor. Biz sadece görünür kalanları alıyoruz.
+```
+Kullanıcı maça tıklar
+    ↓
+1. Memory cache kontrolü  → HIT: 0ms döner
+    ↓ MISS
+2. DB kontrolü            → HIT: ~1-3sn (sadece B/C DB sorgusu, Playwright YOK)
+    ↓ MISS
+3. Playwright scrape      → ~15-30sn (ilk kez veya DB'de yok)
+    ↓
+Memory cache'e yazar
+```
 
-**Match detail sayfası** (`/match/h2h-{match_id}`):
-- Takım isimleri: `.home` ve `.guest` span'ları
-- Tablolar:
-  - `#table_v1` class="team-table-home" → ev sahibinin son 20 maçı
-  - `#table_v2` class="team-table-guest" → deplasmanın son 20 maçı
-  - `#table_v3` class="team-table-other" → H2H
-- Maç satırı: `<tr id="tr1_N" index="MATCH_ID">`
-  - td[0]: lig kısa kodu (metin) + title attribute (tam ad)
-  - td[1]: tarih (`<span data-t="...">`)
-  - td[2]: ev takım
-  - td[3]: skor `<span class="fscore_1">2-1</span><span class="hscore_1">(1-0)</span>`
-  - td[4]: dep takım
+### Arka Plan Analiz Kuyruğu
 
-Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-detect**: h2h ve ev maçları tablolarındaki lig kodları sayılır, en çok görülen kupa/friendly olmayan kod ana maçın lig kodudur.
+- `/api/fixture` çağrıldığında tüm maçlar `asyncio.Queue`'ya eklenir
+- Seri worker (`_bg_worker`) maçları sırayla analiz eder
+- DB'deki maçlar kuyrukta hızlı (~1-3sn), DB'siz olanlar yavaş (~15-30sn)
+- Kullanıcı maça tıkladığında büyük ihtimalle cache'de hazır
 
-## Mevcut Durum (Sprint 4 — Devam Ediyor)
+### Fixture Cache
 
-**Çalışan:**
-- ✅ Fixture parser: Hot modunu aktive edip maçları doğru çekiyor (43 hot / ~252 toplam)
-- ✅ Match detail parser: takım, lig kodu, form/H2H maçları parse + gerçek skor çıkarımı
-- ✅ İY/2Y/MS gol dağılımları doğru
+- Aynı tarih için 5 dakika boyunca nowgoal'a gitmiyor
+- Date switch'leri anında döner (2. ziyaretten itibaren)
+
+### Production için Kritik: Günlük Pipeline
+
+```bash
+python -m app.cli.main run-pipeline
+```
+
+Bu komut sabah çalıştırıldığında bugünün tüm maçlarını scrape edip DB'ye yazar. Gün içinde kullanıcılar maçlara tıkladığında **Playwright hiç açılmaz**, DB'den 1-3sn'de gelir. Web sitesine geçince GitHub Actions'a eklenecek:
+
+```yaml
+on:
+  schedule:
+    - cron: "0 6 * * *"  # Her sabah 06:00 UTC
+```
+
+---
+
+## Frontend — IddaaCoupon İstatistik Bölümleri
+
+Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
+
+| Bölüm | Sekme | Açıklama |
+|---|---|---|
+| Maç Sonucu | Tümü | 1/X/2 + Çifte Şans |
+| İlk Yarı / Maç Sonucu | MS only | 9 kombo (1/1, 1/X, ..., 2/2) |
+| MS + 2.5 Alt/Üst | Tümü | 6 kombo |
+| Hangi Takım Kaç Farkla Kazanır | Tümü | 7 seçenek |
+| Handikap | Tümü | 12 hücre (2:0, 1:0, 0:1, 0:2) |
+| Taraf Alt/Üst | Tümü | Ev/Dep 0.5/1.5/2.5 + 1Y 0.5 |
+| Toplam Gol | Tümü | Gol aralığı + En çok gol yarısı |
+| Yarı Alt/Üst | MS only | 1Y 0.5/1.5/2.5 + İki yarı 1.5 |
+| Gol Sayısı ve KG | Tümü | Alt/Üst + KG |
+| MS + 1.5 / MS + KG | Tümü | 6 kombo |
+| Gol (detay) | MS only | 1Y/2Y KG, İY/2Y kombo, Ev/Dep iki yarı |
+| Yarı Sonuçları | MS only | İY + 2Y alt istatistikler |
+| Skor Sıklığı | Tümü | En sık 10 skor |
+
+**Renk skalası:** %70+ → mavi, %40-70 → turuncu, %40 altı → kırmızı
+
+---
+
+## Mevcut Durum (Sprint 5 — TAMAMLANDI ✅)
+
+### Backend
+
+- ✅ Fixture parser: Hot modunu aktive edip maçları doğru çekiyor
+- ✅ Match detail parser: takım, lig kodu, form/H2H parse + gerçek skor
 - ✅ Analiz motoru (Katman A): 105 oran hesaplaması
-- ✅ 3.5+ filtresi → MS1/MSX/MS2 listeleri
-- ✅ Kural dışı tespiti (lig/5 maç/h2h 5 maç)
-- ✅ CLI: `fetch-fixture`, `analyze`, `analyze-debug`, `fetch-and-analyze`, `run-pipeline`, `build-archive`, `serve`
-- ✅ 9/9 unit test geçiyor
-- ✅ Katman B pattern matching: `analyze` komutunda DB eşleşme istatistiği gösterilir
-- ✅ `build-archive`: lig sayfasından geçmiş maç ID'leri → analiz → DB (gerçek skor dahil)
-- ✅ Katman C pattern matching: `app/analysis/pattern_c.py` — FT oranlarıyla ±0.5 fuzzy match
-- ✅ FastAPI REST endpoints: `app/api/main.py` — /api/health, /api/fixture, /api/analyze, /api/matches, /api/match
+- ✅ Katman B pattern matching: `find_pattern_b_matches`
+- ✅ Katman C pattern matching: `find_pattern_c_all_periods` — tek sorgu, tüm periyotlar
+- ✅ `build-archive` CLI: lig → geçmiş maç ID → fetch+analiz+upsert
+- ✅ FastAPI: 5 endpoint + fixture cache + bg analiz kuyruğu + DB-first analiz
+- ✅ `pattern_stats.py`: ~130 alan, 9 bölüm (İY/MS kombo, fark, taraf alt/üst, toplam gol, yarı alt/üst, gol detay dahil)
 
-**Henüz Yok:**
-- ❌ Frontend (Next.js) — Sprint 5
+### Frontend
+
+- ✅ Next.js App Router — dark tema, sidebar navigasyon
+- ✅ Bülten sayfası: Hot maçlar, saat, lig, 8 günlük kayan takvim
+- ✅ Analiz sayfası: Katman A skor listesi + IddaaCoupon (Arşiv-1 ve Arşiv-2)
+- ✅ Periyot sekmeleri: İY / 2Y / MS — her biri kendi istatistiklerini gösterir
+- ✅ 3.5+ skor yoksa o periyot için "tahmin üretilemez" uyarısı
+- ✅ URL'den takım isimleri okunur (yükleme sırasında başlık gösterilir)
+- ✅ Skip reason Türkçe mesajlara çevrilir
+
+### Henüz Yok
+
 - ❌ Premium/Auth — sonraki fazlar
 - ❌ Canlı maç + trend motoru — sonraki fazlar
+- ❌ Web sitesi deployment — Sprint 6
 
-## Sprint 2 — TAMAMLANDI ✅
+---
 
-- Supabase PostgreSQL (eu-west-1, session pooler port 5432)
-- SQLAlchemy 2.x async + asyncpg — `app/db/`
-- `matches` tablosu: JSONB sütunlarla Katman A sonuçları + gerçek sonuç alanları
-- Alembic migration: `641438be3ff8_initial_schema`
-- Pipeline: tek browser, fetch → analiz → upsert (idempotent)
-- `run-pipeline` CLI komutu
-- İlk çalışma: 43 maçtan 35 kayıt, 8 kural dışı, 0 hata
+## Sprint Geçmişi
 
-## Sprint 4 — DEVAM EDİYOR 🔄
+### Sprint 2 — TAMAMLANDI ✅
+- Supabase PostgreSQL + SQLAlchemy async + asyncpg
+- `matches` tablosu JSONB schema + Alembic migration
+- `run-pipeline` CLI: fetch → analiz → upsert (idempotent)
 
-- `app/analysis/pattern_c.py`: `find_pattern_c_matches()` — FT oranlarıyla ±0.5 fuzzy match, `PatternCResult` dataclass
-- `app/api/main.py`: FastAPI app — 5 endpoint (health, fixture, analyze, matches, match)
-- `analyze` ve `analyze-debug` komutlarına Katman C paneli eklendi
-- CLI'ye `serve` komutu eklendi (`uvicorn` ile API başlatır)
-- `requirements.txt`'e `fastapi==0.115.12` ve `uvicorn[standard]==0.34.2` eklendi
-- ENG PR 2024-2025 arşivi DB'ye yazılıyor (`build-archive 36 2024-2025` — devam ediyor)
+### Sprint 3 — TAMAMLANDI ✅
+- Gerçek skor çıkarımı (`actual_ft/ht_home/away`)
+- `build-archive` CLI: lig arşivi DB'ye yazılıyor
+- Katman B pattern matching (`find_pattern_b_matches`)
 
-## Sprint 3 — TAMAMLANDI ✅
+### Sprint 4 — TAMAMLANDI ✅
+- Katman C pattern matching (`find_pattern_c_all_periods`)
+- FastAPI REST API (5 endpoint)
+- Windows ProactorEventLoop düzeltmesi
 
-- `_extract_main_match_score()`: bitmiş maçların gerçek skorunu h2h sayfasından çıkarır
-- `MatchRawData`'ya `actual_ft_home/away`, `actual_ht_home/away` alanları eklendi
-- `app/scraper/league.py`: `fetch_league_match_ids(league_id, season, ctx)` — lig sayfasından maç ID listesi
-- `app/analysis/pattern_b.py`: `find_pattern_b_matches()` — JSONB equality sorgusu, `PatternBResult` dataclass
-- `build-archive` CLI komutu: lig+sezon → tüm maç ID → fetch+analiz+upsert (gerçek skor dahil)
-- `analyze` ve `analyze-debug` komutları Katman B panelini gösteriyor
+### Sprint 5 — TAMAMLANDI ✅
+- Next.js frontend (bülten + analiz sayfaları)
+- CORS 405 hatası düzeltildi: Next.js proxy rewrite (`/api/* → backend`)
+- Timezone düzeltildi: nowgoal `data-t` UTC'dir, Beijing değil (8 saat ileri sorunu)
+- Windows `--reload` modunda Playwright subprocess hatası düzeltildi (`loop="none"`)
+- Fixture 5dk cache + arka plan analiz kuyruğu + DB-first analiz
+- `pattern_stats.py`'ye 9 yeni istatistik bölümü eklendi
+- IddaaCoupon: kompakt kartlar, mavi/turuncu/kırmızı renk skalası
+
+---
 
 ## Bilinen Teknik Notlar
 
-- **Typer 0.12.5 + Python 3.11 bug:** `bool` type annotation'lı Option'lar string `'False'` veya `None` dönebiliyor. `cli/main.py`'de `_flag()` yardımcısı bu sorunu çözüyor. Typer güncellenirse `_flag()` kaldırılabilir.
-- **Playwright tarayıcısı:** `browser_context()` context manager ile tek browser açılıp kapanıyor. Pipeline ve `build-archive` bu context'i tüm maçlarda paylaşır (tek seferlik browser).
-- **Lig sayfası HTML yapısı:** `football.nowgoal26.com/league/{ID}` sayfası JS-render. `league.py` 4 farklı stratejiyle maç ID çıkarır; hiç bulamazsa debug HTML kaydeder — ID'lerin nasıl gömüldüğünü oradan kontrol et.
+- **Timezone:** nowgoal `data-t` attribute **UTC**'dir (Beijing UTC+8 değil). Istanbul = UTC+3. Eski kod +8 ekleyip sonra convert ediyordu → 16 saat ileri hata. `fixture.py`'de `_SITE_TZ = timezone.utc`.
+
+- **Windows Playwright + uvicorn:** uvicorn `loop="auto"` Windows'ta `WindowsSelectorEventLoopPolicy` kullanır, Playwright subprocess açamaz. Çözüm: `cli/main.py`'de `loop="none"` + `api/main.py` modül seviyesinde `WindowsProactorEventLoopPolicy`.
+
+- **Katman C tek sorgu:** `find_pattern_c_all_periods(ft_ratios)` FT oranlarıyla bir kez DB sorgular, aynı eşleşme setinden İY/2Y/MS istatistiklerini hesaplar. Periyot başına ayrı sorgu yapılsaydı İY'de eşleşme bulunup MS'de bulunmama gibi tutarsızlık oluşurdu.
+
+- **DB-first analiz:** `_analyze_and_cache` önce DB kontrol eder. `run-pipeline` çalıştırıldıktan sonra tüm maçlar DB'de olur ve Playwright hiç açılmaz.
+
+- **Typer 0.12.5 + Python 3.11 bug:** `bool` Option'lar string `'False'` dönebilir. `cli/main.py`'de `_flag()` yardımcısı çözüyor.
+
+- **Next.js proxy:** `next.config.ts`'te `/api/*` → `http://localhost:8000/api/*` rewrite var. Frontend'de `BASE = ""` — aynı origin, CORS yok.
+
+---
 
 ## Teknoloji Kararları
 
-- **Python 3.11+** / FastAPI / SQLAlchemy / Pydantic 2
-- **Playwright** (BS4 ile JS render yetersiz — Cloudflare/dinamik content)
-- **PostgreSQL** (Supabase free tier) — ölçekleme için kritik (30K+ maç hedefi)
-- **Next.js 14 + TailwindCSS** frontend
-- **GitHub Actions** cron (günlük 1 kez)
+- **Python 3.11+** / FastAPI / SQLAlchemy 2.x async / Pydantic 2
+- **Playwright** (nowgoal Cloudflare/dinamik JS render — BS4 yetersiz)
+- **PostgreSQL** (Supabase free tier) — 30K+ maç hedefi için JSONB şart
+- **Next.js App Router + TailwindCSS** frontend
+- **GitHub Actions** cron (günlük `run-pipeline`)
 - **Typer + Rich** CLI
 - Tamamen ücretsiz altyapı
 
@@ -308,25 +376,23 @@ Lig kısa kodu ana maçtan alınamaz (sayfa başlığında tam ad var). **Auto-d
 Kullanıcı kod tecrübesinde sınırlı. **Yapılacaklar:**
 - Türkçe yorumlar, Türkçe commit mesajları, Türkçe CLI
 - Her önemli karar açıklansın
-- Mikro-refaktör değil, modüler ve okunabilir kod
-- Eski projedeki "1165 satır tek main.py" gibi şeylerden KAÇIN
-- Testleri önce yaz/güncel tut
-- Kullanıcı komutları kopyala-yapıştır çalıştıracak; PowerShell (Windows 10/11) ortamına dikkat
+- Modüler ve okunabilir kod — tek dosyada 1000+ satır olmayacak
+- Kullanıcı komutları kopyala-yapıştır çalıştıracak; Windows PowerShell ortamına dikkat
 
 ## Kullanıcıya Sormadan Yapılmayacak Şeyler
 
 - Büyük mimari değişiklikler
 - Yeni altyapı seçimleri (DB, framework, vb.)
-- Tekonoloji yığınına yeni şey ekleme
+- Teknoloji yığınına yeni şey ekleme
 - Bağımlılık ekleme (requirements.txt'ye madde ekleme)
 
-## Kullanıcının Verdiği Örnek Maç
+## Test Maçı
 
-Test için: **2813084** (Kayserispor vs Karagumruk, TUR D1, bitmiş maç 1-0). Excel ARSIV-1'deki benzer Kayserispor/Karagumruk maçlarıyla karşılaştırma yapılabilir.
+Test için: **2813084** (Kayserispor vs Karagumruk, TUR D1, bitmiş maç 1-0).
 
-## Excel Dosyası
+## Excel Referansı
 
-Kullanıcının Excel'i: `Claude.xlsm` (projeyle birlikte gelmiyor, kullanıcıda). İçinde:
-- ARSIV - 1: 3490 satır, 1633 maç analizi + gerçek sonuçlar
+Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
+- ARSIV-1: 3490 satır, 1633 maç + gerçek sonuçlar (Katman B referansı)
 - NORT ANALİZ: Pattern matching sonuçları
-- BAHİS TABLOSU: Manuel üretilmiş bahis önerileri
+- BAHİS TABLOSU: Manuel bahis önerileri
