@@ -15,25 +15,20 @@ export interface PeriodOut {
 
 export interface PatternResult {
   match_count: number;
-  // Maç Sonucu
   result_1_pct: number;
   result_x_pct: number;
   result_2_pct: number;
-  // Çifte Şans
   dc_1x_pct: number;
   dc_x2_pct: number;
   dc_12_pct: number;
-  // Alt / Üst
   alt_15_pct: number;
   ust_15_pct: number;
   alt_25_pct: number;
   ust_25_pct: number;
   alt_35_pct: number;
   ust_35_pct: number;
-  // KG
   kg_var_pct: number;
   kg_yok_pct: number;
-  // Handikap
   hnd_h20_1_pct: number;
   hnd_h20_x_pct: number;
   hnd_h20_2_pct: number;
@@ -46,23 +41,86 @@ export interface PatternResult {
   hnd_a20_1_pct: number;
   hnd_a20_x_pct: number;
   hnd_a20_2_pct: number;
-  // MS + 1.5
   ms1_alt15_pct: number;
   ms1_ust15_pct: number;
   msx_alt15_pct: number;
   msx_ust15_pct: number;
   ms2_alt15_pct: number;
   ms2_ust15_pct: number;
-  // MS + KG
+  ms1_alt25_pct: number;
+  ms1_ust25_pct: number;
+  msx_alt25_pct: number;
+  msx_ust25_pct: number;
+  ms2_alt25_pct: number;
+  ms2_ust25_pct: number;
   ms1_kg_var_pct: number;
   ms1_kg_yok_pct: number;
   msx_kg_var_pct: number;
   msx_kg_yok_pct: number;
   ms2_kg_var_pct: number;
   ms2_kg_yok_pct: number;
-  // Skor sıklığı
+  fark_ev1_pct: number;
+  fark_ev2_pct: number;
+  fark_ev3p_pct: number;
+  fark_ber_pct: number;
+  fark_dep1_pct: number;
+  fark_dep2_pct: number;
+  fark_dep3p_pct: number;
+  ev_alt_05_pct: number;
+  ev_ust_05_pct: number;
+  ev_alt_15_pct: number;
+  ev_ust_15_pct: number;
+  ev_alt_25_pct: number;
+  ev_ust_25_pct: number;
+  dep_alt_05_pct: number;
+  dep_ust_05_pct: number;
+  dep_alt_15_pct: number;
+  dep_ust_15_pct: number;
+  dep_alt_25_pct: number;
+  dep_ust_25_pct: number;
+  ev_ht_alt_05_pct: number;
+  ev_ht_ust_05_pct: number;
+  dep_ht_alt_05_pct: number;
+  dep_ht_ust_05_pct: number;
+  gol_01_pct: number;
+  gol_23_pct: number;
+  gol_45_pct: number;
+  gol_6p_pct: number;
+  encok_gol_1y_pct: number;
+  encok_gol_esit_pct: number;
+  encok_gol_2y_pct: number;
+  iy_alt_05_pct: number;
+  iy_ust_05_pct: number;
+  iy_alt_15_pct: number;
+  iy_ust_15_pct: number;
+  iy_alt_25_pct: number;
+  iy_ust_25_pct: number;
+  iki_yari_alt15_pct: number;
+  iki_yari_ust15_pct: number;
+  h2_kg_var_pct: number;
+  h2_kg_yok_pct: number;
+  iy_h2_kg_vv_pct: number;
+  iy_h2_kg_vy_pct: number;
+  iy_h2_kg_yv_pct: number;
+  iy_h2_kg_yy_pct: number;
+  ev_iki_yari_gol_pct: number;
+  dep_iki_yari_gol_pct: number;
+  ev_encok_1y_pct: number;
+  ev_encok_esit_pct: number;
+  ev_encok_2y_pct: number;
+  dep_encok_1y_pct: number;
+  dep_encok_esit_pct: number;
+  dep_encok_2y_pct: number;
+  iy_ms_11_pct: number;
+  iy_ms_1x_pct: number;
+  iy_ms_12_pct: number;
+  iy_ms_x1_pct: number;
+  iy_ms_xx_pct: number;
+  iy_ms_x2_pct: number;
+  iy_ms_21_pct: number;
+  iy_ms_2x_pct: number;
+  iy_ms_22_pct: number;
   score_freq: Record<string, number>;
-  // HT alt-istatistikler (FT pattern'de dolu)
   ht_result_1_pct: number;
   ht_result_x_pct: number;
   ht_result_2_pct: number;
@@ -73,7 +131,6 @@ export interface PatternResult {
   ht_ust_15_pct: number;
   ht_kg_var_pct: number;
   ht_kg_yok_pct: number;
-  // H2 alt-istatistikler (FT pattern'de dolu)
   h2_result_1_pct: number;
   h2_result_x_pct: number;
   h2_result_2_pct: number;
