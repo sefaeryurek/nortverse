@@ -767,7 +767,7 @@ def serve(
         host=host,
         port=port,
         reload=_flag(reload),
-        loop="asyncio",
+        loop="none",
     )
 
 
