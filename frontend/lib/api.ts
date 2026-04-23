@@ -1,8 +1,12 @@
 import type { AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
 
-// Geliştirme: boş string → Next.js rewrite proxy (/api/* → localhost:8000)
-// Üretim: NEXT_PUBLIC_API_URL env var ile tam URL ver
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+// Geliştirme: BASE = "" → Next.js proxy (/api/* → localhost:8000)
+// Vercel server-side (SSR): BACKEND_URL → Railway'e direkt
+// Vercel client-side (browser): BACKEND_URL undefined → proxy üzerinden Railway'e
+const BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.BACKEND_URL ||
+  "";
 
 export async function getFixture(date: string): Promise<FixtureMatch[]> {
   const res = await fetch(`${BASE}/api/fixture?date=${date}`, {
