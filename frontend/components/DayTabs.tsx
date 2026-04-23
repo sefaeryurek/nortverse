@@ -4,18 +4,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 
-function getWeekDates(): { label: string; date: string; today: boolean }[] {
+function getRollingDates(): { label: string; date: string; today: boolean }[] {
   const now = new Date();
-  const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
-
-  return DAYS.map((label, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+  const todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+  // Dün + bugün + 6 gün = 8 günlük pencere
+  return Array.from({ length: 8 }, (_, i) => {
+    const d = new Date(now);
+    d.setDate(now.getDate() - 1 + i);
     const iso = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
-    const todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
-    return { label, date: iso, today: iso === todayIso };
+    const dayIdx = (d.getDay() + 6) % 7; // 0=Pzt
+    return { label: DAYS[dayIdx], date: iso, today: iso === todayIso };
   });
 }
 
@@ -25,7 +23,7 @@ interface Props {
 
 export default function DayTabs({ activeDate }: Props) {
   const router = useRouter();
-  const days = getWeekDates();
+  const days = getRollingDates();
 
   return (
     <div

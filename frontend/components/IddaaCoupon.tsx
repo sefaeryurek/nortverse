@@ -7,9 +7,9 @@ interface Props {
 }
 
 function pctColor(v: number) {
-  if (v >= 60) return { color: "#4ade80", bg: "#052e16", border: "#166534" };
-  if (v >= 40) return { color: "#fbbf24", bg: "#1c1400", border: "#92400e" };
-  return { color: "#f87171", bg: "#1a0a0a", border: "#7f1d1d" };
+  if (v >= 70) return { color: "#38bdf8", bg: "#071927", border: "#0e4272" };
+  if (v >= 40) return { color: "#fb923c", bg: "#140d05", border: "#7c2d12" };
+  return { color: "#f87171", bg: "#130808", border: "#7f1d1d" };
 }
 
 interface OddCellProps {
@@ -22,18 +22,18 @@ function OddCell({ label, value, sub }: OddCellProps) {
   const { color, bg, border } = pctColor(pct);
   return (
     <div
-      className="flex flex-col items-center justify-center gap-0.5 p-2 rounded-lg border text-center"
+      className="flex flex-col items-center justify-center gap-px px-1 py-1.5 rounded border text-center"
       style={{ backgroundColor: bg, borderColor: border, minWidth: 0 }}
     >
-      <span className="text-[10px] font-medium leading-tight" style={{ color: "#94a3b8" }}>
+      <span className="text-[9px] font-medium leading-tight" style={{ color: "#64748b" }}>
         {label}
       </span>
       {sub && (
-        <span className="text-[9px] leading-tight" style={{ color: "#475569" }}>
+        <span className="text-[8px] leading-tight" style={{ color: "#374151" }}>
           {sub}
         </span>
       )}
-      <span className="text-base font-black font-mono mt-0.5" style={{ color }}>
+      <span className="text-xs font-bold font-mono" style={{ color }}>
         %{pct}
       </span>
     </div>
@@ -46,8 +46,8 @@ interface SectionProps {
 }
 function Section({ title, children }: SectionProps) {
   return (
-    <div className="space-y-2">
-      <h4 className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>
+    <div className="space-y-1.5">
+      <h4 className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "#334155" }}>
         {title}
       </h4>
       {children}
@@ -57,7 +57,7 @@ function Section({ title, children }: SectionProps) {
 
 function Row({ items }: { items: OddCellProps[] }) {
   return (
-    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
+    <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
       {items.map((item) => (
         <OddCell key={item.label + (item.sub ?? "")} {...item} />
       ))}
@@ -66,7 +66,7 @@ function Row({ items }: { items: OddCellProps[] }) {
 }
 
 function SubLabel({ text }: { text: string }) {
-  return <p className="text-[10px] mt-1" style={{ color: "#475569" }}>{text}</p>;
+  return <p className="text-[9px] mt-1" style={{ color: "#374151" }}>{text}</p>;
 }
 
 interface ScoreFreqProps {
@@ -138,7 +138,7 @@ function ArchiveCoupon({
   const lbl = periodLabels(period);
 
   return (
-    <div className="rounded-xl p-4 border space-y-4" style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}>
+    <div className="rounded-xl p-3 border space-y-3" style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}>
       {/* Başlık */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
