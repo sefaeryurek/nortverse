@@ -26,7 +26,7 @@ from rich.table import Table
 
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.pattern_b import find_pattern_b_matches
-from app.analysis.pattern_c import find_pattern_c_matches
+from app.analysis.pattern_c import find_pattern_c_all_periods
 from app.analysis.pattern_stats import PatternResult
 from app.analysis.scores import ALL_SCORES, MS1_SCORES, MSX_SCORES, MS2_SCORES
 from app.models import MatchAnalysisResult, MatchRawData, Period, PeriodAnalysis
@@ -359,9 +359,9 @@ def analyze(
 
         # Katman C — oran eşleşmesi (FT)
         try:
-            c_result = await find_pattern_c_matches(period="ft", all_ratios=result.ft.all_ratios)
-            if c_result:
-                _render_pattern(c_result, "[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]", "blue", con=con)
+            _ht_c, _h2_c, ft_c = await find_pattern_c_all_periods(result.ft.all_ratios)
+            if ft_c:
+                _render_pattern(ft_c, "[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]", "blue", con=con)
             else:
                 con.print("[dim]Katman C: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
         except Exception as e:
@@ -447,9 +447,9 @@ def analyze_debug(
 
         # Katman C — oran eşleşmesi (FT, debug)
         try:
-            c_result = await find_pattern_c_matches(period="ft", all_ratios=result.ft.all_ratios)
-            if c_result:
-                _render_pattern(c_result, "[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]", "blue", con=con)
+            _ht_c, _h2_c, ft_c = await find_pattern_c_all_periods(result.ft.all_ratios)
+            if ft_c:
+                _render_pattern(ft_c, "[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]", "blue", con=con)
             else:
                 con.print("[dim]Katman C: Yeterli eşleşme yok (arşiv boş veya < 5 maç)[/dim]")
         except Exception as e:
