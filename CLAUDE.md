@@ -42,6 +42,8 @@ python -m app.cli.main analyze-debug 2813084            # Excel karşılaştırm
 python -m app.cli.main fetch-and-analyze                # çek + analiz et
 python -m app.cli.main run-pipeline                     # fetch → analiz → DB'ye kaydet (GÜNLÜK ÇALIŞMALI)
 python -m app.cli.main run-pipeline --date 2026-04-20   # belirli gün için pipeline
+python -m app.cli.main update-scores                    # bugünün biten maçlarının skorlarını güncelle
+python -m app.cli.main update-scores --date 2026-04-20  # belirli gün için skor güncelle
 
 # Arşiv oluşturma
 # Syntax: build-archive <LEAGUE_ID> [SEZON]
@@ -174,7 +176,8 @@ nortverse/
 │   │   ├── models.py              # Pydantic: FixtureMatch, HistoricalMatch, MatchRawData
 │   │   ├── db/
 │   │   │   ├── connection.py      # SQLAlchemy async engine + get_session()
-│   │   │   └── models.py          # Match ORM — JSONB: ht/h2/ft_scores_*, *_all_ratios, actual skorlar
+│   │   │   ├── models.py          # Match + FixtureCache ORM — JSONB kolonlar, actual skorlar
+│   │   └── connection.py      # pool_size=2, statement_cache_size=0 (Supabase PgBouncer)
 │   │   ├── scraper/
 │   │   │   ├── browser.py         # Playwright wrapper (browser_context context manager)
 │   │   │   ├── fixture.py         # Günlük bülten — Hot filtreli, kickoff UTC timezone
@@ -190,7 +193,7 @@ nortverse/
 │   │   ├── api/
 │   │   │   └── main.py            # FastAPI — fixture cache, bg queue, DB-first analiz
 │   │   ├── pipeline/
-│   │   │   └── runner.py          # run_pipeline: fetch → analiz → upsert
+│   │   │   └── runner.py          # run_pipeline + update_results: fetch → analiz → upsert
 │   │   └── cli/
 │   │       └── main.py            # Typer + Rich CLI
 │   ├── alembic/                   # DB migration
@@ -202,13 +205,16 @@ nortverse/
 │   │   ├── layout.tsx             # Root layout (dark tema, sidebar)
 │   │   ├── bulten/
 │   │   │   └── page.tsx           # Server component — fixture listesi (Suspense)
+│   │   ├── sonuclar/
+│   │   │   └── page.tsx           # Server component — biten maçlar, skor, tahmin özeti
 │   │   └── analyze/[match_id]/
 │   │       └── page.tsx           # Client component — maç analiz sayfası
 │   ├── components/
 │   │   ├── BultenRow.tsx          # Maç satırı (link ?home=&away= param ile)
-│   │   ├── DayTabs.tsx            # 8 günlük kayan pencere (dün + bugün + 6 gün)
+│   │   ├── DayTabs.tsx            # 8 günlük kayan pencere, basePath prop ile
 │   │   ├── IddaaCoupon.tsx        # Arşiv istatistik kartları (Katman B + C)
-│   │   └── ScoreList.tsx          # Katman A 3.5+ skor listesi
+│   │   ├── ScoreList.tsx          # Katman A 3.5+ skor listesi
+│   │   └── Sidebar.tsx            # Sol menü (Bülten + Sonuçlar)
 │   ├── lib/
 │   │   ├── api.ts                 # Backend API çağrıları (BASE = "" → Next.js proxy)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
@@ -252,13 +258,14 @@ Memory cache'e yazar
 python -m app.cli.main run-pipeline
 ```
 
-Bu komut sabah çalıştırıldığında bugünün tüm maçlarını scrape edip DB'ye yazar. Gün içinde kullanıcılar maçlara tıkladığında **Playwright hiç açılmaz**, DB'den 1-3sn'de gelir. Web sitesine geçince GitHub Actions'a eklenecek:
+Bu komut sabah çalıştırıldığında bugünün tüm maçlarını scrape edip DB'ye yazar. Gün içinde kullanıcılar maçlara tıkladığında **Playwright hiç açılmaz**, DB'den 1-3sn'de gelir.
 
-```yaml
-on:
-  schedule:
-    - cron: "0 6 * * *"  # Her sabah 06:00 UTC
-```
+**GitHub Actions otomatik çalışır** (`.github/workflows/daily_pipeline.yml`):
+- `0 5 * * *` → 08:00 İstanbul → `run-pipeline` (sabah analiz)
+- `30 21 * * *` → 00:30 İstanbul → `update-scores` (gece skor güncelleme)
+- `0 23 * * *` → 02:00 İstanbul → `update-scores` (geç maçlar)
+
+Ayrıca Railway container'da FastAPI `_score_updater` task her 30 dakikada skorları günceller.
 
 ---
 
@@ -286,7 +293,7 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 ---
 
-## Mevcut Durum (Sprint 5 — TAMAMLANDI ✅)
+## Mevcut Durum (Sprint 6 — TAMAMLANDI ✅)
 
 ### Backend
 
@@ -296,8 +303,15 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ Katman B pattern matching: `find_pattern_b_matches`
 - ✅ Katman C pattern matching: `find_pattern_c_all_periods` — tek sorgu, tüm periyotlar
 - ✅ `build-archive` CLI: lig → geçmiş maç ID → fetch+analiz+upsert
-- ✅ FastAPI: 5 endpoint + fixture cache + bg analiz kuyruğu + DB-first analiz
-- ✅ `pattern_stats.py`: ~130 alan, 9 bölüm (İY/MS kombo, fark, taraf alt/üst, toplam gol, yarı alt/üst, gol detay dahil)
+- ✅ FastAPI: 7 endpoint + fixture cache (memory + DB) + bg analiz kuyruğu + DB-first analiz
+- ✅ `pattern_stats.py`: ~130 alan, 9 bölüm
+- ✅ Railway deployment: `https://nortverse-production.up.railway.app`
+- ✅ `fixture_cache` DB tablosu: bülten verileri kalıcı, server restart'tan etkilenmez
+- ✅ `/api/results` endpoint: günlük biten maçlar + Katman A kapsamı
+- ✅ `update-scores` CLI: biten maçların actual skorlarını DB'ye yazar
+- ✅ Otomatik skor güncelleme: FastAPI içinde her 30 dakikada `_score_updater` task
+- ✅ Supabase PgBouncer uyumu: `pool_size=2`, `statement_cache_size=0`
+- ✅ Date bug düzeltildi: fixture İstanbul tz bazlı, tarih filtresi eklendi
 
 ### Frontend
 
@@ -305,15 +319,14 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ Bülten sayfası: Hot maçlar, saat, lig, 8 günlük kayan takvim
 - ✅ Analiz sayfası: Katman A skor listesi + IddaaCoupon (Arşiv-1 ve Arşiv-2)
 - ✅ Periyot sekmeleri: İY / 2Y / MS — her biri kendi istatistiklerini gösterir
-- ✅ 3.5+ skor yoksa o periyot için "tahmin üretilemez" uyarısı
-- ✅ URL'den takım isimleri okunur (yükleme sırasında başlık gösterilir)
-- ✅ Skip reason Türkçe mesajlara çevrilir
+- ✅ Sonuçlar sayfası (`/sonuclar`): biten maçlar, skor, Katman A/KG/2.5 özet
+- ✅ Vercel deployment: `https://nortverse.vercel.app`
+- ✅ SSR URL düzeltildi: `BACKEND_URL` env var ile Vercel → Railway direkt
 
 ### Henüz Yok
 
 - ❌ Premium/Auth — sonraki fazlar
 - ❌ Canlı maç + trend motoru — sonraki fazlar
-- ❌ Web sitesi deployment — Sprint 6
 
 ---
 
@@ -343,6 +356,16 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - `pattern_stats.py`'ye 9 yeni istatistik bölümü eklendi
 - IddaaCoupon: kompakt kartlar, mavi/turuncu/kırmızı renk skalası
 
+### Sprint 6 — TAMAMLANDI ✅
+- Railway backend deployment + Vercel frontend deployment
+- `fixture_cache` tablosu: bülten DB'ye kaydediliyor, server restart'ta Playwright açılmıyor
+- Sonuçlar sayfası (`/sonuclar`): biten maçlar, gerçek skor, Katman A/KG/2.5 özet
+- GitHub Actions günlük pipeline: her sabah 08:00 İstanbul'da otomatik `run-pipeline`
+- `update-scores` CLI + FastAPI `_score_updater`: her 30 dakikada skorlar otomatik güncellenir
+- Supabase PgBouncer ECIRCUITBREAKER hatası düzeltildi: `pool_size=2`, `statement_cache_size=0`
+- Date bug düzeltildi: fixture URL ve tarih filtresi İstanbul tz bazlı
+- Vercel SSR URL sorunu düzeltildi: `BACKEND_URL` env var ile server-side fetch
+
 ---
 
 ## Bilinen Teknik Notlar
@@ -359,6 +382,14 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 - **Next.js proxy:** `next.config.ts`'te `/api/*` → `http://localhost:8000/api/*` rewrite var. Frontend'de `BASE = ""` — aynı origin, CORS yok.
 
+- **Supabase PgBouncer:** Transaction mode pooler (port 5432) ile asyncpg kullanırken `pool_size=2, max_overflow=0, connect_args={"statement_cache_size": 0}` zorunlu. Aksi halde GitHub Actions gibi ortamlarda ECIRCUITBREAKER hatası alınır.
+
+- **fixture_cache tablosu:** `/api/fixture` 3 katmanlı cache kullanır: memory (5dk) → DB (geçmiş=kalıcı, bugün=1saat) → Playwright. Yeni migration: `a3f9e2b1c4d5`.
+
+- **Otomatik skor güncelleme:** `api/main.py`'de `_score_updater` async task her 30 dakikada `update_results()` çağırır. Railway container ayakta olduğu sürece çalışır. Ayrıca GitHub Actions'da gece 00:30 ve 02:00 İstanbul'da da çalışır (yedek).
+
+- **Arşive ekleme yapılmıyor:** Mevcut arşiv sabittir, yeni lig/sezon eklenmeyecek. Var olan maçların yüzdeleri değişmesin diye bu karar alındı.
+
 ---
 
 ## Teknoloji Kararları
@@ -367,7 +398,9 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - **Playwright** (nowgoal Cloudflare/dinamik JS render — BS4 yetersiz)
 - **PostgreSQL** (Supabase free tier) — 30K+ maç hedefi için JSONB şart
 - **Next.js App Router + TailwindCSS** frontend
-- **GitHub Actions** cron (günlük `run-pipeline`)
+- **GitHub Actions** cron (günlük `run-pipeline` + gece `update-scores`)
+- **Railway** backend (Docker, `mcr.microsoft.com/playwright/python:v1.47.0-jammy`)
+- **Vercel** frontend (Next.js otomatik deploy, `BACKEND_URL` env var gerekli)
 - **Typer + Rich** CLI
 - Tamamen ücretsiz altyapı
 
