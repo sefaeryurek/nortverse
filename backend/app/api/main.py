@@ -13,6 +13,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
+
+# Windows'ta Playwright subprocess için ProactorEventLoop gerekiyor
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 from datetime import date
 from typing import Optional
 
