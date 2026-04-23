@@ -24,6 +24,8 @@ from typing import Optional
 
 # Nowgoal data-t attribute'u UTC saatiyle çalışır
 _SITE_TZ = timezone.utc
+# Tarih hesaplamaları için İstanbul
+_ISTANBUL_TZ = timezone(timedelta(hours=3))
 
 from bs4 import BeautifulSoup
 from bs4.element import Tag
@@ -50,7 +52,7 @@ def _build_fixture_url(target_date: Optional[date] = None) -> str:
     if target_date is None:
         return base
 
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(_ISTANBUL_TZ).date()
     diff = (target_date - today).days
 
     if diff == 0:
@@ -227,6 +229,19 @@ async def fetch_fixture(
             html = await _fetch_fixture_with_ctx(new_ctx, url, only_hot)
 
     matches = _parse_fixture_html(html, only_hot=only_hot)
+
+    # Belirli bir tarih istendiyse İstanbul günü dışındaki maçları çıkar
+    if target_date is not None:
+        day_start = datetime(target_date.year, target_date.month, target_date.day,
+                             0, 0, 0, tzinfo=_ISTANBUL_TZ)
+        day_end = datetime(target_date.year, target_date.month, target_date.day,
+                           23, 59, 59, tzinfo=_ISTANBUL_TZ)
+        before = len(matches)
+        matches = [m for m in matches
+                   if m.kickoff_time and day_start <= m.kickoff_time <= day_end]
+        if len(matches) != before:
+            log.info("Tarih filtresi (%s): %d → %d maç", target_date, before, len(matches))
+
     log.info("Fixture: %d maç bulundu (only_hot=%s)", len(matches), only_hot)
     return matches
 

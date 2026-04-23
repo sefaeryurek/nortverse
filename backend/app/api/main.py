@@ -150,17 +150,37 @@ async def _bg_worker() -> None:
             _bg_queue.task_done()
 
 
+async def _score_updater() -> None:
+    """Her 30 dakikada bugünün biten maçlarının skorlarını günceller.
+
+    Railway container'da çalışır — GitHub Actions cron'una gerek kalmaz.
+    İlk 30 dakika beklenir ki startup sırasında tetiklenmesin.
+    """
+    await asyncio.sleep(1800)
+    while True:
+        try:
+            from app.pipeline.runner import update_results
+            stats = await update_results()
+            log.info("Otomatik skor güncelleme: %s", stats)
+        except Exception as exc:
+            log.warning("Skor güncelleme hatası: %s", exc)
+        await asyncio.sleep(1800)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _bg_queue
     _bg_queue = asyncio.Queue()
-    task = asyncio.create_task(_bg_worker())
+    worker = asyncio.create_task(_bg_worker())
+    updater = asyncio.create_task(_score_updater())
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    worker.cancel()
+    updater.cancel()
+    for t in (worker, updater):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
 
 
 # ─── FastAPI uygulaması ───────────────────────────────────────────────────────
