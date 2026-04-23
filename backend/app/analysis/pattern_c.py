@@ -1,7 +1,13 @@
 """Katman C — Tam Oran Pattern Matching (ARŞIV-2).
 
-Bülten maçının ham oranlarını DB'deki geçmiş maçlarla ±0.5 aralığında karşılaştırır.
-Tüm 35 skorda tolerans içinde kalan geçmiş maçların gerçek sonuçlarından istatistik çıkarır.
+Bülten maçının FT ham oranlarını DB'deki geçmiş maçlarla ±0.5 aralığında karşılaştırır.
+Eşleşen maçlar için IY, 2Y ve FT istatistiklerini aynı setten hesaplar.
+
+Neden tek set?
+    105 oran (35 skor × 3 periyot) aynı h2h/form verisinden türetilir.
+    FT oranlarıyla benzer bulunan maçlar IY/2Y için de benzerdir.
+    Tek eşleşme setiyle IY/2Y/FT tutarlı sonuç verir; seti parçalamak
+    bir periyotta "var" diğerinde "yok" anomalisine yol açar.
 """
 
 from __future__ import annotations
@@ -32,61 +38,42 @@ def _ratios_match(
     return True
 
 
-async def find_pattern_c_matches(
-    period: str,
-    all_ratios: dict[str, float],
+async def find_pattern_c_all_periods(
+    ft_ratios: dict[str, float],
     min_matches: int = 5,
     tolerance: float = 0.5,
-) -> PatternResult | None:
-    """Belirtilen periyot oranlarıyla ±tolerance eşleşen geçmiş maçları bul.
+) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
+    """FT oranlarıyla eşleşen geçmiş maçlar için IY, 2Y ve FT istatistiklerini döndür.
 
-    Args:
-        period: "ht", "h2" veya "ft"
-        all_ratios: Bülten maçının 35 oranı {"1-0": 5.5, ...}
-        min_matches: Minimum eşleşme sayısı
-        tolerance: Her skor için izin verilen oran farkı (±0.5)
+    Tüm periyotlar aynı eşleşme setini kullanır.
 
     Returns:
-        PatternResult veya None (eşleşme < min_matches ise)
+        (ht_result, h2_result, ft_result) — eşleşme yetersizse hepsi None
     """
-    if period == "ht":
-        ratios_col = Match.ht_all_ratios
-        actual_check = Match.actual_ht_home.isnot(None)
-        ratios_attr = "ht_all_ratios"
-    elif period == "h2":
-        ratios_col = Match.h2_all_ratios
-        actual_check = Match.actual_h2_home.isnot(None)
-        ratios_attr = "h2_all_ratios"
-    else:
-        ratios_col = Match.ft_all_ratios
-        actual_check = Match.actual_ft_home.isnot(None)
-        ratios_attr = "ft_all_ratios"
-
     async with get_session() as session:
-        stmt = (
-            select(Match)
-            .where(
-                ratios_col.isnot(None),
-                actual_check,
-            )
+        stmt = select(Match).where(
+            Match.ft_all_ratios.isnot(None),
+            Match.actual_ft_home.isnot(None),
         )
         rows = (await session.execute(stmt)).scalars().all()
 
     matched = [
         row for row in rows
-        if getattr(row, ratios_attr)
-        and _ratios_match(all_ratios, getattr(row, ratios_attr), tolerance)
+        if row.ft_all_ratios and _ratios_match(ft_ratios, row.ft_all_ratios, tolerance)
     ]
 
     if len(matched) < min_matches:
         log.info(
-            "Katman C [%s]: %d eşleşme (minimum %d, tolerans ±%.1f) — atlandı",
-            period,
+            "Katman C: %d eşleşme (minimum %d, tolerans ±%.1f) — atlandı",
             len(matched),
             min_matches,
             tolerance,
         )
-        return None
+        return None, None, None
 
-    log.info("Katman C [%s]: %d eşleşme bulundu", period, len(matched))
-    return compute_stats(matched, period)
+    log.info("Katman C: %d eşleşme bulundu", len(matched))
+    return (
+        compute_stats(matched, "ht"),
+        compute_stats(matched, "h2"),
+        compute_stats(matched, "ft"),
+    )

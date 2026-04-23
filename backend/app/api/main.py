@@ -23,7 +23,7 @@ from sqlalchemy import select
 
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.pattern_b import find_pattern_b_matches
-from app.analysis.pattern_c import find_pattern_c_matches
+from app.analysis.pattern_c import find_pattern_c_all_periods
 from app.analysis.pattern_stats import PatternResult
 from app.db.connection import get_session
 from app.db.models import Match
@@ -138,21 +138,22 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
             log.warning("Katman B [%s] sorgusu başarısız [%s]: %s", period, match_id, e)
             return None
 
-    async def _c(period: str, ratios: dict) -> Optional[PatternResult]:
+    async def _c_all(ratios: dict) -> tuple:
         try:
-            return await find_pattern_c_matches(period, ratios)
+            return await find_pattern_c_all_periods(ratios)
         except Exception as e:
-            log.warning("Katman C [%s] sorgusu başarısız [%s]: %s", period, match_id, e)
-            return None
+            log.warning("Katman C sorgusu başarısız [%s]: %s", match_id, e)
+            return None, None, None
 
-    ht_b, ht_c, h2_b, h2_c, ft_b, ft_c = await asyncio.gather(
-        _b("ht", result.ht.scores_1, result.ht.scores_x, result.ht.scores_2),
-        _c("ht", result.ht.all_ratios),
-        _b("h2", result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
-        _c("h2", result.half2.all_ratios),
-        _b("ft", result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
-        _c("ft", result.ft.all_ratios),
+    (ht_b, h2_b, ft_b), c_results = await asyncio.gather(
+        asyncio.gather(
+            _b("ht", result.ht.scores_1, result.ht.scores_x, result.ht.scores_2),
+            _b("h2", result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
+            _b("ft", result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
+        ),
+        _c_all(result.ft.all_ratios),
     )
+    ht_c, h2_c, ft_c = c_results
 
     return AnalyzeResponse(
         match_id=result.match_id,
