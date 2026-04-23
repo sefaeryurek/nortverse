@@ -236,6 +236,23 @@ class MatchSummary(BaseModel):
     ft_scores_2: Optional[list]
 
 
+class ResultOut(BaseModel):
+    match_id: str
+    home_team: str
+    away_team: str
+    league_code: Optional[str]
+    league_name: Optional[str]
+    kickoff_time: Optional[str]
+    actual_ft_home: int
+    actual_ft_away: int
+    actual_ht_home: Optional[int]
+    actual_ht_away: Optional[int]
+    result: str          # "1" / "X" / "2"
+    kg_var: bool         # Her iki takım gol attı
+    over_25: bool        # Toplam gol >= 3
+    katman_a_covered: bool   # Gerçek sonuç tipi Katman A'da var mıydı?
+
+
 # ─── Ortak analiz fonksiyonu ──────────────────────────────────────────────────
 
 async def _do_analyze(match_id: str) -> AnalyzeResponse:
@@ -390,6 +407,74 @@ async def list_matches(
         )
         for row in rows
     ]
+
+
+@app.get("/api/results", response_model=list[ResultOut])
+async def get_results(target_date: Optional[str] = Query(None, alias="date")) -> list[ResultOut]:
+    """Belirli bir tarihte biten maçları döndürür. Katman A tahmin kapsamı dahil."""
+    from datetime import datetime, timezone, timedelta
+
+    if target_date:
+        try:
+            d = date.fromisoformat(target_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Geçersiz tarih formatı. Kullanım: YYYY-MM-DD")
+    else:
+        d = date.today()
+
+    # Günün başı ve sonu (UTC+3 Istanbul → UTC)
+    day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=timezone(timedelta(hours=3)))
+    day_end = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=timezone(timedelta(hours=3)))
+
+    async with get_session() as session:
+        rows = (
+            await session.execute(
+                select(Match)
+                .where(Match.actual_ft_home.isnot(None))
+                .where(Match.kickoff_time >= day_start)
+                .where(Match.kickoff_time <= day_end)
+                .order_by(Match.kickoff_time)
+            )
+        ).scalars().all()
+
+    out = []
+    for row in rows:
+        h = row.actual_ft_home
+        a = row.actual_ft_away
+        if h is None or a is None:
+            continue
+
+        result = "1" if h > a else ("2" if a > h else "X")
+        kg_var = h > 0 and a > 0
+        over_25 = (h + a) >= 3
+
+        # Katman A: gerçek sonuç tipi için 3.5+ skor listesi doluysa kapsanmış
+        if result == "1":
+            covered_list = row.ft_scores_1 or []
+        elif result == "2":
+            covered_list = row.ft_scores_2 or []
+        else:
+            covered_list = row.ft_scores_x or []
+        katman_a_covered = len(covered_list) > 0
+
+        out.append(ResultOut(
+            match_id=row.match_id,
+            home_team=row.home_team,
+            away_team=row.away_team,
+            league_code=row.league_code,
+            league_name=row.league_name,
+            kickoff_time=row.kickoff_time.isoformat() if row.kickoff_time else None,
+            actual_ft_home=h,
+            actual_ft_away=a,
+            actual_ht_home=row.actual_ht_home,
+            actual_ht_away=row.actual_ht_away,
+            result=result,
+            kg_var=kg_var,
+            over_25=over_25,
+            katman_a_covered=katman_a_covered,
+        ))
+
+    return out
 
 
 @app.get("/api/match/{match_id}", response_model=MatchSummary)

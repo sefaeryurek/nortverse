@@ -19,9 +19,10 @@ function getRollingDates(): { label: string; date: string; today: boolean }[] {
 
 interface Props {
   activeDate: string;
+  basePath?: string;
 }
 
-export default function DayTabs({ activeDate }: Props) {
+export default function DayTabs({ activeDate, basePath = "/bulten" }: Props) {
   const router = useRouter();
   const days = getRollingDates();
 
@@ -35,7 +36,7 @@ export default function DayTabs({ activeDate }: Props) {
         return (
           <button
             key={date}
-            onClick={() => router.push(`/bulten?date=${date}`)}
+            onClick={() => router.push(`${basePath}?date=${date}`)}
             className="flex-shrink-0 flex flex-col items-center px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
             style={{
               backgroundColor: active ? "#1d4ed8" : today ? "#1e3a5f" : "#1c2333",

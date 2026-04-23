@@ -155,6 +155,23 @@ export interface AnalyzeResponse {
   skip_reason: string | null;
 }
 
+export interface ResultMatch {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  league_code: string | null;
+  league_name: string | null;
+  kickoff_time: string | null;
+  actual_ft_home: number;
+  actual_ft_away: number;
+  actual_ht_home: number | null;
+  actual_ht_away: number | null;
+  result: "1" | "X" | "2";
+  kg_var: boolean;
+  over_25: boolean;
+  katman_a_covered: boolean;
+}
+
 export interface MatchSummary {
   match_id: string;
   home_team: string;

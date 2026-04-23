@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   { href: "/bulten", label: "Bülten", icon: "📋" },
+  { href: "/sonuclar", label: "Sonuçlar", icon: "✅" },
 ];
 
 export default function Sidebar() {
@@ -47,7 +48,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-6 py-4 border-t text-xs" style={{ borderColor: "#2d3748", color: "#475569" }}>
-        v0.5.0
+        v0.6.0
       </div>
     </aside>
   );

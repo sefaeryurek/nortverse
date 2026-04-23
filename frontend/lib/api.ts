@@ -1,4 +1,4 @@
-import type { AnalyzeResponse, FixtureMatch, MatchSummary } from "./types";
+import type { AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
 
 // Geliştirme: boş string → Next.js rewrite proxy (/api/* → localhost:8000)
 // Üretim: NEXT_PUBLIC_API_URL env var ile tam URL ver
@@ -26,6 +26,14 @@ export async function prefetchAnalyze(matchId: string): Promise<void> {
   } catch {
     // sessiz başarısızlık — prefetch arka planda çalışır
   }
+}
+
+export async function getResults(date: string): Promise<ResultMatch[]> {
+  const res = await fetch(`${BASE}/api/results?date=${date}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Sonuçlar alınamadı: ${res.status}`);
+  return res.json();
 }
 
 export async function getMatches(
