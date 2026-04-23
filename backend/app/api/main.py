@@ -45,10 +45,65 @@ _bg_queue: asyncio.Queue[str] | None = None
 _bg_queued: set[str] = set()  # kuyruğa girmiş ama henüz tamamlanmamış match_id'ler
 
 
-# ─── Ortak analiz yardımcısı ─────────────────────────────────────────────────
+# ─── DB-first yardımcıları ───────────────────────────────────────────────────
+
+async def _build_from_db(row: Match) -> "AnalyzeResponse | None":
+    """DB satırından AnalyzeResponse üret — Playwright açılmaz, sadece B/C sorgusu."""
+    if row.ft_scores_1 is None:
+        return None  # Katman A verisi eksik, scrape gerekli
+
+    ht_s1 = row.ht_scores_1 or []
+    ht_sx = row.ht_scores_x or []
+    ht_s2 = row.ht_scores_2 or []
+    h2_s1 = row.h2_scores_1 or []
+    h2_sx = row.h2_scores_x or []
+    h2_s2 = row.h2_scores_2 or []
+    ft_s1 = row.ft_scores_1 or []
+    ft_sx = row.ft_scores_x or []
+    ft_s2 = row.ft_scores_2 or []
+    ft_ratios = row.ft_all_ratios or {}
+
+    async def _b(period: str, s1: list, sx: list, s2: list) -> Optional[PatternResult]:
+        try:
+            return await find_pattern_b_matches(period, s1, sx, s2)
+        except Exception as exc:
+            log.warning("Katman B [%s] DB-hit sorgusu başarısız [%s]: %s", period, row.match_id, exc)
+            return None
+
+    async def _c_all(ratios: dict) -> tuple:
+        try:
+            return await find_pattern_c_all_periods(ratios)
+        except Exception as exc:
+            log.warning("Katman C DB-hit sorgusu başarısız [%s]: %s", row.match_id, exc)
+            return None, None, None
+
+    (ht_b, h2_b, ft_b), c_results = await asyncio.gather(
+        asyncio.gather(
+            _b("ht", ht_s1, ht_sx, ht_s2),
+            _b("h2", h2_s1, h2_sx, h2_s2),
+            _b("ft", ft_s1, ft_sx, ft_s2),
+        ),
+        _c_all(ft_ratios),
+    )
+    ht_c, h2_c, ft_c = c_results
+
+    return AnalyzeResponse(
+        match_id=row.match_id,
+        home_team=row.home_team,
+        away_team=row.away_team,
+        league_code=row.league_code or "",
+        season=row.season or "",
+        ht=PeriodOut(scores_1=ht_s1, scores_x=ht_sx, scores_2=ht_s2),
+        half2=PeriodOut(scores_1=h2_s1, scores_x=h2_sx, scores_2=h2_s2),
+        ft=PeriodOut(scores_1=ft_s1, scores_x=ft_sx, scores_2=ft_s2),
+        ht_b=ht_b, ht_c=ht_c,
+        h2_b=h2_b, h2_c=h2_c,
+        ft_b=ft_b, ft_c=ft_c,
+    )
+
 
 async def _analyze_and_cache(match_id: str) -> "AnalyzeResponse":
-    """Maçı analiz et, cache'e yaz, sonucu döndür (lock ile)."""
+    """DB kontrol et → bulursa B/C hesapla (hızlı). Yoksa Playwright scrape (yavaş)."""
     if match_id in _analysis_cache:
         return _analysis_cache[match_id]
     if match_id not in _analysis_locks:
@@ -56,6 +111,22 @@ async def _analyze_and_cache(match_id: str) -> "AnalyzeResponse":
     async with _analysis_locks[match_id]:
         if match_id in _analysis_cache:
             return _analysis_cache[match_id]
+
+        # 1. DB kontrolü — önce DB'den dene (Playwright YOK)
+        async with get_session() as session:
+            db_row = (
+                await session.execute(select(Match).where(Match.match_id == match_id))
+            ).scalar_one_or_none()
+
+        if db_row is not None:
+            response = await _build_from_db(db_row)
+            if response is not None:
+                log.info("DB hit — anlık: %s", match_id)
+                _analysis_cache[match_id] = response
+                return response
+
+        # 2. DB miss — Playwright ile scrape (ilk kez veya arşivde yok)
+        log.info("DB miss — Playwright scrape: %s", match_id)
         response = await _do_analyze(match_id)
         _analysis_cache[match_id] = response
         return response
