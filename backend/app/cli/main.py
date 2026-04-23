@@ -756,12 +756,18 @@ def serve(
     Örnek: python -m app.cli.main serve
            python -m app.cli.main serve --reload  # geliştirme modu
     """
+    import sys
     import uvicorn
+    # Windows'ta Playwright subprocess için ProactorEventLoop gerekiyor
+    if sys.platform == "win32":
+        import asyncio
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     uvicorn.run(
         "app.api.main:app",
         host=host,
         port=port,
         reload=_flag(reload),
+        loop="asyncio",
     )
 
 
