@@ -20,9 +20,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.analysis import analyze_match, check_match_filters
-from app.analysis.pattern_b import find_pattern_b_matches
-from app.analysis.pattern_c import find_pattern_c_all_periods
 from app.analysis.pattern_stats import PatternResult
+from app.analysis.persist import compute_all_patterns, update_match_patterns
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
 from app.scraper import fetch_fixture, fetch_match_detail
@@ -47,8 +46,24 @@ _bg_queued: set[str] = set()  # kuyruğa girmiş ama henüz tamamlanmamış matc
 
 # ─── DB-first yardımcıları ───────────────────────────────────────────────────
 
+def _pat(blob: dict | None) -> Optional[PatternResult]:
+    """JSONB → PatternResult; None ise None döner."""
+    if not blob:
+        return None
+    try:
+        return PatternResult.model_validate(blob)
+    except Exception as exc:
+        log.warning("Saklı pattern parse edilemedi: %s", exc)
+        return None
+
+
 async def _build_from_db(row: Match) -> "AnalyzeResponse | None":
-    """DB satırından AnalyzeResponse üret — Playwright açılmaz, sadece B/C sorgusu."""
+    """DB satırından AnalyzeResponse üret.
+
+    HIZLI YOL: 6 pattern kolonu da doluysa doğrudan deserialize → ~50ms.
+    YAVAŞ YOL (lazy backfill): biri eksikse runtime hesabı yap + DB'ye geri yaz
+    → bu maç için bir kerelik 1-3sn, sonraki tıklar hızlı.
+    """
     if row.ft_scores_1 is None:
         return None  # Katman A verisi eksik, scrape gerekli
 
@@ -64,29 +79,33 @@ async def _build_from_db(row: Match) -> "AnalyzeResponse | None":
     ft_ratios = row.ft_all_ratios or {}
     mid = row.match_id
 
-    async def _b(period: str, s1: list, sx: list, s2: list) -> Optional[PatternResult]:
-        try:
-            return await find_pattern_b_matches(period, s1, sx, s2, exclude_match_id=mid)
-        except Exception as exc:
-            log.warning("Katman B [%s] DB-hit sorgusu başarısız [%s]: %s", period, mid, exc)
-            return None
-
-    async def _c_all(ratios: dict) -> tuple:
-        try:
-            return await find_pattern_c_all_periods(ratios, exclude_match_id=mid)
-        except Exception as exc:
-            log.warning("Katman C DB-hit sorgusu başarısız [%s]: %s", mid, exc)
-            return None, None, None
-
-    (ht_b, h2_b, ft_b), c_results = await asyncio.gather(
-        asyncio.gather(
-            _b("ht", ht_s1, ht_sx, ht_s2),
-            _b("h2", h2_s1, h2_sx, h2_s2),
-            _b("ft", ft_s1, ft_sx, ft_s2),
-        ),
-        _c_all(ft_ratios),
+    # Hızlı yol: pattern kolonları doluysa direkt deserialize
+    pattern_blobs = (
+        row.pattern_ht_b, row.pattern_ht_c,
+        row.pattern_h2_b, row.pattern_h2_c,
+        row.pattern_ft_b, row.pattern_ft_c,
     )
-    ht_c, h2_c, ft_c = c_results
+    if all(p is not None for p in pattern_blobs):
+        log.debug("Hızlı yol — saklı pattern'ler kullanıldı: %s", mid)
+        ht_b, ht_c = _pat(row.pattern_ht_b), _pat(row.pattern_ht_c)
+        h2_b, h2_c = _pat(row.pattern_h2_b), _pat(row.pattern_h2_c)
+        ft_b, ft_c = _pat(row.pattern_ft_b), _pat(row.pattern_ft_c)
+    else:
+        # Yavaş yol: hesapla + DB'ye yaz (lazy backfill)
+        log.info("Yavaş yol — pattern eksik, hesaplanıyor + DB'ye yazılıyor: %s", mid)
+        patterns = await compute_all_patterns(
+            match_id=mid,
+            ht_scores=(ht_s1, ht_sx, ht_s2),
+            h2_scores=(h2_s1, h2_sx, h2_s2),
+            ft_scores=(ft_s1, ft_sx, ft_s2),
+            ft_ratios=ft_ratios,
+        )
+        # Write-through: DB'ye sessiz yaz (hata olursa bile yanıt dönsün)
+        await update_match_patterns(mid, patterns)
+
+        ht_b, ht_c = _pat(patterns["pattern_ht_b"]), _pat(patterns["pattern_ht_c"])
+        h2_b, h2_c = _pat(patterns["pattern_h2_b"]), _pat(patterns["pattern_h2_c"])
+        ft_b, ft_c = _pat(patterns["pattern_ft_b"]), _pat(patterns["pattern_ft_c"])
 
     return AnalyzeResponse(
         match_id=row.match_id,
@@ -311,30 +330,20 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
         )
 
     result = analyze_match(raw)
-
-    async def _b(period: str, s1: list, sx: list, s2: list) -> Optional[PatternResult]:
-        try:
-            return await find_pattern_b_matches(period, s1, sx, s2, exclude_match_id=match_id)
-        except Exception as e:
-            log.warning("Katman B [%s] sorgusu başarısız [%s]: %s", period, match_id, e)
-            return None
-
-    async def _c_all(ratios: dict) -> tuple:
-        try:
-            return await find_pattern_c_all_periods(ratios, exclude_match_id=match_id)
-        except Exception as e:
-            log.warning("Katman C sorgusu başarısız [%s]: %s", match_id, e)
-            return None, None, None
-
-    (ht_b, h2_b, ft_b), c_results = await asyncio.gather(
-        asyncio.gather(
-            _b("ht", result.ht.scores_1, result.ht.scores_x, result.ht.scores_2),
-            _b("h2", result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
-            _b("ft", result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
-        ),
-        _c_all(result.ft.all_ratios),
+    patterns = await compute_all_patterns(
+        match_id=match_id,
+        ht_scores=(result.ht.scores_1, result.ht.scores_x, result.ht.scores_2),
+        h2_scores=(result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
+        ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
+        ft_ratios=result.ft.all_ratios,
     )
-    ht_c, h2_c, ft_c = c_results
+
+    # Sonraki kullanıcılar hızlı görsün diye DB'ye tam upsert (analiz + pattern)
+    try:
+        from app.pipeline.runner import _upsert as _persist_full
+        await _persist_full(result, raw, patterns)
+    except Exception as exc:
+        log.warning("Maç DB'ye kaydedilemedi [%s]: %s", match_id, exc)
 
     return AnalyzeResponse(
         match_id=result.match_id,
@@ -345,9 +354,9 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
         ht=PeriodOut(scores_1=result.ht.scores_1, scores_x=result.ht.scores_x, scores_2=result.ht.scores_2),
         half2=PeriodOut(scores_1=result.half2.scores_1, scores_x=result.half2.scores_x, scores_2=result.half2.scores_2),
         ft=PeriodOut(scores_1=result.ft.scores_1, scores_x=result.ft.scores_x, scores_2=result.ft.scores_2),
-        ht_b=ht_b, ht_c=ht_c,
-        h2_b=h2_b, h2_c=h2_c,
-        ft_b=ft_b, ft_c=ft_c,
+        ht_b=_pat(patterns["pattern_ht_b"]), ht_c=_pat(patterns["pattern_ht_c"]),
+        h2_b=_pat(patterns["pattern_h2_b"]), h2_c=_pat(patterns["pattern_h2_c"]),
+        ft_b=_pat(patterns["pattern_ft_b"]), ft_c=_pat(patterns["pattern_ft_c"]),
     )
 
 

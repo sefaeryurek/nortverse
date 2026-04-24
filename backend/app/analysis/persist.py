@@ -11,8 +11,12 @@ import asyncio
 import logging
 from typing import Optional
 
+from sqlalchemy import update as sa_update
+
 from app.analysis.pattern_b import find_pattern_b_matches
 from app.analysis.pattern_c import find_pattern_c_all_periods
+from app.db.connection import get_session
+from app.db.models import Match
 
 log = logging.getLogger(__name__)
 
@@ -84,3 +88,19 @@ async def compute_all_patterns(
         "pattern_ft_b": ft_b,
         "pattern_ft_c": ft_c,
     }
+
+
+async def update_match_patterns(match_id: str, patterns: dict[str, dict | None]) -> None:
+    """matches satırının sadece 6 pattern kolonunu günceller.
+
+    Lazy backfill için kullanılır: _build_from_db DB'de pattern bulamazsa
+    hesaplar, sonra bu fonksiyonu çağırıp DB'ye yazar (write-through cache).
+    """
+    try:
+        async with get_session() as session:
+            await session.execute(
+                sa_update(Match).where(Match.match_id == match_id).values(**patterns)
+            )
+        log.info("Pattern'ler DB'ye kaydedildi (lazy backfill): %s", match_id)
+    except Exception as exc:
+        log.warning("Pattern'leri DB'ye yazamadık [%s]: %s", match_id, exc)
