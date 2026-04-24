@@ -42,6 +42,15 @@ class Match(Base):
     ft_scores_2: Mapped[dict | None] = mapped_column(JSONB)
     ft_all_ratios: Mapped[dict | None] = mapped_column(JSONB)
 
+    # Pattern sonuçları (kaydedilmiş — sub-saniye analiz için)
+    # exclude_match_id=match_id ile hesaplanmıştır, okurken ek filtre gerekmez
+    pattern_ht_b: Mapped[dict | None] = mapped_column(JSONB)
+    pattern_ht_c: Mapped[dict | None] = mapped_column(JSONB)
+    pattern_h2_b: Mapped[dict | None] = mapped_column(JSONB)
+    pattern_h2_c: Mapped[dict | None] = mapped_column(JSONB)
+    pattern_ft_b: Mapped[dict | None] = mapped_column(JSONB)
+    pattern_ft_c: Mapped[dict | None] = mapped_column(JSONB)
+
     # Gerçek sonuç
     actual_ht_home: Mapped[int | None] = mapped_column(Integer)
     actual_ht_away: Mapped[int | None] = mapped_column(Integer)
