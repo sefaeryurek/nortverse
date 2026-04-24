@@ -103,6 +103,31 @@ async def _build_from_db(row: Match) -> "AnalyzeResponse | None":
     )
 
 
+async def _analyze_db_only(match_id: str) -> bool:
+    """Sadece DB hit denemesi — Playwright YOK.
+
+    Arka plan worker'ı bunu kullanır. Container'ı Playwright fırtınasından korur.
+    DB'de yoksa False döner; kullanıcı maça tıkladığında foreground tam analiz tetiklenir.
+    """
+    if match_id in _analysis_cache:
+        return True
+    try:
+        async with get_session() as session:
+            row = (await session.execute(
+                select(Match).where(Match.match_id == match_id)
+            )).scalar_one_or_none()
+        if row is None:
+            return False
+        response = await _build_from_db(row)
+        if response is None:
+            return False
+        _analysis_cache[match_id] = response
+        return True
+    except Exception as exc:
+        log.warning("DB-only analiz başarısız [%s]: %s", match_id, exc)
+        return False
+
+
 async def _analyze_and_cache(match_id: str) -> "AnalyzeResponse":
     """DB kontrol et → bulursa B/C hesapla (hızlı). Yoksa Playwright scrape (yavaş)."""
     if match_id in _analysis_cache:
@@ -136,36 +161,25 @@ async def _analyze_and_cache(match_id: str) -> "AnalyzeResponse":
 # ─── Arka plan kuyruğu ───────────────────────────────────────────────────────
 
 async def _bg_worker() -> None:
-    """Fixture yüklendikten sonra tüm maçları sırayla arka planda analiz eder."""
+    """Bülten yüklenince DB'de hazır olan maçların cache'ini ısıtır.
+
+    KRİTİK: Sadece DB-hit dener; Playwright AÇMAZ. DB'de yoksa atlar.
+    Aksi halde Cumartesi gibi pipeline'sız günlerde bütün container'ı boğar.
+    """
     assert _bg_queue is not None
     while True:
         match_id = await _bg_queue.get()
         try:
-            if match_id not in _analysis_cache:
-                await _analyze_and_cache(match_id)
-                log.info("Arka plan analizi tamamlandı: %s", match_id)
+            ok = await _analyze_db_only(match_id)
+            if ok:
+                log.info("Arka plan DB-cache hazırlandı: %s", match_id)
+            else:
+                log.debug("Arka plan: DB'de yok, atlandı (foreground tetikleyecek): %s", match_id)
         except Exception as exc:
-            log.warning("Arka plan analizi başarısız [%s]: %s", match_id, exc)
+            log.warning("Arka plan DB-cache hatası [%s]: %s", match_id, exc)
         finally:
             _bg_queued.discard(match_id)
             _bg_queue.task_done()
-
-
-async def _score_updater() -> None:
-    """Her 30 dakikada bugünün biten maçlarının skorlarını günceller.
-
-    Railway container'da çalışır — GitHub Actions cron'una gerek kalmaz.
-    İlk 30 dakika beklenir ki startup sırasında tetiklenmesin.
-    """
-    await asyncio.sleep(1800)
-    while True:
-        try:
-            from app.pipeline.runner import update_results
-            stats = await update_results()
-            log.info("Otomatik skor güncelleme: %s", stats)
-        except Exception as exc:
-            log.warning("Skor güncelleme hatası: %s", exc)
-        await asyncio.sleep(1800)
 
 
 @asynccontextmanager
@@ -173,15 +187,12 @@ async def lifespan(app: FastAPI):
     global _bg_queue
     _bg_queue = asyncio.Queue()
     worker = asyncio.create_task(_bg_worker())
-    updater = asyncio.create_task(_score_updater())
     yield
     worker.cancel()
-    updater.cancel()
-    for t in (worker, updater):
-        try:
-            await t
-        except asyncio.CancelledError:
-            pass
+    try:
+        await worker
+    except asyncio.CancelledError:
+        pass
 
 
 # ─── FastAPI uygulaması ───────────────────────────────────────────────────────
@@ -429,9 +440,19 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
             _enqueue_bg_analysis(result)
             return result
 
-    # 3. Playwright scrape
+    # 3. Playwright scrape — hard timeout ile sarmalı (Vercel SSR 25sn'de düşer)
     log.info("Fixture Playwright scrape başlıyor: %s", cache_key)
-    matches = await fetch_fixture(target_date=parsed_date, only_hot=True)
+    try:
+        matches = await asyncio.wait_for(
+            fetch_fixture(target_date=parsed_date, only_hot=True),
+            timeout=20.0,
+        )
+    except asyncio.TimeoutError:
+        log.error("Fixture scrape 20sn içinde dönmedi: %s", cache_key)
+        raise HTTPException(
+            status_code=503,
+            detail="Maç verisi çekilemedi (timeout). Lütfen birkaç dakika sonra tekrar deneyin.",
+        )
     result = [
         FixtureMatchOut(
             match_id=m.match_id,
