@@ -266,11 +266,12 @@ python -m app.cli.main run-pipeline
 Bu komut sabah çalıştırıldığında bugünün tüm maçlarını scrape edip DB'ye yazar. Gün içinde kullanıcılar maçlara tıkladığında **Playwright hiç açılmaz**, DB'den 1-3sn'de gelir.
 
 **GitHub Actions otomatik çalışır** (`.github/workflows/daily_pipeline.yml`):
-- `0 5 * * *` → 08:00 İstanbul → `run-pipeline` (sabah analiz)
+- `0 5 * * *` → 08:00 İstanbul → `run-pipeline` (sabah analiz, birinci deneme)
+- `0 6 * * *` → 09:00 İstanbul → `run-pipeline` (yedek; 08:00 cron kaçırırsa)
 - `30 21 * * *` → 00:30 İstanbul → `update-scores` (gece skor güncelleme)
 - `0 23 * * *` → 02:00 İstanbul → `update-scores` (geç maçlar)
 
-Ayrıca Railway container'da FastAPI `_score_updater` task her 30 dakikada skorları günceller.
+**Not:** `_score_updater` task'i Sprint 7 sırasında kaldırıldı (Playwright fırtınası sebebiyle). Skor güncelleme tek başına gece cron'una bırakıldı.
 
 ---
 
@@ -302,7 +303,7 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 ---
 
-## Mevcut Durum (Sprint 7 — TAMAMLANDI ✅)
+## Mevcut Durum (Sprint 8 — TAMAMLANDI ✅)
 
 ### Backend
 
@@ -311,16 +312,25 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ Analiz motoru (Katman A): 105 oran hesaplaması
 - ✅ Katman B pattern matching: `find_pattern_b_matches` — `exclude_match_id` ile analiz edilen maç kendi arşivinden hariç
 - ✅ Katman C pattern matching: `find_pattern_c_all_periods` — tek sorgu, tüm periyotlar; `exclude_match_id` desteği
+- ✅ **Pattern saklama (Sprint 8):** `matches` tablosunda 6 yeni JSONB kolon (`pattern_ht_b/c`, `pattern_h2_b/c`, `pattern_ft_b/c`) — runtime hesabı yerine DB'den okur
+- ✅ **`compute_all_patterns` ortak yardımcısı:** `app/analysis/persist.py` — pipeline ve API kullanır
+- ✅ **Lazy backfill:** `_build_from_db` pattern eksik bulursa hesaplayıp DB'ye yazar (write-through cache)
+- ✅ **`_do_analyze` write-through:** Playwright scrape sonrası tam upsert (analiz + pattern)
 - ✅ `build-archive` CLI: lig → geçmiş maç ID → fetch+analiz+upsert
 - ✅ FastAPI: 7 endpoint + fixture cache (memory + DB) + bg analiz kuyruğu + DB-first analiz
+- ✅ **Bg worker DB-only (Sprint 7 acil):** Playwright AÇMAZ; sadece DB-hit yapar + lazy backfill tetikler
+- ✅ **`/api/fixture` hard timeout 20sn (Sprint 7 acil):** Playwright takılırsa 503, backend ölmez
+- ✅ **`/api/health` zenginleştirildi:** DB durumu, son pipeline saati, fixture cache zamanı, bg queue, cached_analyses
+- ✅ **`/api/health` GET+HEAD:** UptimeRobot free tier HEAD desteği
 - ✅ `pattern_stats.py`: ~130 alan, 9 bölüm
 - ✅ Railway deployment: `https://nortverse-production.up.railway.app`
 - ✅ `fixture_cache` DB tablosu: bülten verileri kalıcı, server restart'tan etkilenmez
 - ✅ `/api/results` endpoint: günlük biten maçlar + Katman A kapsamı
 - ✅ `update-scores` CLI: biten maçların actual skorlarını DB'ye yazar
-- ✅ Otomatik skor güncelleme: FastAPI içinde her 30 dakikada `_score_updater` task
 - ✅ Supabase PgBouncer uyumu: `pool_size=2`, `statement_cache_size=0`
 - ✅ Date bug düzeltildi: fixture İstanbul tz bazlı, tarih filtresi eklendi
+- ✅ **Yedek pipeline cron (09:00 İstanbul):** 08:00 cron kaçırırsa devreye girer
+- ❌ `_score_updater` kaldırıldı: Playwright fırtınası sebebiyle (Sprint 7 acil)
 
 ### Frontend
 
@@ -328,17 +338,35 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ Bülten sayfası: Hot maçlar, saat, lig, 8 günlük kayan takvim
 - ✅ Analiz sayfası: Katman A skor listesi + IddaaCoupon (Arşiv-1 ve Arşiv-2)
 - ✅ Periyot sekmeleri: İY / 2Y / MS — her biri kendi istatistiklerini gösterir
-- ✅ Sonuçlar sayfası (`/sonuclar`): biten maçlar, skor; canlı maç "Canlı" rozeti; KG/2.5/A✓ rozetleri kaldırıldı
+- ✅ Sonuçlar sayfası (`/sonuclar`): biten maçlar, skor; canlı maç "Canlı" rozeti
 - ✅ IddaaCoupon: her arşiv kartının üstünde "Altın Oranlar" (%79+) bölümü
 - ✅ IddaaCoupon: handikap (2:0)/(0:2) convention düzeltildi
 - ✅ Vercel deployment: `https://nortverse.vercel.app`
 - ✅ SSR URL düzeltildi: `BACKEND_URL` env var ile Vercel → Railway direkt
+- ✅ **Next.js Data Cache 60sn (Sprint 7):** `getFixture`/`getResults` server cache → tarih değişimi anlık
+- ✅ **Skeleton fallback (Sprint 7):** Suspense'te 8 satırlık iskelet, "Yükleniyor..." flash bitti
+- ✅ **DayTabs disable (Sprint 7):** Aktif tarihe tıklayınca reload yok
+- ❌ **BultenPrefetcher kapatıldı (Sprint 7 acil):** Backend'i boğuyordu; bg_worker tek otorite
+
+### Performans Sonuçları (Sprint 8 sonrası)
+
+| Senaryo | Süre |
+|---|---|
+| Memory cache hit (2. tıklama) | ~50-100ms |
+| DB hit + saklı pattern | ~300-1000ms |
+| DB hit + pattern eksik (lazy backfill, tek seferlik) | ~1-9sn |
+| DB miss (Playwright scrape, ilk kez) | ~10-15sn |
+
+### Altyapı / Monitoring
+
+- ✅ **UptimeRobot kuruldu:** `/api/health`'e 5dk'da bir HEAD ping → Railway uyumaz
+- ✅ Backend memory cache TTL: 5dk → 10dk
 
 ### Henüz Yok
 
 - ❌ Premium/Auth — sonraki fazlar
 - ❌ Canlı maç + trend motoru — sonraki fazlar
-- ❌ Railway uyku sorunu: ücretsiz planda backend uyku moduna giriyor; bülten "fetch failed" verebilir
+- ❌ Veri doğruluğu auditi yapılmadı (3-5 maç nowgoal vs DB karşılaştırması)
 
 ---
 
@@ -385,6 +413,28 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - IddaaCoupon: handikap convention düzeltildi — `Hnd(2:0)` ev +2 alır, `Hnd(0:2)` dep +2 alır
 - `pattern_b.py` + `pattern_c.py`: `exclude_match_id` parametresi — analiz edilen maç kendi arşivinden hariç
 - `api/main.py`: `_build_from_db` ve `_do_analyze`'a `exclude_match_id=match_id` geçildi
+- CLAUDE.md eksik/hatalı bölümler düzeltildi (tree, komutlar, migration, AGENTS.md referansı)
+- `/api/health` zenginleştirildi: DB durumu, son pipeline saati, fixture cache zamanı, bg queue
+- `/api/health` GET+HEAD desteği — UptimeRobot 405 hatası çözüldü
+- UptimeRobot kuruldu: 5dk'da bir HEAD ping → Railway uyku sorunu çözüldü
+- Performans: Next.js Data Cache 60sn, skeleton fallback, DayTabs disable, prefetch 3→5
+- **ACİL müdahale (production incident):** Playwright fırtınası tespit edildi
+  - Bg worker DB-only yapıldı (Playwright AÇMAZ)
+  - `_score_updater` task tamamen kaldırıldı (gece cron'a güveniliyor)
+  - `/api/fixture` Playwright çağrısına 20sn hard timeout (503 dönüp backend'i koruyor)
+  - BultenPrefetcher kapatıldı (no-op)
+  - Backend memory cache 5dk→10dk
+
+### Sprint 8 — TAMAMLANDI ✅ (Sub-saniye Analiz)
+- **Pattern saklama altyapısı:** `matches` tablosuna 6 yeni JSONB kolon eklendi
+  - Migration: `b7e4a2d8c901_add_pattern_columns`
+  - Kolonlar: `pattern_ht_b`, `pattern_ht_c`, `pattern_h2_b`, `pattern_h2_c`, `pattern_ft_b`, `pattern_ft_c`
+- `app/analysis/persist.py`: `compute_all_patterns` (paralel B+C hesabı) + `update_match_patterns` (lazy backfill DB write)
+- `pipeline/runner.py`: `run-pipeline` artık her maç için pattern hesaplayıp DB'ye yazar
+- `api/main.py` `_build_from_db`: kaydedilmiş pattern'leri okur (~300-1000ms); eksikse hesaplayıp DB'ye yazar (write-through)
+- `api/main.py` `_do_analyze`: Playwright path'inde de pattern + analiz tam upsert
+- 09:00 İstanbul yedek pipeline cron eklendi (`0 6 * * *`) — 08:00 cron kaçırırsa devreye girer
+- **Sonuç:** Tüm maç tıklamaları **<1 saniye** (memory cache veya saklı pattern)
 
 ---
 
@@ -418,7 +468,17 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 - **Canlı maç tespiti:** Sonuçlar sayfasında `kickoff_time + 110 dakika > now` ise maç muhtemelen hâlâ oynuyor → "Canlı" rozeti gösterilir. `_score_updater` canlı skorları da kaydedebilir (gerçek bitişi takip etmiyor), bu yüzden frontend tarafı tespit yapılıyor.
 
-- **Railway uyku modu:** Ücretsiz planda Railway container inaktiflikte uyku moduna girer. Bülten sayfası "fetch failed" verebilir. Çözüm: ücretli plan veya dış cron ile `/api/health` ping.
+- **Railway uyku modu — ÇÖZÜLDÜ (Sprint 7):** UptimeRobot 5dk'da bir HEAD ping atıyor (`/api/health`). Container hep ayakta. Free tier yeterli.
+
+- **Bg worker DB-only (Sprint 7 acil):** Önceki tasarım fixture yüklendikten sonra TÜM maçlar için arka planda Playwright açıyordu — pipeline'sız günlerde container OOM olurdu. Yeni tasarım: bg worker SADECE DB-hit yapar (`_analyze_db_only`). DB miss'ler atlanır; kullanıcı tıkladığında foreground tek seferlik scrape yapar. Bg worker + Sprint 8 lazy backfill kombinasyonu sayesinde DB'deki maçların pattern'lerini de arka planda ısıtır.
+
+- **`/api/fixture` hard timeout (Sprint 7 acil):** Playwright scrape `asyncio.wait_for(timeout=20)` ile sarmalı. Vercel SSR ~25sn'de düşer, biz 20sn'de 503 dönüyoruz — backend ölmez, kullanıcı "fetch failed" görür ama sistem ayakta kalır.
+
+- **Pattern saklama (Sprint 8):** `matches` tablosunda 6 JSONB kolon (`pattern_ht/h2/ft_b/c`). `exclude_match_id=match_id` ile hesaplanıp saklanır → okuma sırasında ek filtre gerekmez. Pattern eksikse `_build_from_db` runtime hesabı yapıp **write-through** ile DB'ye yazar (lazy backfill). Storage tahmini ~450MB Supabase free tier 500MB sınırına yakın — aşılırsa arşiv prune.
+
+- **`compute_all_patterns` (Sprint 8):** `app/analysis/persist.py` — pipeline ve API tek bir kanaldan pattern üretir. 3 paralel pattern_b çağrısı + 1 pattern_c (3 periyot döner) `asyncio.gather` ile aynı anda hesaplanır.
+
+- **Yedek pipeline cron (Sprint 8):** GitHub Actions free tier cron kırılgan (1-2 saat geç çalışabilir). 08:00 ve 09:00 İstanbul olmak üzere 2 cron tanımlı. İdempotent upsert sayesinde ikisi de başarılı olursa veri zarar görmez.
 
 ---
 
@@ -459,3 +519,46 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 - ARSIV-1: 3490 satır, 1633 maç + gerçek sonuçlar (Katman B referansı)
 - NORT ANALİZ: Pattern matching sonuçları
 - BAHİS TABLOSU: Manuel bahis önerileri
+
+---
+
+## Kaldığımız Yer (2026-04-25 Cumartesi gece)
+
+Sprint 8 deploy edildi. Sistem stabil ve hızlı. Sıradaki adımlar (sırayla):
+
+### 1. Veri Doğruluğu Auditi (Sıradaki — kullanıcı talep etti)
+- 3-5 maçı nowgoal'da yan yana karşılaştır
+- Saat, takım ismi, lig, skor zincirini kontrol et
+- 5 biten maç → DB'deki actual_ft skorları vs nowgoal sayfası
+- Kayserispor test maçı (`2813084`) — Excel ile pattern karşılaştırması
+- Excel'in `ARSIV-1` ve `NORT ANALİZ` sheet'leriyle 1-2 maç çapraz doğrulama
+
+### 2. Sprint 9 — Auth/Premium (Para kazanma yolu)
+- NextAuth.js + Google OAuth (şifresiz)
+- Supabase'de `users` tablosu — üyelik seviyesi (free/premium)
+- Free: Bülten + Sonuçlar açık, Analiz kilitli
+- Premium: Tüm analiz açık + ileride canlı maç
+- İkinci faz: Stripe entegrasyonu (aylık abonelik)
+
+### 3. Sprint 10 — Canlı Maç & Trend (Uzun vade)
+- Anlık skor takibi (devre arası + final)
+- WebSocket veya 30sn polling
+- Maç sırasında oran değişimi takibi
+
+### Bilinen Açık Konular
+- **Storage:** Pattern saklama tahminen ~450MB → Supabase free tier 500MB sınırına yakın. İzlenmeli; aşılırsa eski arşiv maçlarının pattern'leri prune edilebilir.
+- **Bg worker hız:** ~3-5sn/maç pattern hesabı. 200-300 maçlık bültende 15-25dk sürer. Acil değil ama paralelize edilebilir (3 worker).
+- **Veri doğruluğu testi yapılmadı:** Sprint 8 öncesi ve sonrası nowgoal data karşılaştırması atlandı.
+- **Yarın 08:00 cron testi:** Eklenen 09:00 yedek cron'un gerçekten çalıştığı yarın görülecek.
+
+### Önemli Commit Zinciri (Son Oturum)
+- `194ce94` Sprint 7: CLAUDE.md eksiklikleri düzeltildi
+- `3ac8c8a` Sprint 7: /api/health zenginleştirildi
+- `2a257f3` Sprint 7: /api/health HEAD desteği (UptimeRobot)
+- `e65384d` Sprint 7: Performans (Data Cache, skeleton, prefetch, DayTabs)
+- `aed8cfd` Sprint 7 ACİL: Playwright fırtınası durduruldu
+- `b1086b9` Sprint 8: Pattern JSONB kolonları
+- `ae31800` Sprint 8: compute_all_patterns yardımcısı
+- `22cdde6` Sprint 8: run-pipeline pattern yazar
+- `7008064` Sprint 8: _build_from_db saklı pattern okur (lazy backfill)
+- `7792e56` Sprint 8: 09:00 yedek pipeline cron
