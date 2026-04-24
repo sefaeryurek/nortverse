@@ -49,6 +49,8 @@ python -m app.cli.main update-scores --date 2026-04-20  # belirli gün için sko
 # Syntax: build-archive <LEAGUE_ID> [SEZON]
 python -m app.cli.main build-archive 36 2024-2025   # ENG PR 2024-2025 sezonu
 python -m app.cli.main build-archive 36              # güncel sezon
+python -m app.cli.main build-multi-archive 36 39 78  # birden fazla lig — sırayla
+python -m app.cli.main list-leagues                  # mevcut tüm lig ID'leri ve isimleri
 
 # FastAPI sunucusu
 python -m app.cli.main serve                         # http://localhost:8000
@@ -175,9 +177,8 @@ nortverse/
 │   │   ├── config.py              # ScraperConfig, AnalysisConfig (frozen dataclass)
 │   │   ├── models.py              # Pydantic: FixtureMatch, HistoricalMatch, MatchRawData
 │   │   ├── db/
-│   │   │   ├── connection.py      # SQLAlchemy async engine + get_session()
-│   │   │   ├── models.py          # Match + FixtureCache ORM — JSONB kolonlar, actual skorlar
-│   │   └── connection.py      # pool_size=2, statement_cache_size=0 (Supabase PgBouncer)
+│   │   │   ├── connection.py      # SQLAlchemy async engine + get_session() — pool_size=2, statement_cache_size=0 (Supabase PgBouncer)
+│   │   │   └── models.py          # Match + FixtureCache ORM — JSONB kolonlar, actual skorlar
 │   │   ├── scraper/
 │   │   │   ├── browser.py         # Playwright wrapper (browser_context context manager)
 │   │   │   ├── fixture.py         # Günlük bülten — Hot filtreli, kickoff UTC timezone
@@ -203,6 +204,7 @@ nortverse/
 ├── frontend/
 │   ├── app/
 │   │   ├── layout.tsx             # Root layout (dark tema, sidebar)
+│   │   ├── page.tsx               # Root → /bulten redirect
 │   │   ├── bulten/
 │   │   │   └── page.tsx           # Server component — fixture listesi (Suspense)
 │   │   ├── sonuclar/
@@ -211,13 +213,16 @@ nortverse/
 │   │       └── page.tsx           # Client component — maç analiz sayfası
 │   ├── components/
 │   │   ├── BultenRow.tsx          # Maç satırı (link ?home=&away= param ile)
+│   │   ├── BultenPrefetcher.tsx   # Bültendeki ilk 3 maçı arka planda prefetch eder
 │   │   ├── DayTabs.tsx            # 8 günlük kayan pencere, basePath prop ile
-│   │   ├── IddaaCoupon.tsx        # Arşiv istatistik kartları (Katman B + C)
+│   │   ├── IddaaCoupon.tsx        # Arşiv istatistik kartları (Katman B + C) + Altın Oranlar
 │   │   ├── ScoreList.tsx          # Katman A 3.5+ skor listesi
-│   │   └── Sidebar.tsx            # Sol menü (Bülten + Sonuçlar)
+│   │   ├── Sidebar.tsx            # Sol menü (Bülten + Sonuçlar)
+│   │   └── StatBadge.tsx          # Yeniden kullanılabilir yüzde rozeti
 │   ├── lib/
-│   │   ├── api.ts                 # Backend API çağrıları (BASE = "" → Next.js proxy)
+│   │   ├── api.ts                 # Backend API çağrıları (BASE = BACKEND_URL ?? "" — SSR'da Railway, CSR'da proxy)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
+│   ├── AGENTS.md                  # ⚠️ Next.js özel sürüm uyarısı — kod yazmadan önce oku
 │   └── next.config.ts             # Rewrite proxy: /api/* → localhost:8000/api/*
 └── CLAUDE.md
 ```
@@ -395,11 +400,13 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 - **Typer 0.12.5 + Python 3.11 bug:** `bool` Option'lar string `'False'` dönebilir. `cli/main.py`'de `_flag()` yardımcısı çözüyor.
 
-- **Next.js proxy:** `next.config.ts`'te `/api/*` → `http://localhost:8000/api/*` rewrite var. Frontend'de `BASE = ""` — aynı origin, CORS yok.
+- **Next.js proxy & BACKEND_URL:** `next.config.ts`'te `/api/*` → `http://localhost:8000/api/*` rewrite var. `lib/api.ts`'te `BASE = process.env.BACKEND_URL || ""`. Sebep: Vercel SSR (server component) `BACKEND_URL` üzerinden Railway'e direkt gider; tarayıcı tarafı (CSR) `BACKEND_URL` görmez → boş string → Next.js proxy üzerinden Railway'e ulaşır. Local'de hiç `BACKEND_URL` yoksa proxy yine local backend'e gider.
+
+- **Frontend Next.js — özel sürüm:** `frontend/AGENTS.md` Next.js'in eğitim verisindekinden farklı olabileceğini, `node_modules/next/dist/docs/` okunmadan kod yazılmaması gerektiğini söylüyor. Frontend kodu değiştirmeden önce **mutlaka** `frontend/AGENTS.md` okunacak.
 
 - **Supabase PgBouncer:** Transaction mode pooler (port 5432) ile asyncpg kullanırken `pool_size=2, max_overflow=0, connect_args={"statement_cache_size": 0}` zorunlu. Aksi halde GitHub Actions gibi ortamlarda ECIRCUITBREAKER hatası alınır.
 
-- **fixture_cache tablosu:** `/api/fixture` 3 katmanlı cache kullanır: memory (5dk) → DB (geçmiş=kalıcı, bugün=1saat) → Playwright. Yeni migration: `a3f9e2b1c4d5`.
+- **fixture_cache tablosu:** `/api/fixture` 3 katmanlı cache kullanır: memory (5dk) → DB (geçmiş=kalıcı, bugün=1saat) → Playwright. Migration zinciri: `641438be3ff8` (initial schema) → `c1b1b4cd333b` (h2 skorları + kickoff_time) → `a3f9e2b1c4d5` (fixture_cache).
 
 - **Otomatik skor güncelleme:** `api/main.py`'de `_score_updater` async task her 30 dakikada `update_results()` çağırır. Railway container ayakta olduğu sürece çalışır. Ayrıca GitHub Actions'da gece 00:30 ve 02:00 İstanbul'da da çalışır (yedek).
 
