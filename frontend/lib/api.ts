@@ -9,8 +9,9 @@ const BASE =
   "";
 
 export async function getFixture(date: string): Promise<FixtureMatch[]> {
+  // Server-side fetch (Vercel SSR): Next.js Data Cache 60sn → tarih değişimi anlık
   const res = await fetch(`${BASE}/api/fixture?date=${date}`, {
-    cache: "no-store",
+    next: { revalidate: 60 },
   });
   if (!res.ok) throw new Error(`Fixture alınamadı: ${res.status}`);
   return res.json();
@@ -33,8 +34,9 @@ export async function prefetchAnalyze(matchId: string): Promise<void> {
 }
 
 export async function getResults(date: string): Promise<ResultMatch[]> {
+  // Sonuçlar 60sn cache — _score_updater 30dk'da bir güncelliyor, 60sn yeterince taze
   const res = await fetch(`${BASE}/api/results?date=${date}`, {
-    cache: "no-store",
+    next: { revalidate: 60 },
   });
   if (!res.ok) throw new Error(`Sonuçlar alınamadı: ${res.status}`);
   return res.json();

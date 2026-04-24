@@ -38,7 +38,7 @@ _analysis_locks: dict[str, asyncio.Lock] = {}
 
 # Fixture cache: "YYYY-MM-DD" → (fetch_timestamp, [FixtureMatchOut])
 _fixture_cache: dict[str, tuple[float, list]] = {}
-FIXTURE_CACHE_TTL = 300.0  # 5 dakika
+FIXTURE_CACHE_TTL = 600.0  # 10 dakika
 
 # Arka plan analiz kuyruğu (lifespan ile başlatılır)
 _bg_queue: asyncio.Queue[str] | None = None

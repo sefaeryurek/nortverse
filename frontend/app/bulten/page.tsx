@@ -4,6 +4,40 @@ import BultenRow from "@/components/BultenRow";
 import { getFixture } from "@/lib/api";
 import type { FixtureMatch } from "@/lib/types";
 
+function BultenSkeleton() {
+  // 8 satırlık iskelet — gerçek BultenRow düzenine yakın boyutlarda
+  return (
+    <>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-0 border-b animate-pulse"
+          style={{ borderColor: "#1e293b" }}
+        >
+          <div
+            className="flex-shrink-0 w-16 h-[60px] flex items-center justify-center"
+            style={{ backgroundColor: "#0f172a" }}
+          >
+            <div className="h-3 w-10 rounded" style={{ backgroundColor: "#1e293b" }} />
+          </div>
+          <div className="flex-1 flex items-center gap-3 px-4 py-3">
+            <div className="flex items-center gap-1.5 w-32">
+              <div className="h-4 w-4 rounded-full" style={{ backgroundColor: "#1e293b" }} />
+              <div className="h-3 w-20 rounded" style={{ backgroundColor: "#1e293b" }} />
+            </div>
+            <div className="flex-1 flex items-center gap-2">
+              <div className="h-3.5 flex-1 rounded" style={{ backgroundColor: "#1e293b" }} />
+              <div className="h-3 w-6 rounded" style={{ backgroundColor: "#1e293b" }} />
+              <div className="h-3.5 flex-1 rounded" style={{ backgroundColor: "#1e293b" }} />
+            </div>
+            <div className="w-7 h-7 rounded-full" style={{ backgroundColor: "#1e293b" }} />
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 interface Props {
   searchParams: Promise<{ date?: string }>;
 }
@@ -122,15 +156,7 @@ export default async function BultenPage({ searchParams }: Props) {
 
       {/* Maç listesi */}
       <div className="flex-1 overflow-y-auto">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-24">
-              <p className="text-sm animate-pulse" style={{ color: "#64748b" }}>
-                Yükleniyor...
-              </p>
-            </div>
-          }
-        >
+        <Suspense fallback={<BultenSkeleton />}>
           <MatchList date={date} />
         </Suspense>
       </div>

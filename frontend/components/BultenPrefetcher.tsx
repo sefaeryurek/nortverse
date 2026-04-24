@@ -9,8 +9,8 @@ interface Props {
 
 export default function BultenPrefetcher({ matchIds }: Props) {
   useEffect(() => {
-    // Sadece ilk 3 maçı prefetch et — daha fazlası eşzamanlı Playwright yükü oluşturur
-    matchIds.slice(0, 3).forEach((id) => prefetchAnalyze(id));
+    // İlk 5 maçı prefetch et — Supabase pool_size=2 limiti için dengeli sayı
+    matchIds.slice(0, 5).forEach((id) => prefetchAnalyze(id));
   }, [matchIds]);
 
   return null;

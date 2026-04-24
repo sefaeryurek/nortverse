@@ -4,6 +4,30 @@ import { getResults } from "@/lib/api";
 import type { ResultMatch } from "@/lib/types";
 import Link from "next/link";
 
+function ResultSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 px-4 py-3 border-b animate-pulse"
+          style={{ borderColor: "#1e293b" }}
+        >
+          <div className="w-12 h-3 rounded" style={{ backgroundColor: "#1e293b" }} />
+          <div className="w-20 h-3 rounded" style={{ backgroundColor: "#1e293b" }} />
+          <div className="flex-1 flex items-center gap-2">
+            <div className="h-3.5 flex-1 rounded" style={{ backgroundColor: "#1e293b" }} />
+            <div className="h-3 w-6 rounded" style={{ backgroundColor: "#1e293b" }} />
+            <div className="h-3.5 flex-1 rounded" style={{ backgroundColor: "#1e293b" }} />
+          </div>
+          <div className="w-16 h-6 rounded" style={{ backgroundColor: "#1e293b" }} />
+          <div className="w-12 h-6 rounded" style={{ backgroundColor: "#1e293b" }} />
+        </div>
+      ))}
+    </>
+  );
+}
+
 interface Props {
   searchParams: Promise<{ date?: string }>;
 }
@@ -197,15 +221,7 @@ export default async function SonuclarPage({ searchParams }: Props) {
 
       {/* Sonuç listesi */}
       <div className="flex-1 overflow-y-auto">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-24">
-              <p className="text-sm animate-pulse" style={{ color: "#64748b" }}>
-                Yükleniyor...
-              </p>
-            </div>
-          }
-        >
+        <Suspense fallback={<ResultSkeleton />}>
           <ResultList date={date} />
         </Suspense>
       </div>
