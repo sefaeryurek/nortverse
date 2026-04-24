@@ -12,6 +12,7 @@ from sqlalchemy import select, update as sa_update
 from sqlalchemy.dialects.postgresql import insert
 
 from app.analysis import analyze_match, check_match_filters
+from app.analysis.persist import compute_all_patterns
 from app.db.connection import get_session
 from app.db.models import Match
 from app.models import MatchAnalysisResult, MatchRawData
@@ -22,9 +23,17 @@ from app.scraper.match_detail import fetch_match_detail
 log = logging.getLogger(__name__)
 
 
-def _result_to_row(r: MatchAnalysisResult, raw: MatchRawData | None = None) -> dict:
-    """MatchAnalysisResult → matches tablosu satırı."""
-    return {
+def _result_to_row(
+    r: MatchAnalysisResult,
+    raw: MatchRawData | None = None,
+    patterns: dict[str, dict | None] | None = None,
+) -> dict:
+    """MatchAnalysisResult → matches tablosu satırı.
+
+    patterns parametresi compute_all_patterns()'in çıktısıdır; verilirse
+    pattern_*_b/c kolonları da satıra eklenir.
+    """
+    row = {
         "match_id": r.match_id,
         "home_team": r.home_team,
         "away_team": r.away_team,
@@ -51,11 +60,18 @@ def _result_to_row(r: MatchAnalysisResult, raw: MatchRawData | None = None) -> d
         "actual_h2_home": raw.actual_h2_home if raw else None,
         "actual_h2_away": raw.actual_h2_away if raw else None,
     }
+    if patterns:
+        row.update(patterns)
+    return row
 
 
-async def _upsert(result: MatchAnalysisResult, raw: MatchRawData | None = None) -> None:
-    """Analiz sonucunu DB'ye yaz; zaten varsa güncelle."""
-    row = _result_to_row(result, raw)
+async def _upsert(
+    result: MatchAnalysisResult,
+    raw: MatchRawData | None = None,
+    patterns: dict[str, dict | None] | None = None,
+) -> None:
+    """Analiz sonucunu (varsa pattern'lerle) DB'ye yaz; zaten varsa güncelle."""
+    row = _result_to_row(result, raw, patterns)
     stmt = (
         insert(Match)
         .values(**row)
@@ -91,7 +107,15 @@ async def run_pipeline(
                     continue
 
                 result = analyze_match(raw)
-                await _upsert(result, raw)
+                # Pattern B/C'leri hesapla (exclude_match_id=mid ile self-exclusion)
+                patterns = await compute_all_patterns(
+                    match_id=mid,
+                    ht_scores=(result.ht.scores_1, result.ht.scores_x, result.ht.scores_2),
+                    h2_scores=(result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
+                    ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
+                    ft_ratios=result.ft.all_ratios,
+                )
+                await _upsert(result, raw, patterns)
                 stats["analyzed"] += 1
                 log.info(
                     "Kaydedildi [%s]: %s vs %s | FT 3.5+: %s",
