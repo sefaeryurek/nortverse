@@ -21,47 +21,30 @@ function formatTime(iso: string | null): string {
   }
 }
 
-function ResultBadge({
-  hit,
-  label,
-}: {
-  hit: boolean;
-  label: string;
-}) {
-  return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold"
-      style={{
-        backgroundColor: hit ? "#14532d" : "#2d1010",
-        color: hit ? "#4ade80" : "#f87171",
-        border: `1px solid ${hit ? "#166534" : "#7f1d1d"}`,
-      }}
-    >
-      {hit ? "✓" : "✗"} {label}
-    </span>
-  );
+function isLive(kickoffIso: string | null): boolean {
+  if (!kickoffIso) return false;
+  const ko = new Date(kickoffIso).getTime();
+  const now = Date.now();
+  const elapsed = now - ko;
+  return elapsed > 0 && elapsed < 110 * 60 * 1000; // 0–110 dakika arası
 }
 
 function ResultRow({ match }: { match: ResultMatch }) {
   const timeStr = formatTime(match.kickoff_time);
-  const scoreStr = `${match.actual_ft_home} - ${match.actual_ft_away}`;
+  const scoreStr =
+    match.actual_ft_home != null && match.actual_ft_away != null
+      ? `${match.actual_ft_home} - ${match.actual_ft_away}`
+      : "- - -";
   const htStr =
     match.actual_ht_home != null && match.actual_ht_away != null
-      ? `${match.actual_ht_home}-${match.actual_ht_away}`
+      ? `IY ${match.actual_ht_home}-${match.actual_ht_away}`
       : null;
 
-  const resultLabel =
-    match.result === "1" ? "Ev" : match.result === "2" ? "Dep" : "X";
-  const resultColor =
-    match.result === "1"
-      ? "#3b82f6"
-      : match.result === "2"
-        ? "#f97316"
-        : "#94a3b8";
+  const live = isLive(match.kickoff_time);
 
   return (
     <div
-      className="flex items-center gap-3 px-4 py-3 border-b hover:bg-opacity-50 transition-colors"
+      className="flex items-center gap-3 px-4 py-3 border-b hover:bg-slate-900/40 transition-colors"
       style={{ borderColor: "#1e293b" }}
     >
       {/* Saat */}
@@ -81,49 +64,41 @@ function ResultRow({ match }: { match: ResultMatch }) {
         {match.league_code ?? "—"}
       </span>
 
-      {/* Maç */}
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        <span
-          className="text-sm font-medium truncate"
-          style={{ color: "#e2e8f0" }}
-        >
-          {match.home_team}
-        </span>
+      {/* Takımlar */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium truncate" style={{ color: "#e2e8f0" }}>
+            {match.home_team}
+          </span>
+          <span className="text-xs flex-shrink-0" style={{ color: "#475569" }}>vs</span>
+          <span className="text-sm font-medium truncate" style={{ color: "#e2e8f0" }}>
+            {match.away_team}
+          </span>
+        </div>
+        {htStr && (
+          <span className="text-[10px] font-mono" style={{ color: "#475569" }}>
+            {htStr}
+          </span>
+        )}
+      </div>
 
-        {/* Skor kutusu */}
-        <div className="flex-shrink-0 flex flex-col items-center">
+      {/* Canlı badge veya skor */}
+      <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
+        {live ? (
           <span
-            className="text-base font-bold font-mono px-3 py-1 rounded"
+            className="px-2 py-0.5 rounded text-xs font-bold animate-pulse"
+            style={{ backgroundColor: "#14532d", color: "#4ade80" }}
+          >
+            Canlı
+          </span>
+        ) : (
+          <span
+            className="text-sm font-bold font-mono px-2 py-0.5 rounded"
             style={{ backgroundColor: "#0f172a", color: "#f1f5f9" }}
           >
             {scoreStr}
           </span>
-          {htStr && (
-            <span className="text-[10px] font-mono mt-0.5" style={{ color: "#475569" }}>
-              IY: {htStr}
-            </span>
-          )}
-        </div>
-
-        <span
-          className="text-sm font-medium truncate"
-          style={{ color: "#e2e8f0" }}
-        >
-          {match.away_team}
-        </span>
-      </div>
-
-      {/* Sonuç rozetleri */}
-      <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
-        <span
-          className="px-2 py-0.5 rounded text-xs font-bold"
-          style={{ backgroundColor: "#1e293b", color: resultColor }}
-        >
-          {resultLabel}
-        </span>
-        <ResultBadge hit={match.kg_var} label="KG" />
-        <ResultBadge hit={match.over_25} label="2.5 Üst" />
-        <ResultBadge hit={match.katman_a_covered} label="A✓" />
+        )}
       </div>
 
       {/* Analiz linki */}
@@ -152,9 +127,7 @@ async function ResultList({ date }: { date: string }) {
       <div className="flex items-center justify-center py-24">
         <div className="text-center space-y-3">
           <div className="text-5xl">⚠️</div>
-          <p className="text-sm font-medium" style={{ color: "#ef4444" }}>
-            {error}
-          </p>
+          <p className="text-sm font-medium" style={{ color: "#ef4444" }}>{error}</p>
         </div>
       </div>
     );
@@ -173,26 +146,19 @@ async function ResultList({ date }: { date: string }) {
     );
   }
 
-  const covered = matches.filter((m) => m.katman_a_covered).length;
-  const covPct =
-    matches.length > 0 ? Math.round((covered / matches.length) * 100) : 0;
-
   return (
     <>
-      {/* Özet satırı */}
+      {/* Özet */}
       <div
         className="flex items-center gap-4 px-4 py-2 text-xs border-b"
         style={{ borderColor: "#1e293b", color: "#475569" }}
       >
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#22c55e" }} />
-          {matches.length} maç tamamlandı
+          {matches.length} maç
         </span>
         <span>KG: {matches.filter((m) => m.kg_var).length}</span>
         <span>2.5 Üst: {matches.filter((m) => m.over_25).length}</span>
-        <span style={{ color: covPct >= 60 ? "#22c55e" : covPct >= 40 ? "#f97316" : "#ef4444" }}>
-          Katman A isabeti: %{covPct}
-        </span>
       </div>
 
       {matches.map((m) => (

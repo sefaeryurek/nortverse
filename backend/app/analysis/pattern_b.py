@@ -24,6 +24,7 @@ async def find_pattern_b_matches(
     scores_x: list[str],
     scores_2: list[str],
     min_matches: int = 5,
+    exclude_match_id: str | None = None,
 ) -> PatternResult | None:
     """Aynı periyot skor setine sahip geçmiş maçları bul ve istatistik üret.
 
@@ -31,6 +32,7 @@ async def find_pattern_b_matches(
         period: "ht", "h2" veya "ft"
         scores_1, scores_x, scores_2: Eşleştirilecek skor listeleri
         min_matches: Minimum eşleşme sayısı
+        exclude_match_id: Bu match_id'yi sonuçlardan çıkar (analiz edilen maçın kendisi)
 
     Returns:
         PatternResult veya None (eşleşme < min_matches ise)
@@ -46,15 +48,15 @@ async def find_pattern_b_matches(
         actual_check = Match.actual_ft_home.isnot(None)
 
     async with get_session() as session:
-        stmt = (
-            select(Match)
-            .where(
-                col_1.cast(JSONB) == cast(scores_1, JSONB),
-                col_x.cast(JSONB) == cast(scores_x, JSONB),
-                col_2.cast(JSONB) == cast(scores_2, JSONB),
-                actual_check,
-            )
-        )
+        filters = [
+            col_1.cast(JSONB) == cast(scores_1, JSONB),
+            col_x.cast(JSONB) == cast(scores_x, JSONB),
+            col_2.cast(JSONB) == cast(scores_2, JSONB),
+            actual_check,
+        ]
+        if exclude_match_id:
+            filters.append(Match.match_id != exclude_match_id)
+        stmt = select(Match).where(*filters)
         rows = (await session.execute(stmt)).scalars().all()
 
     if len(rows) < min_matches:

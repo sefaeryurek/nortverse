@@ -42,19 +42,26 @@ async def find_pattern_c_all_periods(
     ft_ratios: dict[str, float],
     min_matches: int = 5,
     tolerance: float = 0.5,
+    exclude_match_id: str | None = None,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """FT oranlarıyla eşleşen geçmiş maçlar için IY, 2Y ve FT istatistiklerini döndür.
 
     Tüm periyotlar aynı eşleşme setini kullanır.
 
+    Args:
+        exclude_match_id: Bu match_id'yi sonuçlardan çıkar (analiz edilen maçın kendisi)
+
     Returns:
         (ht_result, h2_result, ft_result) — eşleşme yetersizse hepsi None
     """
     async with get_session() as session:
-        stmt = select(Match).where(
+        filters = [
             Match.ft_all_ratios.isnot(None),
             Match.actual_ft_home.isnot(None),
-        )
+        ]
+        if exclude_match_id:
+            filters.append(Match.match_id != exclude_match_id)
+        stmt = select(Match).where(*filters)
         rows = (await session.execute(stmt)).scalars().all()
 
     matched = [

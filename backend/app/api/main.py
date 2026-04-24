@@ -62,19 +62,20 @@ async def _build_from_db(row: Match) -> "AnalyzeResponse | None":
     ft_sx = row.ft_scores_x or []
     ft_s2 = row.ft_scores_2 or []
     ft_ratios = row.ft_all_ratios or {}
+    mid = row.match_id
 
     async def _b(period: str, s1: list, sx: list, s2: list) -> Optional[PatternResult]:
         try:
-            return await find_pattern_b_matches(period, s1, sx, s2)
+            return await find_pattern_b_matches(period, s1, sx, s2, exclude_match_id=mid)
         except Exception as exc:
-            log.warning("Katman B [%s] DB-hit sorgusu başarısız [%s]: %s", period, row.match_id, exc)
+            log.warning("Katman B [%s] DB-hit sorgusu başarısız [%s]: %s", period, mid, exc)
             return None
 
     async def _c_all(ratios: dict) -> tuple:
         try:
-            return await find_pattern_c_all_periods(ratios)
+            return await find_pattern_c_all_periods(ratios, exclude_match_id=mid)
         except Exception as exc:
-            log.warning("Katman C DB-hit sorgusu başarısız [%s]: %s", row.match_id, exc)
+            log.warning("Katman C DB-hit sorgusu başarısız [%s]: %s", mid, exc)
             return None, None, None
 
     (ht_b, h2_b, ft_b), c_results = await asyncio.gather(
@@ -297,14 +298,14 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
 
     async def _b(period: str, s1: list, sx: list, s2: list) -> Optional[PatternResult]:
         try:
-            return await find_pattern_b_matches(period, s1, sx, s2)
+            return await find_pattern_b_matches(period, s1, sx, s2, exclude_match_id=match_id)
         except Exception as e:
             log.warning("Katman B [%s] sorgusu başarısız [%s]: %s", period, match_id, e)
             return None
 
     async def _c_all(ratios: dict) -> tuple:
         try:
-            return await find_pattern_c_all_periods(ratios)
+            return await find_pattern_c_all_periods(ratios, exclude_match_id=match_id)
         except Exception as e:
             log.warning("Katman C sorgusu başarısız [%s]: %s", match_id, e)
             return None, None, None

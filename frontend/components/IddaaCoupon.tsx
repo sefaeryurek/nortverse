@@ -12,6 +12,11 @@ function pctColor(v: number) {
   return { color: "#f87171", bg: "#130808", border: "#7f1d1d" };
 }
 
+function goldenColor(v: number) {
+  if (v >= 90) return { color: "#fbbf24", bg: "#1c1200", border: "#92400e" };
+  return { color: "#fcd34d", bg: "#141000", border: "#78350f" };
+}
+
 interface OddCellProps {
   label: string;
   value: number;
@@ -123,6 +128,196 @@ function periodLabels(period: "ht" | "h2" | "ft") {
   };
 }
 
+// Tüm PatternResult alanları için label eşlemesi
+function buildAllMetrics(
+  result: PatternResult,
+  period: "ht" | "h2" | "ft",
+): { label: string; value: number }[] {
+  const p = period === "ht" ? "İY" : period === "h2" ? "2Y" : "MS";
+  const isFT = period === "ft";
+
+  const items: { label: string; value: number }[] = [
+    { label: `${p} 1`, value: result.result_1_pct },
+    { label: `${p} X`, value: result.result_x_pct },
+    { label: `${p} 2`, value: result.result_2_pct },
+    { label: "1X Çifte", value: result.dc_1x_pct },
+    { label: "X2 Çifte", value: result.dc_x2_pct },
+    { label: "12 Çifte", value: result.dc_12_pct },
+    { label: "Alt 1.5", value: result.alt_15_pct },
+    { label: "Üst 1.5", value: result.ust_15_pct },
+    { label: "Alt 2.5", value: result.alt_25_pct },
+    { label: "Üst 2.5", value: result.ust_25_pct },
+    { label: "Alt 3.5", value: result.alt_35_pct },
+    { label: "Üst 3.5", value: result.ust_35_pct },
+    { label: "KG Var", value: result.kg_var_pct },
+    { label: "KG Yok", value: result.kg_yok_pct },
+    // Handikap — DÜZELTME: (2:0) ev +2 alır = hnd_a20; (0:2) dep +2 alır = hnd_h20
+    { label: "1 Hnd(2:0)", value: result.hnd_a20_1_pct },
+    { label: "X Hnd(2:0)", value: result.hnd_a20_x_pct },
+    { label: "2 Hnd(2:0)", value: result.hnd_a20_2_pct },
+    { label: "1 Hnd(1:0)", value: result.hnd_a10_1_pct },
+    { label: "X Hnd(1:0)", value: result.hnd_a10_x_pct },
+    { label: "2 Hnd(1:0)", value: result.hnd_a10_2_pct },
+    { label: "1 Hnd(0:1)", value: result.hnd_h10_1_pct },
+    { label: "X Hnd(0:1)", value: result.hnd_h10_x_pct },
+    { label: "2 Hnd(0:1)", value: result.hnd_h10_2_pct },
+    { label: "1 Hnd(0:2)", value: result.hnd_h20_1_pct },
+    { label: "X Hnd(0:2)", value: result.hnd_h20_x_pct },
+    { label: "2 Hnd(0:2)", value: result.hnd_h20_2_pct },
+    { label: "1+Alt 2.5", value: result.ms1_alt25_pct },
+    { label: "1+Üst 2.5", value: result.ms1_ust25_pct },
+    { label: "X+Alt 2.5", value: result.msx_alt25_pct },
+    { label: "X+Üst 2.5", value: result.msx_ust25_pct },
+    { label: "2+Alt 2.5", value: result.ms2_alt25_pct },
+    { label: "2+Üst 2.5", value: result.ms2_ust25_pct },
+    { label: "1+KG Var", value: result.ms1_kg_var_pct },
+    { label: "1+KG Yok", value: result.ms1_kg_yok_pct },
+    { label: "X+KG Var", value: result.msx_kg_var_pct },
+    { label: "X+KG Yok", value: result.msx_kg_yok_pct },
+    { label: "2+KG Var", value: result.ms2_kg_var_pct },
+    { label: "2+KG Yok", value: result.ms2_kg_yok_pct },
+    { label: "Ev 1 fark", value: result.fark_ev1_pct },
+    { label: "Ev 2 fark", value: result.fark_ev2_pct },
+    { label: "Ev 3+", value: result.fark_ev3p_pct },
+    { label: "Berabere", value: result.fark_ber_pct },
+    { label: "Dep 1 fark", value: result.fark_dep1_pct },
+    { label: "Dep 2 fark", value: result.fark_dep2_pct },
+    { label: "Dep 3+", value: result.fark_dep3p_pct },
+    { label: "Ev Alt 0.5", value: result.ev_alt_05_pct },
+    { label: "Ev Üst 0.5", value: result.ev_ust_05_pct },
+    { label: "Ev Alt 1.5", value: result.ev_alt_15_pct },
+    { label: "Ev Üst 1.5", value: result.ev_ust_15_pct },
+    { label: "Ev Alt 2.5", value: result.ev_alt_25_pct },
+    { label: "Ev Üst 2.5", value: result.ev_ust_25_pct },
+    { label: "Dep Alt 0.5", value: result.dep_alt_05_pct },
+    { label: "Dep Üst 0.5", value: result.dep_ust_05_pct },
+    { label: "Dep Alt 1.5", value: result.dep_alt_15_pct },
+    { label: "Dep Üst 1.5", value: result.dep_ust_15_pct },
+    { label: "Dep Alt 2.5", value: result.dep_alt_25_pct },
+    { label: "Dep Üst 2.5", value: result.dep_ust_25_pct },
+    { label: "0-1 Gol", value: result.gol_01_pct },
+    { label: "2-3 Gol", value: result.gol_23_pct },
+    { label: "4-5 Gol", value: result.gol_45_pct },
+    { label: "6+ Gol", value: result.gol_6p_pct },
+  ];
+
+  if (isFT) {
+    if (result.iy_ms_xx_pct > 0) {
+      items.push(
+        { label: "1/1", value: result.iy_ms_11_pct },
+        { label: "1/X", value: result.iy_ms_1x_pct },
+        { label: "1/2", value: result.iy_ms_12_pct },
+        { label: "X/1", value: result.iy_ms_x1_pct },
+        { label: "X/X", value: result.iy_ms_xx_pct },
+        { label: "X/2", value: result.iy_ms_x2_pct },
+        { label: "2/1", value: result.iy_ms_21_pct },
+        { label: "2/X", value: result.iy_ms_2x_pct },
+        { label: "2/2", value: result.iy_ms_22_pct },
+      );
+    }
+    if (result.iy_ust_05_pct > 0) {
+      items.push(
+        { label: "İY Alt 0.5", value: result.iy_alt_05_pct },
+        { label: "İY Üst 0.5", value: result.iy_ust_05_pct },
+        { label: "İY Alt 1.5", value: result.iy_alt_15_pct },
+        { label: "İY Üst 1.5", value: result.iy_ust_15_pct },
+        { label: "İkiYarı Alt", value: result.iki_yari_alt15_pct },
+        { label: "İkiYarı Üst", value: result.iki_yari_ust15_pct },
+        { label: "EncokGol 1Y", value: result.encok_gol_1y_pct },
+        { label: "EncokGol 2Y", value: result.encok_gol_2y_pct },
+      );
+    }
+    if (result.ht_kg_var_pct > 0) {
+      items.push(
+        { label: "1Y KG Var", value: result.ht_kg_var_pct },
+        { label: "1Y KG Yok", value: result.ht_kg_yok_pct },
+        { label: "2Y KG Var", value: result.h2_kg_var_pct },
+        { label: "2Y KG Yok", value: result.h2_kg_yok_pct },
+        { label: "Ev 2Y Gol", value: result.ev_iki_yari_gol_pct },
+        { label: "Dep 2Y Gol", value: result.dep_iki_yari_gol_pct },
+      );
+    }
+    if (result.ht_result_1_pct > 0) {
+      items.push(
+        { label: "İY 1", value: result.ht_result_1_pct },
+        { label: "İY X", value: result.ht_result_x_pct },
+        { label: "İY 2", value: result.ht_result_2_pct },
+        { label: "İY 1X", value: result.ht_dc_1x_pct },
+        { label: "İY X2", value: result.ht_dc_x2_pct },
+        { label: "İY 12", value: result.ht_dc_12_pct },
+        { label: "İY Alt 1.5", value: result.ht_alt_15_pct },
+        { label: "İY Üst 1.5", value: result.ht_ust_15_pct },
+      );
+    }
+    if (result.h2_result_1_pct > 0) {
+      items.push(
+        { label: "2Y 1", value: result.h2_result_1_pct },
+        { label: "2Y X", value: result.h2_result_x_pct },
+        { label: "2Y 2", value: result.h2_result_2_pct },
+      );
+    }
+    if (result.ev_ht_ust_05_pct > 0) {
+      items.push(
+        { label: "Ev 1Y Üst", value: result.ev_ht_ust_05_pct },
+        { label: "Dep 1Y Üst", value: result.dep_ht_ust_05_pct },
+      );
+    }
+  }
+
+  return items;
+}
+
+function GoldenRatios({
+  result,
+  period,
+}: {
+  result: PatternResult;
+  period: "ht" | "h2" | "ft";
+}) {
+  const threshold = 79;
+  const all = buildAllMetrics(result, period);
+  const golden = all
+    .filter((x) => Math.round(x.value) >= threshold)
+    .sort((a, b) => b.value - a.value);
+
+  if (golden.length === 0) return null;
+
+  return (
+    <div
+      className="rounded-lg p-3 border space-y-2"
+      style={{ backgroundColor: "#0e0d00", borderColor: "#78350f" }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-sm">✦</span>
+        <h4 className="text-xs font-bold tracking-wide" style={{ color: "#fbbf24" }}>
+          Altın Oranlar ({golden.length})
+        </h4>
+        <span className="text-[10px]" style={{ color: "#78350f" }}>≥%{threshold}</span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {golden.map((item) => {
+          const pct = Math.round(item.value);
+          const { color, bg, border } = goldenColor(pct);
+          return (
+            <div
+              key={item.label}
+              className="flex items-center gap-1 px-2 py-0.5 rounded border"
+              style={{ backgroundColor: bg, borderColor: border }}
+            >
+              <span className="text-[10px] font-medium" style={{ color: "#92400e" }}>
+                {item.label}
+              </span>
+              <span className="text-xs font-extrabold font-mono" style={{ color }}>
+                %{pct}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ArchiveCoupon({
   result,
   title,
@@ -149,6 +344,9 @@ function ArchiveCoupon({
           {result.match_count} maç
         </span>
       </div>
+
+      {/* Altın Oranlar */}
+      <GoldenRatios result={result} period={period} />
 
       {/* Sonuç */}
       <Section title={lbl.sonuc}>
@@ -212,23 +410,23 @@ function ArchiveCoupon({
         ]} />
       </Section>
 
-      {/* Handikap */}
+      {/* Handikap — DÜZELTME: (2:0) ev +2 alır = hnd_a20; (0:2) dep +2 alır = hnd_h20 */}
       <Section title={lbl.hnd}>
         <Row items={[
-          { label: "1", sub: "Hnd (2:0)", value: result.hnd_h20_1_pct },
-          { label: "X", sub: "Hnd (2:0)", value: result.hnd_h20_x_pct },
-          { label: "2", sub: "Hnd (2:0)", value: result.hnd_h20_2_pct },
-          { label: "1", sub: "Hnd (1:0)", value: result.hnd_h10_1_pct },
-          { label: "X", sub: "Hnd (1:0)", value: result.hnd_h10_x_pct },
-          { label: "2", sub: "Hnd (1:0)", value: result.hnd_h10_2_pct },
+          { label: "1", sub: "Hnd (2:0)", value: result.hnd_a20_1_pct },
+          { label: "X", sub: "Hnd (2:0)", value: result.hnd_a20_x_pct },
+          { label: "2", sub: "Hnd (2:0)", value: result.hnd_a20_2_pct },
+          { label: "1", sub: "Hnd (1:0)", value: result.hnd_a10_1_pct },
+          { label: "X", sub: "Hnd (1:0)", value: result.hnd_a10_x_pct },
+          { label: "2", sub: "Hnd (1:0)", value: result.hnd_a10_2_pct },
         ]} />
         <Row items={[
-          { label: "1", sub: "Hnd (0:1)", value: result.hnd_a10_1_pct },
-          { label: "X", sub: "Hnd (0:1)", value: result.hnd_a10_x_pct },
-          { label: "2", sub: "Hnd (0:1)", value: result.hnd_a10_2_pct },
-          { label: "1", sub: "Hnd (0:2)", value: result.hnd_a20_1_pct },
-          { label: "X", sub: "Hnd (0:2)", value: result.hnd_a20_x_pct },
-          { label: "2", sub: "Hnd (0:2)", value: result.hnd_a20_2_pct },
+          { label: "1", sub: "Hnd (0:1)", value: result.hnd_h10_1_pct },
+          { label: "X", sub: "Hnd (0:1)", value: result.hnd_h10_x_pct },
+          { label: "2", sub: "Hnd (0:1)", value: result.hnd_h10_2_pct },
+          { label: "1", sub: "Hnd (0:2)", value: result.hnd_h20_1_pct },
+          { label: "X", sub: "Hnd (0:2)", value: result.hnd_h20_x_pct },
+          { label: "2", sub: "Hnd (0:2)", value: result.hnd_h20_2_pct },
         ]} />
       </Section>
 
