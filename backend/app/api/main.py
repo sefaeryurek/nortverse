@@ -342,10 +342,11 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
-@app.get("/api/health", response_model=HealthResponse)
+@app.api_route("/api/health", methods=["GET", "HEAD"], response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Sistem sağlık kontrolü — UptimeRobot/cron-job.org dış pinglerine uygun.
 
+    HEAD ve GET'i de kabul eder (UptimeRobot free tier varsayılan HEAD gönderir).
     Container'ı uyandırır + DB durumu + son pipeline zamanı bilgisi döndürür.
     """
     from datetime import date as _date
