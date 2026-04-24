@@ -275,6 +275,7 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 | Bölüm | Sekme | Açıklama |
 |---|---|---|
+| **Altın Oranlar** | Tümü | %79+ olan tüm tahminler, değere göre sıralı — kartın en üstünde |
 | Maç Sonucu | Tümü | 1/X/2 + Çifte Şans |
 | İlk Yarı / Maç Sonucu | MS only | 9 kombo (1/1, 1/X, ..., 2/2) |
 | MS + 2.5 Alt/Üst | Tümü | 6 kombo |
@@ -290,18 +291,21 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 | Skor Sıklığı | Tümü | En sık 10 skor |
 
 **Renk skalası:** %70+ → mavi, %40-70 → turuncu, %40 altı → kırmızı
+**Altın Oranlar renk skalası:** %90+ → koyu altın, %79-89 → altın sarı
+
+**Handikap convention:** `Hnd (2:0)` = ev sahibi +2 gol alır (ev güçlü) → `hnd_a20` hesabı kullanılır. `Hnd (0:2)` = deplasman +2 gol alır (dep güçlü) → `hnd_h20` hesabı kullanılır.
 
 ---
 
-## Mevcut Durum (Sprint 6 — TAMAMLANDI ✅)
+## Mevcut Durum (Sprint 7 — TAMAMLANDI ✅)
 
 ### Backend
 
 - ✅ Fixture parser: Hot modunu aktive edip maçları doğru çekiyor
 - ✅ Match detail parser: takım, lig kodu, form/H2H parse + gerçek skor
 - ✅ Analiz motoru (Katman A): 105 oran hesaplaması
-- ✅ Katman B pattern matching: `find_pattern_b_matches`
-- ✅ Katman C pattern matching: `find_pattern_c_all_periods` — tek sorgu, tüm periyotlar
+- ✅ Katman B pattern matching: `find_pattern_b_matches` — `exclude_match_id` ile analiz edilen maç kendi arşivinden hariç
+- ✅ Katman C pattern matching: `find_pattern_c_all_periods` — tek sorgu, tüm periyotlar; `exclude_match_id` desteği
 - ✅ `build-archive` CLI: lig → geçmiş maç ID → fetch+analiz+upsert
 - ✅ FastAPI: 7 endpoint + fixture cache (memory + DB) + bg analiz kuyruğu + DB-first analiz
 - ✅ `pattern_stats.py`: ~130 alan, 9 bölüm
@@ -319,7 +323,9 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ Bülten sayfası: Hot maçlar, saat, lig, 8 günlük kayan takvim
 - ✅ Analiz sayfası: Katman A skor listesi + IddaaCoupon (Arşiv-1 ve Arşiv-2)
 - ✅ Periyot sekmeleri: İY / 2Y / MS — her biri kendi istatistiklerini gösterir
-- ✅ Sonuçlar sayfası (`/sonuclar`): biten maçlar, skor, Katman A/KG/2.5 özet
+- ✅ Sonuçlar sayfası (`/sonuclar`): biten maçlar, skor; canlı maç "Canlı" rozeti; KG/2.5/A✓ rozetleri kaldırıldı
+- ✅ IddaaCoupon: her arşiv kartının üstünde "Altın Oranlar" (%79+) bölümü
+- ✅ IddaaCoupon: handikap (2:0)/(0:2) convention düzeltildi
 - ✅ Vercel deployment: `https://nortverse.vercel.app`
 - ✅ SSR URL düzeltildi: `BACKEND_URL` env var ile Vercel → Railway direkt
 
@@ -327,6 +333,7 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 - ❌ Premium/Auth — sonraki fazlar
 - ❌ Canlı maç + trend motoru — sonraki fazlar
+- ❌ Railway uyku sorunu: ücretsiz planda backend uyku moduna giriyor; bülten "fetch failed" verebilir
 
 ---
 
@@ -366,6 +373,14 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - Date bug düzeltildi: fixture URL ve tarih filtresi İstanbul tz bazlı
 - Vercel SSR URL sorunu düzeltildi: `BACKEND_URL` env var ile server-side fetch
 
+### Sprint 7 — TAMAMLANDI ✅
+- Sonuçlar sayfası temizlendi: KG/2.5 Üst/A✓ rozet kutucukları kaldırıldı
+- Sonuçlar sayfası: canlı maç tespiti (kickoff+110dk içindeyse "Canlı" rozeti)
+- IddaaCoupon: her arşiv kartının üstüne "Altın Oranlar" bölümü eklendi (%79+ tahminler, sıralı)
+- IddaaCoupon: handikap convention düzeltildi — `Hnd(2:0)` ev +2 alır, `Hnd(0:2)` dep +2 alır
+- `pattern_b.py` + `pattern_c.py`: `exclude_match_id` parametresi — analiz edilen maç kendi arşivinden hariç
+- `api/main.py`: `_build_from_db` ve `_do_analyze`'a `exclude_match_id=match_id` geçildi
+
 ---
 
 ## Bilinen Teknik Notlar
@@ -389,6 +404,14 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - **Otomatik skor güncelleme:** `api/main.py`'de `_score_updater` async task her 30 dakikada `update_results()` çağırır. Railway container ayakta olduğu sürece çalışır. Ayrıca GitHub Actions'da gece 00:30 ve 02:00 İstanbul'da da çalışır (yedek).
 
 - **Arşive ekleme yapılmıyor:** Mevcut arşiv sabittir, yeni lig/sezon eklenmeyecek. Var olan maçların yüzdeleri değişmesin diye bu karar alındı.
+
+- **Pattern matching self-exclusion:** `find_pattern_b_matches` ve `find_pattern_c_all_periods` fonksiyonları `exclude_match_id` parametresi alır. Bülten maçı analiz edilirken kendi match_id'si geçilmeli — DB'de sonucu varsa kendi kendini analiz etmemesi için. `main.py`'deki `_build_from_db` ve `_do_analyze` bunu otomatik yapar.
+
+- **Handikap convention:** `Hnd(2:0)` → ev sahibi +2 head start alır = deplasman takımının 2 golü "silinir" → `hnd_a20` (`eff_h=h, eff_a=a-2`). `Hnd(0:2)` → deplasman +2 head start alır → `hnd_h20` (`eff_h=h-2, eff_a=a`). Eski kodda labellar takımlara ters bağlanmıştı (Sprint 7'de düzeltildi).
+
+- **Canlı maç tespiti:** Sonuçlar sayfasında `kickoff_time + 110 dakika > now` ise maç muhtemelen hâlâ oynuyor → "Canlı" rozeti gösterilir. `_score_updater` canlı skorları da kaydedebilir (gerçek bitişi takip etmiyor), bu yüzden frontend tarafı tespit yapılıyor.
+
+- **Railway uyku modu:** Ücretsiz planda Railway container inaktiflikte uyku moduna girer. Bülten sayfası "fetch failed" verebilir. Çözüm: ücretli plan veya dış cron ile `/api/health` ping.
 
 ---
 
