@@ -3,6 +3,7 @@ name: Pipeline & Sonuç Güncelleme
 on:
   schedule:
     - cron: "0 5 * * *"    # 08:00 İstanbul — sabah analiz (run-pipeline)
+    - cron: "0 6 * * *"    # 09:00 İstanbul — yedek analiz (08:00 cron kaçırırsa)
     - cron: "30 21 * * *"  # 00:30 İstanbul — gece sonuç güncelleme (update-scores)
     - cron: "0 23 * * *"   # 02:00 İstanbul — geç maçlar sonuç güncelleme (update-scores)
   workflow_dispatch:
@@ -52,10 +53,10 @@ jobs:
           SCHEDULE="${{ github.event.schedule }}"
           CMD="${{ github.event.inputs.command }}"
 
-          if [ "$SCHEDULE" = "0 5 * * *" ] || [ "$CMD" = "run-pipeline" ] || ([ -z "$CMD" ] && [ -z "$SCHEDULE" ]); then
-            echo "Sabah pipeline çalışıyor (run-pipeline)..."
+          if [ "$SCHEDULE" = "0 5 * * *" ] || [ "$SCHEDULE" = "0 6 * * *" ] || [ "$CMD" = "run-pipeline" ] || ([ -z "$CMD" ] && [ -z "$SCHEDULE" ]); then
+            echo "Pipeline çalışıyor (run-pipeline)... [schedule=$SCHEDULE]"
             python -m app.cli.main run-pipeline
           else
-            echo "Sonuç güncellemesi çalışıyor (update-scores)..."
+            echo "Sonuç güncellemesi çalışıyor (update-scores)... [schedule=$SCHEDULE]"
             python -m app.cli.main update-scores
           fi
