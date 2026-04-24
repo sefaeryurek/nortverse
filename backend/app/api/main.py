@@ -206,6 +206,11 @@ app.add_middleware(
 class HealthResponse(BaseModel):
     status: str
     version: str = "0.2.0"
+    db_ok: bool
+    last_pipeline_at: Optional[str] = None  # son maç analiz zamanı (ISO)
+    last_fixture_cached_at: Optional[str] = None  # bugünün fixture cache zamanı (ISO)
+    bg_queue_size: int = 0
+    cached_analyses: int = 0
 
 
 class FixtureMatchOut(BaseModel):
@@ -339,7 +344,41 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+    """Sistem sağlık kontrolü — UptimeRobot/cron-job.org dış pinglerine uygun.
+
+    Container'ı uyandırır + DB durumu + son pipeline zamanı bilgisi döndürür.
+    """
+    from datetime import date as _date
+    from sqlalchemy import func
+
+    db_ok = False
+    last_pipeline = None
+    last_fixture_cached = None
+
+    try:
+        async with get_session() as session:
+            # En son analiz edilen maç → pipeline canlı mı?
+            row = await session.execute(
+                select(func.max(Match.analyzed_at))
+            )
+            last_pipeline = row.scalar_one_or_none()
+
+            # Bugünün fixture cache zamanı
+            fc = await session.get(FixtureCache, _date.today().isoformat())
+            if fc:
+                last_fixture_cached = fc.cached_at
+            db_ok = True
+    except Exception as exc:
+        log.warning("Health check DB sorgusu başarısız: %s", exc)
+
+    return HealthResponse(
+        status="ok" if db_ok else "degraded",
+        db_ok=db_ok,
+        last_pipeline_at=last_pipeline.isoformat() if last_pipeline else None,
+        last_fixture_cached_at=last_fixture_cached.isoformat() if last_fixture_cached else None,
+        bg_queue_size=_bg_queue.qsize() if _bg_queue else 0,
+        cached_analyses=len(_analysis_cache),
+    )
 
 
 @app.get("/api/fixture", response_model=list[FixtureMatchOut])
