@@ -72,16 +72,7 @@ export default function AnalyzePage() {
       >
         <button
           onClick={() => router.back()}
-          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors flex-shrink-0"
-          style={{ backgroundColor: "#1e293b", color: "#64748b" }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "#334155";
-            e.currentTarget.style.color = "#e2e8f0";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "#1e293b";
-            e.currentTarget.style.color = "#64748b";
-          }}
+          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors flex-shrink-0 bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
