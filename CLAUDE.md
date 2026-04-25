@@ -205,6 +205,7 @@ nortverse/
 │   ├── app/
 │   │   ├── layout.tsx             # Root layout (dark tema, sidebar)
 │   │   ├── page.tsx               # Root → /bulten redirect
+│   │   ├── error.tsx              # Global error boundary (Sprint 8.3) — React crash fallback
 │   │   ├── bulten/
 │   │   │   └── page.tsx           # Server component — fixture listesi (Suspense)
 │   │   ├── sonuclar/
@@ -212,15 +213,15 @@ nortverse/
 │   │   └── analyze/[match_id]/
 │   │       └── page.tsx           # Client component — maç analiz sayfası
 │   ├── components/
-│   │   ├── BultenRow.tsx          # Maç satırı (link ?home=&away= param ile)
-│   │   ├── BultenPrefetcher.tsx   # Bültendeki ilk 3 maçı arka planda prefetch eder
+│   │   ├── BultenRow.tsx          # Maç satırı (link ?home=&away= param ile, lig bayrak)
 │   │   ├── DayTabs.tsx            # 8 günlük kayan pencere, basePath prop ile
 │   │   ├── IddaaCoupon.tsx        # Arşiv istatistik kartları (Katman B + C) + Altın Oranlar
 │   │   ├── ScoreList.tsx          # Katman A 3.5+ skor listesi
-│   │   ├── Sidebar.tsx            # Sol menü (Bülten + Sonuçlar)
+│   │   ├── Sidebar.tsx            # Sol menü (md altı gizli — mobile)
 │   │   └── StatBadge.tsx          # Yeniden kullanılabilir yüzde rozeti
 │   ├── lib/
 │   │   ├── api.ts                 # Backend API çağrıları (BASE = BACKEND_URL ?? "" — SSR'da Railway, CSR'da proxy)
+│   │   ├── leagues.ts             # Lig adı → bayrak + kısa kod sözlüğü (Sprint 8.3)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
 │   ├── AGENTS.md                  # ⚠️ Next.js özel sürüm uyarısı — kod yazmadan önce oku
 │   └── next.config.ts             # Rewrite proxy: /api/* → localhost:8000/api/*
@@ -303,7 +304,7 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 ---
 
-## Mevcut Durum (Sprint 8.2 — TAMAMLANDI ✅)
+## Mevcut Durum (Sprint 8.3 — TAMAMLANDI ✅)
 
 ### Backend
 
@@ -326,6 +327,9 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ **Sonuçlar smart filtering (Sprint 8.1):** `/api/results` endpoint'i artık tüm günün maçlarını döndürür, her maça `status` (scheduled/live/finished); scheduled ve stale (>130dk skorsuz) gizlenir
 - ✅ **Saat başı update-scores cron (Sprint 8.1):** 12:00–23:00 İstanbul her saat — biten skorlar dakikalar içinde sonuçlar sayfasında
 - ✅ **Playwright path ERROR seviyesi (Sprint 8.2):** `_do_analyze` upsert hatası `log.error` + `exc_info=True` (Railway logs'ta stack trace)
+- ✅ **DB write retry (Sprint 8.3):** `_with_retry` yardımcısı — `_upsert` ve `update_results` 3 deneme + exponential backoff (Supabase PgBouncer drop koruması)
+- ✅ **`/api/match/{id}` lazy fallback (Sprint 8.3):** DB miss → Playwright scrape + upsert (25sn timeout); 404 yerine maç hep gelir
+- ✅ **Fixture tarih sınırı (Sprint 8.3):** -30 / +14 gün dışına çıkılamaz (uçuk tarih → 400, Playwright açılmaz)
 - ✅ `pattern_stats.py`: ~130 alan, 9 bölüm
 - ✅ Railway deployment: `https://nortverse-production.up.railway.app`
 - ✅ `fixture_cache` DB tablosu: bülten verileri kalıcı, server restart'tan etkilenmez
@@ -355,7 +359,12 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ **Mobile touch hedefleri (Sprint 8.2):** Sonuçlar Analiz linki min-h-[40px]
 - ✅ **Sonuçlar status renderı (Sprint 8.1):** Canlı (yeşil rozet, skor varsa "Canlı 1-0"), Bitmiş (skor), scheduled/stale (gizli)
 - ✅ **Hover button cleanup (Sprint 8.2):** Geri butonu inline mouseenter → Tailwind hover sınıfı
-- ❌ **BultenPrefetcher kapatıldı (Sprint 7 acil):** Backend'i boğuyordu; bg_worker tek otorite
+- ✅ **Error boundary (Sprint 8.3):** `app/error.tsx` Next.js global error boundary — React crash'lerinde "Tekrar dene" butonlu fallback, beyaz ekran yok
+- ✅ **`/sonuclar` empty state mesajı (Sprint 8.3):** "Henüz oynanan veya canlı maç yok" + bugün için açıklayıcı alt yazı
+- ✅ **Periyot sekmeleri snappy (Sprint 8.3):** `useTransition` + opacity fade — geçiş anında, jank azaldı
+- ✅ **Lig eşlemesi yenilendi (Sprint 8.3):** `lib/leagues.ts` — backend tam adlarına (English Premier League vs.) uygun 30+ lig bayrak/kısa kod sözlüğü
+- ✅ **`ScoreFreq` null-safe (Sprint 8.3):** Defensive null check, parent'ta da kontrol
+- ✅ **BultenPrefetcher silindi (Sprint 8.3):** Sprint 7'de no-op olmuştu, ölü kod olarak temizlendi
 
 ### Performans Sonuçları (Sprint 8 sonrası)
 
@@ -461,6 +470,13 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - **Playwright path log seviyesi:** `_do_analyze` upsert hatası `log.warning` → `log.error` + `exc_info=True`
 - **Geri butonu cleanup:** Inline `onMouseEnter`/`onMouseLeave` style → Tailwind `hover:` sınıfı
 
+### Sprint 8.3 — TAMAMLANDI ✅ (Profesyonel Stabilite)
+- **Frontend:** `app/error.tsx` global error boundary, sonuçlar empty state mesajı, ScoreFreq null-safe, periyot sekmeleri `useTransition`, lig eşlemesi (`lib/leagues.ts`) yeni tam adlara güncellendi
+- **Frontend cleanup:** `BultenPrefetcher` ve `prefetchAnalyze` ölü kod silindi (Sprint 7'de devre dışıydı)
+- **Backend:** `/api/fixture` tarih sınırı (-30 / +14 gün), `/api/match/{id}` lazy Playwright fallback (25sn timeout)
+- **Backend dayanıklılık:** `_with_retry` yardımcısı (`pipeline/runner.py`) — `_upsert` ve `update_results` 3 deneme + exponential backoff
+- **Sonuç:** Profesyonel stabilite hedefi — geçici DB hataları otomatik çözülür, React crash'leri yakalanır, mobil + desktop UX tutarlı
+
 ---
 
 ## Bilinen Teknik Notlar
@@ -505,6 +521,18 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 - **Yedek pipeline cron (Sprint 8):** GitHub Actions free tier cron kırılgan (1-2 saat geç çalışabilir). 08:00 ve 09:00 İstanbul olmak üzere 2 cron tanımlı. İdempotent upsert sayesinde ikisi de başarılı olursa veri zarar görmez.
 
+- **DB write retry (Sprint 8.3):** `_with_retry` helper (`app/pipeline/runner.py`) — Supabase PgBouncer ara sıra connection drop yapıyor; `_upsert` ve `update_results` write'ları 3 deneme + 0.5/1.0/2.0s exponential backoff ile sarmalı. Geçici hatalar sessizce iyileşir.
+
+- **`/api/match/{id}` fallback (Sprint 8.3):** DB miss'te Playwright scrape + upsert; `asyncio.wait_for(timeout=25)` ile sarılı (Vercel SSR ~25-30sn limiti içinde). Scrape başarısız olursa 404; timeout olursa 504. Sonraki ziyaret hızlı (DB'de hazır).
+
+- **Fixture tarih sınırı (Sprint 8.3):** `/api/fixture` -30 / +14 gün dışındaki tarihler için 400 döner. Yanlışlıkla uçuk tarih (örn. 2030-01-01) → Playwright sürekli açılmaz.
+
+- **`useTransition` periyot sekmeleri (Sprint 8.3):** Analiz sayfasında İY/2Y/MS geçişi `startTransition` ile sarılı. Buton tıklaması anında hisli; React arka planda re-render eder, içerik `isPending` iken hafif soluk (opacity 0.6).
+
+- **Frontend `lib/leagues.ts` (Sprint 8.3):** Backend artık tam lig adı dönüyor ("English Premier League"). Eski "ENG PR" kısa kodları kaldırıldı; yeni eşleme bayrak + kısa görsel kod (ENG, ESP, ITA, ...) sözlüğü. Bilinmeyen lig için `⚽ + —` fallback.
+
+- **Error boundary (Sprint 8.3):** `app/error.tsx` Next.js convention — React render hatalarında otomatik fallback ("Tekrar dene" butonlu kart). Beyaz ekran yok, kullanıcı kurtarılabilir.
+
 ---
 
 ## Teknoloji Kararları
@@ -547,16 +575,15 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-04-25 Cumartesi gece — Sprint 8.2 sonu)
+## Kaldığımız Yer (2026-04-25 Cumartesi gece — Sprint 8.3 sonu)
 
 Sprint 8 deploy edildi. Sistem stabil ve hızlı. Sıradaki adımlar (sırayla):
 
-### 1. Veri Doğruluğu Auditi (Sıradaki — kullanıcı talep etti)
-- 3-5 maçı nowgoal'da yan yana karşılaştır
-- Saat, takım ismi, lig, skor zincirini kontrol et
-- 5 biten maç → DB'deki actual_ft skorları vs nowgoal sayfası
-- Kayserispor test maçı (`2813084`) — Excel ile pattern karşılaştırması
-- Excel'in `ARSIV-1` ve `NORT ANALİZ` sheet'leriyle 1-2 maç çapraz doğrulama
+### 1. Veri Doğruluğu Spot-Check ✅ (yapıldı, Sprint 8.3 sonu)
+- Bülten temel verisi (saat, takım, lig) Cumartesi maçları için tüm spot-checks geçti
+- 2813084 (Kayserispor vs Karagumruk) ve 2813121 (Kayserispor vs Çaykur) için backend ↔ frontend uyumu: 7/7 tam
+- Pattern C bazı maçlarda None — kullanıcı "diğer maçlarda geliyor" diye onayladı, tasarım gereği
+- Excel ile derin çapraz doğrulama yapılmadı; ileri sprintte istenirse
 
 ### 2. Sprint 9 — Auth/Premium (Para kazanma yolu)
 - NextAuth.js + Google OAuth (şifresiz)
@@ -596,3 +623,9 @@ Sprint 8 deploy edildi. Sistem stabil ve hızlı. Sıradaki adımlar (sırayla):
 - `7b7bd61` Sprint 8.2: Sonuçlar Analiz touch hedefi
 - `1499be5` Sprint 8.2: Playwright DB hatası ERROR seviyesi
 - `05c270e` Sprint 8.2: Geri butonu Tailwind hover
+- `eb271a4` Sprint 8.3: error boundary, empty state, ScoreFreq null-safe, fixture tarih sınırı
+- `eb303fc` Sprint 8.3: pipeline DB write retry (_with_retry helper)
+- `d6a0865` Sprint 8.3: /api/match/{id} lazy Playwright fallback
+- `1aaf2c4` Sprint 8.3: BultenPrefetcher ölü kod silindi
+- `35d2eda` Sprint 8.3: Periyot sekmeleri useTransition
+- `2c52756` Sprint 8.3: Lig eşlemesi yeni tam adlara güncellendi (lib/leagues.ts)
