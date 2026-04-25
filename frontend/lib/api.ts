@@ -25,14 +25,6 @@ export async function analyzeMatch(matchId: string): Promise<AnalyzeResponse> {
   return res.json();
 }
 
-export async function prefetchAnalyze(matchId: string): Promise<void> {
-  try {
-    await fetch(`${BASE}/api/analyze/${matchId}`, { cache: "no-store" });
-  } catch {
-    // sessiz başarısızlık — prefetch arka planda çalışır
-  }
-}
-
 export async function getResults(date: string): Promise<ResultMatch[]> {
   // Sonuçlar 60sn cache — _score_updater 30dk'da bir güncelliyor, 60sn yeterince taze
   const res = await fetch(`${BASE}/api/results?date=${date}`, {
