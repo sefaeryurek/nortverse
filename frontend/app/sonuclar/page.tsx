@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import { getResults } from "@/lib/api";
+import { leagueDisplay } from "@/lib/leagues";
 import type { ResultMatch } from "@/lib/types";
 import Link from "next/link";
 
@@ -70,13 +71,19 @@ function ResultRow({ match }: { match: ResultMatch }) {
       </span>
 
       {/* Lig */}
-      <span
-        className="w-20 text-xs font-semibold truncate flex-shrink-0"
-        style={{ color: "#475569" }}
-        title={match.league_name ?? match.league_code ?? ""}
-      >
-        {match.league_code ?? "—"}
-      </span>
+      {(() => {
+        const { flag, short } = leagueDisplay(match.league_code, match.league_name);
+        return (
+          <span
+            className="w-24 text-xs font-semibold truncate flex-shrink-0 flex items-center gap-1"
+            style={{ color: "#475569" }}
+            title={match.league_name ?? match.league_code ?? ""}
+          >
+            <span className="text-base leading-none" aria-hidden>{flag}</span>
+            <span>{short}</span>
+          </span>
+        );
+      })()}
 
       {/* Takımlar */}
       <div className="flex-1 min-w-0">

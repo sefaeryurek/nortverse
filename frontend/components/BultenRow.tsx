@@ -1,31 +1,14 @@
 import Link from "next/link";
 import type { FixtureMatch } from "@/lib/types";
+import { leagueDisplay } from "@/lib/leagues";
 
 interface Props {
   match: FixtureMatch;
   timeStr: string;
 }
 
-const LEAGUE_FLAGS: Record<string, string> = {
-  "ENG PR": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
-  "SPA D1": "🇪🇸",
-  "ITA D1": "🇮🇹",
-  "GER D1": "🇩🇪",
-  "FRA D1": "🇫🇷",
-  "POR D1": "🇵🇹",
-  "HOL D1": "🇳🇱",
-  "TUR D1": "🇹🇷",
-  "BEL D1": "🇧🇪",
-  "SCO PR": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
-  "GRE D1": "🇬🇷",
-  "RUS D1": "🇷🇺",
-  "USA MLS": "🇺🇸",
-  "BRA D1": "🇧🇷",
-  "ARG D1": "🇦🇷",
-};
-
 export default function BultenRow({ match, timeStr }: Props) {
-  const flag = LEAGUE_FLAGS[match.league_code] ?? "⚽";
+  const { flag } = leagueDisplay(match.league_code, match.league_name);
   const leagueName = match.league_name || match.league_code;
 
   return (
