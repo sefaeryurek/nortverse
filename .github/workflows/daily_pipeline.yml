@@ -4,10 +4,21 @@ on:
   schedule:
     - cron: "0 5 * * *"    # 08:00 İstanbul — sabah analiz (run-pipeline)
     - cron: "0 6 * * *"    # 09:00 İstanbul — yedek analiz (08:00 cron kaçırırsa)
-    - cron: "0 15 * * *"   # 18:00 İstanbul — akşam ara skor güncelleme (update-scores)
-    - cron: "0 19 * * *"   # 22:00 İstanbul — gece ara skor güncelleme (update-scores)
-    - cron: "30 21 * * *"  # 00:30 İstanbul — gece sonuç güncelleme (update-scores)
-    - cron: "0 23 * * *"   # 02:00 İstanbul — geç maçlar sonuç güncelleme (update-scores)
+    # Saat başı update-scores — maç saatleri 12:00–23:00 İstanbul
+    - cron: "0 9 * * *"    # 12:00 İstanbul (update-scores)
+    - cron: "0 10 * * *"   # 13:00 İstanbul (update-scores)
+    - cron: "0 11 * * *"   # 14:00 İstanbul (update-scores)
+    - cron: "0 12 * * *"   # 15:00 İstanbul (update-scores)
+    - cron: "0 13 * * *"   # 16:00 İstanbul (update-scores)
+    - cron: "0 14 * * *"   # 17:00 İstanbul (update-scores)
+    - cron: "0 15 * * *"   # 18:00 İstanbul (update-scores)
+    - cron: "0 16 * * *"   # 19:00 İstanbul (update-scores)
+    - cron: "0 17 * * *"   # 20:00 İstanbul (update-scores)
+    - cron: "0 18 * * *"   # 21:00 İstanbul (update-scores)
+    - cron: "0 19 * * *"   # 22:00 İstanbul (update-scores)
+    - cron: "0 20 * * *"   # 23:00 İstanbul (update-scores)
+    - cron: "30 21 * * *"  # 00:30 İstanbul — gece toplu güncelleme (update-scores)
+    - cron: "0 23 * * *"   # 02:00 İstanbul — geç maçlar (update-scores)
   workflow_dispatch:
     inputs:
       command:
