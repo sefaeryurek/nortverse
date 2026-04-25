@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { AnalyzeResponse } from "@/lib/types";
 import { analyzeMatch } from "@/lib/api";
@@ -45,6 +45,12 @@ export default function AnalyzePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activePeriod, setActivePeriod] = useState<Period>("ft");
+  const [isPending, startTransition] = useTransition();
+
+  const changePeriod = (key: Period) => {
+    if (key === activePeriod) return;
+    startTransition(() => setActivePeriod(key));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +164,7 @@ export default function AnalyzePage() {
                   {PERIODS.map(({ key, label, short }) => (
                     <button
                       key={key}
-                      onClick={() => setActivePeriod(key)}
+                      onClick={() => changePeriod(key)}
                       className="px-4 py-2 rounded-lg text-sm font-semibold transition-all"
                       style={{
                         backgroundColor: activePeriod === key ? "#1d4ed8" : "#1e293b",
@@ -174,6 +180,12 @@ export default function AnalyzePage() {
                     </button>
                   ))}
                 </div>
+
+                {/* Periyot içeriği — pending iken hafif soluk (kullanıcı geçiş hissini alır) */}
+                <div
+                  className="space-y-4 transition-opacity duration-150"
+                  style={{ opacity: isPending ? 0.6 : 1 }}
+                >
 
                 {/* Katman A — 3.5+ skor dağılımı */}
                 {scores && (scores.scores_1.length > 0 || scores.scores_x.length > 0 || scores.scores_2.length > 0) && (
@@ -221,6 +233,7 @@ export default function AnalyzePage() {
                     </p>
                   </div>
                 )}
+                </div>
               </>
             )}
           </div>
