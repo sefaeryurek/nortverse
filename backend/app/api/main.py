@@ -379,7 +379,12 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
         from app.pipeline.runner import _upsert as _persist_full
         await _persist_full(result, raw, patterns)
     except Exception as exc:
-        log.warning("Maç DB'ye kaydedilemedi [%s]: %s", match_id, exc)
+        # ERROR seviyesi — DB yazısı başarısız olursa lazy-backfill yine tetiklenir
+        # ama bu durum monitoring'de görünür olmalı (Railway logs)
+        log.error(
+            "Maç DB'ye kaydedilemedi (sonraki ziyarette tekrar Playwright açılacak) [%s]: %s",
+            match_id, exc, exc_info=True,
+        )
 
     return AnalyzeResponse(
         match_id=result.match_id,
