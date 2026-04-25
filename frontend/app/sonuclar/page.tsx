@@ -96,7 +96,7 @@ function ResultRow({ match }: { match: ResultMatch }) {
         )}
       </div>
 
-      {/* Status'e göre: Canlı / Skor / Saat */}
+      {/* Status'e göre: Canlı veya Skor */}
       <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
         {match.status === "live" ? (
           <span
@@ -105,19 +105,12 @@ function ResultRow({ match }: { match: ResultMatch }) {
           >
             {scoreStr ? `Canlı ${scoreStr}` : "Canlı"}
           </span>
-        ) : match.status === "finished" && scoreStr ? (
+        ) : (
           <span
             className="text-sm font-bold font-mono px-2 py-0.5 rounded"
             style={{ backgroundColor: "#0f172a", color: "#f1f5f9" }}
           >
             {scoreStr}
-          </span>
-        ) : (
-          <span
-            className="text-xs font-mono px-2 py-0.5 rounded"
-            style={{ backgroundColor: "#0f172a", color: "#475569" }}
-          >
-            Henüz başlamadı
           </span>
         )}
       </div>

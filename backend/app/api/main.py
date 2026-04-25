@@ -587,19 +587,19 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
     for row in rows:
         h = row.actual_ft_home
         a = row.actual_ft_away
-
-        # Status hesapla
         kickoff = row.kickoff_time
+
+        # Status hesapla — sadece "finished" ve "live" maçlar gösterilir.
+        # Henüz başlamamış (scheduled) ve skor güncellemesi bekleyen eski (stale)
+        # maçlar /sonuclar'dan gizlenir; bültende veya update-scores cron'undan sonra görünür.
         if h is not None and a is not None:
             status = "finished"
         elif kickoff and now_utc >= kickoff and (now_utc - kickoff).total_seconds() < 130 * 60:
             # Kick-off geçmiş, son 130dk içinde, skor henüz yok → canlı
             status = "live"
-        elif kickoff and now_utc < kickoff:
-            status = "scheduled"
         else:
-            # Kick-off 130dk önce geçmiş, skor yok → bekleniyor (skor güncellemesi gelecek)
-            status = "live"  # UI'da yine "Canlı" gösterimi makul
+            # scheduled (kickoff > now) veya stale (kickoff > 130dk önce, skor yok)
+            continue
 
         result = None
         kg_var = None
