@@ -4,12 +4,43 @@ Tek browser context ile tüm maçları işler, sonuçları Supabase'e yazar.
 Idempotent: aynı match_id için tekrar çalıştırılırsa günceller (upsert).
 """
 
+import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Awaitable, Callable, Optional, TypeVar
 
 from sqlalchemy import select, update as sa_update
 from sqlalchemy.dialects.postgresql import insert
+
+T = TypeVar("T")
+
+
+async def _with_retry(
+    op: Callable[[], Awaitable[T]],
+    label: str,
+    attempts: int = 3,
+    base_delay: float = 0.5,
+) -> T:
+    """Geçici DB hatalarına karşı exponential backoff ile retry.
+
+    Supabase PgBouncer ara sıra connection drop yaşıyor; ilk denemede
+    başarısız olan bir işlem 2-3 deneme içinde genelde tutar.
+    Son deneme yine başarısız olursa exception yukarı fırlatılır.
+    """
+    last_exc: Exception | None = None
+    for i in range(attempts):
+        try:
+            return await op()
+        except Exception as exc:
+            last_exc = exc
+            if i == attempts - 1:
+                raise
+            wait = base_delay * (2 ** i)
+            log.warning("%s — deneme %d/%d başarısız: %s (yeniden deneme %.1fs sonra)",
+                        label, i + 1, attempts, exc, wait)
+            await asyncio.sleep(wait)
+    # mantık olarak buraya gelinmez ama tip checker memnun olsun
+    raise last_exc if last_exc else RuntimeError("retry tükendi")
 
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.persist import compute_all_patterns
@@ -70,15 +101,22 @@ async def _upsert(
     raw: MatchRawData | None = None,
     patterns: dict[str, dict | None] | None = None,
 ) -> None:
-    """Analiz sonucunu (varsa pattern'lerle) DB'ye yaz; zaten varsa güncelle."""
+    """Analiz sonucunu (varsa pattern'lerle) DB'ye yaz; zaten varsa güncelle.
+
+    Geçici DB hatalarına karşı 3 denemeli retry (Supabase PgBouncer drop).
+    """
     row = _result_to_row(result, raw, patterns)
-    stmt = (
-        insert(Match)
-        .values(**row)
-        .on_conflict_do_update(index_elements=["match_id"], set_=row)
-    )
-    async with get_session() as session:
-        await session.execute(stmt)
+
+    async def _do():
+        stmt = (
+            insert(Match)
+            .values(**row)
+            .on_conflict_do_update(index_elements=["match_id"], set_=row)
+        )
+        async with get_session() as session:
+            await session.execute(stmt)
+
+    await _with_retry(_do, label=f"_upsert[{result.match_id}]")
 
 
 async def run_pipeline(
@@ -175,20 +213,23 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                     stats["not_finished"] += 1
                     continue
 
-                async with get_session() as session:
-                    await session.execute(
-                        sa_update(Match)
-                        .where(Match.match_id == match_id)
-                        .values(
-                            actual_ft_home=raw.actual_ft_home,
-                            actual_ft_away=raw.actual_ft_away,
-                            actual_ht_home=raw.actual_ht_home,
-                            actual_ht_away=raw.actual_ht_away,
-                            actual_h2_home=raw.actual_h2_home,
-                            actual_h2_away=raw.actual_h2_away,
-                            result_fetched_at=datetime.now(timezone.utc),
+                async def _do_update(_raw=raw, _mid=match_id):
+                    async with get_session() as session:
+                        await session.execute(
+                            sa_update(Match)
+                            .where(Match.match_id == _mid)
+                            .values(
+                                actual_ft_home=_raw.actual_ft_home,
+                                actual_ft_away=_raw.actual_ft_away,
+                                actual_ht_home=_raw.actual_ht_home,
+                                actual_ht_away=_raw.actual_ht_away,
+                                actual_h2_home=_raw.actual_h2_home,
+                                actual_h2_away=_raw.actual_h2_away,
+                                result_fetched_at=datetime.now(timezone.utc),
+                            )
                         )
-                    )
+
+                await _with_retry(_do_update, label=f"update_results[{match_id}]")
                 stats["updated"] += 1
                 log.info(
                     "Güncellendi [%s]: %s vs %s | %d-%d",
