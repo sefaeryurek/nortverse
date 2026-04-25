@@ -6,6 +6,7 @@ import asyncio
 import logging
 import sys
 import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Optional
@@ -30,10 +31,42 @@ log = logging.getLogger(__name__)
 
 # ─── Cache & eşzamanlılık ────────────────────────────────────────────────────
 
-# Analiz sonuçları: match_id → AnalyzeResponse
-_analysis_cache: dict[str, "AnalyzeResponse"] = {}
-# Aynı match için tek seferde scrape garantisi
-_analysis_locks: dict[str, asyncio.Lock] = {}
+# LRU bound — uzun süre çalışan container'da bellek koruması
+_CACHE_MAX = 500
+
+# Analiz sonuçları: match_id → AnalyzeResponse (LRU)
+_analysis_cache: "OrderedDict[str, AnalyzeResponse]" = OrderedDict()
+# Aynı match için tek seferde scrape garantisi (LRU)
+_analysis_locks: "OrderedDict[str, asyncio.Lock]" = OrderedDict()
+
+
+def _cache_put(match_id: str, value: "AnalyzeResponse") -> None:
+    """LRU semantiği: ekle, en sona taşı, sınırı aşarsa en eskiyi at."""
+    _analysis_cache[match_id] = value
+    _analysis_cache.move_to_end(match_id)
+    while len(_analysis_cache) > _CACHE_MAX:
+        evicted, _ = _analysis_cache.popitem(last=False)
+        _analysis_locks.pop(evicted, None)  # ilgili lock'u da temizle
+
+
+def _cache_touch(match_id: str) -> None:
+    """LRU sırasını güncellemek için: son erişimi en sona al."""
+    if match_id in _analysis_cache:
+        _analysis_cache.move_to_end(match_id)
+
+
+def _get_or_make_lock(match_id: str) -> asyncio.Lock:
+    """match_id için lock döndür; yeni oluşturulursa LRU'ya ekler."""
+    lock = _analysis_locks.get(match_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _analysis_locks[match_id] = lock
+        while len(_analysis_locks) > _CACHE_MAX:
+            _analysis_locks.popitem(last=False)
+    else:
+        _analysis_locks.move_to_end(match_id)
+    return lock
+
 
 # Fixture cache: "YYYY-MM-DD" → (fetch_timestamp, [FixtureMatchOut])
 _fixture_cache: dict[str, tuple[float, list]] = {}
@@ -129,6 +162,7 @@ async def _analyze_db_only(match_id: str) -> bool:
     DB'de yoksa False döner; kullanıcı maça tıkladığında foreground tam analiz tetiklenir.
     """
     if match_id in _analysis_cache:
+        _cache_touch(match_id)
         return True
     try:
         async with get_session() as session:
@@ -140,7 +174,7 @@ async def _analyze_db_only(match_id: str) -> bool:
         response = await _build_from_db(row)
         if response is None:
             return False
-        _analysis_cache[match_id] = response
+        _cache_put(match_id, response)
         return True
     except Exception as exc:
         log.warning("DB-only analiz başarısız [%s]: %s", match_id, exc)
@@ -150,11 +184,12 @@ async def _analyze_db_only(match_id: str) -> bool:
 async def _analyze_and_cache(match_id: str) -> "AnalyzeResponse":
     """DB kontrol et → bulursa B/C hesapla (hızlı). Yoksa Playwright scrape (yavaş)."""
     if match_id in _analysis_cache:
+        _cache_touch(match_id)
         return _analysis_cache[match_id]
-    if match_id not in _analysis_locks:
-        _analysis_locks[match_id] = asyncio.Lock()
-    async with _analysis_locks[match_id]:
+    lock = _get_or_make_lock(match_id)
+    async with lock:
         if match_id in _analysis_cache:
+            _cache_touch(match_id)
             return _analysis_cache[match_id]
 
         # 1. DB kontrolü — önce DB'den dene (Playwright YOK)
@@ -167,13 +202,13 @@ async def _analyze_and_cache(match_id: str) -> "AnalyzeResponse":
             response = await _build_from_db(db_row)
             if response is not None:
                 log.info("DB hit — anlık: %s", match_id)
-                _analysis_cache[match_id] = response
+                _cache_put(match_id, response)
                 return response
 
         # 2. DB miss — Playwright ile scrape (ilk kez veya arşivde yok)
         log.info("DB miss — Playwright scrape: %s", match_id)
         response = await _do_analyze(match_id)
-        _analysis_cache[match_id] = response
+        _cache_put(match_id, response)
         return response
 
 
@@ -514,7 +549,7 @@ async def get_analyze(match_id: str) -> AnalyzeResponse:
 async def post_analyze(match_id: str) -> AnalyzeResponse:
     """Maçı her zaman scrape eder ve cache'i günceller."""
     response = await _do_analyze(match_id)
-    _analysis_cache[match_id] = response
+    _cache_put(match_id, response)
     return response
 
 
