@@ -118,7 +118,7 @@ function ResultRow({ match }: { match: ResultMatch }) {
       {/* Analiz linki */}
       <Link
         href={`/analyze/${match.match_id}?home=${encodeURIComponent(match.home_team)}&away=${encodeURIComponent(match.away_team)}`}
-        className="flex-shrink-0 text-xs px-2 py-1 rounded transition-colors"
+        className="flex-shrink-0 text-xs px-3 py-2 rounded transition-colors min-h-[40px] flex items-center justify-center"
         style={{ backgroundColor: "#1e293b", color: "#64748b" }}
       >
         Analiz
