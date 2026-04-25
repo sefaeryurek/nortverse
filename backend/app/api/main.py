@@ -690,13 +690,32 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
 
 @app.get("/api/match/{match_id}", response_model=MatchSummary)
 async def get_match(match_id: str) -> MatchSummary:
+    """Maçın özet bilgisi. DB'de yoksa Playwright ile çek + DB'ye kaydet, sonra dön.
+
+    Hard timeout 25sn (Vercel SSR limiti dahilinde). Scrape de başarısız olursa 404.
+    """
     async with get_session() as session:
         row = (
             await session.execute(select(Match).where(Match.match_id == match_id))
         ).scalar_one_or_none()
 
     if not row:
-        raise HTTPException(status_code=404, detail=f"Maç bulunamadı: {match_id}")
+        # Fallback: scrape + upsert + tekrar oku
+        log.info("/api/match miss — Playwright fallback: %s", match_id)
+        try:
+            await asyncio.wait_for(_do_analyze(match_id), timeout=25.0)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail=f"Maç verisi çekilemedi (timeout): {match_id}")
+        except Exception as exc:
+            log.warning("Maç fallback scrape başarısız [%s]: %s", match_id, exc)
+            raise HTTPException(status_code=404, detail=f"Maç bulunamadı: {match_id}")
+
+        async with get_session() as session:
+            row = (
+                await session.execute(select(Match).where(Match.match_id == match_id))
+            ).scalar_one_or_none()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Maç bulunamadı: {match_id}")
 
     return MatchSummary(
         match_id=row.match_id,
