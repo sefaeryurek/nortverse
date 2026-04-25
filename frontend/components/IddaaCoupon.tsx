@@ -75,9 +75,10 @@ function SubLabel({ text }: { text: string }) {
 }
 
 interface ScoreFreqProps {
-  freq: Record<string, number>;
+  freq: Record<string, number> | null | undefined;
 }
 function ScoreFreq({ freq }: ScoreFreqProps) {
+  if (!freq) return null;
   const entries = Object.entries(freq).slice(0, 10);
   if (entries.length === 0) return null;
   return (
@@ -625,7 +626,7 @@ function ArchiveCoupon({
       )}
 
       {/* Skor Sıklığı */}
-      {Object.keys(result.score_freq).length > 0 && (
+      {result.score_freq && Object.keys(result.score_freq).length > 0 && (
         <Section title="Skor Sıklığı">
           <ScoreFreq freq={result.score_freq} />
         </Section>

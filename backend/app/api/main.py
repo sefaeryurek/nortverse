@@ -465,6 +465,17 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
     cache_key = parsed_date.isoformat() if parsed_date else today.isoformat()
     req_date = parsed_date or today
 
+    # Tarih sınırı: 30 gün geçmiş, 14 gün gelecek dışına çıkılamaz
+    # Sebep: yanlışlıkla uçuk tarih girilirse sürekli Playwright açılmasın
+    from datetime import timedelta as _td
+    max_past = today - _td(days=30)
+    max_future = today + _td(days=14)
+    if req_date < max_past or req_date > max_future:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tarih sınırlar dışında. {max_past.isoformat()} ile {max_future.isoformat()} arası kabul edilir."
+        )
+
     # 1. Memory cache
     if cache_key in _fixture_cache:
         ts, cached_result = _fixture_cache[cache_key]

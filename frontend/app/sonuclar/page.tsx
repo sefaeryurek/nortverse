@@ -148,13 +148,22 @@ async function ResultList({ date }: { date: string }) {
   }
 
   if (matches.length === 0) {
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+    const isToday = date === today;
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="text-center space-y-3">
+        <div className="text-center space-y-3 max-w-md px-6">
           <div className="text-5xl">📭</div>
           <p className="text-sm font-medium" style={{ color: "#64748b" }}>
-            Bu tarihe ait tamamlanmış maç bulunamadı.
+            {isToday
+              ? "Henüz oynanan veya canlı maç yok."
+              : "Bu tarihe ait maç bulunamadı."}
           </p>
+          {isToday && (
+            <p className="text-xs" style={{ color: "#475569" }}>
+              Maçlar başladıkça canlı, bittikçe skor olarak burada görünür.
+            </p>
+          )}
         </div>
       </div>
     );
