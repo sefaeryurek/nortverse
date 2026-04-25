@@ -47,10 +47,15 @@ export default function AnalyzePage() {
   const [activePeriod, setActivePeriod] = useState<Period>("ft");
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    setData(null);
     analyzeMatch(match_id)
-      .then(setData)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [match_id]);
 
   const { b: patternB, c: patternC } = data
