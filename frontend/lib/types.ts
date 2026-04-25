@@ -162,14 +162,15 @@ export interface ResultMatch {
   league_code: string | null;
   league_name: string | null;
   kickoff_time: string | null;
-  actual_ft_home: number;
-  actual_ft_away: number;
+  actual_ft_home: number | null;
+  actual_ft_away: number | null;
   actual_ht_home: number | null;
   actual_ht_away: number | null;
-  result: "1" | "X" | "2";
-  kg_var: boolean;
-  over_25: boolean;
-  katman_a_covered: boolean;
+  status: "scheduled" | "live" | "finished";
+  result: "1" | "X" | "2" | null;
+  kg_var: boolean | null;
+  over_25: boolean | null;
+  katman_a_covered: boolean | null;
 }
 
 export interface MatchSummary {

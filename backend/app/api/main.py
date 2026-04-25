@@ -299,14 +299,15 @@ class ResultOut(BaseModel):
     league_code: Optional[str]
     league_name: Optional[str]
     kickoff_time: Optional[str]
-    actual_ft_home: int
-    actual_ft_away: int
-    actual_ht_home: Optional[int]
-    actual_ht_away: Optional[int]
-    result: str          # "1" / "X" / "2"
-    kg_var: bool         # Her iki takım gol attı
-    over_25: bool        # Toplam gol >= 3
-    katman_a_covered: bool   # Gerçek sonuç tipi Katman A'da var mıydı?
+    actual_ft_home: Optional[int] = None
+    actual_ft_away: Optional[int] = None
+    actual_ht_home: Optional[int] = None
+    actual_ht_away: Optional[int] = None
+    status: str          # "scheduled" / "live" / "finished"
+    result: Optional[str] = None        # "1" / "X" / "2"  (sadece finished)
+    kg_var: Optional[bool] = None       # sadece finished
+    over_25: Optional[bool] = None      # sadece finished
+    katman_a_covered: Optional[bool] = None  # sadece finished
 
 
 # ─── Ortak analiz fonksiyonu ──────────────────────────────────────────────────
@@ -549,7 +550,14 @@ async def list_matches(
 
 @app.get("/api/results", response_model=list[ResultOut])
 async def get_results(target_date: Optional[str] = Query(None, alias="date")) -> list[ResultOut]:
-    """Belirli bir tarihte biten maçları döndürür. Katman A tahmin kapsamı dahil."""
+    """Belirli bir tarihte oynanan/oynanacak TÜM maçları döndürür.
+
+    actual_ft_home filtresi YOK — canlı/başlamamış maçlar da listede yer alır.
+    Frontend `status` alanına göre uygun gösterimi yapar:
+      - "finished": skor + KG/2.5 istatistikleri
+      - "live"    : Canlı rozet
+      - "scheduled": Sadece saat
+    """
     from datetime import datetime, timezone, timedelta
 
     if target_date:
@@ -568,32 +576,45 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         rows = (
             await session.execute(
                 select(Match)
-                .where(Match.actual_ft_home.isnot(None))
                 .where(Match.kickoff_time >= day_start)
                 .where(Match.kickoff_time <= day_end)
                 .order_by(Match.kickoff_time)
             )
         ).scalars().all()
 
+    now_utc = datetime.now(timezone.utc)
     out = []
     for row in rows:
         h = row.actual_ft_home
         a = row.actual_ft_away
-        if h is None or a is None:
-            continue
 
-        result = "1" if h > a else ("2" if a > h else "X")
-        kg_var = h > 0 and a > 0
-        over_25 = (h + a) >= 3
-
-        # Katman A: gerçek sonuç tipi için 3.5+ skor listesi doluysa kapsanmış
-        if result == "1":
-            covered_list = row.ft_scores_1 or []
-        elif result == "2":
-            covered_list = row.ft_scores_2 or []
+        # Status hesapla
+        kickoff = row.kickoff_time
+        if h is not None and a is not None:
+            status = "finished"
+        elif kickoff and now_utc >= kickoff and (now_utc - kickoff).total_seconds() < 130 * 60:
+            # Kick-off geçmiş, son 130dk içinde, skor henüz yok → canlı
+            status = "live"
+        elif kickoff and now_utc < kickoff:
+            status = "scheduled"
         else:
-            covered_list = row.ft_scores_x or []
-        katman_a_covered = len(covered_list) > 0
+            # Kick-off 130dk önce geçmiş, skor yok → bekleniyor (skor güncellemesi gelecek)
+            status = "live"  # UI'da yine "Canlı" gösterimi makul
+
+        result = None
+        kg_var = None
+        over_25 = None
+        katman_a_covered = None
+        if status == "finished" and h is not None and a is not None:
+            result = "1" if h > a else ("2" if a > h else "X")
+            kg_var = h > 0 and a > 0
+            over_25 = (h + a) >= 3
+            covered_list = (
+                row.ft_scores_1 if result == "1"
+                else row.ft_scores_2 if result == "2"
+                else row.ft_scores_x
+            ) or []
+            katman_a_covered = len(covered_list) > 0
 
         out.append(ResultOut(
             match_id=row.match_id,
@@ -606,6 +627,7 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
             actual_ft_away=a,
             actual_ht_home=row.actual_ht_home,
             actual_ht_away=row.actual_ht_away,
+            status=status,
             result=result,
             kg_var=kg_var,
             over_25=over_25,

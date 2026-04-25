@@ -45,26 +45,16 @@ function formatTime(iso: string | null): string {
   }
 }
 
-function isLive(kickoffIso: string | null): boolean {
-  if (!kickoffIso) return false;
-  const ko = new Date(kickoffIso).getTime();
-  const now = Date.now();
-  const elapsed = now - ko;
-  return elapsed > 0 && elapsed < 110 * 60 * 1000; // 0–110 dakika arası
-}
-
 function ResultRow({ match }: { match: ResultMatch }) {
   const timeStr = formatTime(match.kickoff_time);
-  const scoreStr =
-    match.actual_ft_home != null && match.actual_ft_away != null
-      ? `${match.actual_ft_home} - ${match.actual_ft_away}`
-      : "- - -";
   const htStr =
     match.actual_ht_home != null && match.actual_ht_away != null
       ? `IY ${match.actual_ht_home}-${match.actual_ht_away}`
       : null;
-
-  const live = isLive(match.kickoff_time);
+  const scoreStr =
+    match.actual_ft_home != null && match.actual_ft_away != null
+      ? `${match.actual_ft_home} - ${match.actual_ft_away}`
+      : null;
 
   return (
     <div
@@ -106,21 +96,28 @@ function ResultRow({ match }: { match: ResultMatch }) {
         )}
       </div>
 
-      {/* Canlı badge veya skor */}
+      {/* Status'e göre: Canlı / Skor / Saat */}
       <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
-        {live ? (
+        {match.status === "live" ? (
           <span
             className="px-2 py-0.5 rounded text-xs font-bold animate-pulse"
             style={{ backgroundColor: "#14532d", color: "#4ade80" }}
           >
-            Canlı
+            {scoreStr ? `Canlı ${scoreStr}` : "Canlı"}
           </span>
-        ) : (
+        ) : match.status === "finished" && scoreStr ? (
           <span
             className="text-sm font-bold font-mono px-2 py-0.5 rounded"
             style={{ backgroundColor: "#0f172a", color: "#f1f5f9" }}
           >
             {scoreStr}
+          </span>
+        ) : (
+          <span
+            className="text-xs font-mono px-2 py-0.5 rounded"
+            style={{ backgroundColor: "#0f172a", color: "#475569" }}
+          >
+            Henüz başlamadı
           </span>
         )}
       </div>
@@ -181,8 +178,12 @@ async function ResultList({ date }: { date: string }) {
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#22c55e" }} />
           {matches.length} maç
         </span>
-        <span>KG: {matches.filter((m) => m.kg_var).length}</span>
-        <span>2.5 Üst: {matches.filter((m) => m.over_25).length}</span>
+        <span style={{ color: "#4ade80" }}>
+          Canlı: {matches.filter((m) => m.status === "live").length}
+        </span>
+        <span>Bitti: {matches.filter((m) => m.status === "finished").length}</span>
+        <span>KG: {matches.filter((m) => m.kg_var === true).length}</span>
+        <span>2.5 Üst: {matches.filter((m) => m.over_25 === true).length}</span>
       </div>
 
       {matches.map((m) => (
