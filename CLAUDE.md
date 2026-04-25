@@ -303,7 +303,7 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 ---
 
-## Mevcut Durum (Sprint 8 — TAMAMLANDI ✅)
+## Mevcut Durum (Sprint 8.2 — TAMAMLANDI ✅)
 
 ### Backend
 
@@ -322,6 +322,10 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ **`/api/fixture` hard timeout 20sn (Sprint 7 acil):** Playwright takılırsa 503, backend ölmez
 - ✅ **`/api/health` zenginleştirildi:** DB durumu, son pipeline saati, fixture cache zamanı, bg queue, cached_analyses
 - ✅ **`/api/health` GET+HEAD:** UptimeRobot free tier HEAD desteği
+- ✅ **LRU cache bound (Sprint 8.2):** `_analysis_cache` ve `_analysis_locks` 500 entry sınırı — uzun ömürlü container'da bellek koruması
+- ✅ **Sonuçlar smart filtering (Sprint 8.1):** `/api/results` endpoint'i artık tüm günün maçlarını döndürür, her maça `status` (scheduled/live/finished); scheduled ve stale (>130dk skorsuz) gizlenir
+- ✅ **Saat başı update-scores cron (Sprint 8.1):** 12:00–23:00 İstanbul her saat — biten skorlar dakikalar içinde sonuçlar sayfasında
+- ✅ **Playwright path ERROR seviyesi (Sprint 8.2):** `_do_analyze` upsert hatası `log.error` + `exc_info=True` (Railway logs'ta stack trace)
 - ✅ `pattern_stats.py`: ~130 alan, 9 bölüm
 - ✅ Railway deployment: `https://nortverse-production.up.railway.app`
 - ✅ `fixture_cache` DB tablosu: bülten verileri kalıcı, server restart'tan etkilenmez
@@ -346,6 +350,11 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ **Next.js Data Cache 60sn (Sprint 7):** `getFixture`/`getResults` server cache → tarih değişimi anlık
 - ✅ **Skeleton fallback (Sprint 7):** Suspense'te 8 satırlık iskelet, "Yükleniyor..." flash bitti
 - ✅ **DayTabs disable (Sprint 7):** Aktif tarihe tıklayınca reload yok
+- ✅ **Race condition fix (Sprint 8.2):** Analiz sayfası `useEffect` cleanup flag — hızlı maç değişiminde yanlış maç gösterilmesi engellendi
+- ✅ **Mobile sidebar (Sprint 8.2):** `md:` breakpoint altında gizli — mobilde +%32 içerik alanı
+- ✅ **Mobile touch hedefleri (Sprint 8.2):** Sonuçlar Analiz linki min-h-[40px]
+- ✅ **Sonuçlar status renderı (Sprint 8.1):** Canlı (yeşil rozet, skor varsa "Canlı 1-0"), Bitmiş (skor), scheduled/stale (gizli)
+- ✅ **Hover button cleanup (Sprint 8.2):** Geri butonu inline mouseenter → Tailwind hover sınıfı
 - ❌ **BultenPrefetcher kapatıldı (Sprint 7 acil):** Backend'i boğuyordu; bg_worker tek otorite
 
 ### Performans Sonuçları (Sprint 8 sonrası)
@@ -436,6 +445,22 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - 09:00 İstanbul yedek pipeline cron eklendi (`0 6 * * *`) — 08:00 cron kaçırırsa devreye girer
 - **Sonuç:** Tüm maç tıklamaları **<1 saniye** (memory cache veya saklı pattern)
 
+### Sprint 8.1 — TAMAMLANDI ✅ (Canlı/Bitti Ayrımı)
+- `/api/results` endpoint'i artık actual_ft filtresi YOK — günün TÜM maçlarını döndürür
+- Her maça `status` alanı: `finished`, `live`, `scheduled`
+- Backend filtresi: `scheduled` (henüz başlamamış) ve `stale` (>130dk skorsuz) maçlar gizli
+- Frontend `ResultRow`: status'e göre Canlı rozet / Skor render
+- Saat başı update-scores cron: 12:00–23:00 İstanbul (12 yeni cron entry) — gün içi skor güncelleme
+- Public repo → GitHub Actions cron limit yok
+
+### Sprint 8.2 — TAMAMLANDI ✅ (Stabilite & Bug Fix)
+- **Race condition fix:** Analiz sayfası `useEffect` cleanup flag — hızlı maç değişiminde yanlış maç gösterilmesi engellendi
+- **LRU cache bound (500 entry):** `_analysis_cache` ve `_analysis_locks` `OrderedDict` — `_cache_put`, `_cache_touch`, `_get_or_make_lock` helper'ları
+- **Mobile sidebar:** `md:` breakpoint altında gizli (mobil ekran genişliği kazanımı)
+- **Mobile touch hedefi:** Sonuçlar Analiz linki min-h-[40px] flex items-center
+- **Playwright path log seviyesi:** `_do_analyze` upsert hatası `log.warning` → `log.error` + `exc_info=True`
+- **Geri butonu cleanup:** Inline `onMouseEnter`/`onMouseLeave` style → Tailwind `hover:` sınıfı
+
 ---
 
 ## Bilinen Teknik Notlar
@@ -522,7 +547,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-04-25 Cumartesi gece)
+## Kaldığımız Yer (2026-04-25 Cumartesi gece — Sprint 8.2 sonu)
 
 Sprint 8 deploy edildi. Sistem stabil ve hızlı. Sıradaki adımlar (sırayla):
 
@@ -562,3 +587,12 @@ Sprint 8 deploy edildi. Sistem stabil ve hızlı. Sıradaki adımlar (sırayla):
 - `22cdde6` Sprint 8: run-pipeline pattern yazar
 - `7008064` Sprint 8: _build_from_db saklı pattern okur (lazy backfill)
 - `7792e56` Sprint 8: 09:00 yedek pipeline cron
+- `74b820a` Sprint 8.1: /sonuclar canlı/bitmiş ayrımı + 18:00/22:00 cron
+- `a700b6f` Sprint 8.1: scheduled/stale gizleme
+- `a095bcd` Sprint 8.1: saat başı update-scores cron (12:00–23:00)
+- `c0694ff` Sprint 8.2: useEffect cleanup (race condition)
+- `4b39c6b` Sprint 8.2: LRU cache 500 entry
+- `6027f29` Sprint 8.2: Sidebar md altında gizli
+- `7b7bd61` Sprint 8.2: Sonuçlar Analiz touch hedefi
+- `1499be5` Sprint 8.2: Playwright DB hatası ERROR seviyesi
+- `05c270e` Sprint 8.2: Geri butonu Tailwind hover
