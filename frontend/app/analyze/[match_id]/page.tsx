@@ -6,6 +6,7 @@ import type { AnalyzeResponse } from "@/lib/types";
 import { analyzeMatch } from "@/lib/api";
 import IddaaCoupon from "@/components/IddaaCoupon";
 import ScoreList from "@/components/ScoreList";
+import TrendsPanel from "@/components/TrendsPanel";
 import { MatchProvider } from "@/lib/match-context";
 
 type Period = "ht" | "h2" | "ft";
@@ -187,6 +188,15 @@ export default function AnalyzePage() {
                   className="space-y-4 transition-opacity duration-150"
                   style={{ opacity: isPending ? 0.6 : 1 }}
                 >
+
+                {/* Form & H2H trendleri — sadece MS periyodunda anlamlı */}
+                {activePeriod === "ft" && data.trends && (
+                  <TrendsPanel
+                    trends={data.trends}
+                    homeTeam={data.home_team}
+                    awayTeam={data.away_team}
+                  />
+                )}
 
                 {/* Katman A — 3.5+ skor dağılımı */}
                 {scores && (scores.scores_1.length > 0 || scores.scores_x.length > 0 || scores.scores_2.length > 0) && (

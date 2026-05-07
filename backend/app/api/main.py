@@ -23,6 +23,7 @@ from sqlalchemy import select
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.pattern_stats import PatternResult
 from app.analysis.persist import compute_all_patterns, update_match_patterns
+from app.analysis.trends import TrendsData, compute_trends
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
 from app.scraper import fetch_fixture, fetch_match_detail
@@ -90,6 +91,17 @@ def _pat(blob: dict | None) -> Optional[PatternResult]:
         return None
 
 
+def _trends(blob: dict | None) -> Optional[TrendsData]:
+    """JSONB → TrendsData; None ise None döner."""
+    if not blob:
+        return None
+    try:
+        return TrendsData.model_validate(blob)
+    except Exception as exc:
+        log.warning("Saklı trends parse edilemedi: %s", exc)
+        return None
+
+
 async def _build_from_db(row: Match) -> "AnalyzeResponse | None":
     """DB satırından AnalyzeResponse üret.
 
@@ -152,6 +164,7 @@ async def _build_from_db(row: Match) -> "AnalyzeResponse | None":
         ht_b=ht_b, ht_c=ht_c,
         h2_b=h2_b, h2_c=h2_c,
         ft_b=ft_b, ft_c=ft_c,
+        trends=_trends(row.trends),
     )
 
 
@@ -308,6 +321,7 @@ class AnalyzeResponse(BaseModel):
     h2_c: Optional[PatternResult] = None
     ft_b: Optional[PatternResult] = None
     ft_c: Optional[PatternResult] = None
+    trends: Optional[TrendsData] = None  # form & H2H trendleri (FT periyodunda gösterilir)
     skipped: bool = False
     skip_reason: Optional[str] = None
 
@@ -386,6 +400,13 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
             match_id, exc, exc_info=True,
         )
 
+    # Form & H2H trendleri — runner.py _result_to_row üzerinden DB'ye yazıldı
+    try:
+        trends_data: Optional[TrendsData] = compute_trends(raw)
+    except Exception as exc:
+        log.warning("Trends hesaplanamadı [%s]: %s", match_id, exc)
+        trends_data = None
+
     return AnalyzeResponse(
         match_id=result.match_id,
         home_team=result.home_team,
@@ -398,6 +419,7 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
         ht_b=_pat(patterns["pattern_ht_b"]), ht_c=_pat(patterns["pattern_ht_c"]),
         h2_b=_pat(patterns["pattern_h2_b"]), h2_c=_pat(patterns["pattern_h2_c"]),
         ft_b=_pat(patterns["pattern_ft_b"]), ft_c=_pat(patterns["pattern_ft_c"]),
+        trends=trends_data,
     )
 
 

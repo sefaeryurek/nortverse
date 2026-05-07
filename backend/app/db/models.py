@@ -51,6 +51,9 @@ class Match(Base):
     pattern_ft_b: Mapped[dict | None] = mapped_column(JSONB)
     pattern_ft_c: Mapped[dict | None] = mapped_column(JSONB)
 
+    # Form & H2H trendleri (Sprint 8.8) — TrendsData JSON
+    trends: Mapped[dict | None] = mapped_column(JSONB)
+
     # Gerçek sonuç
     actual_ht_home: Mapped[int | None] = mapped_column(Integer)
     actual_ht_away: Mapped[int | None] = mapped_column(Integer)

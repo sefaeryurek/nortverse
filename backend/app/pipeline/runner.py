@@ -44,6 +44,7 @@ async def _with_retry(
 
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.persist import compute_all_patterns
+from app.analysis.trends import compute_trends
 from app.db.connection import get_session
 from app.db.models import Match
 from app.models import MatchAnalysisResult, MatchRawData
@@ -63,6 +64,7 @@ def _result_to_row(
 
     patterns parametresi compute_all_patterns()'in çıktısıdır; verilirse
     pattern_*_b/c kolonları da satıra eklenir.
+    `trends` kolonu ham veriden hesaplanır (raw verildiyse).
     """
     row = {
         "match_id": r.match_id,
@@ -93,6 +95,12 @@ def _result_to_row(
     }
     if patterns:
         row.update(patterns)
+    if raw is not None:
+        try:
+            row["trends"] = compute_trends(raw).model_dump()
+        except Exception as exc:
+            log.warning("Trend hesaplanamadı [%s]: %s", r.match_id, exc)
+            row["trends"] = None
     return row
 
 

@@ -136,6 +136,25 @@ export interface PatternResult {
   h2_result_2_pct: number;
 }
 
+export interface TrendBlock {
+  label: string;
+  sample_size: number;
+  win_pct: number;
+  draw_pct: number;
+  loss_pct: number;
+  kg_var_pct: number;
+  over_25_pct: number;
+  avg_goals_for: number;
+  avg_goals_against: number;
+  last_n_results: ("G" | "B" | "M")[];
+}
+
+export interface TrendsData {
+  home_form: TrendBlock | null;
+  away_form: TrendBlock | null;
+  h2h: TrendBlock | null;
+}
+
 export interface AnalyzeResponse {
   match_id: string;
   home_team: string;
@@ -151,6 +170,7 @@ export interface AnalyzeResponse {
   h2_c: PatternResult | null;
   ft_b: PatternResult | null;
   ft_c: PatternResult | null;
+  trends: TrendsData | null;
   skipped: boolean;
   skip_reason: string | null;
 }
