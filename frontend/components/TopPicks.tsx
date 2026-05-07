@@ -101,12 +101,10 @@ function PickRow({ pick }: { pick: Pick }) {
 }
 
 export default function TopPicks({ patternB, patternC, period }: Props) {
-  const picks = useMemo(
+  const { picks, effectiveMinPct, matchCount: totalMatches } = useMemo(
     () => getTopPicks(buildPicks(patternB, patternC, period), { limit: 8 }),
     [patternB, patternC, period],
   );
-
-  const totalMatches = Math.max(patternB?.match_count ?? 0, patternC?.match_count ?? 0);
 
   if (picks.length === 0) {
     return (
@@ -150,8 +148,12 @@ export default function TopPicks({ patternB, patternC, period }: Props) {
             {picks.length}
           </span>
         </div>
-        <span className="text-[10px] font-mono" style={{ color: "#475569" }}>
-          ⛁ {totalMatches} maç eşleşti
+        <span
+          className="text-[10px] font-mono"
+          style={{ color: "#475569" }}
+          title="Eşleşme sayısı arttıkça istatistiksel güven artar; düşük örneklemde daha yüksek yüzde eşiği uygulanır."
+        >
+          ⛁ {totalMatches} maç · Eşik: ≥%{Math.round(effectiveMinPct)}
         </span>
       </div>
 

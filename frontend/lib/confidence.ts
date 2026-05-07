@@ -536,19 +536,44 @@ export function resolveConflicts(picks: Pick[]): Pick[] {
 export interface TopPicksOptions {
   minConfidence?: number;  // default 0.55
   limit?: number;          // default 8
-  minPct?: number;         // default 60 (%)
+  minPct?: number;         // override: dinamik eşik yerine sabit eşik
+  matchCount?: number;     // dinamik eşik için örneklem boyutu (yoksa picks'ten en yüksek alınır)
+}
+
+export interface TopPicksResult {
+  picks: Pick[];
+  effectiveMinPct: number; // gerçekten uygulanan eşik (UI gösterimi için)
+  matchCount: number;
+}
+
+/**
+ * Örneklem boyutuna göre minimum yüzde eşiğini ayarlar.
+ * 5 maç → ~74%, 15 maç → ~70%, 30 maç → ~68%, 50 maç → ~66%, 100+ → ~64%
+ * Wilson lower bound benzeri pragmatik formül.
+ */
+export function dynamicMinPct(matchCount: number): number {
+  if (matchCount <= 0) return 80;
+  return Math.max(64, 80 - Math.log10(matchCount + 1) * 8);
 }
 
 /**
  * Top Picks: çelişkisiz, confidence sırasına göre en güçlü tahminler.
+ * Eşleşme sayısı ile dinamik eşik: küçük örneklemde daha yüksek pct ister, büyük örneklemde daha gevşek.
  */
-export function getTopPicks(picks: Pick[], opts: TopPicksOptions = {}): Pick[] {
+export function getTopPicks(picks: Pick[], opts: TopPicksOptions = {}): TopPicksResult {
   const minConf = opts.minConfidence ?? 0.55;
   const limit = opts.limit ?? 8;
-  const minPct = opts.minPct ?? 60;
-  return resolveConflicts(picks)
+  const matchCount =
+    opts.matchCount ?? picks.reduce((m, p) => Math.max(m, p.matchCountA, p.matchCountB), 0);
+  const minPct = opts.minPct ?? dynamicMinPct(matchCount);
+  const filtered = resolveConflicts(picks)
     .filter((p) => p.confidence >= minConf && p.pct >= minPct)
     .slice(0, limit);
+  return {
+    picks: filtered,
+    effectiveMinPct: minPct,
+    matchCount,
+  };
 }
 
 export interface MarketSummaryRow {
