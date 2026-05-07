@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import type { PatternResult } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import { getMarketSummary } from "@/lib/confidence";
+import { useMatchInfo } from "@/lib/match-context";
+import AddToCartButton from "./AddToCartButton";
 
 interface Props {
   patternB: PatternResult | null;
@@ -18,7 +20,22 @@ function pctTone(pct: number): { color: string; muted: boolean } {
   return { color: "#475569", muted: true };
 }
 
-function Cell({ value, accent }: { value: { selectionLabel: string; pct: number } | null; accent: string }) {
+function Cell({
+  value,
+  accent,
+  marketKey,
+  marketLabel,
+  archive,
+  period,
+}: {
+  value: { selectionLabel: string; pct: number } | null;
+  accent: string;
+  marketKey: string;
+  marketLabel: string;
+  archive: "A" | "B";
+  period: Period;
+}) {
+  const match = useMatchInfo();
   if (!value) {
     return (
       <div className="text-xs text-center font-mono" style={{ color: "#334155" }}>
@@ -39,6 +56,21 @@ function Cell({ value, accent }: { value: { selectionLabel: string; pct: number 
       >
         %{pct}
       </span>
+      {match && pct >= 60 && (
+        <AddToCartButton
+          item={{
+            matchId: match.matchId,
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            marketKey,
+            marketLabel,
+            selectionLabel: value.selectionLabel,
+            pct: value.pct,
+            archive,
+            period,
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -95,8 +127,22 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
                 {row.marketLabel}
               </span>
             </div>
-            <Cell value={row.winnerA} accent="#4ade80" />
-            <Cell value={row.winnerB} accent="#c084fc" />
+            <Cell
+              value={row.winnerA}
+              accent="#4ade80"
+              marketKey={row.marketKey}
+              marketLabel={row.marketLabel}
+              archive="A"
+              period={period}
+            />
+            <Cell
+              value={row.winnerB}
+              accent="#c084fc"
+              marketKey={row.marketKey}
+              marketLabel={row.marketLabel}
+              archive="B"
+              period={period}
+            />
           </div>
         ))}
       </div>

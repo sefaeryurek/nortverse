@@ -6,6 +6,7 @@ import type { AnalyzeResponse } from "@/lib/types";
 import { analyzeMatch } from "@/lib/api";
 import IddaaCoupon from "@/components/IddaaCoupon";
 import ScoreList from "@/components/ScoreList";
+import { MatchProvider } from "@/lib/match-context";
 
 type Period = "ht" | "h2" | "ft";
 
@@ -215,11 +216,13 @@ export default function AnalyzePage() {
 
                 {/* Arşiv İstatistikleri */}
                 {scores && (scores.scores_1.length > 0 || scores.scores_x.length > 0 || scores.scores_2.length > 0) ? (
-                  <IddaaCoupon
-                    patternB={patternB}
-                    patternC={patternC}
-                    period={activePeriod}
-                  />
+                  <MatchProvider value={{ matchId: data.match_id, homeTeam: data.home_team, awayTeam: data.away_team }}>
+                    <IddaaCoupon
+                      patternB={patternB}
+                      patternC={patternC}
+                      period={activePeriod}
+                    />
+                  </MatchProvider>
                 ) : (
                   <div
                     className="rounded-xl p-5 border text-center"

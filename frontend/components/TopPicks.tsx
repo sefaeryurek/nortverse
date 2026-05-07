@@ -4,11 +4,61 @@ import { useMemo } from "react";
 import type { PatternResult } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import { buildPicks, getTopPicks, confidenceTier, type Pick, type ConfidenceTier } from "@/lib/confidence";
+import { useMatchInfo } from "@/lib/match-context";
+import AddToCartButton from "./AddToCartButton";
 
 interface Props {
   patternB: PatternResult | null;
   patternC: PatternResult | null;
   period: Period;
+}
+
+function PickRowWithCart({ pick, period }: { pick: Pick; period: Period }) {
+  const match = useMatchInfo();
+  const tier = confidenceTier(pick.confidence);
+  const s = tierStyle(tier);
+  const pct = Math.round(pick.pct);
+  return (
+    <div
+      className="flex items-center gap-2 px-2.5 py-2 rounded-lg border"
+      style={{ backgroundColor: s.bg, borderColor: s.border }}
+    >
+      <ArchiveBadge archive={pick.archive} />
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] uppercase tracking-wider truncate" style={{ color: "#475569" }}>
+          {pick.marketLabel}
+        </div>
+        <div className="text-sm font-semibold truncate" style={{ color: s.labelText }}>
+          {pick.selectionLabel}
+        </div>
+      </div>
+      <div className="flex flex-col items-end flex-shrink-0">
+        <div className="text-base font-extrabold font-mono leading-none" style={{ color: s.pctText }}>
+          %{pct}
+        </div>
+        {pick.archive === "AB" && pick.pctA !== null && pick.pctB !== null && (
+          <div className="text-[9px] font-mono mt-0.5" style={{ color: "#475569" }}>
+            {Math.round(pick.pctA)} · {Math.round(pick.pctB)}
+          </div>
+        )}
+      </div>
+      {match && (
+        <AddToCartButton
+          item={{
+            matchId: match.matchId,
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            marketKey: pick.marketKey,
+            marketLabel: pick.marketLabel,
+            selectionLabel: pick.selectionLabel,
+            pct: pick.pct,
+            archive: pick.archive,
+            period,
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
 function tierStyle(tier: ConfidenceTier) {
@@ -65,38 +115,6 @@ function ArchiveBadge({ archive }: { archive: "A" | "B" | "AB" }) {
     >
       {text}
     </span>
-  );
-}
-
-function PickRow({ pick }: { pick: Pick }) {
-  const tier = confidenceTier(pick.confidence);
-  const s = tierStyle(tier);
-  const pct = Math.round(pick.pct);
-  return (
-    <div
-      className="flex items-center gap-2 px-2.5 py-2 rounded-lg border"
-      style={{ backgroundColor: s.bg, borderColor: s.border }}
-    >
-      <ArchiveBadge archive={pick.archive} />
-      <div className="flex-1 min-w-0">
-        <div className="text-[10px] uppercase tracking-wider truncate" style={{ color: "#475569" }}>
-          {pick.marketLabel}
-        </div>
-        <div className="text-sm font-semibold truncate" style={{ color: s.labelText }}>
-          {pick.selectionLabel}
-        </div>
-      </div>
-      <div className="flex flex-col items-end flex-shrink-0">
-        <div className="text-base font-extrabold font-mono leading-none" style={{ color: s.pctText }}>
-          %{pct}
-        </div>
-        {pick.archive === "AB" && pick.pctA !== null && pick.pctB !== null && (
-          <div className="text-[9px] font-mono mt-0.5" style={{ color: "#475569" }}>
-            {Math.round(pick.pctA)} · {Math.round(pick.pctB)}
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -160,7 +178,7 @@ export default function TopPicks({ patternB, patternC, period }: Props) {
       {/* Pick listesi */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {picks.map((p) => (
-          <PickRow key={`${p.marketKey}-${p.selectionLabel}`} pick={p} />
+          <PickRowWithCart key={`${p.marketKey}-${p.selectionLabel}`} pick={p} period={period} />
         ))}
       </div>
 

@@ -5,6 +5,8 @@ import type { PatternResult } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import { buildPicks } from "@/lib/confidence";
 import { generateCombos, comboTierLabel, comboTierAccent, type Combo } from "@/lib/combos";
+import { useMatchInfo } from "@/lib/match-context";
+import { useCart } from "@/lib/cart";
 
 interface Props {
   patternB: PatternResult | null;
@@ -12,11 +14,30 @@ interface Props {
   period: Period;
 }
 
-function ComboCard({ combo }: { combo: Combo }) {
+function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
   const accent = comboTierAccent(combo.tier);
   const probPct = (combo.jointProb * 100).toFixed(1);
   const odds = combo.estDecimalOdds.toFixed(2);
   const tierLabel = comboTierLabel(combo.tier);
+  const match = useMatchInfo();
+  const { addItem } = useCart();
+
+  const addAllLegs = () => {
+    if (!match) return;
+    for (const leg of combo.legs) {
+      addItem({
+        matchId: match.matchId,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        marketKey: leg.marketKey,
+        marketLabel: leg.marketLabel,
+        selectionLabel: leg.selectionLabel,
+        pct: leg.pct,
+        archive: leg.archive,
+        period,
+      });
+    }
+  };
 
   return (
     <div
@@ -77,6 +98,21 @@ function ComboCard({ combo }: { combo: Combo }) {
           </div>
         </div>
       </div>
+
+      {/* Sepete ekle (tüm leg'ler) */}
+      {match && (
+        <button
+          onClick={addAllLegs}
+          className="w-full text-xs py-1.5 rounded-lg font-semibold transition-colors hover:opacity-80"
+          style={{
+            backgroundColor: "#0a0f17",
+            color: accent.color,
+            border: `1px solid ${accent.border}`,
+          }}
+        >
+          + Sepete Ekle ({combo.legs.length} maç)
+        </button>
+      )}
     </div>
   );
 }
@@ -116,7 +152,7 @@ export default function ComboSuggestion({ patternB, patternC, period }: Props) {
       {/* Kombo kartları */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {combos.map((c) => (
-          <ComboCard key={c.tier} combo={c} />
+          <ComboCard key={c.tier} combo={c} period={period} />
         ))}
       </div>
 

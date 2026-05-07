@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import BetCart from "@/components/BetCart";
 
 export const metadata: Metadata = {
   title: "Nortverse",
@@ -19,6 +20,7 @@ export default function RootLayout({
         <main className="flex-1 overflow-y-auto">
           {children}
         </main>
+        <BetCart />
       </body>
     </html>
   );
