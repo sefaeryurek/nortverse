@@ -157,16 +157,19 @@ function ArchiveDetailCard({
         </Section>
       )}
 
-      <Section title={lbl.combo25}>
-        <Row items={[
-          { label: "1 + Alt", value: result.ms1_alt25_pct },
-          { label: "1 + Üst", value: result.ms1_ust25_pct },
-          { label: "X + Alt", value: result.msx_alt25_pct },
-          { label: "X + Üst", value: result.msx_ust25_pct },
-          { label: "2 + Alt", value: result.ms2_alt25_pct },
-          { label: "2 + Üst", value: result.ms2_ust25_pct },
-        ]} />
-      </Section>
+      {/* MS + 2.5 — sadece FT (IY/2Y'de iddaa 2.5 hattı açmaz) */}
+      {isFT && (
+        <Section title={lbl.combo25}>
+          <Row items={[
+            { label: "1 + Alt", value: result.ms1_alt25_pct },
+            { label: "1 + Üst", value: result.ms1_ust25_pct },
+            { label: "X + Alt", value: result.msx_alt25_pct },
+            { label: "X + Üst", value: result.msx_ust25_pct },
+            { label: "2 + Alt", value: result.ms2_alt25_pct },
+            { label: "2 + Üst", value: result.ms2_ust25_pct },
+          ]} />
+        </Section>
+      )}
 
       <Section title={lbl.fark}>
         <Row items={[
@@ -182,44 +185,66 @@ function ArchiveDetailCard({
         ]} />
       </Section>
 
-      <Section title={lbl.hnd}>
-        <Row items={[
-          { label: "1", sub: "Hnd (2:0)", value: result.hnd_a20_1_pct },
-          { label: "X", sub: "Hnd (2:0)", value: result.hnd_a20_x_pct },
-          { label: "2", sub: "Hnd (2:0)", value: result.hnd_a20_2_pct },
-          { label: "1", sub: "Hnd (1:0)", value: result.hnd_a10_1_pct },
-          { label: "X", sub: "Hnd (1:0)", value: result.hnd_a10_x_pct },
-          { label: "2", sub: "Hnd (1:0)", value: result.hnd_a10_2_pct },
-        ]} />
-        <Row items={[
-          { label: "1", sub: "Hnd (0:1)", value: result.hnd_h10_1_pct },
-          { label: "X", sub: "Hnd (0:1)", value: result.hnd_h10_x_pct },
-          { label: "2", sub: "Hnd (0:1)", value: result.hnd_h10_2_pct },
-          { label: "1", sub: "Hnd (0:2)", value: result.hnd_h20_1_pct },
-          { label: "X", sub: "Hnd (0:2)", value: result.hnd_h20_x_pct },
-          { label: "2", sub: "Hnd (0:2)", value: result.hnd_h20_2_pct },
-        ]} />
-      </Section>
+      {/* Handikap — sadece FT (IY/2Y'de iddaa handikap açmaz) */}
+      {isFT && (
+        <Section title={lbl.hnd}>
+          <Row items={[
+            { label: "1", sub: "Hnd (2:0)", value: result.hnd_a20_1_pct },
+            { label: "X", sub: "Hnd (2:0)", value: result.hnd_a20_x_pct },
+            { label: "2", sub: "Hnd (2:0)", value: result.hnd_a20_2_pct },
+            { label: "1", sub: "Hnd (1:0)", value: result.hnd_a10_1_pct },
+            { label: "X", sub: "Hnd (1:0)", value: result.hnd_a10_x_pct },
+            { label: "2", sub: "Hnd (1:0)", value: result.hnd_a10_2_pct },
+          ]} />
+          <Row items={[
+            { label: "1", sub: "Hnd (0:1)", value: result.hnd_h10_1_pct },
+            { label: "X", sub: "Hnd (0:1)", value: result.hnd_h10_x_pct },
+            { label: "2", sub: "Hnd (0:1)", value: result.hnd_h10_2_pct },
+            { label: "1", sub: "Hnd (0:2)", value: result.hnd_h20_1_pct },
+            { label: "X", sub: "Hnd (0:2)", value: result.hnd_h20_x_pct },
+            { label: "2", sub: "Hnd (0:2)", value: result.hnd_h20_2_pct },
+          ]} />
+        </Section>
+      )}
 
       <Section title={lbl.taraf}>
         <SubLabel text="Ev Sahibi" />
-        <Row items={[
-          { label: "Alt 0.5", sub: "Ev", value: result.ev_alt_05_pct },
-          { label: "Üst 0.5", sub: "Ev", value: result.ev_ust_05_pct },
-          { label: "Alt 1.5", sub: "Ev", value: result.ev_alt_15_pct },
-          { label: "Üst 1.5", sub: "Ev", value: result.ev_ust_15_pct },
-          { label: "Alt 2.5", sub: "Ev", value: result.ev_alt_25_pct },
-          { label: "Üst 2.5", sub: "Ev", value: result.ev_ust_25_pct },
-        ]} />
+        {/* IY/2Y'de 2.5 hattı açılmaz (Alt %99+, Üst nadir) → sadece FT'de göster */}
+        <Row items={
+          isFT
+            ? [
+                { label: "Alt 0.5", sub: "Ev", value: result.ev_alt_05_pct },
+                { label: "Üst 0.5", sub: "Ev", value: result.ev_ust_05_pct },
+                { label: "Alt 1.5", sub: "Ev", value: result.ev_alt_15_pct },
+                { label: "Üst 1.5", sub: "Ev", value: result.ev_ust_15_pct },
+                { label: "Alt 2.5", sub: "Ev", value: result.ev_alt_25_pct },
+                { label: "Üst 2.5", sub: "Ev", value: result.ev_ust_25_pct },
+              ]
+            : [
+                { label: "Alt 0.5", sub: "Ev", value: result.ev_alt_05_pct },
+                { label: "Üst 0.5", sub: "Ev", value: result.ev_ust_05_pct },
+                { label: "Alt 1.5", sub: "Ev", value: result.ev_alt_15_pct },
+                { label: "Üst 1.5", sub: "Ev", value: result.ev_ust_15_pct },
+              ]
+        } />
         <SubLabel text="Deplasman" />
-        <Row items={[
-          { label: "Alt 0.5", sub: "Dep", value: result.dep_alt_05_pct },
-          { label: "Üst 0.5", sub: "Dep", value: result.dep_ust_05_pct },
-          { label: "Alt 1.5", sub: "Dep", value: result.dep_alt_15_pct },
-          { label: "Üst 1.5", sub: "Dep", value: result.dep_ust_15_pct },
-          { label: "Alt 2.5", sub: "Dep", value: result.dep_alt_25_pct },
-          { label: "Üst 2.5", sub: "Dep", value: result.dep_ust_25_pct },
-        ]} />
+        <Row items={
+          isFT
+            ? [
+                { label: "Alt 0.5", sub: "Dep", value: result.dep_alt_05_pct },
+                { label: "Üst 0.5", sub: "Dep", value: result.dep_ust_05_pct },
+                { label: "Alt 1.5", sub: "Dep", value: result.dep_alt_15_pct },
+                { label: "Üst 1.5", sub: "Dep", value: result.dep_ust_15_pct },
+                { label: "Alt 2.5", sub: "Dep", value: result.dep_alt_25_pct },
+                { label: "Üst 2.5", sub: "Dep", value: result.dep_ust_25_pct },
+              ]
+            : [
+                { label: "Alt 0.5", sub: "Dep", value: result.dep_alt_05_pct },
+                { label: "Üst 0.5", sub: "Dep", value: result.dep_ust_05_pct },
+                { label: "Alt 1.5", sub: "Dep", value: result.dep_alt_15_pct },
+                { label: "Üst 1.5", sub: "Dep", value: result.dep_ust_15_pct },
+              ]
+        } />
         {isFT && result.ev_ht_ust_05_pct > 0 && (
           <>
             <SubLabel text="1. Yarı" />
@@ -272,14 +297,22 @@ function ArchiveDetailCard({
       )}
 
       <Section title="Gol Sayısı ve KG">
-        <Row items={[
-          { label: "Alt 1.5", value: result.alt_15_pct },
-          { label: "Üst 1.5", value: result.ust_15_pct },
-          { label: "Alt 2.5", value: result.alt_25_pct },
-          { label: "Üst 2.5", value: result.ust_25_pct },
-          { label: "Alt 3.5", value: result.alt_35_pct },
-          { label: "Üst 3.5", value: result.ust_35_pct },
-        ]} />
+        {/* IY/2Y'de 2.5 ve 3.5 hatları açılmaz → sadece FT'de göster */}
+        <Row items={
+          isFT
+            ? [
+                { label: "Alt 1.5", value: result.alt_15_pct },
+                { label: "Üst 1.5", value: result.ust_15_pct },
+                { label: "Alt 2.5", value: result.alt_25_pct },
+                { label: "Üst 2.5", value: result.ust_25_pct },
+                { label: "Alt 3.5", value: result.alt_35_pct },
+                { label: "Üst 3.5", value: result.ust_35_pct },
+              ]
+            : [
+                { label: "Alt 1.5", value: result.alt_15_pct },
+                { label: "Üst 1.5", value: result.ust_15_pct },
+              ]
+        } />
         <Row items={[
           { label: "KG Var", value: result.kg_var_pct },
           { label: "KG Yok", value: result.kg_yok_pct },

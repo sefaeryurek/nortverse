@@ -45,6 +45,7 @@ interface MarketSpec {
   weight: number;
   fields: FieldSpec[];
   ftOnly?: boolean;       // sadece FT periyodunda hesaplanır
+  excludePeriods?: Period[]; // bu periyotlarda hiç gösterilme (iddaa'da 1.01 olan ya da açılmayan pazarlar)
   ftZeroCheck?: keyof PatternResult; // bu alan 0 ise pazarı atla (HT verisi yoksa)
 }
 
@@ -74,6 +75,7 @@ const MARKETS: MarketSpec[] = [
     key: "ou_25",
     label: () => "2.5 Alt/Üst",
     weight: 1.0,
+    excludePeriods: ["ht", "h2"], // IY/2Y'de iddaa açmaz (Alt 1.01, Üst yok)
     fields: [
       { field: "alt_25_pct", selection: "Alt 2.5" },
       { field: "ust_25_pct", selection: "Üst 2.5" },
@@ -114,6 +116,7 @@ const MARKETS: MarketSpec[] = [
     key: "hnd_a10",
     label: () => "Handikap (0:1)",
     weight: 0.9,
+    excludePeriods: ["ht", "h2"], // IY/2Y'de iddaa handikap açmaz
     fields: [
       { field: "hnd_a10_1_pct", selection: "1" },
       { field: "hnd_a10_x_pct", selection: "X" },
@@ -124,6 +127,7 @@ const MARKETS: MarketSpec[] = [
     key: "hnd_h10",
     label: () => "Handikap (1:0)",
     weight: 0.9,
+    excludePeriods: ["ht", "h2"], // IY/2Y'de iddaa handikap açmaz
     fields: [
       { field: "hnd_h10_1_pct", selection: "1" },
       { field: "hnd_h10_x_pct", selection: "X" },
@@ -136,6 +140,7 @@ const MARKETS: MarketSpec[] = [
     key: "ms_25_combo",
     label: (l) => l.combo25,
     weight: 0.7,
+    excludePeriods: ["ht", "h2"], // 2.5 hattı IY/2Y'de açılmadığı için kombineler de anlamsız
     fields: [
       { field: "ms1_alt25_pct", selection: "1 + Alt 2.5" },
       { field: "ms1_ust25_pct", selection: "1 + Üst 2.5" },
@@ -200,6 +205,7 @@ const MARKETS: MarketSpec[] = [
     key: "ou_35",
     label: () => "3.5 Alt/Üst",
     weight: 0.6,
+    excludePeriods: ["ht", "h2"], // IY/2Y'de 3.5 hattı yok
     fields: [
       { field: "alt_35_pct", selection: "Alt 3.5" },
       { field: "ust_35_pct", selection: "Üst 3.5" },
@@ -227,6 +233,7 @@ const MARKETS: MarketSpec[] = [
     key: "ev_25",
     label: () => "Ev 2.5 Alt/Üst",
     weight: 0.6,
+    excludePeriods: ["ht", "h2"], // Ev 1Y/2Y'de 3 gol atması neredeyse imkansız → bahis yok
     fields: [
       { field: "ev_alt_25_pct", selection: "Ev Alt 2.5" },
       { field: "ev_ust_25_pct", selection: "Ev Üst 2.5" },
@@ -254,6 +261,7 @@ const MARKETS: MarketSpec[] = [
     key: "dep_25",
     label: () => "Dep 2.5 Alt/Üst",
     weight: 0.6,
+    excludePeriods: ["ht", "h2"], // Dep 1Y/2Y'de 3 gol atması neredeyse imkansız → bahis yok
     fields: [
       { field: "dep_alt_25_pct", selection: "Dep Alt 2.5" },
       { field: "dep_ust_25_pct", selection: "Dep Üst 2.5" },
@@ -381,6 +389,7 @@ const MARKETS: MarketSpec[] = [
     key: "hnd_a20",
     label: () => "Handikap (0:2)",
     weight: 0.5,
+    excludePeriods: ["ht", "h2"], // IY/2Y'de iddaa handikap açmaz
     fields: [
       { field: "hnd_a20_1_pct", selection: "1" },
       { field: "hnd_a20_x_pct", selection: "X" },
@@ -391,6 +400,7 @@ const MARKETS: MarketSpec[] = [
     key: "hnd_h20",
     label: () => "Handikap (2:0)",
     weight: 0.5,
+    excludePeriods: ["ht", "h2"], // IY/2Y'de iddaa handikap açmaz
     fields: [
       { field: "hnd_h20_1_pct", selection: "1" },
       { field: "hnd_h20_x_pct", selection: "X" },
@@ -405,6 +415,7 @@ export function getMarkets(): readonly MarketSpec[] {
 
 function isMarketActive(market: MarketSpec, period: Period, sample: PatternResult): boolean {
   if (market.ftOnly && period !== "ft") return false;
+  if (market.excludePeriods?.includes(period)) return false;
   if (market.ftZeroCheck && (sample[market.ftZeroCheck] as number) <= 0) return false;
   return true;
 }
