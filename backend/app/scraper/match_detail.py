@@ -30,6 +30,7 @@ from typing import Optional
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
+from app.analysis.league_filter import canonical_league_name, is_supported_league
 from app.config import SCRAPER
 from app.models import HistoricalMatch, MatchRawData
 from app.scraper.browser import browser_context, close_ad_overlay, goto_with_retry
@@ -236,8 +237,17 @@ def _parse_match_row(
     if not home_team or not away_team:
         return None
 
-    # Lig kodu ana maçla aynı mı?
-    is_league = (league_code.strip() == main_league_code.strip()) and bool(main_league_code)
+    # Lig kodu ana maçla aynı mı? (Sprint 8.9 — kanonik karşılaştırma)
+    # H2H tablolarında "ENG PR" gibi kısa kod olabilir; ana maç için "English Premier League"
+    # tam adı gelmiş olabilir → kanonik forma çevirip karşılaştır.
+    # Ek olarak: H2H satırının kendisi kupa ise lig maçı sayma (UEL/Cup karışıklığı).
+    canon_row = canonical_league_name(league_code)
+    canon_main = canonical_league_name(main_league_code)
+    is_league = (
+        bool(canon_main)
+        and canon_row == canon_main
+        and is_supported_league(league_code)
+    )
 
     return HistoricalMatch(
         opponent=away_team,  # perspektif sonra ayarlanır
@@ -319,10 +329,17 @@ def _save_debug_html(match_id: str, html: str) -> None:
     log.info("H2H HTML debug'e kaydedildi: %s", path)
 
 
-async def fetch_match_detail(match_id: str, ctx=None) -> MatchRawData:
+async def fetch_match_detail(
+    match_id: str,
+    ctx=None,
+    expected_league_name: Optional[str] = None,
+) -> MatchRawData:
     """Verilen maç ID için H2H sayfasından detay veriyi çek.
 
     ctx: Varolan BrowserContext (pipeline'dan gelir). None ise yeni browser açılır.
+    expected_league_name: Bültenden gelen kanonik lig adı (Sprint 8.9). Verildiyse
+        H2H tabanlı tespit yerine bu kullanılır — UEL/UCL gibi maçlarda H2H'ın
+        yanlış "ENG PR" döndürmesini engeller.
     """
     url = SCRAPER.base_url + SCRAPER.match_detail_path.format(match_id=match_id)
     log.info("Match detail çekiliyor: %s", url)
@@ -359,8 +376,16 @@ async def fetch_match_detail(match_id: str, ctx=None) -> MatchRawData:
     away_table = soup.find("table", id="table_v2")
     h2h_table = soup.find("table", id="table_v3")
 
-    # Ana maçın lig kısa kodunu tespit et
-    main_league_code = _detect_main_league_code(home, away, home_table, away_table, h2h_table)
+    # Ana maçın lig kısa kodunu tespit et — Sprint 8.9 önceliği:
+    # 1) Bültenden gelen ad (expected_league_name) en güvenilir
+    # 2) HTML .fbheader'daki tam ad (league_full)
+    # 3) H2H tablosundan istatistiksel tespit (eski yöntem)
+    if expected_league_name:
+        main_league_code = expected_league_name
+    elif league_full:
+        main_league_code = league_full
+    else:
+        main_league_code = _detect_main_league_code(home, away, home_table, away_table, h2h_table)
 
     # Tabloları parse et
     home_recent = _parse_history_table(home_table, main_league_code)

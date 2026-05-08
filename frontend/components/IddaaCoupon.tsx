@@ -12,8 +12,10 @@ interface Props {
 }
 
 export default function IddaaCoupon({ patternB, patternC, period }: Props) {
+  // Sprint 8.9: Pattern B (skor seti) için 5+ eşleşme şart, Pattern C (oran benzerliği)
+  // tolerance=0.0 ile sıkı arandığından 1+ yeterli — düşük güven UI'da rozetle belirtilir.
   const hasB = patternB !== null && patternB.match_count >= 5;
-  const hasC = patternC !== null && patternC.match_count >= 5;
+  const hasC = patternC !== null && patternC.match_count >= 1;
 
   if (!hasB && !hasC) {
     return (

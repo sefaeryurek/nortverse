@@ -40,13 +40,17 @@ def _ratios_match(
 
 async def find_pattern_c_all_periods(
     ft_ratios: dict[str, float],
-    min_matches: int = 5,
-    tolerance: float = 0.5,
+    min_matches: int = 1,
+    tolerance: float = 0.0,
     exclude_match_id: str | None = None,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """FT oranlarıyla eşleşen geçmiş maçlar için IY, 2Y ve FT istatistiklerini döndür.
 
     Tüm periyotlar aynı eşleşme setini kullanır.
+
+    Sprint 8.9 değişiklikleri:
+    - tolerance 0.5 → 0.0 (tam eşleşme; oranlar 0.5 katı olduğundan birebir aynı)
+    - min_matches 5 → 1 (sıkı tolerance ile az eşleşme normal; UI 1-4 maçı "düşük güven" rozetiyle gösterir)
 
     Args:
         exclude_match_id: Bu match_id'yi sonuçlardan çıkar (analiz edilen maçın kendisi)

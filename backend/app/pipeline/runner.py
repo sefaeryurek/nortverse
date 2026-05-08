@@ -144,7 +144,14 @@ async def run_pipeline(
         for fixture in fixtures:
             mid = fixture.match_id
             try:
-                raw = await fetch_match_detail(mid, ctx=ctx)
+                # Bültenden gelen lig adını match_detail'e geçir (Sprint 8.9):
+                # H2H tabanlı tespit yerine bu kullanılır → UEL/UCL gibi maçlarda
+                # H2H'ın yanlış "ENG PR" döndürmesi engellenir.
+                raw = await fetch_match_detail(
+                    mid,
+                    ctx=ctx,
+                    expected_league_name=fixture.league_name or fixture.league_code,
+                )
                 check = check_match_filters(raw)
 
                 if not check.passed:

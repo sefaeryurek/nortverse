@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from app.analysis.league_filter import is_supported_league
 from app.config import ANALYSIS
 from app.models import MatchRawData, SkipReason
 
@@ -39,6 +40,15 @@ def check_match_filters(
     Returns:
         FilterCheck. passed=True ise analiz edilebilir.
     """
+    # 0. Maçın kendisi lig maçı mı? (Sprint 8.9)
+    # Kupa, Avrupa kupaları, friendly, milli takım maçları → atlanır.
+    if not is_supported_league(data.league_name, data.league_code):
+        return FilterCheck(
+            passed=False,
+            reason=SkipReason.NOT_LEAGUE_MATCH,
+            detail=f"Lig maçı değil (kupa/turnuva): {data.league_name or data.league_code}",
+        )
+
     # 1. Ev sahibi yeterince lig maçı oynamış mı?
     home_league_count = sum(
         1 for m in data.home_recent_matches if m.is_league_match

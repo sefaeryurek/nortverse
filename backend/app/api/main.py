@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.analysis import analyze_match, check_match_filters
+from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
 from app.analysis.persist import compute_all_patterns, update_match_patterns
 from app.analysis.trends import TrendsData, compute_trends
@@ -518,8 +519,11 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
         is_stale = req_date >= today and age >= 3600  # geçmiş tarih = kalıcı, diğerleri 1 saat
         if not is_stale:
             result = [FixtureMatchOut(**m) for m in db_row.matches_json]
+            # Sprint 8.9: eski DB cache'lerde kupa olabilir — defansif filtre
+            result = [m for m in result if is_supported_league(m.league_name, m.league_code)]
             _fixture_cache[cache_key] = (time.time(), result)
-            log.info("Fixture DB cache hit: %s (%.0f sn önce)", cache_key, age)
+            log.info("Fixture DB cache hit: %s (%.0f sn önce, %d lig maçı)",
+                     cache_key, age, len(result))
             _enqueue_bg_analysis(result)
             return result
 
@@ -536,6 +540,9 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
             status_code=503,
             detail="Maç verisi çekilemedi (timeout). Lütfen birkaç dakika sonra tekrar deneyin.",
         )
+    # Sprint 8.9: kupa/Avrupa/friendly maçlar bültene gelmesin
+    matches = [m for m in matches if is_supported_league(m.league_name, m.league_code)]
+
     result = [
         FixtureMatchOut(
             match_id=m.match_id,
@@ -658,6 +665,11 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
     now_utc = datetime.now(timezone.utc)
     out = []
     for row in rows:
+        # Sprint 8.9: eski DB'de bulunan kupa maçları (Sprint 8.9 öncesi yazılmış)
+        # /sonuclar'da görünmesin. Yeni filtre sayesinde yeni gelenler zaten yazılmıyor.
+        if not is_supported_league(row.league_name, row.league_code):
+            continue
+
         h = row.actual_ft_home
         a = row.actual_ft_away
         kickoff = row.kickoff_time
