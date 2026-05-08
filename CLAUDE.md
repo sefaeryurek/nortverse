@@ -56,6 +56,14 @@ python -m app.cli.main list-leagues                  # mevcut tüm lig ID'leri v
 python -m app.cli.main serve                         # http://localhost:8000
 python -m app.cli.main serve --reload               # geliştirme modu (Windows'ta çalışır)
 
+# Veri kalitesi & Audit (Sprint 8.9)
+python -m app.cli.main self-test 2813084             # E2E sistem testi (7 adım kontrol)
+python -m app.cli.main audit-db                      # DB sağlık raporu (kalite skoru, eksik veri)
+python -m app.cli.main audit-patterns 2813084        # Pattern B/C eşleşme davranışı + tolerance etkisi
+python -m app.cli.main prune-non-league              # Kupa maçlarını soft-delete (default dry-run)
+python -m app.cli.main prune-non-league --apply      # Gerçekten temizle (audit_log'a kayıt düşer)
+python -m app.cli.main restore-deleted 2976657       # Soft-deleted maçı geri al
+
 # Frontend (ayrı terminalde, frontend/ dizininden)
 cd ../frontend
 npm run dev                                          # http://localhost:3000
@@ -329,7 +337,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 8.8 — TAMAMLANDI ✅)
+## Mevcut Durum (Sprint 8.9 — TAMAMLANDI ✅ — Veri Bütünlüğü)
 
 ### Backend
 
@@ -357,6 +365,14 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - ✅ **Fixture tarih sınırı (Sprint 8.3):** -30 / +14 gün dışına çıkılamaz (uçuk tarih → 400, Playwright açılmaz)
 - ✅ **Form & H2H Trendleri (Sprint 8.8):** `app/analysis/trends.py` — `compute_trends(raw)` 3 blok döner (home_form / away_form / h2h); `matches.trends` JSONB (migration `f5c8d2a1b394`); `_do_analyze` ve `_result_to_row` write
 - ✅ **`AnalyzeResponse.trends` (Sprint 8.8):** API'den frontend'e taşınır; `_build_from_db` saklı trends'i parse eder, `_trends` helper (api/main.py)
+- ✅ **Lig filtresi (Sprint 8.9):** `app/analysis/league_filter.py` — `is_supported_league` (kupa keyword kara liste) + `canonical_league_name` (lig adı kanonik); `check_match_filters` NOT_LEAGUE_MATCH ile kupa/Avrupa/friendly maçları skip eder
+- ✅ **Lig adı tespiti güçlendirildi (Sprint 8.9):** `fetch_match_detail(expected_league_name=...)` parametresi — pipeline `fixture.league_name`'i geçirir, H2H tabanlı yanlış tespit önlenir (UEL maçı "ENG PR" sanılma sorunu çözüldü)
+- ✅ **Soft delete + audit_log (Sprint 8.9):** `matches.deleted_at/deleted_reason` kolonları + `audit_log` tablosu; `prune-non-league` soft delete yapar, `restore-deleted` geri alır; tüm SELECT(Match) sorgularında `deleted_at IS NULL` filtresi (pattern_b/c arşivde de saymaz)
+- ✅ **Pre-write validation (Sprint 8.9):** `_validate_row` — bozuk veri (boş takım, kupa, saçma skor) DB'ye yazılmaz; `_upsert` öncesi guard
+- ✅ **Pattern C sıkı eşleşme (Sprint 8.9):** `tolerance: 0.5 → 0.0` (tam eşleşme), `min_matches: 5 → 1`; tolerance=0 sıkı, az eşleşme normal — frontend Pattern C için `match_count >= 1`
+- ✅ **`/api/health` data_quality skoru (Sprint 8.9):** total/active/soft_deleted/non_league_active/missing_pattern/missing_trends/missing_actual + 0-100 quality_score
+- ✅ **5 yeni CLI komutu (Sprint 8.9):** `self-test` (E2E 7 adım), `audit-db` (kalite raporu), `audit-patterns` (Pattern B/C davranış), `prune-non-league` (soft delete), `restore-deleted` (geri al)
+- ✅ **Pytest 52 test (Sprint 8.9):** `test_league_filter.py` (28), `test_pre_write_validation.py` (10), `test_trends.py` (6) — kalıcı test suite
 - ✅ `pattern_stats.py`: ~130 alan, 9 bölüm
 - ✅ Railway deployment: `https://nortverse-production.up.railway.app`
 - ✅ `fixture_cache` DB tablosu: bülten verileri kalıcı, server restart'tan etkilenmez
@@ -557,6 +573,19 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Mount noktaları:** TopPicks PickRow, ComboSuggestion (toplu ekleme), MarketSummary Cell (≥%60 olanlarda); DetailedStats kalabalık olur diye eklenmedi
 - **Layout mount:** `app/layout.tsx` — `<BetCart />` her sayfada görünür (boş sepette gizli)
 
+### Sprint 8.9 — TAMAMLANDI ✅ (Veri Bütünlüğü & Filtre Sertleştirme)
+- **Problem:** UEL maçı 2976657 "ENG PR" sanıldı; UCL maçı 2976378 lig sanılıp tahmin üretildi; kupa maçları DB/bültende görünüyordu; sistem sürekli arşiv ekliyor → veri kalitesi izleme yok
+- **Lig filtresi:** `app/analysis/league_filter.py` (CUP_KEYWORDS kara listesi 30+ keyword; LEAGUE_ALIASES kanonik form 50+ lig); `is_supported_league(*names)` çoklu parametre desteği; `canonical_league_name(name)` "ENG PR" → "English Premier League"
+- **Maçın kendisi lig mi:** `check_match_filters`'a NOT_LEAGUE_MATCH kontrolü eklendi
+- **Lig tespiti güçlendirildi:** `fetch_match_detail(expected_league_name=...)` — pipeline bültenden geçirir; H2H tabanlı tespit fallback
+- **Soft delete + audit_log:** Migration `g4d2a7c9b815` — `matches.deleted_at`/`deleted_reason` + `audit_log` tablosu (id, timestamp, operation, target_match_id, actor, details JSONB); tüm SELECT(Match) sorgularına `deleted_at IS NULL` filtresi
+- **Pre-write validation:** `_validate_row` — boş takım, kupa, saçma skor DB'ye yazılmaz
+- **Kanonik lig adı:** `_result_to_row` `canonical_league_name` uygular; tutarsızlık önlenir
+- **Pattern C sıkı:** `tolerance: 0.5 → 0.0`, `min_matches: 5 → 1`; frontend `match_count >= 1` (Pattern B 5'te kalır)
+- **5 yeni CLI:** `prune-non-league` (soft delete + audit), `restore-deleted`, `audit-db` (kalite raporu + pattern self-check), `audit-patterns` (B/C davranış), `self-test` (E2E 7 adım)
+- **`/api/health` data_quality:** quality_score 0-100, alt metrikler
+- **Pytest 52 test:** kalıcı `tests/test_league_filter.py`, `test_pre_write_validation.py`, `test_trends.py` — hepsi yeşil
+
 ### Sprint 8.8 — TAMAMLANDI ✅ (Form & H2H Trendleri)
 - **Backend `app/analysis/trends.py`:** `compute_trends(raw)` 3 blok döner
   - `home_form`: ev sahibinin son N **ev** maçı (lig, role="home")
@@ -648,6 +677,37 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Trends migration adımı (Sprint 8.8):** Railway Dockerfile alembic koşturmuyor. Yeni migration eklendiğinde kullanıcı manuel olarak Supabase SQL Editor'den `ALTER TABLE matches ADD COLUMN <kolon> JSONB;` çalıştırmalı. `f5c8d2a1b394` (trends) bu yolla 2026-05-07'de uygulandı.
 
+- **Lig filtresi `is_supported_league` (Sprint 8.9):** Hibrit yaklaşım — kara liste keyword (champions/europa/cup/friendly/qualifier/...) + beyaz liste override (`LEAGUE_ALIASES` içindeki ad zaten geçer). Çoklu parametre kabul eder (`is_supported_league(name, code)`); biri lig sayılırsa True.
+
+- **Lig adı tespit önceliği (Sprint 8.9):** `fetch_match_detail` üç kademe: (1) `expected_league_name` parametresi (bültenden gelir, en güvenilir), (2) `_extract_main_match_info` HTML `.fbheader > a`, (3) `_detect_main_league_code` H2H tabanlı (en zayıf, fallback). Aston Villa-Nottingham Forest UEL sorunu (3. yöntemin H2H'taki "ENG PR" maçlarını sayması) (1) ile çözüldü.
+
+- **Soft delete (Sprint 8.9):** `matches.deleted_at IS NOT NULL` ise satır "silinmiş" sayılır. Pattern_b/c, /api/fixture, /api/results, /api/match, list_matches — tüm SELECT(Match) sorgularında `deleted_at IS NULL` filtresi eklendi. Geri alma: `restore-deleted <match_id>` komutu. Audit_log tablosu tüm prune/restore işlemlerini timestamp'li saklar.
+
+- **Migration `g4d2a7c9b815` (Sprint 8.9):** Manuel uygulanması gereken SQL:
+  ```sql
+  ALTER TABLE matches ADD COLUMN deleted_at TIMESTAMPTZ NULL;
+  ALTER TABLE matches ADD COLUMN deleted_reason VARCHAR(50) NULL;
+  CREATE INDEX ix_matches_deleted_at ON matches(deleted_at) WHERE deleted_at IS NULL;
+  CREATE TABLE audit_log (
+    id BIGSERIAL PRIMARY KEY,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    operation VARCHAR(50) NOT NULL,
+    target_match_id VARCHAR(20),
+    actor VARCHAR(100),
+    details JSONB
+  );
+  CREATE INDEX ix_audit_log_timestamp ON audit_log(timestamp);
+  CREATE INDEX ix_audit_log_target ON audit_log(target_match_id);
+  ```
+
+- **Pre-write validation (Sprint 8.9):** `_validate_row(row)` `_upsert` öncesi kontrol — boş takım/lig kodu, kupa filtresi, saçma skor (negatif/>30) → reddedilir, log.error, ama pipeline devam eder. Pipeline başarısızlığı sayılmaz.
+
+- **Pattern C tolerance=0.0 (Sprint 8.9):** Eski `±0.5` toleransta yan yana iki "kova" eşleşmiş sayılıyordu (örn. 3.5 ile 4.0). Yeni: tam eşleşme. Eşleşme sayısı 5-10x düştü ama kalite arttı. `min_matches: 5 → 1` çünkü tolerance=0 sıkı, 1-4 maç düşük güven kabul edilebilir. Frontend `match_count >= 1` ile Pattern C'yi gösterir; UI'da düşük örneklemde dynamicMinPct doğal koruma sağlar (Sprint 8.6).
+
+- **Kanonik lig adı (Sprint 8.9):** `LEAGUE_ALIASES` 50+ alias → kanonik ad. `_result_to_row` `canonical_league_name(r.league_code)` uygular → DB hep tutarlı isim yazar. Mevcut karışık isimleri normalize etmek için ayrı CLI yazılmadı (yeni gelenler tutarlı, eskileri organik düzelir).
+
+- **Audit & quality görünürlük (Sprint 8.9):** `/api/health.data_quality.quality_score` 0-100 arası — `total - (non_league/total*40 + missing_pattern/active*20 + missing_actual/active*30 + missing_trends/active*10) * 100`. UptimeRobot'ta görünür; `audit-db` CLI Rich tablo ile detay verir.
+
 ---
 
 ## Teknoloji Kararları
@@ -690,21 +750,45 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-05-07 — Sprint 8.8 sonu)
+## Kaldığımız Yer (2026-05-08 — Sprint 8.9 sonu)
 
-Sprint 8.4-8.8 deploy edildi. Profesyonel tahmin sayfası (3 katman + akıllı kombo + dinamik eşik + bahis sepeti + form trendleri) canlıda. Migration `f5c8d2a1b394` (trends JSONB) Supabase'da uygulandı.
+Sprint 8.9 deploy edildi (commits `6ab2821`, `72d4ab1`, `2b7274b`). Veri bütünlüğü altyapısı tamamen canlıda.
+
+### ⚠️ Manuel Migration Adımı (Kullanıcı bekliyor)
+
+Railway Dockerfile alembic koşturmuyor. Sprint 8.9 migration `g4d2a7c9b815` Supabase SQL Editor'de manuel uygulanmalı:
+
+```sql
+ALTER TABLE matches ADD COLUMN deleted_at TIMESTAMPTZ NULL;
+ALTER TABLE matches ADD COLUMN deleted_reason VARCHAR(50) NULL;
+CREATE INDEX ix_matches_deleted_at ON matches(deleted_at) WHERE deleted_at IS NULL;
+CREATE TABLE audit_log (
+  id BIGSERIAL PRIMARY KEY,
+  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  operation VARCHAR(50) NOT NULL,
+  target_match_id VARCHAR(20),
+  actor VARCHAR(100),
+  details JSONB
+);
+CREATE INDEX ix_audit_log_timestamp ON audit_log(timestamp);
+CREATE INDEX ix_audit_log_target ON audit_log(target_match_id);
+```
+
+Migration uygulanana kadar `/api/health` `db_ok: false` döner (`deleted_at` kolonu yok). Uygulandıktan sonra `python -m app.cli.main prune-non-league --apply` ile mevcut kupa maçları temizlenebilir.
 
 ### Sıradaki Yapılacaklar (sırayla)
 
-#### 1. Pytest Birim Testleri (henüz yok, eklenecek)
-- `backend/tests/test_trends.py` — `compute_trends` sentetik veriyle (Sprint 8.8 hızlı manuel doğrulama yapılmıştı; kalıcı dosya yok)
-- Frontend için Vitest setup: `lib/confidence.ts`, `lib/combos.ts`, `lib/cart.ts` saf TS — birim test edilebilir
-- Hedef: confidence formülü, çelişki çözümü, kombo üretimi, sepet idempotency
+#### 1. Migration uygula + ilk DB temizliği (manuel adım)
+- Yukarıdaki SQL'i Supabase'da çalıştır
+- `python -m app.cli.main audit-db` — kalite skoru raporu
+- `python -m app.cli.main prune-non-league` (dry-run) → kaç kupa maçı var
+- Onay ile `--apply` → audit_log'a kayıt düşer
+- `python -m app.cli.main self-test 2813084` → E2E doğrulama
 
-#### 2. Trends Backfill (eski maçlar için)
-- Sprint 8.8'de "lazy backfill yok" denmişti — eski maçlarda `trends` null kalıyor
-- Mevcut maçlar bir sonraki `run-pipeline`'da otomatik trend ile yazılır (idempotent upsert)
-- Daha hızlı: bir CLI komutu `backfill-trends` — DB'deki tüm maçları döner, raw_data olmadığı için **yeniden scrape gerekir** → Playwright fırtınası riski; pragmatik olarak organik dolması beklenebilir
+#### 2. Frontend Vitest birim testleri
+- `frontend/lib/confidence.ts`, `lib/combos.ts`, `lib/cart.ts` saf TS — birim test edilebilir
+- Vitest setup gerekir (`npm i -D vitest`)
+- Hedef: confidence formülü, çelişki çözümü, kombo üretimi, sepet idempotency
 
 #### 3. Top Picks'e Trend Katkısı (confidence boost)
 - Ev formu KG %80'se → kg_var pick'ine küçük bonus (örn. `× 1.05`)
@@ -714,30 +798,43 @@ Sprint 8.4-8.8 deploy edildi. Profesyonel tahmin sayfası (3 katman + akıllı k
 
 #### 4. Sepet Özeti Sticky Rozet
 - Sepet kapalıyken sayfa üstünde küçük bilgi: "🧾 3 tahmin · ≈%49 · ≈2.03"
-- Şu anda sepet ikon görünür ama içeriği görmek için tıklamak gerek
 - Mobile'da özellikle değerli (bottom bar şeffaflığı)
 
-#### 5. Sprint 9 — Auth/Premium (Para kazanma yolu)
-- NextAuth.js + Google OAuth (şifresiz)
-- Supabase'de `users` tablosu — üyelik seviyesi (free/premium)
-- Free: Bülten + Sonuçlar açık, Analiz kilitli
-- Premium: Tüm analiz açık + Trends + Kombolar + Sepet
-- İkinci faz: Stripe entegrasyonu (aylık abonelik)
+#### 5. Migration otomatikleştirme
+- Dockerfile CMD'den önce `alembic upgrade head` ekle — manuel SQL adımı kalksın
+- Risk: prod migration ilk deploy'da koşar; geri alma planı gerek
 
-#### 6. Sprint 10 — Canlı Maç & Trend (Uzun vade)
+#### 6. Trends Backfill (eski maçlar için — opsiyonel)
+- Mevcut maçlar bir sonraki `run-pipeline`'da otomatik trend ile yazılır (idempotent upsert)
+- Daha hızlı: `backfill-trends` CLI — `raw_data` olmadığı için yeniden scrape gerek → Playwright fırtınası riski; organik dolması yeterli
+
+#### 7. Pattern recompute trigger
+- Arşiv her gün büyüyor (`run-pipeline`) → eski maçların pattern eşleşme sayısı zamanla değişir
+- Şimdilik: pattern bir kere yazılır, bayatlar ama sorun değil
+- İleride: haftalık `recompute-patterns` cron — eski maçların pattern'lerini yeniler
+
+#### 8. Sprint 10 — Canlı Maç & Trend (Uzun vade)
 - Anlık skor takibi (devre arası + final)
 - WebSocket veya 30sn polling
 - Maç sırasında oran değişimi takibi
 
-### Bilinen Açık Konular
-- **Storage:** Pattern saklama ~450MB + trends ~50MB = ~500MB Supabase free tier sınırı. Trends'ten sonra izlemeli; aşılırsa eski arşiv maçlarının pattern/trend prune edilebilir.
-- **Migration deployment manuel:** Railway Dockerfile alembic koşturmuyor. Her yeni migration için kullanıcı Supabase SQL Editor'den manuel `ALTER TABLE`. Otomatikleştirilebilir (Dockerfile CMD'den önce `alembic upgrade head`).
-- **Bg worker hız:** ~3-5sn/maç pattern hesabı + ~1ms trends. 200-300 maçlık bültende 15-25dk sürer. Acil değil ama paralelize edilebilir (3 worker).
-- **Veri doğruluğu testi yapılmadı:** Sprint 8 öncesi ve sonrası nowgoal data karşılaştırması atlandı. Spot-check yapıldı (Sprint 8.3'te 2813084/2813121); derin audit ileride.
-- **Joint olasılık bağımsızlık varsayımı:** Combo ve sepet `∏ p` ile hesaplıyor; gerçekte korelasyon var. ML/historical correction matrisi Sprint 10+ için.
-- **Trends backfill yok:** Eski maçlar trends null. Yeni gelen maçlar otomatik dolu — organik mig.
+#### 9. Sprint 11+ — Auth/Premium (Para kazanma yolu) — kullanıcı şu an istemiyor
+- NextAuth.js + Google OAuth
+- Free vs Premium farkı
 
-### Önemli Commit Zinciri (Sprint 8.4-8.8 oturumu)
+### Bilinen Açık Konular
+- **Migration manuel adımı:** Railway Dockerfile alembic koşturmuyor (Sprint 8.5'te eklenecek)
+- **Storage:** Pattern + trends ~500MB, Supabase free tier sınırına yakın — izlenmeli
+- **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction Sprint 10+
+- **Pattern self-check anomalileri:** `audit-db` rapor üretebilir — uygulandığında kontrol edilmeli
+- **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
+
+### Önemli Commit Zinciri (Sprint 8.9 oturumu)
+- `6ab2821` Sprint 8.9 (1/n): Lig filtresi + Pattern C tam eşleşme — kupa maçları sistemden çıkarıldı
+- `72d4ab1` Sprint 8.9 (2/n): Soft delete + audit_log + pre-write validation + kanonik lig adı
+- `2b7274b` Sprint 8.9 (3/n): 5 CLI komutu (prune/restore/audit-db/audit-patterns/self-test) + 52 pytest + /api/health quality
+
+### Önceki Oturum (Sprint 8.4-8.8) Commit Zinciri
 - `cd49f4e` Sprint 8.4: 3 katman mimari (TopPicks + MarketSummary + DetailedStats), Altın Oranlar kaldırıldı
 - `9203b3a` Sprint 8.4: IY/2Y'de iddaa açmayan pazarlar gizlendi (excludePeriods)
 - `92d95c9` Sprint 8.5: Akıllı kombinasyon kuponu (combos.ts + ComboSuggestion)
