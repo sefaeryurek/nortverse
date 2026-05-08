@@ -284,6 +284,18 @@ app.add_middleware(
 
 # ─── Response şemaları ────────────────────────────────────────────────────────
 
+class DataQuality(BaseModel):
+    """Sprint 8.9 — DB sağlığı/veri kalitesi göstergesi."""
+    total_matches: int = 0
+    active_matches: int = 0
+    soft_deleted: int = 0
+    non_league_active: int = 0  # 0 olmalı (yeni filtre sonrası)
+    missing_pattern: int = 0
+    missing_trends: int = 0
+    missing_actual_score: int = 0
+    quality_score: float = 100.0  # 0-100
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str = "0.2.0"
@@ -292,6 +304,7 @@ class HealthResponse(BaseModel):
     last_fixture_cached_at: Optional[str] = None  # bugünün fixture cache zamanı (ISO)
     bg_queue_size: int = 0
     cached_analyses: int = 0
+    data_quality: Optional[DataQuality] = None
 
 
 class FixtureMatchOut(BaseModel):
@@ -441,6 +454,7 @@ async def health() -> HealthResponse:
     db_ok = False
     last_pipeline = None
     last_fixture_cached = None
+    quality: Optional[DataQuality] = None
 
     try:
         async with get_session() as session:
@@ -454,6 +468,70 @@ async def health() -> HealthResponse:
             fc = await session.get(FixtureCache, _date.today().isoformat())
             if fc:
                 last_fixture_cached = fc.cached_at
+
+            # Sprint 8.9 — Data quality skoru
+            from datetime import datetime, timezone, timedelta
+            from sqlalchemy import or_
+
+            total = (await session.execute(select(func.count(Match.id)))).scalar() or 0
+            active = (await session.execute(
+                select(func.count(Match.id)).where(Match.deleted_at.is_(None))
+            )).scalar() or 0
+            soft_deleted = total - active
+
+            # Aktif kupa maçları sayımı (Python tarafında — keyword filtresi)
+            active_rows = (await session.execute(
+                select(Match.league_code, Match.league_name)
+                .where(Match.deleted_at.is_(None))
+            )).all()
+            non_league = sum(
+                1 for r in active_rows
+                if not is_supported_league(r.league_name, r.league_code)
+            )
+
+            missing_pattern = (await session.execute(
+                select(func.count(Match.id)).where(
+                    Match.deleted_at.is_(None),
+                    or_(Match.pattern_ft_b.is_(None), Match.pattern_ft_c.is_(None),
+                        Match.pattern_ht_b.is_(None), Match.pattern_h2_b.is_(None)),
+                )
+            )).scalar() or 0
+            missing_trends = (await session.execute(
+                select(func.count(Match.id)).where(
+                    Match.deleted_at.is_(None), Match.trends.is_(None)
+                )
+            )).scalar() or 0
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=130)
+            missing_actual = (await session.execute(
+                select(func.count(Match.id)).where(
+                    Match.deleted_at.is_(None),
+                    Match.kickoff_time < cutoff,
+                    Match.actual_ft_home.is_(None),
+                )
+            )).scalar() or 0
+
+            if total == 0:
+                score = 0.0
+            else:
+                penalties = (
+                    (non_league / max(total, 1)) * 40
+                    + (missing_pattern / max(active, 1)) * 20
+                    + (missing_actual / max(active, 1)) * 30
+                    + (missing_trends / max(active, 1)) * 10
+                )
+                score = max(0.0, 100.0 - penalties)
+
+            quality = DataQuality(
+                total_matches=total,
+                active_matches=active,
+                soft_deleted=soft_deleted,
+                non_league_active=non_league,
+                missing_pattern=missing_pattern,
+                missing_trends=missing_trends,
+                missing_actual_score=missing_actual,
+                quality_score=round(score, 1),
+            )
+
             db_ok = True
     except Exception as exc:
         log.warning("Health check DB sorgusu başarısız: %s", exc)
@@ -465,6 +543,7 @@ async def health() -> HealthResponse:
         last_fixture_cached_at=last_fixture_cached.isoformat() if last_fixture_cached else None,
         bg_queue_size=_bg_queue.qsize() if _bg_queue else 0,
         cached_analyses=len(_analysis_cache),
+        data_quality=quality,
     )
 
 
