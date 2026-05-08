@@ -276,35 +276,60 @@ Bu komut sabah çalıştırıldığında bugünün tüm maçlarını scrape edip
 
 ---
 
-## Frontend — IddaaCoupon İstatistik Bölümleri
+## Frontend — Analiz Sayfası Mimarisi (Sprint 8.4+)
 
-Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
+Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan yana göster" yerine **bilgi hiyerarşisi** uygulanmıştır:
 
-| Bölüm | Sekme | Açıklama |
-|---|---|---|
-| **Altın Oranlar** | Tümü | %79+ olan tüm tahminler, değere göre sıralı — kartın en üstünde |
-| Maç Sonucu | Tümü | 1/X/2 + Çifte Şans |
-| İlk Yarı / Maç Sonucu | MS only | 9 kombo (1/1, 1/X, ..., 2/2) |
-| MS + 2.5 Alt/Üst | Tümü | 6 kombo |
-| Hangi Takım Kaç Farkla Kazanır | Tümü | 7 seçenek |
-| Handikap | Tümü | 12 hücre (2:0, 1:0, 0:1, 0:2) |
-| Taraf Alt/Üst | Tümü | Ev/Dep 0.5/1.5/2.5 + 1Y 0.5 |
-| Toplam Gol | Tümü | Gol aralığı + En çok gol yarısı |
-| Yarı Alt/Üst | MS only | 1Y 0.5/1.5/2.5 + İki yarı 1.5 |
-| Gol Sayısı ve KG | Tümü | Alt/Üst + KG |
-| MS + 1.5 / MS + KG | Tümü | 6 kombo |
-| Gol (detay) | MS only | 1Y/2Y KG, İY/2Y kombo, Ev/Dep iki yarı |
-| Yarı Sonuçları | MS only | İY + 2Y alt istatistikler |
-| Skor Sıklığı | Tümü | En sık 10 skor |
+### Katman 0 — Trends Paneli (sadece MS sekmesi)
+`components/TrendsPanel.tsx` — 3 mini kart (Ev Form, Dep Form, H2H):
+- Son 5 sonucu G/B/M renkli timeline (yeşil/sarı/kırmızı)
+- Galibiyet/KG/Üst 2.5 yüzdeleri + Att/Yedi ortalama
+- Backend'de `app/analysis/trends.py` ile hesaplanır, `matches.trends` JSONB'de saklanır
+- Yetersiz örnek (<3) → ilgili blok gizlenir
 
-**Renk skalası:** %70+ → mavi, %40-70 → turuncu, %40 altı → kırmızı
-**Altın Oranlar renk skalası:** %90+ → koyu altın, %79-89 → altın sarı
+### Katman 1 — Top Picks (Önerilen Bahisler)
+`components/TopPicks.tsx` — confidence sıralı en güçlü 5-8 tahmin:
+- Confidence formülü: `(pct/100) × volume × market_weight × dual_bonus`
+- **Dinamik eşik (Sprint 8.6):** 5 maç %74, 50 maç %66 — örneklem küçükse daha sıkı
+- Arşiv 1+2 ortak doğrularsa `1+2` rozeti, dual_bonus 1.15
 
-**Handikap convention:** `Hnd (2:0)` = ev sahibi +2 gol alır (ev güçlü) → `hnd_a20` hesabı kullanılır. `Hnd (0:2)` = deplasman +2 gol alır (dep güçlü) → `hnd_h20` hesabı kullanılır.
+### Katman 1b — Akıllı Kombolar (Sprint 8.5)
+`components/ComboSuggestion.tsx` — 3 hazır kombo kartı:
+- **Çift** (2 leg ≥%75) / **Üçlü** (3 leg ≥%70) / **Süper** (4-5 leg ≥%75, sadece ≥20 maç eşleşmesinde)
+- Joint olasılık + tahmini decimal oran (≈ ile yaklaşık)
+- Aynı domain'den iki leg yasak (`combos.ts:DOMAIN_OF`)
+- "+ Sepete Ekle (N maç)" butonu tüm leg'leri toplu ekler
+
+### Katman 2 — Ana Pazar Özeti
+`components/MarketSummary.tsx` — sadece ana pazarların kazananları (Arşiv 1 vs Arşiv 2 yan yana). Çelişen seçimler yok, her pazarın tek kazananı.
+
+### Katman 3 — Detaylı Analiz (varsayılan kapalı, accordion)
+`components/DetailedStats.tsx` — tüm 137 alan; localStorage ile son state hatırlanır.
+
+### Bahis Sepeti (Sprint 8.7)
+`components/BetCart.tsx` — floating panel (desktop) / mobile sheet:
+- localStorage tabanlı çok-maç sepet (`nortverse_bet_cart`)
+- TopPicks/MarketSummary/ComboSuggestion'da "+" butonları
+- Toplam joint olasılık + tahmini kombi oran
+- `lib/cart.ts:useCart` hook + `lib/match-context.tsx` ile match metadata
+
+### IY/2Y'de Gizlenen Pazarlar (Sprint 8.4)
+İddaa'da 1.01 oranlı veya açılmayan pazarlar IY/2Y'de gösterilmez:
+- 2.5 Alt/Üst, 3.5 Alt/Üst (toplam + Ev/Dep tarafları)
+- Tüm handikaplar (2:0, 1:0, 0:1, 0:2)
+- MS+2.5 kombineleri
+
+`confidence.ts:MARKETS` içinde `excludePeriods: ["ht", "h2"]` ile merkezi filtre — Top Picks, Market Summary, DetailedStats üçü birden tutarlı.
+
+### Renk Skalası
+**Confidence-bazlı (Top Picks):** ≥0.80 yeşil dolu, 0.65-0.79 yeşil çerçeve, 0.50-0.64 gri, <0.50 silik.
+**Detailed (Sprint 8.4):** ≥%75 yeşil canlı, %60-74 sade gri, %40-59 silik gri, <%40 transparan.
+
+**Handikap convention:** `Hnd (2:0)` = ev sahibi +2 gol alır → `hnd_a20`. `Hnd (0:2)` = deplasman +2 gol alır → `hnd_h20`.
 
 ---
 
-## Mevcut Durum (Sprint 8.3 — TAMAMLANDI ✅)
+## Mevcut Durum (Sprint 8.8 — TAMAMLANDI ✅)
 
 ### Backend
 
@@ -330,6 +355,8 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ **DB write retry (Sprint 8.3):** `_with_retry` yardımcısı — `_upsert` ve `update_results` 3 deneme + exponential backoff (Supabase PgBouncer drop koruması)
 - ✅ **`/api/match/{id}` lazy fallback (Sprint 8.3):** DB miss → Playwright scrape + upsert (25sn timeout); 404 yerine maç hep gelir
 - ✅ **Fixture tarih sınırı (Sprint 8.3):** -30 / +14 gün dışına çıkılamaz (uçuk tarih → 400, Playwright açılmaz)
+- ✅ **Form & H2H Trendleri (Sprint 8.8):** `app/analysis/trends.py` — `compute_trends(raw)` 3 blok döner (home_form / away_form / h2h); `matches.trends` JSONB (migration `f5c8d2a1b394`); `_do_analyze` ve `_result_to_row` write
+- ✅ **`AnalyzeResponse.trends` (Sprint 8.8):** API'den frontend'e taşınır; `_build_from_db` saklı trends'i parse eder, `_trends` helper (api/main.py)
 - ✅ `pattern_stats.py`: ~130 alan, 9 bölüm
 - ✅ Railway deployment: `https://nortverse-production.up.railway.app`
 - ✅ `fixture_cache` DB tablosu: bülten verileri kalıcı, server restart'tan etkilenmez
@@ -365,6 +392,13 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - ✅ **Lig eşlemesi yenilendi (Sprint 8.3):** `lib/leagues.ts` — backend tam adlarına (English Premier League vs.) uygun 30+ lig bayrak/kısa kod sözlüğü
 - ✅ **`ScoreFreq` null-safe (Sprint 8.3):** Defensive null check, parent'ta da kontrol
 - ✅ **BultenPrefetcher silindi (Sprint 8.3):** Sprint 7'de no-op olmuştu, ölü kod olarak temizlendi
+- ✅ **3 Katman Mimari (Sprint 8.4):** `IddaaCoupon` artık orchestrator — TopPicks (Katman 1) + ComboSuggestion (Katman 1b) + MarketSummary (Katman 2) + DetailedStats (Katman 3, accordion)
+- ✅ **Confidence Scoring (Sprint 8.4):** `lib/confidence.ts` — pct × volume × market_weight × dual_bonus; `resolveConflicts` aynı pazardan tek seçim; `getTopPicks` çelişkisiz sıralı
+- ✅ **IY/2Y'de iddaa açmayan pazarlar gizli (Sprint 8.4):** `MarketSpec.excludePeriods` — 2.5/3.5 A/Ü, taraf 2.5, tüm handikaplar IY/2Y'de gizlendi
+- ✅ **Akıllı Kombinasyon Kuponu (Sprint 8.5):** `lib/combos.ts` + `components/ComboSuggestion.tsx` — 3 hazır kombo (çift/üçlü/süper); domain bazlı çelişki kontrolü; joint probability + tahmini decimal oran
+- ✅ **Dinamik Confidence Eşiği (Sprint 8.6):** `dynamicMinPct(matchCount)` — 5 maç ~%74, 50 maç ~%66; başlıkta "Eşleşme: N maç · Eşik: ≥%X" göstergesi
+- ✅ **Bahis Sepeti (Sprint 8.7):** `lib/cart.ts` (localStorage `nortverse_bet_cart`), `components/BetCart.tsx` (floating panel + mobile sheet), `components/AddToCartButton.tsx`, `lib/match-context.tsx`; çok-maç destekli; cross-tab sync (storage event + custom event)
+- ✅ **TrendsPanel (Sprint 8.8):** `components/TrendsPanel.tsx` — 3 mini kart (Ev/Dep Form, H2H), son 5 sonuç G/B/M timeline, sadece MS sekmesinde
 
 ### Performans Sonuçları (Sprint 8 sonrası)
 
@@ -477,6 +511,69 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 - **Backend dayanıklılık:** `_with_retry` yardımcısı (`pipeline/runner.py`) — `_upsert` ve `update_results` 3 deneme + exponential backoff
 - **Sonuç:** Profesyonel stabilite hedefi — geçici DB hataları otomatik çözülür, React crash'leri yakalanır, mobil + desktop UX tutarlı
 
+### Sprint 8.4 — TAMAMLANDI ✅ (3 Katman Tahmin Mimarisi + IY/2Y Filtre)
+- **Problem:** Bir maç açıldığında 260+ rozet/oran rendering — kullanıcı bunalıyordu
+- **Çözüm — 3 Katman:**
+  - **Top Picks** (`components/TopPicks.tsx`): confidence sıralı 5-8 en güçlü tahmin
+  - **Ana Pazar Özeti** (`components/MarketSummary.tsx`): sadece ana pazarların kazananları, Arşiv 1 vs 2 yan yana
+  - **Detaylı Analiz** (`components/DetailedStats.tsx`): mevcut tüm bölümler accordion içinde, varsayılan kapalı, localStorage hatırlama
+- **Yeni:** `lib/confidence.ts` — `computeConfidence`, `resolveConflicts`, `mergeArchives`, `getTopPicks`; `lib/labels.ts` — paylaşılan period etiketleri
+- **Eski "Altın Oranlar" kaldırıldı:** Top Picks gelişmiş hali
+- **Renk skalası yenilendi:** mavi/turuncu/kırmızı kakofoni → yeşil/gri sade
+- **IY/2Y'de iddaa açmayan pazarlar gizlendi:** 2.5/3.5 A/Ü, taraf 2.5, tüm handikaplar (`MarketSpec.excludePeriods: ["ht", "h2"]`) — Top Picks + Market Summary + DetailedStats üçü birden tutarlı
+
+### Sprint 8.5 — TAMAMLANDI ✅ (Akıllı Kombinasyon Kuponu)
+- **`lib/combos.ts`:** `generateCombos(picks)` 3 hazır kombo üretir
+  - **Çift Kombo** (2 leg ≥%75)
+  - **Üçlü Kombo** (3 leg ≥%70)
+  - **Süper Kombo** (4-5 leg ≥%75, sadece eşleşme ≥20 maç ve avg confidence ≥0.65)
+- **Çelişki kontrolü:** `DOMAIN_OF` haritası ile aynı domain'den iki leg yasak; `HARD_CONFLICTS` keskin çelişkileri yakalar (örn. result_x + fark_ev1)
+- **Joint olasılık:** `∏ (pct/100)` (bağımsızlık varsayımı, ≈ ile yaklaşık belirtilir)
+- **Tahmini oran:** `1 / jointProb` (gerçek iddaa oranı değil, kullanıcıya açıkça söylenir)
+- **`components/ComboSuggestion.tsx`:** 3 kart yan yana grid; "Sepete Ekle (N maç)" butonu tüm leg'leri toplu ekler
+
+### Sprint 8.6 — TAMAMLANDI ✅ (Dinamik Confidence Eşiği)
+- **Problem:** Sabit `minPct=60` küçük örneklemde yanıltıcı tahminler gösteriyordu
+- **`dynamicMinPct(matchCount)`:** Wilson lower bound benzeri pragmatik formül — `max(64, 80 - log10(matchCount + 1) × 8)`
+  - 5 maç → ~74%
+  - 15 maç → ~70%
+  - 30 maç → ~68%
+  - 50 maç → ~66%
+  - 100+ → ~64%
+- **`getTopPicks` artık `TopPicksResult` döner:** `picks` + `effectiveMinPct` + `matchCount`
+- **TopPicks başlığı:** "Eşleşme: N maç · Eşik: ≥%X" — şeffaflık, hover tooltip ile açıklama
+
+### Sprint 8.7 — TAMAMLANDI ✅ (Bahis Sepeti)
+- **`lib/cart.ts`:** localStorage tabanlı çok-maç sepet (`nortverse_bet_cart`)
+  - `useCart()` React hook: `items`, `addItem`, `removeItem`, `clear`, `has`, `jointProb`, `estOdds`
+  - Cross-tab sync: storage event + `nortverse-cart-updated` custom event
+  - Idempotent: aynı tahmin iki kez eklenemez
+- **`lib/match-context.tsx`:** `MatchProvider` — analiz sayfasında match metadata'yı paylaşır (prop drilling yok)
+- **`components/BetCart.tsx`:** floating buton (sağ alt) + açıldığında panel
+  - **Desktop (md+):** sticky w-80 kart
+  - **Mobile:** alt sheet, arkaplan dim
+  - Toplam joint olasılık + tahmini kombi oran + "Sepeti Temizle"
+- **`components/AddToCartButton.tsx`:** "+" / "✓" toggle butonu
+- **Mount noktaları:** TopPicks PickRow, ComboSuggestion (toplu ekleme), MarketSummary Cell (≥%60 olanlarda); DetailedStats kalabalık olur diye eklenmedi
+- **Layout mount:** `app/layout.tsx` — `<BetCart />` her sayfada görünür (boş sepette gizli)
+
+### Sprint 8.8 — TAMAMLANDI ✅ (Form & H2H Trendleri)
+- **Backend `app/analysis/trends.py`:** `compute_trends(raw)` 3 blok döner
+  - `home_form`: ev sahibinin son N **ev** maçı (lig, role="home")
+  - `away_form`: deplasmanın son N **dış** maçı (lig, role="away")
+  - `h2h`: son lig karşılaşmaları (ev sahibi perspektifinden)
+  - Her blok: win/draw/loss %, KG Var %, Üst 2.5 %, ort gol, son 5 G/B/M
+  - Minimum 3 örnek altında ilgili blok None
+- **Migration `f5c8d2a1b394_add_trends_column`:** `matches.trends` JSONB kolonu (kullanıcı 2026-05-07'de Supabase'da uyguladı)
+- **`pipeline/runner.py:_result_to_row`:** raw verildiyse `compute_trends(raw).model_dump()` ile `trends` kolonunu doldurur
+- **`api/main.py`:** `AnalyzeResponse.trends: Optional[TrendsData]`; `_trends()` helper; `_build_from_db` saklı trends'i parse eder; `_do_analyze` Playwright path'inde de hesaplar
+- **Frontend `lib/types.ts`:** `TrendBlock`, `TrendsData` interface'leri
+- **`components/TrendsPanel.tsx`:** 3 mini kart yan yana (Ev/Dep Form, H2H)
+  - Header: ikon + label + örneklem boyutu rozet
+  - Mini timeline: son 5 sonuç G/B/M renkli noktalar (yeşil/sarı/kırmızı)
+  - Metrikler: Galibiyet/Beraberlik/Mağlubiyet/KG Var/Üst 2.5/Att-Yedi
+- **Mount noktası:** `app/analyze/[match_id]/page.tsx` — sadece MS periyodunda görünür (`activePeriod === "ft"`)
+
 ---
 
 ## Bilinen Teknik Notlar
@@ -533,6 +630,24 @@ Her arşiv kartında (Arşiv-1 / Arşiv-2) şu bölümler gösterilir:
 
 - **Error boundary (Sprint 8.3):** `app/error.tsx` Next.js convention — React render hatalarında otomatik fallback ("Tekrar dene" butonlu kart). Beyaz ekran yok, kullanıcı kurtarılabilir.
 
+- **Confidence formülü (Sprint 8.4):** `confidence = (pct/100) × volume_weight × market_weight × dual_bonus`. `volume_weight = min(1, ln(matchCount+1) / ln(30))` — 5 maçta 0.50, 30+ maçta 1.0. `market_weight` 1.0 (ana pazarlar) → 0.4 (encok yarı, iy/2y kg kombineleri). `dual_bonus = 1.15` eğer her iki arşivde de ≥%65.
+
+- **`MarketSpec.excludePeriods` (Sprint 8.4):** `confidence.ts` MARKETS tablosunda her pazara `excludePeriods?: Period[]` alanı. IY/2Y'de iddaa açmayan pazarlar (2.5/3.5 A/Ü, taraf 2.5, handikaplar, MS+2.5 kombo) bu listede `["ht", "h2"]` olarak işaretlenir. `isMarketActive` filtreleyerek Top Picks + MarketSummary + DetailedStats üçü birden tutarlı.
+
+- **Combo domain mantığı (Sprint 8.5):** `combos.ts:DOMAIN_OF` 30+ pazarı 14 domain'e gruplar (`match_result`, `total_goals`, `btts`, `home_total`, `away_total`, `iy_ms`, vs.). Bir leg seçilince aynı domain'den ikinci leg yasaklanır → bağımsızlık varsayımı daha sağlam. `HARD_CONFLICTS` ekstra keskin çelişki çiftleri (örn. `result_x` + `fark_ev1`).
+
+- **Joint olasılık yaklaşıklığı (Sprint 8.5/8.7):** `combos.ts` ve `cart.ts` `∏ (pct/100)` ile joint hesaplar (bağımsız olay varsayımı). UI'da `≈` ile yaklaşık olduğu belirtilir. Gerçekte futbol pazarları arasında korelasyon var; ileride profesyonelleştirilebilir (corr matrisi → `Pₐᵦ ≈ Pₐ × Pᵦ × 1.05` gibi).
+
+- **Dinamik eşik formülü (Sprint 8.6):** `dynamicMinPct = max(64, 80 - log10(n+1) × 8)`. Wilson alt sınırının pragmatik yaklaşımı. Küçük örneklemde yanıltıcı yüksek yüzdeyi eler, büyük örneklemde gerçek değerli tahminleri keser. `getTopPicks` artık `{picks, effectiveMinPct, matchCount}` döner — UI başlıkta gösterir.
+
+- **Bahis sepeti localStorage anahtarları:** `nortverse_bet_cart` (Sprint 8.7), `nortverse_detailed_open` (Sprint 8.4). Cross-tab sync için `storage` event + `nortverse-cart-updated` custom event. SSR'da hidrasyon yarış koşulu önlemek için `useCart` `hydrated` flag — boş sepette `BetCart` render bile etmez.
+
+- **MatchContext (Sprint 8.7):** `lib/match-context.tsx` analyze sayfasında match metadata'yı (`matchId`, `homeTeam`, `awayTeam`) paylaşır. Tüm pick component'leri `useMatchInfo()` ile match bilgisini alır → prop drilling yok. `MatchProvider` sadece analyze page'inde sarar, diğer sayfalarda `useMatchInfo()` null döner → "+" butonu görünmez.
+
+- **Trends mimarisi (Sprint 8.8):** `compute_trends(raw)` ham `MatchRawData`'dan 3 blok üretir. `_result_to_row` pipeline path'inde, `_do_analyze` API path'inde DB'ye `trends` JSONB yazar. `_build_from_db` DB'den okur, parse hatası warning + None döner. **Lazy backfill yok** — eski maçlarda `trends` null kalır, frontend sessizce gizler. Yeni gelen maçlar (her run-pipeline veya foreground scrape) trends ile yazılır.
+
+- **Trends migration adımı (Sprint 8.8):** Railway Dockerfile alembic koşturmuyor. Yeni migration eklendiğinde kullanıcı manuel olarak Supabase SQL Editor'den `ALTER TABLE matches ADD COLUMN <kolon> JSONB;` çalıştırmalı. `f5c8d2a1b394` (trends) bu yolla 2026-05-07'de uygulandı.
+
 ---
 
 ## Teknoloji Kararları
@@ -575,57 +690,57 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-04-25 Cumartesi gece — Sprint 8.3 sonu)
+## Kaldığımız Yer (2026-05-07 — Sprint 8.8 sonu)
 
-Sprint 8 deploy edildi. Sistem stabil ve hızlı. Sıradaki adımlar (sırayla):
+Sprint 8.4-8.8 deploy edildi. Profesyonel tahmin sayfası (3 katman + akıllı kombo + dinamik eşik + bahis sepeti + form trendleri) canlıda. Migration `f5c8d2a1b394` (trends JSONB) Supabase'da uygulandı.
 
-### 1. Veri Doğruluğu Spot-Check ✅ (yapıldı, Sprint 8.3 sonu)
-- Bülten temel verisi (saat, takım, lig) Cumartesi maçları için tüm spot-checks geçti
-- 2813084 (Kayserispor vs Karagumruk) ve 2813121 (Kayserispor vs Çaykur) için backend ↔ frontend uyumu: 7/7 tam
-- Pattern C bazı maçlarda None — kullanıcı "diğer maçlarda geliyor" diye onayladı, tasarım gereği
-- Excel ile derin çapraz doğrulama yapılmadı; ileri sprintte istenirse
+### Sıradaki Yapılacaklar (sırayla)
 
-### 2. Sprint 9 — Auth/Premium (Para kazanma yolu)
+#### 1. Pytest Birim Testleri (henüz yok, eklenecek)
+- `backend/tests/test_trends.py` — `compute_trends` sentetik veriyle (Sprint 8.8 hızlı manuel doğrulama yapılmıştı; kalıcı dosya yok)
+- Frontend için Vitest setup: `lib/confidence.ts`, `lib/combos.ts`, `lib/cart.ts` saf TS — birim test edilebilir
+- Hedef: confidence formülü, çelişki çözümü, kombo üretimi, sepet idempotency
+
+#### 2. Trends Backfill (eski maçlar için)
+- Sprint 8.8'de "lazy backfill yok" denmişti — eski maçlarda `trends` null kalıyor
+- Mevcut maçlar bir sonraki `run-pipeline`'da otomatik trend ile yazılır (idempotent upsert)
+- Daha hızlı: bir CLI komutu `backfill-trends` — DB'deki tüm maçları döner, raw_data olmadığı için **yeniden scrape gerekir** → Playwright fırtınası riski; pragmatik olarak organik dolması beklenebilir
+
+#### 3. Top Picks'e Trend Katkısı (confidence boost)
+- Ev formu KG %80'se → kg_var pick'ine küçük bonus (örn. `× 1.05`)
+- Üst 2.5 trendi yüksekse → ust_25 pick'ine bonus
+- Form mağlubiyet trendi → ev kazanma pick'lerine penaltı
+- Implementation: `confidence.ts`'e `trendBoost(pick, trends)` fonksiyonu
+
+#### 4. Sepet Özeti Sticky Rozet
+- Sepet kapalıyken sayfa üstünde küçük bilgi: "🧾 3 tahmin · ≈%49 · ≈2.03"
+- Şu anda sepet ikon görünür ama içeriği görmek için tıklamak gerek
+- Mobile'da özellikle değerli (bottom bar şeffaflığı)
+
+#### 5. Sprint 9 — Auth/Premium (Para kazanma yolu)
 - NextAuth.js + Google OAuth (şifresiz)
 - Supabase'de `users` tablosu — üyelik seviyesi (free/premium)
 - Free: Bülten + Sonuçlar açık, Analiz kilitli
-- Premium: Tüm analiz açık + ileride canlı maç
+- Premium: Tüm analiz açık + Trends + Kombolar + Sepet
 - İkinci faz: Stripe entegrasyonu (aylık abonelik)
 
-### 3. Sprint 10 — Canlı Maç & Trend (Uzun vade)
+#### 6. Sprint 10 — Canlı Maç & Trend (Uzun vade)
 - Anlık skor takibi (devre arası + final)
 - WebSocket veya 30sn polling
 - Maç sırasında oran değişimi takibi
 
 ### Bilinen Açık Konular
-- **Storage:** Pattern saklama tahminen ~450MB → Supabase free tier 500MB sınırına yakın. İzlenmeli; aşılırsa eski arşiv maçlarının pattern'leri prune edilebilir.
-- **Bg worker hız:** ~3-5sn/maç pattern hesabı. 200-300 maçlık bültende 15-25dk sürer. Acil değil ama paralelize edilebilir (3 worker).
-- **Veri doğruluğu testi yapılmadı:** Sprint 8 öncesi ve sonrası nowgoal data karşılaştırması atlandı.
-- **Yarın 08:00 cron testi:** Eklenen 09:00 yedek cron'un gerçekten çalıştığı yarın görülecek.
+- **Storage:** Pattern saklama ~450MB + trends ~50MB = ~500MB Supabase free tier sınırı. Trends'ten sonra izlemeli; aşılırsa eski arşiv maçlarının pattern/trend prune edilebilir.
+- **Migration deployment manuel:** Railway Dockerfile alembic koşturmuyor. Her yeni migration için kullanıcı Supabase SQL Editor'den manuel `ALTER TABLE`. Otomatikleştirilebilir (Dockerfile CMD'den önce `alembic upgrade head`).
+- **Bg worker hız:** ~3-5sn/maç pattern hesabı + ~1ms trends. 200-300 maçlık bültende 15-25dk sürer. Acil değil ama paralelize edilebilir (3 worker).
+- **Veri doğruluğu testi yapılmadı:** Sprint 8 öncesi ve sonrası nowgoal data karşılaştırması atlandı. Spot-check yapıldı (Sprint 8.3'te 2813084/2813121); derin audit ileride.
+- **Joint olasılık bağımsızlık varsayımı:** Combo ve sepet `∏ p` ile hesaplıyor; gerçekte korelasyon var. ML/historical correction matrisi Sprint 10+ için.
+- **Trends backfill yok:** Eski maçlar trends null. Yeni gelen maçlar otomatik dolu — organik mig.
 
-### Önemli Commit Zinciri (Son Oturum)
-- `194ce94` Sprint 7: CLAUDE.md eksiklikleri düzeltildi
-- `3ac8c8a` Sprint 7: /api/health zenginleştirildi
-- `2a257f3` Sprint 7: /api/health HEAD desteği (UptimeRobot)
-- `e65384d` Sprint 7: Performans (Data Cache, skeleton, prefetch, DayTabs)
-- `aed8cfd` Sprint 7 ACİL: Playwright fırtınası durduruldu
-- `b1086b9` Sprint 8: Pattern JSONB kolonları
-- `ae31800` Sprint 8: compute_all_patterns yardımcısı
-- `22cdde6` Sprint 8: run-pipeline pattern yazar
-- `7008064` Sprint 8: _build_from_db saklı pattern okur (lazy backfill)
-- `7792e56` Sprint 8: 09:00 yedek pipeline cron
-- `74b820a` Sprint 8.1: /sonuclar canlı/bitmiş ayrımı + 18:00/22:00 cron
-- `a700b6f` Sprint 8.1: scheduled/stale gizleme
-- `a095bcd` Sprint 8.1: saat başı update-scores cron (12:00–23:00)
-- `c0694ff` Sprint 8.2: useEffect cleanup (race condition)
-- `4b39c6b` Sprint 8.2: LRU cache 500 entry
-- `6027f29` Sprint 8.2: Sidebar md altında gizli
-- `7b7bd61` Sprint 8.2: Sonuçlar Analiz touch hedefi
-- `1499be5` Sprint 8.2: Playwright DB hatası ERROR seviyesi
-- `05c270e` Sprint 8.2: Geri butonu Tailwind hover
-- `eb271a4` Sprint 8.3: error boundary, empty state, ScoreFreq null-safe, fixture tarih sınırı
-- `eb303fc` Sprint 8.3: pipeline DB write retry (_with_retry helper)
-- `d6a0865` Sprint 8.3: /api/match/{id} lazy Playwright fallback
-- `1aaf2c4` Sprint 8.3: BultenPrefetcher ölü kod silindi
-- `35d2eda` Sprint 8.3: Periyot sekmeleri useTransition
-- `2c52756` Sprint 8.3: Lig eşlemesi yeni tam adlara güncellendi (lib/leagues.ts)
+### Önemli Commit Zinciri (Sprint 8.4-8.8 oturumu)
+- `cd49f4e` Sprint 8.4: 3 katman mimari (TopPicks + MarketSummary + DetailedStats), Altın Oranlar kaldırıldı
+- `9203b3a` Sprint 8.4: IY/2Y'de iddaa açmayan pazarlar gizlendi (excludePeriods)
+- `92d95c9` Sprint 8.5: Akıllı kombinasyon kuponu (combos.ts + ComboSuggestion)
+- `13a9db3` Sprint 8.6: Dinamik confidence eşiği (dynamicMinPct)
+- `713cf79` Sprint 8.7: Bahis sepeti (cart.ts + BetCart + AddToCartButton + MatchContext)
+- `e994468` Sprint 8.8: Form & H2H trendleri (trends.py + matches.trends + TrendsPanel)
