@@ -53,6 +53,7 @@ async def find_pattern_b_matches(
             col_x.cast(JSONB) == cast(scores_x, JSONB),
             col_2.cast(JSONB) == cast(scores_2, JSONB),
             actual_check,
+            Match.deleted_at.is_(None),  # Sprint 8.9: soft-deleted (kupa) maçlar arşivde sayılmaz
         ]
         if exclude_match_id:
             filters.append(Match.match_id != exclude_match_id)

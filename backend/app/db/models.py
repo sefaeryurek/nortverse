@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -63,12 +63,35 @@ class Match(Base):
     actual_ft_away: Mapped[int | None] = mapped_column(Integer)
     result_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Soft delete (Sprint 8.9) — kupa temizliği geri alınabilir
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_reason: Mapped[str | None] = mapped_column(String(50))
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
     def __repr__(self) -> str:
         return f"<Match {self.match_id}: {self.home_team} vs {self.away_team}>"
+
+
+class AuditLog(Base):
+    """Veri bütünlüğü değişiklik kaydı (Sprint 8.9).
+
+    Tüm prune/silme/restore/recompute işlemleri burada saklanır.
+    Production incident analizi ve geri alma için kritik.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    operation: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_match_id: Mapped[str | None] = mapped_column(String(20))
+    actor: Mapped[str | None] = mapped_column(String(100))
+    details: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class FixtureCache(Base):

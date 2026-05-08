@@ -181,7 +181,7 @@ async def _analyze_db_only(match_id: str) -> bool:
     try:
         async with get_session() as session:
             row = (await session.execute(
-                select(Match).where(Match.match_id == match_id)
+                select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
             )).scalar_one_or_none()
         if row is None:
             return False
@@ -209,7 +209,9 @@ async def _analyze_and_cache(match_id: str) -> "AnalyzeResponse":
         # 1. DB kontrolü — önce DB'den dene (Playwright YOK)
         async with get_session() as session:
             db_row = (
-                await session.execute(select(Match).where(Match.match_id == match_id))
+                await session.execute(
+                    select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                )
             ).scalar_one_or_none()
 
         if db_row is not None:
@@ -604,7 +606,12 @@ async def list_matches(
     limit: int = Query(50, le=200),
 ) -> list[MatchSummary]:
     async with get_session() as session:
-        stmt = select(Match).order_by(Match.analyzed_at.desc()).limit(limit)
+        stmt = (
+            select(Match)
+            .where(Match.deleted_at.is_(None))
+            .order_by(Match.analyzed_at.desc())
+            .limit(limit)
+        )
         if league:
             stmt = stmt.where(Match.league_code == league)
         rows = (await session.execute(stmt)).scalars().all()
@@ -658,6 +665,7 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
                 select(Match)
                 .where(Match.kickoff_time >= day_start)
                 .where(Match.kickoff_time <= day_end)
+                .where(Match.deleted_at.is_(None))  # Sprint 8.9
                 .order_by(Match.kickoff_time)
             )
         ).scalars().all()
@@ -730,7 +738,9 @@ async def get_match(match_id: str) -> MatchSummary:
     """
     async with get_session() as session:
         row = (
-            await session.execute(select(Match).where(Match.match_id == match_id))
+            await session.execute(
+                select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+            )
         ).scalar_one_or_none()
 
     if not row:
@@ -746,7 +756,9 @@ async def get_match(match_id: str) -> MatchSummary:
 
         async with get_session() as session:
             row = (
-                await session.execute(select(Match).where(Match.match_id == match_id))
+                await session.execute(
+                    select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                )
             ).scalar_one_or_none()
         if not row:
             raise HTTPException(status_code=404, detail=f"Maç bulunamadı: {match_id}")

@@ -62,6 +62,7 @@ async def find_pattern_c_all_periods(
         filters = [
             Match.ft_all_ratios.isnot(None),
             Match.actual_ft_home.isnot(None),
+            Match.deleted_at.is_(None),  # Sprint 8.9: soft-deleted (kupa) maçlar arşivde sayılmaz
         ]
         if exclude_match_id:
             filters.append(Match.match_id != exclude_match_id)

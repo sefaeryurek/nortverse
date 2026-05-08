@@ -43,6 +43,7 @@ async def _with_retry(
     raise last_exc if last_exc else RuntimeError("retry tükendi")
 
 from app.analysis import analyze_match, check_match_filters
+from app.analysis.league_filter import canonical_league_name, is_supported_league
 from app.analysis.persist import compute_all_patterns
 from app.analysis.trends import compute_trends
 from app.db.connection import get_session
@@ -66,11 +67,15 @@ def _result_to_row(
     pattern_*_b/c kolonları da satıra eklenir.
     `trends` kolonu ham veriden hesaplanır (raw verildiyse).
     """
+    # Sprint 8.9: lig adını kanonik forma çevir — "ENG PR" / "English Premier League"
+    # tutarsızlığı önlenir; tüm DB tek bir kanonik form kullanır.
+    canonical_code = canonical_league_name(r.league_code)
     row = {
         "match_id": r.match_id,
         "home_team": r.home_team,
         "away_team": r.away_team,
-        "league_code": r.league_code,
+        "league_code": canonical_code,
+        "league_name": canonical_code,
         "season": r.season,
         "analyzed_at": r.analyzed_at,
         "ht_scores_1": r.ht.scores_1,
@@ -104,6 +109,30 @@ def _result_to_row(
     return row
 
 
+def _validate_row(row: dict) -> tuple[bool, str | None]:
+    """DB'ye yazılmadan önce sanity kontrolleri (Sprint 8.9).
+
+    Bozuk veri DB'ye sızmasın. None döner True/None — sorun yok.
+    False/"reason" döner — yazma reddedilir.
+    """
+    if not row.get("home_team") or row["home_team"] == "?":
+        return False, "home_team boş veya '?'"
+    if not row.get("away_team") or row["away_team"] == "?":
+        return False, "away_team boş veya '?'"
+    if not row.get("league_code") or row["league_code"] == "?":
+        return False, "league_code boş veya '?'"
+    # Lig kontrolü — kupa maçı son anda yakalanır
+    if not is_supported_league(row.get("league_code")):
+        return False, f"lig maçı değil (kupa filtresi): {row.get('league_code')}"
+    # Skorlar makul aralıkta mı (negatif veya saçma değer DB'ye girmesin)
+    for k in ("actual_ft_home", "actual_ft_away", "actual_ht_home", "actual_ht_away",
+              "actual_h2_home", "actual_h2_away"):
+        v = row.get(k)
+        if v is not None and (v < 0 or v > 30):
+            return False, f"{k}={v} aralık dışı (0-30)"
+    return True, None
+
+
 async def _upsert(
     result: MatchAnalysisResult,
     raw: MatchRawData | None = None,
@@ -112,8 +141,14 @@ async def _upsert(
     """Analiz sonucunu (varsa pattern'lerle) DB'ye yaz; zaten varsa güncelle.
 
     Geçici DB hatalarına karşı 3 denemeli retry (Supabase PgBouncer drop).
+    Sprint 8.9: pre-write validation — bozuk veri reddedilir.
     """
     row = _result_to_row(result, raw, patterns)
+
+    ok, reason = _validate_row(row)
+    if not ok:
+        log.error("DB write reddedildi [%s]: %s", result.match_id, reason)
+        return  # Yazma yapma; pipeline devam eder
 
     async def _do():
         stmt = (
@@ -213,7 +248,11 @@ async def update_results(target_date: Optional[date] = None) -> dict:
         match_ids = list(
             (await session.execute(
                 select(Match.match_id)
-                .where(Match.kickoff_time >= day_start, Match.kickoff_time <= day_end)
+                .where(
+                    Match.kickoff_time >= day_start,
+                    Match.kickoff_time <= day_end,
+                    Match.deleted_at.is_(None),  # Sprint 8.9: silinmiş maçların skoru güncellenmez
+                )
             )).scalars().all()
         )
 
