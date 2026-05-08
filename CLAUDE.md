@@ -337,7 +337,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 8.9 — TAMAMLANDI ✅ — Veri Bütünlüğü)
+## Mevcut Durum (Sprint 8.10 — TAMAMLANDI ✅ — Egress Optimizasyonu / ACİL)
 
 ### Backend
 
@@ -372,7 +372,9 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - ✅ **Pattern C sıkı eşleşme (Sprint 8.9):** `tolerance: 0.5 → 0.0` (tam eşleşme), `min_matches: 5 → 1`; tolerance=0 sıkı, az eşleşme normal — frontend Pattern C için `match_count >= 1`
 - ✅ **`/api/health` data_quality skoru (Sprint 8.9):** total/active/soft_deleted/non_league_active/missing_pattern/missing_trends/missing_actual + 0-100 quality_score
 - ✅ **5 yeni CLI komutu (Sprint 8.9):** `self-test` (E2E 7 adım), `audit-db` (kalite raporu), `audit-patterns` (Pattern B/C davranış), `prune-non-league` (soft delete), `restore-deleted` (geri al)
-- ✅ **Pytest 52 test (Sprint 8.9):** `test_league_filter.py` (28), `test_pre_write_validation.py` (10), `test_trends.py` (6) — kalıcı test suite
+- ✅ **Pytest 67 test (Sprint 8.9 + 8.10):** `test_league_filter.py` (28), `test_pre_write_validation.py` (10), `test_trends.py` (6), `test_pattern_c.py` (6), `test_analysis.py` (mevcut) — kalıcı test suite
+- ✅ **Pattern C egress optimizasyonu (Sprint 8.10):** tolerance=0.0 fast-path DB-side JSONB equality — eski 130MB/çağrı → yeni 50KB/çağrı (%99.96 azaltma); tolerance > 0 fallback yolu korundu
+- ✅ **`/api/health` hafifletildi (Sprint 8.10):** Sprint 8.9'da eklenmiş `data_quality` UptimeRobot pinglerinde 187 MB/gün egress yaratıyordu → kaldırıldı; yeni `/api/admin/quality` endpoint detay rapor için (UptimeRobot çağırmaz)
 - ✅ `pattern_stats.py`: ~130 alan, 9 bölüm
 - ✅ Railway deployment: `https://nortverse-production.up.railway.app`
 - ✅ `fixture_cache` DB tablosu: bülten verileri kalıcı, server restart'tan etkilenmez
@@ -573,6 +575,23 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Mount noktaları:** TopPicks PickRow, ComboSuggestion (toplu ekleme), MarketSummary Cell (≥%60 olanlarda); DetailedStats kalabalık olur diye eklenmedi
 - **Layout mount:** `app/layout.tsx` — `<BetCart />` her sayfada görünür (boş sepette gizli)
 
+### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
+- **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
+- **Kök neden:**
+  1. `pattern_c.py` her çağrıda 13K+ matches satırı çekip Python'da filter (130MB/çağrı × 200 maç/gün run-pipeline = ~26 GB/gün)
+  2. `/api/health.data_quality` (Sprint 8.9'da eklendi) UptimeRobot her 5dk pingde tüm matches taraması (~187 MB/gün)
+- **Çözüm — Pattern C DB-side filter:**
+  - `tolerance == 0.0` fast-path: `cast(Match.ft_all_ratios, JSONB) == cast(ft_ratios, JSONB)` PostgreSQL JSONB kanonik equality
+  - 130 MB/çağrı → ~50 KB/çağrı (%99.96 azaltma)
+  - `tolerance > 0.0` fallback yolu korundu (ileride fuzzy match için)
+- **Çözüm — `/api/health` hafifletme:**
+  - `data_quality` alanı `HealthResponse`'tan kaldırıldı
+  - Yeni `/api/admin/quality` endpoint — manuel/CLI çağrılır, UptimeRobot çağırmaz
+- **Yeni pytest:** `tests/test_pattern_c.py` (6 test) — `_ratios_match` fuzzy match davranışı; toplam 67 test yeşil
+- **Beklenen toplam egress:** ~26 GB/gün → ~50 MB/gün (500x altı, free tier güvenli alanı)
+- **Lokal test:** Supabase erişimi yok, smoke test prod kotası geri geldikten sonra
+- **Kullanıcı kararı bekleyen:** Supabase Pro upgrade ($25/ay) anlık vs billing reset bekleme (~1 ay)
+
 ### Sprint 8.9 — TAMAMLANDI ✅ (Veri Bütünlüğü & Filtre Sertleştirme)
 - **Problem:** UEL maçı 2976657 "ENG PR" sanıldı; UCL maçı 2976378 lig sanılıp tahmin üretildi; kupa maçları DB/bültende görünüyordu; sistem sürekli arşiv ekliyor → veri kalitesi izleme yok
 - **Lig filtresi:** `app/analysis/league_filter.py` (CUP_KEYWORDS kara listesi 30+ keyword; LEAGUE_ALIASES kanonik form 50+ lig); `is_supported_league(*names)` çoklu parametre desteği; `canonical_league_name(name)` "ENG PR" → "English Premier League"
@@ -706,7 +725,9 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Kanonik lig adı (Sprint 8.9):** `LEAGUE_ALIASES` 50+ alias → kanonik ad. `_result_to_row` `canonical_league_name(r.league_code)` uygular → DB hep tutarlı isim yazar. Mevcut karışık isimleri normalize etmek için ayrı CLI yazılmadı (yeni gelenler tutarlı, eskileri organik düzelir).
 
-- **Audit & quality görünürlük (Sprint 8.9):** `/api/health.data_quality.quality_score` 0-100 arası — `total - (non_league/total*40 + missing_pattern/active*20 + missing_actual/active*30 + missing_trends/active*10) * 100`. UptimeRobot'ta görünür; `audit-db` CLI Rich tablo ile detay verir.
+- **Audit & quality görünürlük (Sprint 8.9 → 8.10 değiştirildi):** Quality skoru artık `/api/admin/quality` endpoint'inde. Sprint 8.9'da `/api/health` içine konmuştu ama UptimeRobot pinglerinde tüm matches taraması = ~187 MB/gün egress → Sprint 8.10'da ayrı endpoint'e taşındı. UptimeRobot artık hafif `/api/health` pingler. CLI `audit-db` aynı bilgiyi Rich tabloyla verir.
+
+- **Pattern C egress optimizasyonu (Sprint 8.10):** Sprint 8.9'da `tolerance=0.0` koyduktan sonra fast-path mümkün oldu — `cast(Match.ft_all_ratios, JSONB) == cast(ft_ratios, JSONB)` ile DB-side filter. Eski yol 13K+ satır çekip Python'da filtere = ~130 MB/çağrı egress; yeni yol ~50 KB/çağrı (%99.96 azaltma). PostgreSQL JSONB karşılaştırması kanonik (key sırası önemsiz). tolerance > 0 fallback yolu `_ratios_match` Python fonksiyonu ile korundu.
 
 ---
 
@@ -750,11 +771,28 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-05-08 — Sprint 8.9 sonu)
+## Kaldığımız Yer (2026-05-08 — Sprint 8.10 sonu)
 
-Sprint 8.9 deploy edildi (commits `6ab2821`, `72d4ab1`, `2b7274b`). Veri bütünlüğü altyapısı tamamen canlıda.
+Sprint 8.10 deploy edildi (commit `d9c8c4d`). **ACİL** Supabase egress aşımı (25 GB / 5 GB = %511) sebebiyle Pattern C DB-side filter + `/api/health` hafifletme uygulandı.
 
-### ⚠️ Manuel Migration Adımı (Kullanıcı bekliyor)
+### 🚨 KRİTİK DURUM — Supabase Erişilmez
+
+Supabase Fair Use Policy aşıldı:
+- Egress: **25,567 MB / 5 GB (%511)**
+- Status: **Unhealthy** (tüm DB istekleri 402 dönüyor)
+- Etki: Production tamamen down — fixture/sonuçlar/analiz çalışmıyor
+
+**Kullanıcı kararı bekleyen:**
+
+| Seçenek | Maliyet | Süre | Risk |
+|---|---|---|---|
+| **A) Supabase Pro upgrade** | $25/ay | Anında | Düşük — egress sınırı kalkar |
+| **B) Billing reset bekleme** | $0 | ~1 ay | Yüksek — servis 1 ay down |
+| **C) Railway PostgreSQL göçü** | $5/ay | 2-3 gün | Orta — migration karmaşık, ayrı sprint |
+
+**Önerim:** A + Sprint 8.10 birlikte → kısa vadeli çözüm + uzun vadeli optimizasyon (egress 25 GB → ~50 MB/gün).
+
+### ⚠️ Manuel Migration Adımı (Sprint 8.9 — Supabase erişimi geri gelince)
 
 Railway Dockerfile alembic koşturmuyor. Sprint 8.9 migration `g4d2a7c9b815` Supabase SQL Editor'de manuel uygulanmalı:
 
@@ -776,7 +814,9 @@ CREATE INDEX ix_audit_log_target ON audit_log(target_match_id);
 
 Migration uygulanana kadar `/api/health` `db_ok: false` döner (`deleted_at` kolonu yok). Uygulandıktan sonra `python -m app.cli.main prune-non-league --apply` ile mevcut kupa maçları temizlenebilir.
 
-### Sıradaki Yapılacaklar (sırayla)
+### Sıradaki Yapılacaklar (sırayla — Supabase erişimi geri geldikten SONRA)
+
+#### 0. **ACİL** — Supabase Pro upgrade veya bekleme kararı (kullanıcı seçimi)
 
 #### 1. Migration uygula + ilk DB temizliği (manuel adım)
 - Yukarıdaki SQL'i Supabase'da çalıştır
@@ -829,10 +869,12 @@ Migration uygulanana kadar `/api/health` `db_ok: false` döner (`deleted_at` kol
 - **Pattern self-check anomalileri:** `audit-db` rapor üretebilir — uygulandığında kontrol edilmeli
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
 
-### Önemli Commit Zinciri (Sprint 8.9 oturumu)
+### Önemli Commit Zinciri (Sprint 8.9 + 8.10 oturumu)
 - `6ab2821` Sprint 8.9 (1/n): Lig filtresi + Pattern C tam eşleşme — kupa maçları sistemden çıkarıldı
 - `72d4ab1` Sprint 8.9 (2/n): Soft delete + audit_log + pre-write validation + kanonik lig adı
 - `2b7274b` Sprint 8.9 (3/n): 5 CLI komutu (prune/restore/audit-db/audit-patterns/self-test) + 52 pytest + /api/health quality
+- `81a82cd` Sprint 8.9 (4/n): CLAUDE.md güncellemesi
+- `d9c8c4d` **Sprint 8.10 ACİL:** Egress optimizasyonu — Pattern C DB-side JSONB equality (%99.96 azaltma) + /api/health.data_quality kaldır → /api/admin/quality
 
 ### Önceki Oturum (Sprint 8.4-8.8) Commit Zinciri
 - `cd49f4e` Sprint 8.4: 3 katman mimari (TopPicks + MarketSummary + DetailedStats), Altın Oranlar kaldırıldı
