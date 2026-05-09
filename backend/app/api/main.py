@@ -282,6 +282,34 @@ app.add_middleware(
 )
 
 
+# Sprint 8.10b — Cache-Control header'ları
+# Cloudflare/Vercel edge cache için public cacheable endpoint'lere s-maxage uygula.
+# Bu header CDN'e "edge'de N saniye sakla" der; origin (Railway → Supabase) çağrısı azalır.
+# stale-while-revalidate: cache eski olsa bile döner, arka planda yenilenir.
+_CACHE_RULES: dict[str, str] = {
+    # Bülten: 5dk edge cache, 1dk stale-while-revalidate
+    "/api/fixture": "public, s-maxage=300, stale-while-revalidate=60",
+    # Sonuçlar: 2dk edge cache (saatlik update-scores ile uyumlu)
+    "/api/results": "public, s-maxage=120, stale-while-revalidate=60",
+    # Maç özeti: 5dk
+    "/api/matches": "public, s-maxage=300, stale-while-revalidate=60",
+    # Health: çok kısa, sadece HEAD ping mantıklı
+    "/api/health": "public, s-maxage=30",
+}
+
+
+@app.middleware("http")
+async def add_cache_headers(request, call_next):
+    response = await call_next(request)
+    # Sadece path eşleşen GET istekleri için cache header
+    if request.method in ("GET", "HEAD"):
+        for prefix, rule in _CACHE_RULES.items():
+            if request.url.path.startswith(prefix):
+                response.headers["Cache-Control"] = rule
+                break
+    return response
+
+
 # ─── Response şemaları ────────────────────────────────────────────────────────
 
 class DataQuality(BaseModel):

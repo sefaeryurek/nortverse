@@ -9,9 +9,11 @@ const BASE =
   "";
 
 export async function getFixture(date: string): Promise<FixtureMatch[]> {
-  // Server-side fetch (Vercel SSR): Next.js Data Cache 60sn → tarih değişimi anlık
+  // Server-side fetch (Vercel SSR): Next.js Data Cache 5dk
+  // Sprint 8.10b: 60sn → 300sn — Supabase egress azaltma; bültende dakikalık
+  // güncelleme nadir olduğu için kullanıcı UX etkisi yok.
   const res = await fetch(`${BASE}/api/fixture?date=${date}`, {
-    next: { revalidate: 60 },
+    next: { revalidate: 300 },
   });
   if (!res.ok) throw new Error(`Fixture alınamadı: ${res.status}`);
   return res.json();
@@ -26,9 +28,10 @@ export async function analyzeMatch(matchId: string): Promise<AnalyzeResponse> {
 }
 
 export async function getResults(date: string): Promise<ResultMatch[]> {
-  // Sonuçlar 60sn cache — _score_updater 30dk'da bir güncelliyor, 60sn yeterince taze
+  // Sonuçlar 2dk cache — Sprint 8.10b: 60sn → 120sn (egress azaltma)
+  // Saatlik update-scores cron olduğu için 2dk gecikme kabul edilebilir
   const res = await fetch(`${BASE}/api/results?date=${date}`, {
-    next: { revalidate: 60 },
+    next: { revalidate: 120 },
   });
   if (!res.ok) throw new Error(`Sonuçlar alınamadı: ${res.status}`);
   return res.json();

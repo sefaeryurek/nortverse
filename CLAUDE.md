@@ -782,15 +782,33 @@ Supabase Fair Use Policy aşıldı:
 - Status: **Unhealthy** (tüm DB istekleri 402 dönüyor)
 - Etki: Production tamamen down — fixture/sonuçlar/analiz çalışmıyor
 
-**Kullanıcı kararı bekleyen:**
+**Kullanıcı tercihi:** Para harcamadan çözüm. Sprint 8.10b ile altyapı buna hazırlandı.
 
-| Seçenek | Maliyet | Süre | Risk |
-|---|---|---|---|
-| **A) Supabase Pro upgrade** | $25/ay | Anında | Düşük — egress sınırı kalkar |
-| **B) Billing reset bekleme** | $0 | ~1 ay | Yüksek — servis 1 ay down |
-| **C) Railway PostgreSQL göçü** | $5/ay | 2-3 gün | Orta — migration karmaşık, ayrı sprint |
+### Sprint 8.10b — Acil Tampon (Para Harcamadan, deploy edildi)
 
-**Önerim:** A + Sprint 8.10 birlikte → kısa vadeli çözüm + uzun vadeli optimizasyon (egress 25 GB → ~50 MB/gün).
+| Önlem | Etki |
+|---|---|
+| GitHub Actions cron'ları **devre dışı** (workflow_dispatch only) | Erişim geri gelince otomatik tetiklenip yine egress yaratmaz |
+| Vercel SSR cache: 60sn → **5dk fixture, 2dk results** | Frontend kullanımdan kaynaklı egress 5x azalır |
+| Backend Cache-Control header (`s-maxage` + `stale-while-revalidate`) | Cloudflare CDN önüne alındığında origin call %80 düşer |
+
+### Para Harcamadan Kesin Yol Seçenekleri (sırayla)
+
+| # | Seçenek | Maliyet | Süre | Garanti |
+|---|---|---|---|---|
+| 1 | **Supabase support ticket** — egress affı iste | 0 ₺ | 0-3 gün | %30-50 başarı |
+| 2 | **Yeni Supabase free projesi + Sprint 8.10/8.10b** | 0 ₺ | 1-2 saat | Yüksek (~%95) |
+| 3 | **Cloudflare CDN ekle** (Seçenek 2 üstüne) | 0 ₺ | 1-2 saat | Çok yüksek (%99+) |
+| 4 | **Oracle Cloud Always Free + self-hosted PostgreSQL** | 0 ₺ ömür boyu | 2-4 saat | %100 — sınırsız egress |
+
+**Önerilen rota:** Önce 1+2 dene (hızlı), trafik artışında 3 ekle, gelecekte 4'e geç.
+
+### Backup İndirme Testi (Kullanıcı Tarafı)
+
+Yeni Supabase projesine veri taşımak için: eski projeden backup indirilebiliyor mu?
+- Supabase Dashboard → eski proje → Database → Backups → Download
+- Egress aşımıyla bloke olabilir; 24 saat sonra tekrar dene
+- Bloke ise: sıfırdan başla (workflow her gün yeniden veri ekler, 1-2 hafta sonra eski seviyede)
 
 ### ⚠️ Manuel Migration Adımı (Sprint 8.9 — Supabase erişimi geri gelince)
 
