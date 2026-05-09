@@ -337,7 +337,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 8.10 — TAMAMLANDI ✅ — Egress Optimizasyonu / ACİL)
+## Mevcut Durum (Sprint 8.10b — TAMAMLANDI ✅ — Oracle Cloud Migration Bekleniyor)
 
 ### Backend
 
@@ -575,6 +575,13 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Mount noktaları:** TopPicks PickRow, ComboSuggestion (toplu ekleme), MarketSummary Cell (≥%60 olanlarda); DetailedStats kalabalık olur diye eklenmedi
 - **Layout mount:** `app/layout.tsx` — `<BetCart />` her sayfada görünür (boş sepette gizli)
 
+### Sprint 8.10b — TAMAMLANDI ✅ (Acil Tampon — Para Harcamadan Kesin Yol Hazırlığı)
+- **Bağlam:** Sprint 8.10 deploy edildi ama Supabase erişilmez (egress %511), kullanıcı para harcamayacak — Oracle Cloud Always Free PostgreSQL göçüne karar verildi
+- **GitHub Actions cron'ları DEVRE DIŞI:** `.github/workflows/daily_pipeline.yml` schedule blokunu yorum satırına aldı; sadece `workflow_dispatch` ile manuel tetiklenebilir → erişim geri gelse bile otomatik egress yaratmaz
+- **Vercel SSR cache agresifleştirildi:** `getFixture` 60sn → 300sn (5dk), `getResults` 60sn → 120sn (2dk) — kullanıcı UX'te kayıp yok ama backend çağrı 5x azalır
+- **Backend Cache-Control middleware:** `/api/fixture`, `/api/results`, `/api/matches`, `/api/health` için `s-maxage` + `stale-while-revalidate` header'ları → Cloudflare CDN önüne alındığında origin call %80 düşer
+- **Sonuç:** Sistem Oracle göçüne hazır; göç sonrası tüm optimizasyonlar kalıcı kalır
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -729,6 +736,12 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Pattern C egress optimizasyonu (Sprint 8.10):** Sprint 8.9'da `tolerance=0.0` koyduktan sonra fast-path mümkün oldu — `cast(Match.ft_all_ratios, JSONB) == cast(ft_ratios, JSONB)` ile DB-side filter. Eski yol 13K+ satır çekip Python'da filtere = ~130 MB/çağrı egress; yeni yol ~50 KB/çağrı (%99.96 azaltma). PostgreSQL JSONB karşılaştırması kanonik (key sırası önemsiz). tolerance > 0 fallback yolu `_ratios_match` Python fonksiyonu ile korundu.
 
+- **Backend Cache-Control middleware (Sprint 8.10b):** `app/api/main.py` `add_cache_headers` middleware'i — `/api/fixture` (5dk), `/api/results` (2dk), `/api/matches` (5dk), `/api/health` (30sn) için `Cache-Control: public, s-maxage=N, stale-while-revalidate=60` header'ları ekler. Cloudflare CDN önüne alındığında edge cache çalışır → origin call (Railway → DB) %80 azalır. Vercel `revalidate` SSR cache'inden farklı, ortogonal: birlikte çalışırlar.
+
+- **GitHub Actions cron'ları geçici devre dışı (Sprint 8.10b):** `.github/workflows/daily_pipeline.yml` schedule bloku yorum satırına alındı. Egress sınırı geri gelene + Oracle migration tamamlanana kadar `workflow_dispatch` (manuel tetik) modunda. Migration sonrası 5 cron'la geri açılacak (08:00 pipeline + 4 update-scores entry: 14/18/22 + gece toplu).
+
+- **Oracle Cloud Always Free migration kararı (Sprint 8.10b sonrası):** Supabase free tier 5 GB/ay egress sınırı yetersiz; Pro upgrade ($25/ay) reddedildi. Oracle Always Free Ampere A1 (4 vCPU + 24 GB RAM + 200 GB disk + 10 TB/ay outbound) ücretsiz alternatif. Self-hosted PostgreSQL 16 + Cloudflare R2 backup. Migration adımları "Kaldığımız Yer" bölümünde 10 madde detaylı.
+
 ---
 
 ## Teknoloji Kararları
@@ -771,133 +784,248 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-05-08 — Sprint 8.10 sonu)
+## Kaldığımız Yer (2026-05-08 — Sprint 8.10b sonu, Oracle Cloud Migration Bekleniyor)
 
-Sprint 8.10 deploy edildi (commit `d9c8c4d`). **ACİL** Supabase egress aşımı (25 GB / 5 GB = %511) sebebiyle Pattern C DB-side filter + `/api/health` hafifletme uygulandı.
+### 🚨 Aktif Sorun — Supabase Egress Kotasını Aştı
 
-### 🚨 KRİTİK DURUM — Supabase Erişilmez
-
-Supabase Fair Use Policy aşıldı:
-- Egress: **25,567 MB / 5 GB (%511)**
+- Egress: **25,567 MB / 5 GB (%511)** — Fair Use Policy aşıldı
 - Status: **Unhealthy** (tüm DB istekleri 402 dönüyor)
-- Etki: Production tamamen down — fixture/sonuçlar/analiz çalışmıyor
+- Production tamamen down — fixture / sonuçlar / analiz çalışmıyor
+- **Kullanıcı kararı:** Para harcamayacak. **Oracle Cloud Always Free** üzerine self-hosted PostgreSQL'e geçilecek (sınırsız egress, ömür boyu ücretsiz).
 
-**Kullanıcı tercihi:** Para harcamadan çözüm. Sprint 8.10b ile altyapı buna hazırlandı.
+### Sprint 8.10 + 8.10b — Egress Optimizasyonu (deploy edildi, commit `fa89bd3`)
 
-### Sprint 8.10b — Acil Tampon (Para Harcamadan, deploy edildi)
+Bunlar kalıcı çözümün öncesinde **gelecek aşımları engellemek için** yapıldı; Oracle göçünden sonra da kalıcı:
 
-| Önlem | Etki |
+| Optimizasyon | Etki |
 |---|---|
-| GitHub Actions cron'ları **devre dışı** (workflow_dispatch only) | Erişim geri gelince otomatik tetiklenip yine egress yaratmaz |
-| Vercel SSR cache: 60sn → **5dk fixture, 2dk results** | Frontend kullanımdan kaynaklı egress 5x azalır |
-| Backend Cache-Control header (`s-maxage` + `stale-while-revalidate`) | Cloudflare CDN önüne alındığında origin call %80 düşer |
+| Pattern C `tolerance=0.0` fast-path → DB-side JSONB equality (`pattern_c.py`) | 130 MB/çağrı → 50 KB (%99.96 azaltma) |
+| `/api/health.data_quality` kaldır → ayrı `/api/admin/quality` endpoint | UptimeRobot ping yükü 187 MB/gün → ~5 MB/gün |
+| GitHub Actions cron'ları **devre dışı** (workflow_dispatch only) | Erişim dönünce otomatik tetiklenip yine egress yaratmaz |
+| Vercel SSR cache: 60sn → 5dk fixture, 2dk results | Frontend kaynaklı çağrılar 5x azalır |
+| Backend `Cache-Control` middleware (`s-maxage` + `stale-while-revalidate`) | CDN önüne alındığında origin call %80 düşer |
 
-### Para Harcamadan Kesin Yol Seçenekleri (sırayla)
+**Beklenen toplam egress:** ~26 GB/gün → ~50-150 MB/gün.
 
-| # | Seçenek | Maliyet | Süre | Garanti |
-|---|---|---|---|---|
-| 1 | **Supabase support ticket** — egress affı iste | 0 ₺ | 0-3 gün | %30-50 başarı |
-| 2 | **Yeni Supabase free projesi + Sprint 8.10/8.10b** | 0 ₺ | 1-2 saat | Yüksek (~%95) |
-| 3 | **Cloudflare CDN ekle** (Seçenek 2 üstüne) | 0 ₺ | 1-2 saat | Çok yüksek (%99+) |
-| 4 | **Oracle Cloud Always Free + self-hosted PostgreSQL** | 0 ₺ ömür boyu | 2-4 saat | %100 — sınırsız egress |
+---
 
-**Önerilen rota:** Önce 1+2 dene (hızlı), trafik artışında 3 ekle, gelecekte 4'e geç.
+## Sıradaki Adım: Oracle Cloud Always Free + Self-hosted PostgreSQL Migration
 
-### Backup İndirme Testi (Kullanıcı Tarafı)
+Yeni sohbete geçilecek. Aşağıdaki yol haritası eksiksiz uygulanmalı.
 
-Yeni Supabase projesine veri taşımak için: eski projeden backup indirilebiliyor mu?
-- Supabase Dashboard → eski proje → Database → Backups → Download
-- Egress aşımıyla bloke olabilir; 24 saat sonra tekrar dene
-- Bloke ise: sıfırdan başla (workflow her gün yeniden veri ekler, 1-2 hafta sonra eski seviyede)
+### Neden Oracle Cloud Always Free?
 
-### ⚠️ Manuel Migration Adımı (Sprint 8.9 — Supabase erişimi geri gelince)
+| Özellik | Oracle Always Free | Supabase Free |
+|---|---|---|
+| RAM | **24 GB** (Ampere A1) | 0.5 GB |
+| CPU | **4 vCPU** ARM | 0.25 vCPU |
+| Disk | **200 GB** | 0.5 GB |
+| Egress | **10 TB/ay** (pratik sınırsız) | 5 GB/ay |
+| Maliyet | **0 ₺ ömür boyu** | 0 ₺ ama sınırlı |
+| Ücret çekimi | Hayır (kredi kartı sadece doğrulama) | — |
 
-Railway Dockerfile alembic koşturmuyor. Sprint 8.9 migration `g4d2a7c9b815` Supabase SQL Editor'de manuel uygulanmalı:
+### Migration Yol Haritası (10 Adım)
 
-```sql
-ALTER TABLE matches ADD COLUMN deleted_at TIMESTAMPTZ NULL;
-ALTER TABLE matches ADD COLUMN deleted_reason VARCHAR(50) NULL;
-CREATE INDEX ix_matches_deleted_at ON matches(deleted_at) WHERE deleted_at IS NULL;
-CREATE TABLE audit_log (
-  id BIGSERIAL PRIMARY KEY,
-  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  operation VARCHAR(50) NOT NULL,
-  target_match_id VARCHAR(20),
-  actor VARCHAR(100),
-  details JSONB
-);
-CREATE INDEX ix_audit_log_timestamp ON audit_log(timestamp);
-CREATE INDEX ix_audit_log_target ON audit_log(target_match_id);
+#### 1. Oracle Cloud Hesabı Açma
+- https://www.oracle.com/cloud/free/
+- "Start for free" → e-posta + kredi kartı doğrulama (ücret çekilmez, $0)
+- **Bölge seçimi:** Frankfurt (eu-frankfurt-1) veya Amsterdam → Türkiye latency ~30-50ms
+- Hesap onayı sonrası Cloud Console aç
+
+#### 2. Compute Instance Oluşturma (Ampere A1)
+- Compute → Instances → Create Instance
+- **Image:** Canonical Ubuntu 22.04 (ARM64-Server)
+- **Shape:** VM.Standard.A1.Flex → 4 OCPU + 24 GB RAM (Always Free hakkına dahil)
+- **Networking:** Yeni VCN + public subnet, public IP atansın
+- **SSH key:** kendi anahtarın yüklenir (Ed25519 önerili)
+- **Boot volume:** 200 GB
+- "Always Free Eligible" rozetine dikkat — bunu seçtiğinden emin ol
+
+#### 3. PostgreSQL 16 Kurulumu
+SSH ile bağlan (`ssh ubuntu@<PUBLIC_IP>`):
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y postgresql-16 postgresql-contrib ufw nginx certbot python3-certbot-nginx
+
+# PostgreSQL servisi
+sudo systemctl enable --now postgresql
+sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '<güçlü-şifre>';"
+
+# DB oluştur
+sudo -u postgres createdb nortverse
+sudo -u postgres psql -c "CREATE USER nortverse_app WITH PASSWORD '<app-şifre>';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE nortverse TO nortverse_app;"
+
+# Dış erişim için
+echo "listen_addresses = '*'" | sudo tee -a /etc/postgresql/16/main/postgresql.conf
+echo "host nortverse nortverse_app 0.0.0.0/0 scram-sha-256" | sudo tee -a /etc/postgresql/16/main/pg_hba.conf
+sudo systemctl restart postgresql
 ```
 
-Migration uygulanana kadar `/api/health` `db_ok: false` döner (`deleted_at` kolonu yok). Uygulandıktan sonra `python -m app.cli.main prune-non-league --apply` ile mevcut kupa maçları temizlenebilir.
+#### 4. Firewall (UFW + Oracle Cloud Security List)
+```bash
+# UFW (Ubuntu)
+sudo ufw allow OpenSSH
+sudo ufw allow 5432/tcp   # PostgreSQL
+sudo ufw allow 80/tcp     # HTTP (Let's Encrypt)
+sudo ufw allow 443/tcp    # HTTPS (opsiyonel API proxy)
+sudo ufw enable
 
-### Sıradaki Yapılacaklar (sırayla — Supabase erişimi geri geldikten SONRA)
+# Oracle Cloud Console: VCN → Security List → Ingress Rules
+# 5432 portunu Railway IP aralığından (veya 0.0.0.0/0 + güçlü şifre) aç
+```
 
-#### 0. **ACİL** — Supabase Pro upgrade veya bekleme kararı (kullanıcı seçimi)
+#### 5. Schema Migration Zinciri (yeni DB'de tek seferde)
+SSH bağlantısında veya `psql` ile yeni DB'ye bağlan, sırayla:
 
-#### 1. Migration uygula + ilk DB temizliği (manuel adım)
-- Yukarıdaki SQL'i Supabase'da çalıştır
-- `python -m app.cli.main audit-db` — kalite skoru raporu
-- `python -m app.cli.main prune-non-league` (dry-run) → kaç kupa maçı var
-- Onay ile `--apply` → audit_log'a kayıt düşer
-- `python -m app.cli.main self-test 2813084` → E2E doğrulama
+```sql
+-- 641438be3ff8 (initial schema): matches + temel kolonlar
+-- c1b1b4cd333b: h2 skorları + kickoff_time
+-- a3f9e2b1c4d5: fixture_cache tablosu
+-- b7e4a2d8c901: 6 pattern JSONB kolonu
+-- f5c8d2a1b394: trends JSONB kolonu
+-- g4d2a7c9b815: deleted_at + audit_log
 
-#### 2. Frontend Vitest birim testleri
-- `frontend/lib/confidence.ts`, `lib/combos.ts`, `lib/cart.ts` saf TS — birim test edilebilir
-- Vitest setup gerekir (`npm i -D vitest`)
-- Hedef: confidence formülü, çelişki çözümü, kombo üretimi, sepet idempotency
+-- Pratik yol: alembic upgrade head (DATABASE_URL=Oracle bağlantısı ile)
+```
 
-#### 3. Top Picks'e Trend Katkısı (confidence boost)
-- Ev formu KG %80'se → kg_var pick'ine küçük bonus (örn. `× 1.05`)
-- Üst 2.5 trendi yüksekse → ust_25 pick'ine bonus
-- Form mağlubiyet trendi → ev kazanma pick'lerine penaltı
-- Implementation: `confidence.ts`'e `trendBoost(pick, trends)` fonksiyonu
+Local'den:
+```bash
+cd backend
+DATABASE_URL="postgresql+asyncpg://nortverse_app:<şifre>@<PUBLIC_IP>:5432/nortverse" alembic upgrade head
+```
 
-#### 4. Sepet Özeti Sticky Rozet
-- Sepet kapalıyken sayfa üstünde küçük bilgi: "🧾 3 tahmin · ≈%49 · ≈2.03"
-- Mobile'da özellikle değerli (bottom bar şeffaflığı)
+#### 6. Veri Taşıma (3 alt seçenek)
 
-#### 5. Migration otomatikleştirme
-- Dockerfile CMD'den önce `alembic upgrade head` ekle — manuel SQL adımı kalksın
-- Risk: prod migration ilk deploy'da koşar; geri alma planı gerek
+**6A. Eski Supabase'ten backup indirilebiliyorsa** (Egress aşımına rağmen backup indirme genelde bloklanmaz):
+```bash
+# Supabase Dashboard → eski proje → Database → Backups → Download .sql
+psql "postgresql://nortverse_app:<şifre>@<PUBLIC_IP>:5432/nortverse" < supabase_backup.sql
+```
 
-#### 6. Trends Backfill (eski maçlar için — opsiyonel)
-- Mevcut maçlar bir sonraki `run-pipeline`'da otomatik trend ile yazılır (idempotent upsert)
-- Daha hızlı: `backfill-trends` CLI — `raw_data` olmadığı için yeniden scrape gerek → Playwright fırtınası riski; organik dolması yeterli
+**6B. Backup indirilemiyorsa — Sıfırdan başla:**
+- Yeni DB boş olsun (sadece schema)
+- GitHub Actions cron'ları açıldığında `run-pipeline` her gün maç ekleyecek
+- 1-2 hafta sonra arşiv eski seviyede (~13K maç)
+- Backfill gereken pattern/trend kolonları organik dolar (idempotent upsert)
 
-#### 7. Pattern recompute trigger
-- Arşiv her gün büyüyor (`run-pipeline`) → eski maçların pattern eşleşme sayısı zamanla değişir
-- Şimdilik: pattern bir kere yazılır, bayatlar ama sorun değil
-- İleride: haftalık `recompute-patterns` cron — eski maçların pattern'lerini yeniler
+**6C. `build-multi-archive` ile hızlandır:**
+- Local'den ana liglerin son 3 sezonunu yeniden scrape et:
+```bash
+cd backend
+DATABASE_URL="postgresql+asyncpg://nortverse_app:<şifre>@<PUBLIC_IP>:5432/nortverse" \
+  python -m app.cli.main build-multi-archive 36 78 88 87 60 --seasons 3
+```
+- 3-6 saatte ~5-10K maç birikir
+- ENG PR (36), Bundesliga (88), La Liga (87), Serie A (78), TUR D1 (60)
 
-#### 8. Sprint 10 — Canlı Maç & Trend (Uzun vade)
-- Anlık skor takibi (devre arası + final)
-- WebSocket veya 30sn polling
-- Maç sırasında oran değişimi takibi
+#### 7. Railway Backend Bağlantısı
+Railway Dashboard → nortverse-production → Variables:
+- `DATABASE_URL` = `postgresql+asyncpg://nortverse_app:<şifre>@<PUBLIC_IP>:5432/nortverse`
+- (asyncpg URL şeması — `postgresql://` değil `postgresql+asyncpg://`)
+- Save → Railway otomatik yeniden deploy eder
+- `https://nortverse-production.up.railway.app/api/health` → `db_ok: true` görmeli
 
-#### 9. Sprint 11+ — Auth/Premium (Para kazanma yolu) — kullanıcı şu an istemiyor
-- NextAuth.js + Google OAuth
-- Free vs Premium farkı
+#### 8. Smoke Test
+```bash
+# Lokal terminal:
+curl https://nortverse-production.up.railway.app/api/health | jq
+# beklenen: {"status":"ok","db_ok":true,...}
+
+curl https://nortverse-production.up.railway.app/api/analyze/2813084 | jq .skipped
+# beklenen: false (lig maçı, atlanmadı)
+
+# Eğer arşiv hazırsa:
+DATABASE_URL=... python -m app.cli.main self-test 2813084
+DATABASE_URL=... python -m app.cli.main audit-db
+```
+
+#### 9. GitHub Actions Cron'ları Yeniden Aç
+[`.github/workflows/daily_pipeline.yml`](github/workflows/daily_pipeline.yml) — yorum satırlı `schedule:` blokunu açığa çıkar:
+
+```yaml
+on:
+  schedule:
+    - cron: "0 5 * * *"    # 08:00 İstanbul — sabah analiz (run-pipeline)
+    - cron: "0 6 * * *"    # 09:00 İstanbul — yedek
+    - cron: "0 11 * * *"   # 14:00 İstanbul — update-scores
+    - cron: "0 15 * * *"   # 18:00 İstanbul — update-scores
+    - cron: "0 19 * * *"   # 22:00 İstanbul — update-scores
+    - cron: "30 21 * * *"  # 00:30 İstanbul — gece toplu
+    - cron: "0 23 * * *"   # 02:00 İstanbul — geç maçlar
+  workflow_dispatch: ...
+```
+
+GitHub Secrets → `DATABASE_URL` Oracle bağlantı string'iyle güncelle.
+
+#### 10. Otomatik Backup (Cloudflare R2 ücretsiz 10 GB)
+Oracle sunucuda crontab:
+```bash
+# /etc/cron.daily/pg_backup
+#!/bin/bash
+TIMESTAMP=$(date +%Y%m%d)
+pg_dump -h localhost -U postgres nortverse | gzip > /tmp/backup_$TIMESTAMP.sql.gz
+# rclone ile R2'ye gönder (Cloudflare R2 free tier 10GB)
+rclone copy /tmp/backup_$TIMESTAMP.sql.gz r2:nortverse-backups/
+# 30 gün eski olanları sil
+find /tmp/backup_*.sql.gz -mtime +30 -delete
+```
+
+### Migration Sonrası Kontrol Listesi
+
+- [ ] `/api/health` → 200 OK, `db_ok: true`
+- [ ] `/api/fixture` → bugünün maçları
+- [ ] `/api/analyze/2813084` → skipped: false, ft_b match_count > 0
+- [ ] `audit-db` → quality_score > 80
+- [ ] GitHub Actions cron manuel test → run-pipeline başarılı
+- [ ] Frontend `/bulten`, `/sonuclar`, `/analyze/<id>` çalışıyor
+- [ ] Otomatik backup script test
+- [ ] UptimeRobot ping yeşil
+
+### Bilinen Riskler
+
+- **Oracle hesap onayı bazen takılır:** "validating account" durumunda 24-48 saat sürebilir. Başka kart denemek veya destek bildirmek
+- **PostgreSQL public expose güvenliği:** Güçlü şifre + scram-sha-256 + IP whitelist (Railway IP'leri) — minimum
+- **Backup yoksa data kaybı:** Pattern arşivi 1-2 haftada organik birikir; kritik veri yok
+- **DNS ve Railway env:** DATABASE_URL public IP'ye bağlı, Oracle reboot/IP değişimi → reserved IP kullan (Always Free)
+
+### Önemli Commit Zinciri
+
+**Sprint 8.10 + 8.10b oturumu:**
+- `d9c8c4d` Sprint 8.10 ACİL — Pattern C DB-side JSONB equality (%99.96 azaltma) + `/api/health.data_quality` kaldır → `/api/admin/quality`
+- `08ae36a` Sprint 8.10 (2/n) — CLAUDE.md egress aşımı durumu + 3 seçenek
+- `fa89bd3` **Sprint 8.10b** — Cron disable + Vercel cache 5x + Backend Cache-Control middleware
+
+**Sprint 8.9 oturumu:**
+- `6ab2821` Lig filtresi + Pattern C tam eşleşme
+- `72d4ab1` Soft delete + audit_log + pre-write validation
+- `2b7274b` 5 CLI komutu + 52 pytest + /api/health quality
+- `81a82cd` CLAUDE.md güncellemesi
+
+**Sprint 8.4-8.8 önceki oturum:**
+- `cd49f4e` Sprint 8.4 — 3 katman mimari
+- `9203b3a` Sprint 8.4 — IY/2Y filtre
+- `92d95c9` Sprint 8.5 — Kombinasyon kuponu
+- `13a9db3` Sprint 8.6 — Dinamik eşik
+- `713cf79` Sprint 8.7 — Bahis sepeti
+- `e994468` Sprint 8.8 — Trendler
+
+### Oracle Migration Sonrası Sıradaki Yapılacaklar
+
+1. **DB temizliği** (`prune-non-league --apply`) — Oracle'a backup'tan import edilen kupa maçları temizlenir
+2. **Self-test** (`self-test 2813084`) — E2E doğrulama
+3. **Frontend Vitest birim testleri** (confidence/combos/cart)
+4. **Top Picks'e trend katkısı** (confidence boost)
+5. **Sepet sticky özet rozeti** (mobile bottom bar)
+6. **Migration otomatikleştirme** (Dockerfile'a `alembic upgrade head` ekle)
+7. **Pattern recompute trigger** (haftalık cron)
+8. **Sprint 10 — Canlı maç & WebSocket** (uzun vade)
+9. **Sprint 11+ — Auth/Premium** (kullanıcı şu an istemiyor)
 
 ### Bilinen Açık Konular
-- **Migration manuel adımı:** Railway Dockerfile alembic koşturmuyor (Sprint 8.5'te eklenecek)
-- **Storage:** Pattern + trends ~500MB, Supabase free tier sınırına yakın — izlenmeli
-- **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction Sprint 10+
-- **Pattern self-check anomalileri:** `audit-db` rapor üretebilir — uygulandığında kontrol edilmeli
+
+- **Sprint 8.9 migration `g4d2a7c9b815`:** Eski Supabase'a manuel uygulanmamıştı; Oracle'a alembic ile uygulanacak (otomatik)
+- **Storage:** Oracle 200 GB, sınır pratik olarak yok
+- **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction gelecek sprint
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
-
-### Önemli Commit Zinciri (Sprint 8.9 + 8.10 oturumu)
-- `6ab2821` Sprint 8.9 (1/n): Lig filtresi + Pattern C tam eşleşme — kupa maçları sistemden çıkarıldı
-- `72d4ab1` Sprint 8.9 (2/n): Soft delete + audit_log + pre-write validation + kanonik lig adı
-- `2b7274b` Sprint 8.9 (3/n): 5 CLI komutu (prune/restore/audit-db/audit-patterns/self-test) + 52 pytest + /api/health quality
-- `81a82cd` Sprint 8.9 (4/n): CLAUDE.md güncellemesi
-- `d9c8c4d` **Sprint 8.10 ACİL:** Egress optimizasyonu — Pattern C DB-side JSONB equality (%99.96 azaltma) + /api/health.data_quality kaldır → /api/admin/quality
-
-### Önceki Oturum (Sprint 8.4-8.8) Commit Zinciri
-- `cd49f4e` Sprint 8.4: 3 katman mimari (TopPicks + MarketSummary + DetailedStats), Altın Oranlar kaldırıldı
-- `9203b3a` Sprint 8.4: IY/2Y'de iddaa açmayan pazarlar gizlendi (excludePeriods)
-- `92d95c9` Sprint 8.5: Akıllı kombinasyon kuponu (combos.ts + ComboSuggestion)
-- `13a9db3` Sprint 8.6: Dinamik confidence eşiği (dynamicMinPct)
-- `713cf79` Sprint 8.7: Bahis sepeti (cart.ts + BetCart + AddToCartButton + MatchContext)
-- `e994468` Sprint 8.8: Form & H2H trendleri (trends.py + matches.trends + TrendsPanel)
+- **Backup yoksa veri kaybı:** Pattern arşivi 1-2 haftada organik birikir, kritik değil
