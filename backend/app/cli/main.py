@@ -1297,6 +1297,95 @@ def audit_patterns_cmd(
     asyncio.run(_run())
 
 
+@app.command("recompute-patterns")
+def recompute_patterns_cmd(
+    limit: Optional[int] = typer.Option(None, "--limit", help="En fazla N maç işle. Boşsa hepsi."),
+    batch_size: int = typer.Option(500, "--batch-size", help="Batch boyutu (default 500)."),
+    only_missing: bool = typer.Option(False, "--only-missing", help="Sadece pattern_ft_b IS NULL olanları işle."),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Tüm matches tablosunda Pattern B/C alanlarını yeniden hesaplayıp DB'ye yaz.
+
+    Sprint 8 lazy backfill ile yan yana çalışır — bulk recompute haftalık cron için.
+    Soft-deleted maçlar atlanır (deleted_at IS NULL filtresi).
+    Hata olan satır atlanır, pipeline devam eder.
+    """
+    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+
+    from sqlalchemy import select, and_
+    from app.db.connection import get_session
+    from app.db.models import Match
+    from app.analysis.persist import compute_all_patterns, update_match_patterns
+    from app.pipeline.runner import _with_retry
+
+    async def _run() -> None:
+        async with get_session() as session:
+            filters = [Match.deleted_at.is_(None)]
+            if _flag(only_missing):
+                filters.append(Match.pattern_ft_b.is_(None))
+            stmt = select(Match.match_id).where(and_(*filters)).order_by(Match.match_id)
+            if limit:
+                stmt = stmt.limit(limit)
+            result = await session.execute(stmt)
+            match_ids = [row[0] for row in result.all()]
+
+        total = len(match_ids)
+        if total == 0:
+            console.print("[yellow]İşlenecek maç yok (filtreye uygun).[/yellow]")
+            return
+
+        console.print(
+            f"[cyan]Recompute başladı:[/cyan] {total} maç · batch={batch_size}"
+            f"{' · only-missing' if _flag(only_missing) else ''}"
+        )
+        processed = 0
+        errors = 0
+        batch_count = (total + batch_size - 1) // batch_size
+
+        for i in range(0, total, batch_size):
+            batch = match_ids[i : i + batch_size]
+            for mid in batch:
+                try:
+                    async with get_session() as session:
+                        row = (await session.execute(
+                            select(Match).where(Match.match_id == mid)
+                        )).scalar_one_or_none()
+                    if not row:
+                        errors += 1
+                        continue
+
+                    patterns = await compute_all_patterns(
+                        match_id=mid,
+                        ht_scores=(row.ht_scores_1 or [], row.ht_scores_x or [], row.ht_scores_2 or []),
+                        h2_scores=(row.h2_scores_1 or [], row.h2_scores_x or [], row.h2_scores_2 or []),
+                        ft_scores=(row.ft_scores_1 or [], row.ft_scores_x or [], row.ft_scores_2 or []),
+                        ft_ratios=row.ft_all_ratios,
+                    )
+                    await _with_retry(
+                        lambda: update_match_patterns(mid, patterns),
+                        label=f"recompute {mid}",
+                    )
+                    processed += 1
+                except Exception as exc:
+                    logging.exception("Recompute hatası [%s]: %s", mid, exc)
+                    errors += 1
+
+            pct = 100.0 * (processed + errors) / total
+            console.print(
+                f"[dim]Batch {i // batch_size + 1}/{batch_count} bitti: "
+                f"{processed} ✓ · {errors} ✗ · {pct:.1f}%[/dim]"
+            )
+            # DB throttle: 13K maç × tek tek query çok yük; her batch sonu 1sn nefes
+            await asyncio.sleep(1.0)
+
+        console.print(
+            f"\n[bold green]Recompute tamamlandı:[/bold green] "
+            f"[green]{processed} güncellendi[/green] · [red]{errors} hata[/red]"
+        )
+
+    asyncio.run(_run())
+
+
 @app.command("self-test")
 def self_test_cmd(
     match_id: str = typer.Argument("2813084", help="Test edilecek match ID"),

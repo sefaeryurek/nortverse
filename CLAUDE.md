@@ -582,6 +582,54 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Backend Cache-Control middleware:** `/api/fixture`, `/api/results`, `/api/matches`, `/api/health` için `s-maxage` + `stale-while-revalidate` header'ları → Cloudflare CDN önüne alındığında origin call %80 düşer
 - **Sonuç:** Sistem Oracle göçüne hazır; göç sonrası tüm optimizasyonlar kalıcı kalır
 
+### Sprint 9 — TAMAMLANDI ✅ (Oracle Migration Kod Hazırlığı + Kritik Bug Fix + Repo Temizlik)
+**Sprint 9 (1/n) — `057a585`:** Oracle migration için kod hazırlığı.
+- `connection.py`: pool_size/max_overflow/statement_cache_size hardcode kaldırıldı, env-driven (DB_POOL_SIZE/DB_MAX_OVERFLOW/DB_STATEMENT_CACHE_SIZE). Defaultlar Oracle-friendly (5/5/100); Supabase için Railway env'de 2/0/0 set edilir.
+- `alembic/env.py`: DATABASE_URL_SYNC artık opsiyonel — yoksa DATABASE_URL'den asyncpg→psycopg2 dönüşümü otomatik. Tek env var ile çalışır.
+- `Dockerfile`: CMD'ye `alembic upgrade head` eklendi. Container her açılışta schema güncel.
+
+**Sprint 9 (2/n) — `3a01d7e` — KRİTİK FIX:** `app/api/main.py:528` `from sqlalchemy import or_` vardı ama `func` yoktu. Sprint 8.10'da `/api/health.data_quality` kaldırılıp `/api/admin/quality` ayrı endpoint olarak eklendiğinde unutulmuş; 5 satır `func.count(Match.id)` NameError fırlatıyordu. Production'da kırık olduğu fark edilmedi çünkü UptimeRobot bu endpoint'i değil `/api/health`'i pingliyor. Tek satır fix: `or_, func`.
+
+**Sprint 9 (3/n) — `ae1c394`:** Repo temizlik (~60 MB) + lint cleanup.
+- Silindi: 4 root scraping artifact (HTML/txt), `backend/debug/` (5 dosya, 172 KB), `backend/debug_html/` (74 dosya, 60 MB)
+- `.gitignore`: `backend/debug/` pattern eklendi
+- F-prefix lint bug'lar (ruff --fix + manuel): F811 `fetch_league_seasons` çift import (cli/main.py:34 kaldırıldı), F401 ×5 (Annotated, ALL_SCORES, timezone, and_, SCRAPER), F841 `steps = []` self-test dead code, F541 ×4 gereksiz f-string prefix
+- DetailedStats SSR guard incelendi — gerçek bug değil (useEffect zaten client-only), skip edildi
+
+### Sprint 10 — TAMAMLANDI ✅ (Kod İyileştirme Fazı — DB-Bağımsız)
+**Bağlam:** Oracle Cloud hesap kabulu sorunlu çıktı, kullanıcı kararı: DB alternatifi başka sohbette aranacak. Bu sohbet DB'siz ilerletilebilir 5 iyileştirme yaptı.
+
+**Sprint 10 (1/5) — `84c0761`:** Frontend Vitest birim test altyapısı (sıfırdan, Next.js 16.2.4 + React 19.2.4).
+- `node_modules/next/dist/docs/01-app/02-guides/testing/vitest.md` resmi rehber takip edildi
+- devDeps: vitest, @vitejs/plugin-react, jsdom, @testing-library/{react,dom}, vite-tsconfig-paths
+- `vitest.config.mts` + `__tests__/fixtures.ts` (PatternResult/Pick factory)
+- `confidence.test.ts` (~33 test): dynamicMinPct, computeConfidence, confidenceTier, resolveConflicts, buildPicks, getTopPicks, getMarketSummary, getMarkets
+- `combos.test.ts` (~15 test): generateCombos, domain conflict, hard conflict, tier kuralları
+- 48 test 1.19sn yeşil
+
+**Sprint 10 (2/5) — `a638389`:** `lib/cart.ts` helper testleri (jsdom localStorage).
+- cart.ts: readStorage/writeStorage/itemKey/STORAGE_KEY/CART_EVENT export edildi (test edilebilirlik)
+- Duplicate export ölü kod (`export { itemKey, STORAGE_KEY as CART_STORAGE_KEY }`) silindi
+- `cart.test.ts` ~14 test: readStorage edge case'ler (boş/bozuk/array dışı/filter), writeStorage event fırlatma, itemKey determinism, roundtrip
+- 62 test yeşil
+
+**Sprint 10 (3/5) — `3c556e2`:** Top Picks Trend Boost — Sprint 8.8 trends → confidence formülü.
+- `confidence.ts`: `getTrendsBoost(marketKey, selection, trends)` helper + TRENDS_BOOST_RULES (5 kural: result+1/2 home/away_form.win_pct≥65 → 1.10, result+X h2h.draw_pct≥40 → 1.07, kg+KG Var h2h.kg_var_pct≥60 → 1.10, ou_25+Üst 2.5 home_form.over_25_pct≥55 → 1.08)
+- `computeConfidence`: 5. param `trendsBoost=1.0` (backward compat)
+- `buildPicks`: 4. param `trends=null` (backward compat) → her pick için boost
+- Prop drilling: `page.tsx → IddaaCoupon → TopPicks` ile `trends` geçirildi
+- 12 yeni test, 74 toplam yeşil + npm run build temiz
+
+**Sprint 10 (4/5) — `5a2d181`:** URL fallback centralize — `lib/env.ts`.
+- `next.config.ts` ve `lib/api.ts`'teki ikili kaynak duplicate kaldırıldı
+- `lib/env.ts` yeni modül: `getApiBase()` (CSR+SSR) + `getProxyTarget()` (rewrite)
+- Davranış değişmedi: Vercel SSR direkt Railway, CSR proxy üzerinden, lokal dev proxy localhost:8000
+
+**Sprint 10 (5/5):** Pattern recompute CLI + haftalık workflow + CLAUDE.md güncelleme.
+- `recompute-patterns` CLI komutu: `--limit N`, `--batch-size N`, `--only-missing`. `deleted_at IS NULL` filtresi, `_with_retry` ile lazy backfill, batch sonu progress log.
+- `.github/workflows/recompute_patterns.yml`: haftalık cron şablonu (Pazar 03:00 İstanbul), `timeout-minutes: 350`. Şu an `schedule:` yorumlu (DB yok), `workflow_dispatch` aktif.
+- 67 backend pytest yeşil.
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -784,36 +832,62 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-05-08 — Sprint 8.10b sonu, Oracle Cloud Migration Bekleniyor)
+## Kaldığımız Yer (2026-05-13 — Sprint 10 sonu, DB Alternatifi Araştırması Bekliyor)
 
-### 🚨 Aktif Sorun — Supabase Egress Kotasını Aştı
+### 🚨 Aktif Sorun — Production Hâlâ Down
 
-- Egress: **25,567 MB / 5 GB (%511)** — Fair Use Policy aşıldı
-- Status: **Unhealthy** (tüm DB istekleri 402 dönüyor)
-- Production tamamen down — fixture / sonuçlar / analiz çalışmıyor
-- **Kullanıcı kararı:** Para harcamayacak. **Oracle Cloud Always Free** üzerine self-hosted PostgreSQL'e geçilecek (sınırsız egress, ömür boyu ücretsiz).
+- Supabase egress aşımı devam ediyor (Fair Use Policy %511); tüm DB istekleri 402
+- Oracle Cloud Always Free **bırakıldı** (hesap onayı / kart sorunu) — kullanıcı kararı
+- DB alternatifi (Neon, fly.io, Aiven free, vs.) **başka sohbette araştırılacak**
+- Bu sürede tüm GitHub Actions cron'ları DEVRE DIŞI; UptimeRobot Railway'i ping atmaya devam ediyor (uyku önler)
 
-### Sprint 8.10 + 8.10b — Egress Optimizasyonu (deploy edildi, commit `fa89bd3`)
+### Sprint 8.10/8.10b/9/10 — Tamamlanan Hazırlıklar
 
-Bunlar kalıcı çözümün öncesinde **gelecek aşımları engellemek için** yapıldı; Oracle göçünden sonra da kalıcı:
+Production geri gelene kadar yapılabilecek her şey yapıldı:
 
-| Optimizasyon | Etki |
+| Konu | Etki |
 |---|---|
-| Pattern C `tolerance=0.0` fast-path → DB-side JSONB equality (`pattern_c.py`) | 130 MB/çağrı → 50 KB (%99.96 azaltma) |
-| `/api/health.data_quality` kaldır → ayrı `/api/admin/quality` endpoint | UptimeRobot ping yükü 187 MB/gün → ~5 MB/gün |
-| GitHub Actions cron'ları **devre dışı** (workflow_dispatch only) | Erişim dönünce otomatik tetiklenip yine egress yaratmaz |
-| Vercel SSR cache: 60sn → 5dk fixture, 2dk results | Frontend kaynaklı çağrılar 5x azalır |
-| Backend `Cache-Control` middleware (`s-maxage` + `stale-while-revalidate`) | CDN önüne alındığında origin call %80 düşer |
-
-**Beklenen toplam egress:** ~26 GB/gün → ~50-150 MB/gün.
+| Pattern C `tolerance=0.0` DB-side JSONB equality (Sprint 8.10) | 130 MB/çağrı → 50 KB (%99.96 azaltma) |
+| `/api/health.data_quality` → `/api/admin/quality` (Sprint 8.10) | UptimeRobot ping yükü 187 MB/gün → ~5 MB/gün |
+| GitHub Actions cron'ları devre dışı (8.10b) | Egress dönünce otomatik tetiklenip yine aşma yaratmaz |
+| Vercel SSR cache: 5dk fixture, 2dk results (8.10b) | Frontend çağrıları 5x azalır |
+| Backend `Cache-Control` middleware (8.10b) | CDN önüne alındığında origin call %80 düşer |
+| `connection.py` env-driven pool/cache (Sprint 9 1/n) | Oracle/Neon/her PostgreSQL'e tek env değişimiyle geçiş |
+| `Dockerfile` alembic upgrade head (Sprint 9 1/n) | Container açılışta schema otomatik güncel |
+| `/api/admin/quality` KRİTİK fix (Sprint 9 2/n) | `func` import eksik, NameError fırlatıyordu |
+| Repo temizlik + lint (Sprint 9 3/n) | ~60 MB, F-prefix bug'lar |
+| **Vitest birim test altyapısı + 74 test (Sprint 10 1-3)** | Frontend test coverage sıfırdan kuruldu, confidence/combos/cart |
+| **Top Picks trend boost (Sprint 10 3/5)** | Sprint 8.8 trends → confidence formülüne kondu |
+| **URL fallback centralize (Sprint 10 4/5)** | `lib/env.ts` — next.config ve lib/api tek kaynaktan okur |
+| **Pattern recompute CLI + workflow (Sprint 10 5/5)** | `recompute-patterns` + haftalık cron şablonu (DB hazır olunca açılır) |
 
 ---
 
-## Sıradaki Adım: Oracle Cloud Always Free + Self-hosted PostgreSQL Migration
+## Sıradaki Adım: DB Alternatifi Araştırması (Başka Sohbet)
 
-Yeni sohbete geçilecek. Aşağıdaki yol haritası eksiksiz uygulanmalı.
+Production'ı geri ayağa kaldırmak için yeni bir DB sağlayıcısı seçilecek. Adaylar:
 
-### Neden Oracle Cloud Always Free?
+| Aday | Bedava katmanı | Egress | Notlar |
+|---|---|---|---|
+| **Neon** | 0.5 GB depo + 191 saat compute/ay | Sınırsız | Postgres native, branching var, asyncpg uyumlu |
+| **Aiven Free** | 1 ay free trial sonrası ~5$/ay başlangıç | — | Free tier kısıtlı, Pro pahalı |
+| **fly.io Postgres** | 3 GB ücretsiz volume | Sınırsız | Self-managed, region seçimi var |
+| **Supabase Pro upgrade** | 25$/ay (kullanıcı reddetti) | 250 GB | Mevcut tüm veriyi korur |
+| **Self-hosted (lokal Docker)** | 0 | Sınırsız | Sürekli açık tutmak gerek |
+
+**Önerilen:** Neon (Postgres native + bedava + sınırsız egress + branching). Schema migration zinciri zaten Sprint 9 (1/n)'de hazır → tek env değişimi yeterli.
+
+Migration sonrası açılacak:
+1. GitHub Actions cron schedule (daily_pipeline.yml + recompute_patterns.yml)
+2. `prune-non-league --apply` — backup'tan gelen kupa temizliği (varsa)
+3. `self-test 2813084` — E2E doğrulama
+4. UptimeRobot zaten Railway'e ping atıyor, değişmez
+
+**Veri:** Supabase backup indirilebilirse direkt import; yoksa `build-multi-archive` ile yeniden topla (3-6 saat).
+
+> **Arşiv notu:** Bu sohbet öncesi Oracle Cloud Always Free için 10 adımlık detaylı migration yol haritası vardı (Ampere A1, schema migration, build-multi-archive, R2 backup, vs.). Oracle'da hesap/kart sorunu çıkınca vazgeçildi. Eski yol haritası git history'de `08ae36a` (Sprint 8.10 2/n) ve `fa89bd3` (Sprint 8.10b) commit'lerinde mevcut — Neon vs. seçilirse benzer adımlar uygulanır (alembic upgrade head zaten Sprint 9 1/n'de Dockerfile'a kondu).
+
+### Neden Oracle Cloud Always Free? (vazgeçildi, referans için)
 
 | Özellik | Oracle Always Free | Supabase Free |
 |---|---|---|
@@ -991,41 +1065,53 @@ find /tmp/backup_*.sql.gz -mtime +30 -delete
 
 ### Önemli Commit Zinciri
 
-**Sprint 8.10 + 8.10b oturumu:**
-- `d9c8c4d` Sprint 8.10 ACİL — Pattern C DB-side JSONB equality (%99.96 azaltma) + `/api/health.data_quality` kaldır → `/api/admin/quality`
-- `08ae36a` Sprint 8.10 (2/n) — CLAUDE.md egress aşımı durumu + 3 seçenek
-- `fa89bd3` **Sprint 8.10b** — Cron disable + Vercel cache 5x + Backend Cache-Control middleware
+**Sprint 10 oturumu (DB-bağımsız kod iyileştirme — 2026-05-13):**
+- `84c0761` Sprint 10 (1/5) — Vitest altyapı + confidence/combos testleri (48 test)
+- `a638389` Sprint 10 (2/5) — cart.ts helper testleri (14 test, 62 toplam)
+- `3c556e2` Sprint 10 (3/5) — Top Picks trend boost (TrendsData → confidence)
+- `5a2d181` Sprint 10 (4/5) — URL fallback centralize (lib/env.ts)
+- (5/5 bu commit) — Pattern recompute CLI + haftalık workflow + CLAUDE.md
 
-**Sprint 8.9 oturumu:**
+**Sprint 9 oturumu (Oracle hazırlığı + kritik fix + temizlik):**
+- `057a585` Sprint 9 (1/n) — connection.py env-driven + Dockerfile alembic upgrade head
+- `3a01d7e` Sprint 9 (2/n) — KRİTİK `/api/admin/quality` func import eksikti
+- `ae1c394` Sprint 9 (3/n) — Repo temizlik ~60 MB + F-prefix lint cleanup
+
+**Sprint 8.10 + 8.10b:**
+- `d9c8c4d` Sprint 8.10 ACİL — Pattern C DB-side JSONB equality (%99.96 azaltma)
+- `fa89bd3` Sprint 8.10b — Cron disable + Vercel cache 5x + Cache-Control middleware
+
+**Sprint 8.9:**
 - `6ab2821` Lig filtresi + Pattern C tam eşleşme
 - `72d4ab1` Soft delete + audit_log + pre-write validation
 - `2b7274b` 5 CLI komutu + 52 pytest + /api/health quality
-- `81a82cd` CLAUDE.md güncellemesi
 
-**Sprint 8.4-8.8 önceki oturum:**
-- `cd49f4e` Sprint 8.4 — 3 katman mimari
-- `9203b3a` Sprint 8.4 — IY/2Y filtre
-- `92d95c9` Sprint 8.5 — Kombinasyon kuponu
-- `13a9db3` Sprint 8.6 — Dinamik eşik
-- `713cf79` Sprint 8.7 — Bahis sepeti
-- `e994468` Sprint 8.8 — Trendler
+**Sprint 8.4-8.8:**
+- `cd49f4e` Sprint 8.4 — 3 katman mimari · `9203b3a` IY/2Y filtre
+- `92d95c9` Sprint 8.5 — Kombinasyon kuponu · `13a9db3` Sprint 8.6 — Dinamik eşik
+- `713cf79` Sprint 8.7 — Bahis sepeti · `e994468` Sprint 8.8 — Trendler
 
-### Oracle Migration Sonrası Sıradaki Yapılacaklar
+### Bu Sohbetten Sonraki Yapılacaklar
 
-1. **DB temizliği** (`prune-non-league --apply`) — Oracle'a backup'tan import edilen kupa maçları temizlenir
-2. **Self-test** (`self-test 2813084`) — E2E doğrulama
-3. **Frontend Vitest birim testleri** (confidence/combos/cart)
-4. **Top Picks'e trend katkısı** (confidence boost)
-5. **Sepet sticky özet rozeti** (mobile bottom bar)
-6. **Migration otomatikleştirme** (Dockerfile'a `alembic upgrade head` ekle)
-7. **Pattern recompute trigger** (haftalık cron)
-8. **Sprint 10 — Canlı maç & WebSocket** (uzun vade)
-9. **Sprint 11+ — Auth/Premium** (kullanıcı şu an istemiyor)
+**Acil (production'ı geri aç):**
+1. **DB alternatifi seç + migration** — başka sohbette (Neon önerili)
+2. **GitHub Actions cron schedule yeniden aç** — daily_pipeline + recompute_patterns
+
+**Migration sonrası temizlik:**
+3. `prune-non-league --apply` — backup'tan gelen kupa maçları (varsa)
+4. `self-test 2813084` — E2E doğrulama
+5. `audit-db` — quality_score > 80 kontrol
+
+**Kod iyileştirme (Sprint 11+):**
+6. **Sepet sticky bottom bar** (mobile UX) — Sprint 10'da skip edildi
+7. **`useCart` hook integration testi** (`renderHook`) — Sprint 10 Faz B'de skip
+8. **`pattern_stats.py` cosmetic refactor** — opsiyonel
+9. **Canlı maç & WebSocket** — uzun vade
+10. **Auth/Premium** — kullanıcı şu an istemiyor
 
 ### Bilinen Açık Konular
 
-- **Sprint 8.9 migration `g4d2a7c9b815`:** Eski Supabase'a manuel uygulanmamıştı; Oracle'a alembic ile uygulanacak (otomatik)
-- **Storage:** Oracle 200 GB, sınır pratik olarak yok
+- **Typer/Click sürüm uyumsuzluğu:** CLI `--help` çıktısı `TypeError: Parameter.make_metavar() missing 'ctx'` veriyor. Pre-existing — tüm komutlarda var, Sprint 9-10 ile alakası yok. Click upgrade veya Typer pin gerekli (sonraki sprint)
 - **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction gelecek sprint
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
-- **Backup yoksa veri kaybı:** Pattern arşivi 1-2 haftada organik birikir, kritik değil
+- **Frontend test coverage:** Sprint 10 birim test başladı (74 test); component test ve E2E henüz yok

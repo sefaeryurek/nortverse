@@ -1,0 +1,76 @@
+name: Pattern Recompute (Haftalık)
+
+# Tüm matches tablosunda Pattern B/C alanlarını yeniden hesaplar.
+# Sprint 8 lazy backfill ile yan yana çalışır — bu workflow toplu güncelleme yapar.
+#
+# ⚠️ Sprint 10 — schedule GEÇİCİ olarak DEVRE DIŞI.
+# Sebep: Supabase egress aşımı + Oracle migration ertelendi → DB erişimi yok.
+# DB hazır olunca aşağıdaki schedule blokunu yorum satırından çıkar.
+# workflow_dispatch ile manuel tetiklenebilir (DB erişimi gelince spot test için).
+
+on:
+  # schedule:
+  #   - cron: "0 0 * * 0"   # Her Pazar 03:00 İstanbul (UTC 00:00) — düşük yük zamanı
+  workflow_dispatch:
+    inputs:
+      only_missing:
+        description: "Sadece pattern eksik olanları (true/false)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      limit:
+        description: "En fazla N maç (boş = hepsi, test için 100 önerilir)"
+        required: false
+        default: ""
+      batch_size:
+        description: "Batch boyutu (default 500)"
+        required: false
+        default: "500"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  recompute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # 5.8 saat (GitHub Actions free limit 6 saat)
+
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bağımlılıkları yükle
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Recompute patterns
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cd backend
+          ONLY_MISSING="${{ github.event.inputs.only_missing }}"
+          LIMIT="${{ github.event.inputs.limit }}"
+          BATCH_SIZE="${{ github.event.inputs.batch_size }}"
+
+          ARGS=""
+          if [ "$ONLY_MISSING" = "true" ]; then
+            ARGS="$ARGS --only-missing"
+          fi
+          if [ -n "$LIMIT" ]; then
+            ARGS="$ARGS --limit $LIMIT"
+          fi
+          if [ -n "$BATCH_SIZE" ]; then
+            ARGS="$ARGS --batch-size $BATCH_SIZE"
+          fi
+
+          echo "Recompute başladı: $ARGS"
+          python -m app.cli.main recompute-patterns $ARGS
