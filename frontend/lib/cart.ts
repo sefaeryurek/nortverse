@@ -19,10 +19,12 @@ export interface CartItem {
   addedAt: number;
 }
 
-const STORAGE_KEY = "nortverse_bet_cart";
-const CART_EVENT = "nortverse-cart-updated";
+export const STORAGE_KEY = "nortverse_bet_cart";
+export const CART_EVENT = "nortverse-cart-updated";
 
-function readStorage(): CartItem[] {
+// Helper'lar test edilebilirlik için export edildi (Sprint 10 Faz B).
+// Production'da useCart hook'u içinde tüketilirler.
+export function readStorage(): CartItem[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -38,7 +40,7 @@ function readStorage(): CartItem[] {
   }
 }
 
-function writeStorage(items: CartItem[]): void {
+export function writeStorage(items: CartItem[]): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -48,7 +50,7 @@ function writeStorage(items: CartItem[]): void {
   }
 }
 
-function itemKey(it: Pick<CartItem, "matchId" | "marketKey" | "selectionLabel" | "period">): string {
+export function itemKey(it: Pick<CartItem, "matchId" | "marketKey" | "selectionLabel" | "period">): string {
   return `${it.matchId}|${it.period}|${it.marketKey}|${it.selectionLabel}`;
 }
 
@@ -123,5 +125,3 @@ export function useCart() {
     count: items.length,
   };
 }
-
-export { itemKey, STORAGE_KEY as CART_STORAGE_KEY };
