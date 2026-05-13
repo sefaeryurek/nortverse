@@ -231,11 +231,14 @@ def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
         total_goals = h + a
 
         if h > a:
-            r1 += 1; res = "1"
+            r1 += 1
+            res = "1"
         elif h == a:
-            rx += 1; res = "x"
+            rx += 1
+            res = "x"
         else:
-            r2 += 1; res = "2"
+            r2 += 1
+            res = "2"
 
         alt15 += 1 if total_goals < 2 else 0
         ust15 += 1 if total_goals >= 2 else 0
@@ -268,16 +271,22 @@ def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
 
         diff = h - a
         if diff > 0:
-            if diff == 1:   fark_ctr["ev1"] += 1
-            elif diff == 2: fark_ctr["ev2"] += 1
-            else:           fark_ctr["ev3p"] += 1
+            if diff == 1:
+                fark_ctr["ev1"] += 1
+            elif diff == 2:
+                fark_ctr["ev2"] += 1
+            else:
+                fark_ctr["ev3p"] += 1
         elif diff == 0:
             fark_ctr["ber"] += 1
         else:
             adiff = -diff
-            if adiff == 1:   fark_ctr["dep1"] += 1
-            elif adiff == 2: fark_ctr["dep2"] += 1
-            else:            fark_ctr["dep3p"] += 1
+            if adiff == 1:
+                fark_ctr["dep1"] += 1
+            elif adiff == 2:
+                fark_ctr["dep2"] += 1
+            else:
+                fark_ctr["dep3p"] += 1
 
         ev_ust_05 += 1 if h >= 1 else 0
         ev_ust_15 += 1 if h >= 2 else 0
@@ -286,10 +295,14 @@ def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
         dep_ust_15 += 1 if a >= 2 else 0
         dep_ust_25 += 1 if a >= 3 else 0
 
-        if total_goals <= 1:   gol_01 += 1
-        elif total_goals <= 3: gol_23 += 1
-        elif total_goals <= 5: gol_45 += 1
-        else:                  gol_6p += 1
+        if total_goals <= 1:
+            gol_01 += 1
+        elif total_goals <= 3:
+            gol_23 += 1
+        elif total_goals <= 5:
+            gol_45 += 1
+        else:
+            gol_6p += 1
 
         if period == "ft":
             ht_h = row.actual_ht_home
