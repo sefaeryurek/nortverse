@@ -29,11 +29,11 @@ export default function BetCart() {
 
   return (
     <>
-      {/* Floating buton (her zaman görünür) */}
+      {/* Floating buton — sadece desktop (md+); mobile'de sticky bar ile değiştirildi */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-40 flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-transform hover:scale-105"
+          className="fixed bottom-4 right-4 z-40 hidden md:flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-transform hover:scale-105"
           style={{
             backgroundColor: "#16a34a",
             color: "#ecfdf5",
@@ -48,6 +48,40 @@ export default function BetCart() {
             style={{ backgroundColor: "#052e16", color: "#bbf7d0" }}
           >
             {count}
+          </span>
+        </button>
+      )}
+
+      {/* Mobile sticky bottom bar — md altında her zaman görünür (count > 0 zaten yukarıda guard'lı) */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed bottom-0 left-0 right-0 md:hidden flex items-center gap-3 px-4 py-3 border-t shadow-2xl"
+          style={{
+            zIndex: 45,
+            backgroundColor: "#0a1410",
+            borderColor: "#15803d",
+            boxShadow: "0 -4px 16px rgba(0,0,0,0.4)",
+          }}
+          aria-label={`Bahis sepetini aç (${count} tahmin)`}
+        >
+          <span className="text-lg">🧾</span>
+          <span
+            className="text-xs font-mono px-1.5 py-0.5 rounded-full flex-shrink-0"
+            style={{ backgroundColor: "#052e16", color: "#bbf7d0" }}
+          >
+            {count} leg
+          </span>
+          <div className="flex-1 flex items-center justify-center gap-3 text-xs font-mono" style={{ color: "#86efac" }}>
+            <span>≈%{probPct}</span>
+            <span style={{ color: "#475569" }}>·</span>
+            <span>≈{odds}</span>
+          </div>
+          <span
+            className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
+            style={{ backgroundColor: "#16a34a", color: "#ecfdf5" }}
+          >
+            Aç
           </span>
         </button>
       )}

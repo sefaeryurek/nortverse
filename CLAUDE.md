@@ -630,6 +630,33 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - `.github/workflows/recompute_patterns.yml`: haftalık cron şablonu (Pazar 03:00 İstanbul), `timeout-minutes: 350`. Şu an `schedule:` yorumlu (DB yok), `workflow_dispatch` aktif.
 - 67 backend pytest yeşil.
 
+### Sprint 11 — TAMAMLANDI ✅ (Kalan Kod İyileştirme Paketi — DB-Bağımsız)
+**Bağlam:** Sprint 10'da skip edilen 4 DB-bağımsız iş tamamlandı.
+
+**Sprint 11 (1/4) — `f77907e`:** `pattern_stats.py` E701/E702 cosmetic refactor.
+- 13 inline lint bug temizlendi (3 E702 semicolon + 10 E701 colon): MS sonucu bloku, fark_ctr nested if, gol_aralık 4-way
+- Logic değişmez, +14 satır, 67 pytest yeşil
+
+**Sprint 11 (2/4) — `5600e33`:** Typer 0.12.5 → 0.25.1 upgrade. `--help` TypeError fix.
+- Sorun: typer 0.12.5 eski Click API kullanıyordu, transitive click 8.3.2 ile `Parameter.make_metavar(ctx)` zorunlu olunca tüm `--help` çağrıları patlardı
+- Typer 0.15.x'de hâlâ vardı, Typer 0.25.1 (Click 8.3 uyumlu) ile çözüldü
+- `_flag()` helper korundu (eski 0.12 bool string bug için; 0.25'te no-op, zarar yok)
+- annotated-doc==0.0.4 transitive yüklendi
+- Doğrulama: `python -m app.cli.main --help` ve `recompute-patterns --help` temiz, 67 pytest yeşil
+
+**Sprint 11 (3/4) — `531c72d`:** `useCart` hook integration testi (renderHook).
+- Sprint 10 Faz B'de helper'lar (readStorage/writeStorage/itemKey) test edilmişti; hook davranışları eksikti
+- `__tests__/fixtures.ts`'e `makeCartItem` eklendi, `cart.test.ts` fixtures'a yönlendirildi
+- `__tests__/use-cart.test.tsx` (.tsx) 14 yeni test: initial state, addItem/idempotent/timestamp, removeItem(idx/key), clear, has, jointProb, estOdds, CART_EVENT re-sync, unmount cleanup (memory leak yok)
+- `stripAddedAt` helper non-deterministic Date.now() için
+- 74 → 88 test, 1.49sn yeşil
+
+**Sprint 11 (4/4):** Sepet sticky bottom bar (mobile UX) + CLAUDE.md.
+- `BetCart.tsx`: floating button `md:flex hidden` (mobile gizli) + yeni mobile sticky bottom bar `md:hidden`, `zIndex: 45` (panel 50 > bar 45 > overlay 40)
+- İçerik: 🧾 + count + ≈%prob + ≈odds + "Aç" butonu; tıklayınca mevcut BetCart sheet açar
+- Boş sepette zaten guard'lı (BetCart hidden if `!hydrated || count === 0`)
+- 88 test yeşil, npm run build temiz
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -832,7 +859,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-05-13 — Sprint 10 sonu, DB Alternatifi Araştırması Bekliyor)
+## Kaldığımız Yer (2026-05-14 — Sprint 11 sonu, DB Alternatifi Araştırması Bekliyor)
 
 ### 🚨 Aktif Sorun — Production Hâlâ Down
 
@@ -841,7 +868,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 - DB alternatifi (Neon, fly.io, Aiven free, vs.) **başka sohbette araştırılacak**
 - Bu sürede tüm GitHub Actions cron'ları DEVRE DIŞI; UptimeRobot Railway'i ping atmaya devam ediyor (uyku önler)
 
-### Sprint 8.10/8.10b/9/10 — Tamamlanan Hazırlıklar
+### Sprint 8.10/8.10b/9/10/11 — Tamamlanan Hazırlıklar
 
 Production geri gelene kadar yapılabilecek her şey yapıldı:
 
@@ -856,10 +883,14 @@ Production geri gelene kadar yapılabilecek her şey yapıldı:
 | `Dockerfile` alembic upgrade head (Sprint 9 1/n) | Container açılışta schema otomatik güncel |
 | `/api/admin/quality` KRİTİK fix (Sprint 9 2/n) | `func` import eksik, NameError fırlatıyordu |
 | Repo temizlik + lint (Sprint 9 3/n) | ~60 MB, F-prefix bug'lar |
-| **Vitest birim test altyapısı + 74 test (Sprint 10 1-3)** | Frontend test coverage sıfırdan kuruldu, confidence/combos/cart |
+| **Vitest birim test altyapısı (Sprint 10 + 11)** | Frontend test coverage sıfırdan kuruldu, **88 test** (confidence + combos + cart helpers + useCart hook) |
 | **Top Picks trend boost (Sprint 10 3/5)** | Sprint 8.8 trends → confidence formülüne kondu |
 | **URL fallback centralize (Sprint 10 4/5)** | `lib/env.ts` — next.config ve lib/api tek kaynaktan okur |
 | **Pattern recompute CLI + workflow (Sprint 10 5/5)** | `recompute-patterns` + haftalık cron şablonu (DB hazır olunca açılır) |
+| **pattern_stats.py cosmetic refactor (Sprint 11 1/4)** | E701/E702 13 lint bug temizliği — readability arttı |
+| **Typer 0.25 upgrade (Sprint 11 2/4)** | `--help` Click 8.3 ile uyumsuzluk düzeldi (Parameter.make_metavar bug) |
+| **useCart hook integration testi (Sprint 11 3/4)** | renderHook ile 14 ek test — addItem/idempotent/cleanup/storage event |
+| **Sticky bottom bar mobile (Sprint 11 4/4)** | Mobilde floating button yerine her zaman görünen özet bar (leg + prob + odds) |
 
 ---
 
@@ -1065,12 +1096,18 @@ find /tmp/backup_*.sql.gz -mtime +30 -delete
 
 ### Önemli Commit Zinciri
 
+**Sprint 11 oturumu (kalan DB-bağımsız iyileştirmeler — 2026-05-14):**
+- `f77907e` Sprint 11 (1/4) — pattern_stats.py E701/E702 cosmetic refactor
+- `5600e33` Sprint 11 (2/4) — Typer 0.25 upgrade (--help TypeError fix)
+- `531c72d` Sprint 11 (3/4) — useCart hook integration testi (14 test, 88 toplam)
+- (4/4 bu commit) — Sepet sticky bottom bar (mobile) + CLAUDE.md
+
 **Sprint 10 oturumu (DB-bağımsız kod iyileştirme — 2026-05-13):**
 - `84c0761` Sprint 10 (1/5) — Vitest altyapı + confidence/combos testleri (48 test)
 - `a638389` Sprint 10 (2/5) — cart.ts helper testleri (14 test, 62 toplam)
 - `3c556e2` Sprint 10 (3/5) — Top Picks trend boost (TrendsData → confidence)
 - `5a2d181` Sprint 10 (4/5) — URL fallback centralize (lib/env.ts)
-- (5/5 bu commit) — Pattern recompute CLI + haftalık workflow + CLAUDE.md
+- `22f845e` Sprint 10 (5/5) — Pattern recompute CLI + haftalık workflow + CLAUDE.md
 
 **Sprint 9 oturumu (Oracle hazırlığı + kritik fix + temizlik):**
 - `057a585` Sprint 9 (1/n) — connection.py env-driven + Dockerfile alembic upgrade head
@@ -1102,16 +1139,16 @@ find /tmp/backup_*.sql.gz -mtime +30 -delete
 4. `self-test 2813084` — E2E doğrulama
 5. `audit-db` — quality_score > 80 kontrol
 
-**Kod iyileştirme (Sprint 11+):**
-6. **Sepet sticky bottom bar** (mobile UX) — Sprint 10'da skip edildi
-7. **`useCart` hook integration testi** (`renderHook`) — Sprint 10 Faz B'de skip
-8. **`pattern_stats.py` cosmetic refactor** — opsiyonel
+**Kod iyileştirme (Sprint 12+):**
+6. **`_flag()` helper'ı Annotated[bool, ...] pattern'ine migrate et** (Typer 0.25'te native, 13 çağrı yerini değiştirmek)
+7. **Component test ve E2E** (Vitest component + Playwright) — sticky bar gibi UI'lar için
+8. **Joint olasılık ML correction** — combo/sepet'te bağımsızlık varsayımı yerine korelasyon matrisi
 9. **Canlı maç & WebSocket** — uzun vade
 10. **Auth/Premium** — kullanıcı şu an istemiyor
 
 ### Bilinen Açık Konular
 
-- **Typer/Click sürüm uyumsuzluğu:** CLI `--help` çıktısı `TypeError: Parameter.make_metavar() missing 'ctx'` veriyor. Pre-existing — tüm komutlarda var, Sprint 9-10 ile alakası yok. Click upgrade veya Typer pin gerekli (sonraki sprint)
 - **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction gelecek sprint
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
-- **Frontend test coverage:** Sprint 10 birim test başladı (74 test); component test ve E2E henüz yok
+- **Frontend component/E2E test:** Birim test 88 case yeşil; component test ve E2E (Playwright) henüz yok — sticky bar gibi UI davranışları manuel doğrulamayla geçildi
+- **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir (pre-existing, Linux/Mac'te yok)
