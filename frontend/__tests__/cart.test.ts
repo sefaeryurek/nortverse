@@ -5,24 +5,8 @@ import {
   itemKey,
   STORAGE_KEY,
   CART_EVENT,
-  type CartItem,
 } from "@/lib/cart";
-
-function makeItem(overrides: Partial<CartItem> = {}): CartItem {
-  return {
-    matchId: "2813084",
-    homeTeam: "Kayserispor",
-    awayTeam: "Karagumruk",
-    marketKey: "result",
-    selectionLabel: "1",
-    marketLabel: "Maç Sonucu",
-    pct: 70,
-    archive: "A",
-    period: "ft",
-    addedAt: 1700000000000,
-    ...overrides,
-  };
-}
+import { makeCartItem as makeItem } from "./fixtures";
 
 describe("readStorage", () => {
   beforeEach(() => {

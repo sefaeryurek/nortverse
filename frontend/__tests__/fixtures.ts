@@ -1,5 +1,6 @@
 import type { PatternResult } from "@/lib/types";
 import type { Pick } from "@/lib/confidence";
+import type { CartItem } from "@/lib/cart";
 
 export function makePatternResult(overrides: Partial<PatternResult> = {}): PatternResult {
   return {
@@ -141,6 +142,22 @@ export function makePick(overrides: Partial<Pick> = {}): Pick {
     marketWeight: 1.0,
     archive: "A",
     confidence: 0.65,
+    ...overrides,
+  };
+}
+
+export function makeCartItem(overrides: Partial<CartItem> = {}): CartItem {
+  return {
+    matchId: "2813084",
+    homeTeam: "Kayserispor",
+    awayTeam: "Karagumruk",
+    marketKey: "result",
+    selectionLabel: "1",
+    marketLabel: "Maç Sonucu",
+    pct: 70,
+    archive: "A",
+    period: "ft",
+    addedAt: 1700000000000,
     ...overrides,
   };
 }
