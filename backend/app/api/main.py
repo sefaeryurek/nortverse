@@ -525,7 +525,7 @@ async def admin_quality() -> DataQuality:
     Manuel çağrı veya CLI `audit-db` ile aynı bilgiyi verir.
     """
     from datetime import datetime, timezone, timedelta
-    from sqlalchemy import or_
+    from sqlalchemy import or_, func
 
     async with get_session() as session:
         total = (await session.execute(select(func.count(Match.id)))).scalar() or 0
