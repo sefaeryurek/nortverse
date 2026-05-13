@@ -1,12 +1,8 @@
 import type { AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
+import { getApiBase } from "./env";
 
-// Geliştirme: BASE = "" → Next.js proxy (/api/* → localhost:8000)
-// Vercel server-side (SSR): BACKEND_URL → Railway'e direkt
-// Vercel client-side (browser): BACKEND_URL undefined → proxy üzerinden Railway'e
-const BASE =
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.BACKEND_URL ||
-  "";
+// Davranış: getApiBase() açıklamasında — Vercel SSR direkt, CSR proxy, lokal dev proxy.
+const BASE = getApiBase();
 
 export async function getFixture(date: string): Promise<FixtureMatch[]> {
   // Server-side fetch (Vercel SSR): Next.js Data Cache 5dk
