@@ -231,6 +231,7 @@ export default function AnalyzePage() {
                       patternB={patternB}
                       patternC={patternC}
                       period={activePeriod}
+                      trends={data.trends}
                     />
                   </MatchProvider>
                 ) : (

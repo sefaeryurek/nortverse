@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { PatternResult } from "@/lib/types";
+import type { PatternResult, TrendsData } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import { buildPicks, getTopPicks, confidenceTier, type Pick, type ConfidenceTier } from "@/lib/confidence";
 import { useMatchInfo } from "@/lib/match-context";
@@ -11,6 +11,7 @@ interface Props {
   patternB: PatternResult | null;
   patternC: PatternResult | null;
   period: Period;
+  trends?: TrendsData | null;
 }
 
 function PickRowWithCart({ pick, period }: { pick: Pick; period: Period }) {
@@ -118,10 +119,10 @@ function ArchiveBadge({ archive }: { archive: "A" | "B" | "AB" }) {
   );
 }
 
-export default function TopPicks({ patternB, patternC, period }: Props) {
+export default function TopPicks({ patternB, patternC, period, trends }: Props) {
   const { picks, effectiveMinPct, matchCount: totalMatches } = useMemo(
-    () => getTopPicks(buildPicks(patternB, patternC, period), { limit: 8 }),
-    [patternB, patternC, period],
+    () => getTopPicks(buildPicks(patternB, patternC, period, trends ?? null), { limit: 8 }),
+    [patternB, patternC, period, trends],
   );
 
   if (picks.length === 0) {

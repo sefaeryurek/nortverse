@@ -1,4 +1,4 @@
-import type { PatternResult } from "@/lib/types";
+import type { PatternResult, TrendsData } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import TopPicks from "./TopPicks";
 import ComboSuggestion from "./ComboSuggestion";
@@ -9,9 +9,10 @@ interface Props {
   patternB: PatternResult | null;
   patternC: PatternResult | null;
   period: Period;
+  trends?: TrendsData | null;
 }
 
-export default function IddaaCoupon({ patternB, patternC, period }: Props) {
+export default function IddaaCoupon({ patternB, patternC, period, trends }: Props) {
   // Sprint 8.9: Pattern B (skor seti) için 5+ eşleşme şart, Pattern C (oran benzerliği)
   // tolerance=0.0 ile sıkı arandığından 1+ yeterli — düşük güven UI'da rozetle belirtilir.
   const hasB = patternB !== null && patternB.match_count >= 5;
@@ -40,7 +41,7 @@ export default function IddaaCoupon({ patternB, patternC, period }: Props) {
   return (
     <div className="space-y-4">
       {/* Katman 1: Önerilen Bahisler (her zaman üstte, varsayılan görünür) */}
-      <TopPicks patternB={safeB} patternC={safeC} period={period} />
+      <TopPicks patternB={safeB} patternC={safeC} period={period} trends={trends} />
 
       {/* Katman 1b: Akıllı Kombinasyon Kuponları (Top Picks'ten otomatik üretilir) */}
       <ComboSuggestion patternB={safeB} patternC={safeC} period={period} />

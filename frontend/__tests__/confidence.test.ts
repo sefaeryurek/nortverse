@@ -8,8 +8,35 @@ import {
   getTopPicks,
   getMarketSummary,
   getMarkets,
+  getTrendsBoost,
 } from "@/lib/confidence";
+import type { TrendBlock, TrendsData } from "@/lib/types";
 import { makePatternResult, makePick } from "./fixtures";
+
+function makeTrendBlock(overrides: Partial<TrendBlock> = {}): TrendBlock {
+  return {
+    label: "Son 10 ev maçı",
+    sample_size: 10,
+    win_pct: 50,
+    draw_pct: 25,
+    loss_pct: 25,
+    kg_var_pct: 50,
+    over_25_pct: 50,
+    avg_goals_for: 1.5,
+    avg_goals_against: 1.2,
+    last_n_results: ["G", "M", "G", "B", "G"],
+    ...overrides,
+  };
+}
+
+function makeTrends(overrides: Partial<TrendsData> = {}): TrendsData {
+  return {
+    home_form: makeTrendBlock(),
+    away_form: makeTrendBlock(),
+    h2h: makeTrendBlock(),
+    ...overrides,
+  };
+}
 
 describe("dynamicMinPct", () => {
   it("matchCount=0 için 80 döner (sample yok → sıkı eşik)", () => {
@@ -262,5 +289,95 @@ describe("getMarkets", () => {
     expect(keys).toContain("ou_25");
     expect(keys).toContain("kg");
     expect(keys).toContain("iy_ms");
+  });
+});
+
+describe("getTrendsBoost", () => {
+  it("trends=null → 1.0 (boost yok)", () => {
+    expect(getTrendsBoost("result", "1", null)).toBe(1.0);
+  });
+
+  it("eşik altı home_form.win_pct → boost yok (1.0)", () => {
+    const trends = makeTrends({ home_form: makeTrendBlock({ win_pct: 60 }) });
+    expect(getTrendsBoost("result", "1", trends)).toBe(1.0);
+  });
+
+  it("home_form.win_pct ≥ 65 → result_1 için 1.10 boost", () => {
+    const trends = makeTrends({ home_form: makeTrendBlock({ win_pct: 70 }) });
+    expect(getTrendsBoost("result", "1", trends)).toBe(1.1);
+  });
+
+  it("away_form.win_pct ≥ 65 → result_2 için 1.10 boost", () => {
+    const trends = makeTrends({ away_form: makeTrendBlock({ win_pct: 80 }) });
+    expect(getTrendsBoost("result", "2", trends)).toBe(1.1);
+  });
+
+  it("h2h.draw_pct ≥ 40 → result_x için 1.07 boost", () => {
+    const trends = makeTrends({ h2h: makeTrendBlock({ draw_pct: 45 }) });
+    expect(getTrendsBoost("result", "X", trends)).toBe(1.07);
+  });
+
+  it("h2h.kg_var_pct ≥ 60 → kg+KG Var için 1.10 boost", () => {
+    const trends = makeTrends({ h2h: makeTrendBlock({ kg_var_pct: 70 }) });
+    expect(getTrendsBoost("kg", "KG Var", trends)).toBe(1.1);
+  });
+
+  it("home_form.over_25_pct ≥ 55 → ou_25+Üst 2.5 için 1.08 boost", () => {
+    const trends = makeTrends({ home_form: makeTrendBlock({ over_25_pct: 60 }) });
+    expect(getTrendsBoost("ou_25", "Üst 2.5", trends)).toBe(1.08);
+  });
+
+  it("bilinmeyen marketKey/selection → 1.0", () => {
+    const trends = makeTrends({ home_form: makeTrendBlock({ win_pct: 90 }) });
+    expect(getTrendsBoost("unknown_market", "X", trends)).toBe(1.0);
+    expect(getTrendsBoost("result", "Y", trends)).toBe(1.0);
+  });
+
+  it("ilgili trend bloğu null → 1.0 (örn. home_form yok)", () => {
+    const trends: TrendsData = { home_form: null, away_form: makeTrendBlock(), h2h: null };
+    expect(getTrendsBoost("result", "1", trends)).toBe(1.0);
+    expect(getTrendsBoost("result", "X", trends)).toBe(1.0); // h2h null
+  });
+});
+
+describe("buildPicks with trends", () => {
+  it("trends=null (default) → davranış mevcut testlerle aynı (backward compat)", () => {
+    const a = makePatternResult({ match_count: 20, result_1_pct: 70 });
+    const without = buildPicks(a, null, "ft");
+    const withNull = buildPicks(a, null, "ft", null);
+    const r1Without = without.find((p) => p.marketKey === "result" && p.selectionLabel === "1");
+    const r1WithNull = withNull.find((p) => p.marketKey === "result" && p.selectionLabel === "1");
+    expect(r1Without!.confidence).toBeCloseTo(r1WithNull!.confidence, 6);
+  });
+
+  it("home_form.win_pct ≥65 → result_1 confidence 10% artar (1.10 çarpan)", () => {
+    const a = makePatternResult({ match_count: 20, result_1_pct: 70 });
+    const noBoost = buildPicks(a, null, "ft", null);
+    const trends = makeTrends({ home_form: makeTrendBlock({ win_pct: 75 }) });
+    const boosted = buildPicks(a, null, "ft", trends);
+
+    const noB = noBoost.find((p) => p.marketKey === "result" && p.selectionLabel === "1")!;
+    const wB = boosted.find((p) => p.marketKey === "result" && p.selectionLabel === "1")!;
+    expect(wB.confidence / noB.confidence).toBeCloseTo(1.1, 3);
+  });
+
+  it("trend boostu sadece ilgili (market, selection) pick'i etkiler — diğerleri aynı kalır", () => {
+    const a = makePatternResult({
+      match_count: 20,
+      result_1_pct: 70,
+      kg_var_pct: 65,
+      kg_yok_pct: 35,
+    });
+    const trends = makeTrends({
+      home_form: makeTrendBlock({ win_pct: 75 }),   // result_1 boost (1.10)
+      h2h: makeTrendBlock({ kg_var_pct: 30 }),       // kg boost yok
+    });
+    const picks = buildPicks(a, null, "ft", trends);
+    const r1 = picks.find((p) => p.marketKey === "result" && p.selectionLabel === "1")!;
+    const kg = picks.find((p) => p.marketKey === "kg" && p.selectionLabel === "KG Var")!;
+    const expectedR1 = computeConfidence(70, 20, 1.0, false, 1.1);
+    const expectedKg = computeConfidence(65, 20, 1.0, false, 1.0);
+    expect(r1.confidence).toBeCloseTo(expectedR1, 3);
+    expect(kg.confidence).toBeCloseTo(expectedKg, 3);
   });
 });

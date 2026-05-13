@@ -1,4 +1,4 @@
-import type { PatternResult } from "./types";
+import type { PatternResult, TrendsData } from "./types";
 import { type Period, periodLabels } from "./labels";
 
 export interface Pick {
@@ -24,13 +24,55 @@ function volumeWeight(matchCount: number): number {
   return Math.min(1.0, Math.log(matchCount + 1) / Math.log(30));
 }
 
+// Sprint 10 Faz C: Form & H2H trendleri (Sprint 8.8) → confidence boost.
+// Mantık: belirli pazar-seçim çiftleri için ilgili trend metriği eşiği geçerse
+// confidence'a çarpan uygulanır. Boost cap 1.15 (DUAL_BONUS ile aynı tavan).
+interface TrendsBoostRule {
+  marketKey: string;
+  selection: string;
+  get: (t: TrendsData) => number | undefined;
+  threshold: number;
+  boost: number;
+}
+
+const TRENDS_BOOST_RULES: TrendsBoostRule[] = [
+  { marketKey: "result", selection: "1", get: (t) => t.home_form?.win_pct, threshold: 65, boost: 1.1 },
+  { marketKey: "result", selection: "2", get: (t) => t.away_form?.win_pct, threshold: 65, boost: 1.1 },
+  { marketKey: "result", selection: "X", get: (t) => t.h2h?.draw_pct, threshold: 40, boost: 1.07 },
+  { marketKey: "kg", selection: "KG Var", get: (t) => t.h2h?.kg_var_pct, threshold: 60, boost: 1.1 },
+  { marketKey: "ou_25", selection: "Üst 2.5", get: (t) => t.home_form?.over_25_pct, threshold: 55, boost: 1.08 },
+];
+
+/**
+ * Belirli (marketKey, selectionLabel) için trend boost değeri (1.0 = boost yok).
+ * trends null veya eşleşen kural yoksa 1.0 döner.
+ */
+export function getTrendsBoost(
+  marketKey: string,
+  selectionLabel: string,
+  trends: TrendsData | null,
+): number {
+  if (!trends) return 1.0;
+  for (const rule of TRENDS_BOOST_RULES) {
+    if (rule.marketKey === marketKey && rule.selection === selectionLabel) {
+      const value = rule.get(trends);
+      if (value !== undefined && value >= rule.threshold) {
+        return rule.boost;
+      }
+      return 1.0;
+    }
+  }
+  return 1.0;
+}
+
 export function computeConfidence(
   pct: number,
   matchCount: number,
   marketWeight: number,
   isDual: boolean,
+  trendsBoost = 1.0,
 ): number {
-  const base = (pct / 100) * volumeWeight(matchCount) * marketWeight;
+  const base = (pct / 100) * volumeWeight(matchCount) * marketWeight * trendsBoost;
   return isDual ? base * DUAL_BONUS : base;
 }
 
@@ -457,6 +499,7 @@ export function buildPicks(
   patternA: PatternResult | null,
   patternB: PatternResult | null,
   period: Period,
+  trends: TrendsData | null = null,
 ): Pick[] {
   const rawA = patternA ? extractRaw(patternA, period) : [];
   const rawB = patternB ? extractRaw(patternB, period) : [];
@@ -497,7 +540,8 @@ export function buildPicks(
       combinedMatchCount = matchCountB;
     }
 
-    const confidence = computeConfidence(combinedPct, combinedMatchCount, ref.weight, dual);
+    const trendsBoost = getTrendsBoost(ref.marketKey, ref.selectionLabel, trends);
+    const confidence = computeConfidence(combinedPct, combinedMatchCount, ref.weight, dual, trendsBoost);
 
     picks.push({
       marketKey: ref.marketKey,
