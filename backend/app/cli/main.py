@@ -16,7 +16,7 @@ import json
 import logging
 from datetime import date, datetime
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -28,7 +28,7 @@ from app.analysis import analyze_match, check_match_filters
 from app.analysis.pattern_b import find_pattern_b_matches
 from app.analysis.pattern_c import find_pattern_c_all_periods
 from app.analysis.pattern_stats import PatternResult
-from app.analysis.scores import ALL_SCORES, MS1_SCORES, MSX_SCORES, MS2_SCORES
+from app.analysis.scores import MS1_SCORES, MSX_SCORES, MS2_SCORES
 from app.models import MatchAnalysisResult, MatchRawData, Period, PeriodAnalysis
 from app.scraper import fetch_fixture, fetch_leagues, fetch_match_detail
 from app.scraper.league import fetch_league_seasons
@@ -815,7 +815,7 @@ def build_multi_archive_cmd(
     n_seasons = int(seasons) if seasons and str(seasons).isdigit() else 5
     from app.pipeline.runner import _upsert
     from app.scraper.browser import browser_context
-    from app.scraper.league import fetch_league_match_ids, fetch_league_seasons
+    from app.scraper.league import fetch_league_match_ids
     from app.scraper.match_detail import fetch_match_detail as _fetch_detail
 
     def _recent_seasons(n: int) -> list[str]:
@@ -983,8 +983,8 @@ def prune_non_league_cmd(
             console.print(f"[dim]... ve {len(non_league) - 15} maç daha[/dim]")
 
         if not _flag(apply):
-            console.print(f"\n[yellow]Dry-run modu: hiçbir şey değişmedi.[/yellow]")
-            console.print(f"[dim]Gerçekten silmek için: prune-non-league --apply[/dim]")
+            console.print("\n[yellow]Dry-run modu: hiçbir şey değişmedi.[/yellow]")
+            console.print("[dim]Gerçekten silmek için: prune-non-league --apply[/dim]")
             return
 
         # Apply: soft delete + audit log
@@ -1026,7 +1026,6 @@ def restore_deleted_cmd(
 ) -> None:
     """Sprint 8.9 — Soft-deleted bir maçı geri al."""
     _setup_logging("DEBUG" if _flag(verbose) else "INFO")
-    from datetime import datetime, timezone
     from sqlalchemy import select, update as sa_update
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from app.db.connection import get_session
@@ -1073,7 +1072,7 @@ def audit_db_cmd(
     _setup_logging("DEBUG" if _flag(verbose) else "WARNING")
 
     from datetime import datetime, timezone, timedelta
-    from sqlalchemy import select, func, and_, or_
+    from sqlalchemy import select, func, or_
     from app.analysis.league_filter import is_supported_league
     from app.db.connection import get_session
     from app.db.models import Match
@@ -1320,8 +1319,6 @@ def self_test_cmd(
             border_style="cyan",
         ))
 
-        steps = []
-
         # 1. Scrape
         console.print("[1/7] Match detail çekiliyor...", end=" ")
         raw = await fetch_match_detail(match_id)
@@ -1339,7 +1336,7 @@ def self_test_cmd(
         console.print("[3/7] check_match_filters()...", end=" ")
         check = check_match_filters(raw)
         if check.passed:
-            console.print(f"[green]✓ PASSED[/green]")
+            console.print("[green]✓ PASSED[/green]")
         else:
             console.print(f"[yellow]✗ {check.reason.value}[/yellow] — {check.detail}")
             return
@@ -1376,7 +1373,7 @@ def self_test_cmd(
         row = _result_to_row(result, raw, patterns)
         ok, reason = _validate_row(row)
         if ok:
-            console.print(f"[green]✓ DB write hazır[/green]")
+            console.print("[green]✓ DB write hazır[/green]")
         else:
             console.print(f"[red]✗ {reason}[/red]")
 

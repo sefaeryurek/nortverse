@@ -19,7 +19,6 @@ import logging
 
 from bs4 import BeautifulSoup
 
-from app.config import SCRAPER
 from app.scraper.browser import browser_context, goto_with_retry
 
 log = logging.getLogger(__name__)

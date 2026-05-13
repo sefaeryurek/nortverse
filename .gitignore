@@ -37,6 +37,7 @@ logs/
 
 # Scraping debug
 debug_html/
+backend/debug/
 *.html.debug
 screenshots/
 
