@@ -39,6 +39,11 @@ function scoresFor(data: AnalyzeResponse, period: Period) {
 
 export default function AnalyzePage() {
   const { match_id } = useParams<{ match_id: string }>();
+  const [attempt, setAttempt] = useState(0);
+  return <MatchAnalysis key={`${match_id}:${attempt}`} match_id={match_id} retry={() => setAttempt((n) => n + 1)} />;
+}
+
+function MatchAnalysis({ match_id, retry }: { match_id: string; retry: () => void }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlHome = searchParams.get("home") ?? "";
@@ -56,14 +61,12 @@ export default function AnalyzePage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    setData(null);
-    analyzeMatch(match_id)
+    const controller = new AbortController();
+    analyzeMatch(match_id, controller.signal)
       .then((d) => { if (!cancelled) setData(d); })
       .catch((e) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [match_id]);
 
   const { b: patternB, c: patternC } = data
@@ -80,6 +83,7 @@ export default function AnalyzePage() {
       >
         <button
           onClick={() => router.back()}
+          aria-label="Önceki sayfaya dön"
           className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors flex-shrink-0 bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -90,7 +94,7 @@ export default function AnalyzePage() {
         <div className="flex-1 min-w-0">
           {data ? (
             <>
-              <h1 className="text-base font-bold truncate" style={{ color: "#e2e8f0" }}>
+              <h1 className="text-base font-bold break-words sm:truncate" style={{ color: "#e2e8f0" }}>
                 {data.home_team}
                 <span className="mx-2" style={{ color: "#475569" }}>vs</span>
                 {data.away_team}
@@ -100,7 +104,7 @@ export default function AnalyzePage() {
               </p>
             </>
           ) : urlHome && urlAway ? (
-            <h1 className="text-base font-bold truncate" style={{ color: "#e2e8f0" }}>
+            <h1 className="text-base font-bold break-words sm:truncate" style={{ color: "#e2e8f0" }}>
               {urlHome}
               <span className="mx-2" style={{ color: "#475569" }}>vs</span>
               {urlAway}
@@ -138,6 +142,7 @@ export default function AnalyzePage() {
             >
               <div className="text-3xl mb-3">⚠️</div>
               <p className="text-sm font-medium" style={{ color: "#f87171" }}>{error}</p>
+              <button onClick={retry} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">Tekrar dene</button>
             </div>
           </div>
         )}

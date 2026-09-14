@@ -9,6 +9,13 @@ import {
 import { makeCartItem as makeItem } from "./fixtures";
 
 describe("readStorage", () => {
+  it("rejects incomplete records and invalid percentages", () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
+      { matchId: "1", marketKey: "result" },
+      makeItem({ pct: -1 }), makeItem({ pct: 101 }), makeItem(),
+    ]));
+    expect(readStorage()).toEqual([makeItem()]);
+  });
   beforeEach(() => {
     window.localStorage.clear();
   });

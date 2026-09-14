@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from bs4 import BeautifulSoup
@@ -51,6 +51,21 @@ def _text_of(el: Optional[Tag]) -> str:
 _HT_IN_VS_RE = re.compile(r"\(\s*(\d+)\s*-\s*(\d+)\s*,")  # "( 0-0 , 1-0 )" → HT
 
 
+def _parse_source_datetime(value: str) -> Optional[datetime]:
+    value = value.strip()
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    except ValueError:
+        pass
+    for fmt in ("%m/%d/%Y %I:%M:%S %p", "%Y/%m/%d %H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
 def _extract_main_match_kickoff(soup: BeautifulSoup) -> Optional[datetime]:
     """Ana maçın kickoff tarih/saatini çıkar.
 
@@ -59,16 +74,9 @@ def _extract_main_match_kickoff(soup: BeautifulSoup) -> Optional[datetime]:
     """
     el = soup.select_one("span.time[data-t]")
     if el is None:
-        el = soup.select_one("[data-t]")
-    if el is None:
         return None
     data_t = el.get("data-t", "").strip()
-    for fmt in ("%m/%d/%Y %I:%M:%S %p", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
-        try:
-            return datetime.strptime(data_t, fmt)
-        except ValueError:
-            continue
-    return None
+    return _parse_source_datetime(data_t)
 
 
 def _extract_main_match_score(
@@ -90,6 +98,10 @@ def _extract_main_match_score(
     if fbheader is None:
         return ft_home, ft_away, ht_home, ht_away, h2_home, h2_away
 
+    # Canlı skorlar arşive kesin sonuç olarak yazılmamalı.
+    if fbheader.select_one(".end") is None:
+        return ft_home, ft_away, ht_home, ht_away, h2_home, h2_away
+
     # FT: iki ayrı .score div'i
     score_divs = fbheader.select(".score")
     if len(score_divs) >= 2:
@@ -99,6 +111,9 @@ def _extract_main_match_score(
         except (ValueError, IndexError):
             ft_home = ft_away = None
 
+    if ft_home is None or ft_away is None or not (0 <= ft_home <= 30 and 0 <= ft_away <= 30):
+        return (None,) * 6
+
     # HT ve 2Y: title attribute ile doğrudan çek
     ht_el = fbheader.select_one('[title="Score 1st Half"]')
     h2_el = fbheader.select_one('[title="Score 2nd Half"]')
@@ -106,13 +121,15 @@ def _extract_main_match_score(
     def _parse_half_score(el: Optional[Tag]) -> tuple[Optional[int], Optional[int]]:
         if el is None:
             return None, None
-        m = _SCORE_FT_RE.search(el.get_text(strip=True))
+        m = _SCORE_FT_RE.fullmatch(el.get_text(strip=True))
         if m:
             return int(m.group(1)), int(m.group(2))
         return None, None
 
     ht_home, ht_away = _parse_half_score(ht_el)
     h2_home, h2_away = _parse_half_score(h2_el)
+    if h2_home is not None and h2_away is not None and (h2_home > ft_home or h2_away > ft_away):
+        h2_home = h2_away = None
 
     # Fallback: eski yöntem — .vs/.end text içinden regex
     if ht_home is None:
@@ -123,6 +140,11 @@ def _extract_main_match_score(
                 ht_home = int(m.group(1))
                 ht_away = int(m.group(2))
 
+    if ft_home is not None and ft_away is not None and ht_home is not None and ht_away is not None:
+        if ht_home <= ft_home and ht_away <= ft_away:
+            h2_home, h2_away = ft_home - ht_home, ft_away - ht_away
+        else:
+            ht_home = ht_away = h2_home = h2_away = None
     return ft_home, ft_away, ht_home, ht_away, h2_home, h2_away
 
 
@@ -168,7 +190,7 @@ def _parse_score_cell(td: Tag) -> tuple[Optional[int], Optional[int], Optional[i
 
     fscore = td.select_one(".fscore_1, .fscore_2, .fscore_3, [class*='fscore']")
     if fscore:
-        m = _SCORE_FT_RE.search(fscore.get_text(strip=True))
+        m = _SCORE_FT_RE.fullmatch(fscore.get_text(strip=True))
         if m:
             home_ft = int(m.group(1))
             away_ft = int(m.group(2))
@@ -181,9 +203,11 @@ def _parse_score_cell(td: Tag) -> tuple[Optional[int], Optional[int], Optional[i
             away_ht = int(m.group(2))
 
     # Fallback: span yoksa direkt metinden ara
-    if home_ft is None:
+    if fscore is None:
         text = td.get_text(" ", strip=True)
-        m = _SCORE_FT_RE.search(text)
+        # A half-time score on its own is not a final result.
+        final_text = _SCORE_HT_RE.sub("", text).strip()
+        m = _SCORE_FT_RE.fullmatch(final_text)
         if m:
             home_ft = int(m.group(1))
             away_ft = int(m.group(2))
@@ -192,6 +216,10 @@ def _parse_score_cell(td: Tag) -> tuple[Optional[int], Optional[int], Optional[i
             home_ht = int(m2.group(1))
             away_ht = int(m2.group(2))
 
+    if home_ft is None or away_ft is None or not (0 <= home_ft <= 30 and 0 <= away_ft <= 30):
+        return None, None, None, None
+    if home_ht is not None and away_ht is not None and (home_ht > home_ft or away_ht > away_ft):
+        home_ht = away_ht = None
     return home_ft, away_ft, home_ht, away_ht
 
 
@@ -218,10 +246,9 @@ def _parse_match_row(
     date_span = date_td.find("span", attrs={"data-t": True})
     if date_span:
         data_t = date_span.get("data-t", "")
-        try:
-            match_date = datetime.strptime(data_t, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            pass
+        match_date = _parse_source_datetime(data_t)
+    else:
+        match_date = _parse_source_datetime(_text_of(date_td))
 
     # td[2]: ev sahibi takım
     home_team = _text_of(tds[2])
@@ -250,6 +277,7 @@ def _parse_match_row(
     )
 
     return HistoricalMatch(
+        match_id=tr.get("index") or None,
         opponent=away_team,  # perspektif sonra ayarlanır
         home_team=home_team,
         away_team=away_team,
@@ -346,13 +374,14 @@ async def fetch_match_detail(
 
     async def _fetch(ctx_) -> str:
         page = await ctx_.new_page()
-        await goto_with_retry(page, url)
-        await page.wait_for_timeout(int(SCRAPER.default_wait * 1000))
-        await close_ad_overlay(page)
-        await page.wait_for_timeout(1000)
-        html = await page.content()
-        await page.close()
-        return html
+        try:
+            await goto_with_retry(page, url)
+            await page.wait_for_timeout(int(SCRAPER.default_wait * 1000))
+            await close_ad_overlay(page)
+            await page.wait_for_timeout(1000)
+            return await page.content()
+        finally:
+            await page.close()
 
     if ctx is not None:
         html = await _fetch(ctx)

@@ -13,10 +13,12 @@ Sonuç, 0.5 katlarında bir sayıdır (0.0, 0.5, 1.0, ...).
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime
 from typing import Optional
 
 from app.analysis.scores import ALL_SCORES, categorize, score_key
+from app.analysis.history import prepare_history
 from app.config import ANALYSIS
 from app.models import (
     HistoricalMatch,
@@ -40,6 +42,8 @@ def _get_goals_in_period(
     - FT: Tam maç
     """
     if match.home_team == for_team:
+        if match.home_score_ht is not None and not 0 <= match.home_score_ht <= match.home_score_ft:
+            return match.home_score_ft if period == Period.FT else None
         # Bizim takım ev sahibi
         if period == Period.FT:
             return match.home_score_ft
@@ -51,6 +55,8 @@ def _get_goals_in_period(
         return match.home_score_ft - match.home_score_ht
 
     elif match.away_team == for_team:
+        if match.away_score_ht is not None and not 0 <= match.away_score_ht <= match.away_score_ft:
+            return match.away_score_ft if period == Period.FT else None
         # Bizim takım deplasman
         if period == Period.FT:
             return match.away_score_ft
@@ -150,9 +156,9 @@ def _analyze_period(data: MatchRawData, period: Period, cfg_n: int, cfg_threshol
     )
 
 
-def _current_season() -> str:
+def _current_season(kickoff: datetime | None = None) -> str:
     """Bugünün tarihine göre sezon kodu döndür."""
-    now = datetime.now()
+    now = kickoff or datetime.now()
     year = now.year
     return f"{year - 1}/{year}" if now.month < 8 else f"{year}/{year + 1}"
 
@@ -161,6 +167,7 @@ def analyze_match(
     data: MatchRawData,
     n_matches: int = ANALYSIS.n_matches,
     threshold: float = ANALYSIS.threshold,
+    season: str | None = None,
 ) -> MatchAnalysisResult:
     """Bir maçın 3 periyot için tam analizini yap.
 
@@ -175,6 +182,11 @@ def analyze_match(
     Returns:
         MatchAnalysisResult, 3 periyotlu sonuç.
     """
+    if isinstance(n_matches, bool) or not isinstance(n_matches, int) or n_matches < 1:
+        raise ValueError("n_matches pozitif tam sayı olmalı")
+    if not math.isfinite(threshold) or threshold <= 0:
+        raise ValueError("threshold pozitif ve sonlu olmalı")
+    data = prepare_history(data)
     log.info(
         "Analiz başlıyor: %s vs %s (n=%d, threshold=%.1f)",
         data.home_team,
@@ -192,7 +204,7 @@ def analyze_match(
         home_team=data.home_team,
         away_team=data.away_team,
         league_code=data.league_code,
-        season=_current_season(),
+        season=season.replace("-", "/") if season else _current_season(data.kickoff_time),
         n_matches=n_matches,
         threshold=threshold,
         ht=ht,

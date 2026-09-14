@@ -1,5 +1,8 @@
+import { redirect } from "next/navigation";
+import { resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
+import RetryButton from "@/components/RetryButton";
 import BultenRow from "@/components/BultenRow";
 import { getFixture } from "@/lib/api";
 import type { FixtureMatch } from "@/lib/types";
@@ -39,7 +42,7 @@ function BultenSkeleton() {
 }
 
 interface Props {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string | string[] }>;
 }
 
 function formatTime(iso: string | null): string {
@@ -85,8 +88,9 @@ async function MatchList({ date }: { date: string }) {
           <div className="text-5xl">⚠️</div>
           <p className="text-sm font-medium" style={{ color: "#ef4444" }}>{error}</p>
           <p className="text-xs" style={{ color: "#475569" }}>
-            Backend sunucusunun çalıştığından emin olun
+            Veriler şu anda yüklenemiyor. Biraz sonra tekrar deneyebilirsiniz.
           </p>
+          <RetryButton />
         </div>
       </div>
     );
@@ -129,7 +133,8 @@ async function MatchList({ date }: { date: string }) {
 export default async function BultenPage({ searchParams }: Props) {
   const params = await searchParams;
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
-  const date = params.date ?? today;
+  const date = resolvePageDate(params.date, today, true);
+  if (date === null) redirect("/bulten");
 
   return (
     <div className="flex flex-col h-full">
@@ -152,7 +157,7 @@ export default async function BultenPage({ searchParams }: Props) {
       </div>
 
       {/* Gün sekmeleri */}
-      <DayTabs activeDate={date} />
+      <DayTabs referenceDate={today} activeDate={date} />
 
       {/* Maç listesi */}
       <div className="flex-1 overflow-y-auto">

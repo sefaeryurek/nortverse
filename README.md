@@ -4,7 +4,8 @@ Futbol maçı tahmin sistemi. Nowgoal26'dan bülten ve h2h verilerini çekip, is
 
 ## Durum
 
-🚧 Sprint 1 — Scraping + Analiz Motoru (Çekirdek)
+FastAPI backend, Next.js frontend, PostgreSQL arşivi ve analiz pipeline'ı bulunur.
+Son kod incelemesi ve doğrulama sınırları: [Denetim raporu](DENETIM_RAPORU.md).
 
 ## Gereksinimler
 
@@ -31,6 +32,16 @@ playwright install chromium
 ```
 
 ## Kullanım
+
+Web arayüzü için backend dizininde `.env` dosyasına `DATABASE_URL` tanımlayın
+(`postgresql+asyncpg://kullanici:parola@localhost:5432/nortverse`), ardından
+`alembic upgrade head` ve `python -m app.cli.main serve` çalıştırın.
+Başka bir terminalde `frontend` dizininde `npm ci` ve `npm run dev` çalıştırın.
+Yerel API varsayılanı `http://localhost:8000`; farklı hedef için frontend'de
+`BACKEND_URL` kullanılabilir.
+
+Kontroller: backend'de `python -m pytest -q` ve `python -m ruff check app/ tests/`;
+frontend'de `npm run test:run`, `npm run lint`, `npx tsc --noEmit`, `npm run build`.
 
 ```bash
 cd backend

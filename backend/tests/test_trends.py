@@ -1,6 +1,6 @@
 """Sprint 8.9 — `compute_trends` testleri (Sprint 8.8 modülünün kalıcı testi)."""
 
-from app.analysis.trends import MIN_SAMPLE, compute_trends
+from app.analysis.trends import compute_trends
 from app.models import HistoricalMatch, MatchRawData
 
 

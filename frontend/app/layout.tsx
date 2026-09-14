@@ -15,9 +15,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="tr" className="h-full">
-      <body className="h-full flex" style={{ backgroundColor: "#0f1117", color: "#e2e8f0" }}>
+      <body className="h-dvh flex flex-col md:flex-row overflow-hidden" style={{ backgroundColor: "#0f1117", color: "#e2e8f0" }}>
         <Sidebar />
-        <main className="flex-1 overflow-y-auto">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-20 md:pb-0">
           {children}
         </main>
         <BetCart />

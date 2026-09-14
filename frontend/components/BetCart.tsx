@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useCart } from "@/lib/cart";
+import { useEffect, useRef, useState } from "react";
+import { itemKey, useCart } from "@/lib/cart";
 
 function PeriodBadge({ period }: { period: "ht" | "h2" | "ft" }) {
   const label = period === "ht" ? "İY" : period === "h2" ? "2Y" : "MS";
@@ -16,22 +16,38 @@ function PeriodBadge({ period }: { period: "ht" | "h2" | "ft" }) {
 }
 
 export default function BetCart() {
-  const { items, hydrated, removeItem, clear, jointProb, estOdds, count } = useCart();
+  const cart = useCart();
+  return cart.hydrated && cart.count > 0 ? <PopulatedCart cart={cart} /> : null;
+}
+
+function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
+  const { items, removeItem, clear, jointProb, estOdds, count, hasRelatedSelections } = cart;
   const [open, setOpen] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const desktopTrigger = useRef<HTMLButtonElement>(null);
+  const mobileTrigger = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
 
-  if (!hydrated || count === 0) {
-    // Sepet boşsa hiçbir şey gösterme — UI kalabalığı azaltır
-    return null;
-  }
+  useEffect(() => {
+    if (open) {
+      dialogRef.current?.showModal();
+      restoreFocus.current = true;
+    } else if (restoreFocus.current) {
+      const trigger = window.matchMedia("(min-width: 768px)").matches ? desktopTrigger : mobileTrigger;
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [open]);
 
-  const probPct = (jointProb * 100).toFixed(1);
-  const odds = estOdds.toFixed(2);
+  const probPct = jointProb === null ? "—" : `≈%${(jointProb * 100).toFixed(1)}`;
+  const odds = estOdds === null ? "—" : `≈${estOdds.toFixed(2)}`;
 
   return (
     <>
       {/* Floating buton — sadece desktop (md+); mobile'de sticky bar ile değiştirildi */}
       {!open && (
         <button
+          ref={desktopTrigger}
           onClick={() => setOpen(true)}
           className="fixed bottom-4 right-4 z-40 hidden md:flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-transform hover:scale-105"
           style={{
@@ -55,6 +71,7 @@ export default function BetCart() {
       {/* Mobile sticky bottom bar — md altında her zaman görünür (count > 0 zaten yukarıda guard'lı) */}
       {!open && (
         <button
+          ref={mobileTrigger}
           onClick={() => setOpen(true)}
           className="fixed bottom-0 left-0 right-0 md:hidden flex items-center gap-3 px-4 py-3 border-t shadow-2xl"
           style={{
@@ -70,12 +87,12 @@ export default function BetCart() {
             className="text-xs font-mono px-1.5 py-0.5 rounded-full flex-shrink-0"
             style={{ backgroundColor: "#052e16", color: "#bbf7d0" }}
           >
-            {count} leg
+            {count} seçim
           </span>
           <div className="flex-1 flex items-center justify-center gap-3 text-xs font-mono" style={{ color: "#86efac" }}>
-            <span>≈%{probPct}</span>
+            <span>{hasRelatedSelections ? "İlişkili seçimler" : probPct}</span>
             <span style={{ color: "#475569" }}>·</span>
-            <span>≈{odds}</span>
+            <span>{odds}</span>
           </div>
           <span
             className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
@@ -89,15 +106,12 @@ export default function BetCart() {
       {/* Açık panel — desktop'ta sticky kart, mobile'da tam sheet */}
       {open && (
         <>
-          {/* Mobile arkaplan */}
-          <div
-            onClick={() => setOpen(false)}
-            className="fixed inset-0 z-40 md:hidden"
-            style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
-          />
-
-          <div
-            className="fixed z-50 flex flex-col md:right-4 md:bottom-4 md:w-80 md:max-h-[80vh] md:rounded-xl right-0 left-0 bottom-0 max-h-[85vh] rounded-t-2xl border"
+          <dialog
+            ref={dialogRef}
+            aria-label="Bahis Sepeti"
+            onCancel={() => setOpen(false)}
+            onClose={() => setOpen(false)}
+            className="fixed z-50 m-0 top-auto w-full max-w-none flex flex-col md:left-auto md:right-4 md:bottom-4 md:w-80 md:max-h-[80vh] md:rounded-xl right-0 left-0 bottom-0 max-h-[85vh] rounded-t-2xl border backdrop:bg-black/60"
             style={{
               backgroundColor: "#0a1410",
               borderColor: "#15803d",
@@ -133,9 +147,9 @@ export default function BetCart() {
 
             {/* Liste */}
             <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
-              {items.map((it, i) => (
+              {items.map((it) => (
                 <div
-                  key={`${it.matchId}-${it.marketKey}-${it.selectionLabel}-${it.period}-${i}`}
+                  key={itemKey(it)}
                   className="rounded-lg p-2 border flex items-start gap-2"
                   style={{ backgroundColor: "#0a0f17", borderColor: "#1e293b" }}
                 >
@@ -161,7 +175,7 @@ export default function BetCart() {
                       %{Math.round(it.pct)}
                     </span>
                     <button
-                      onClick={() => removeItem(i)}
+                      onClick={() => removeItem(itemKey(it))}
                       className="text-xs w-5 h-5 rounded flex items-center justify-center transition-colors hover:bg-slate-700"
                       style={{ color: "#64748b" }}
                       aria-label="Tahmini sepetten kaldır"
@@ -184,7 +198,7 @@ export default function BetCart() {
                     Toplam Olasılık
                   </div>
                   <div className="text-base font-bold font-mono" style={{ color: "#86efac" }}>
-                    ≈%{probPct}
+                    {probPct}
                   </div>
                 </div>
                 <div>
@@ -192,11 +206,16 @@ export default function BetCart() {
                     Tahmini Oran
                   </div>
                   <div className="text-base font-bold font-mono" style={{ color: "#86efac" }}>
-                    ≈{odds}
+                    {odds}
                   </div>
                 </div>
               </div>
 
+              <p className="text-xs text-slate-400" role="status">
+                {hasRelatedSelections
+                  ? "Aynı maçın seçimleri birbirini etkileyebilir veya çelişebilir. Ortak veri olmadan toplam olasılık hesaplanmaz."
+                  : "Geçmiş yüzdelerden, maçların bağımsızlığı varsayımıyla hesaplanır. Gösterilen oran bir bahis şirketi teklifi değildir."}
+              </p>
               <button
                 onClick={clear}
                 className="w-full text-xs py-2 rounded-lg transition-colors hover:bg-red-950"
@@ -209,7 +228,7 @@ export default function BetCart() {
                 Sepeti Temizle
               </button>
             </div>
-          </div>
+          </dialog>
         </>
       )}
     </>

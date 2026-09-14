@@ -7,10 +7,25 @@ import { makeCartItem } from "./fixtures";
 // Karşılaştırma yaparken addedAt'i ignore ediyoruz.
 function stripAddedAt<T extends { addedAt: number }>(item: T) {
   const { addedAt, ...rest } = item;
+  void addedAt;
   return rest;
 }
 
 describe("useCart — initial state", () => {
+  it("keeps multiple hook instances synchronized when storage writes fail", () => {
+    const first = renderHook(() => useCart());
+    const second = renderHook(() => useCart());
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+    try {
+      act(() => first.result.current.addItem(makeCartItem()));
+      expect(second.result.current.count).toBe(1);
+      act(() => second.result.current.addItem(makeCartItem({ matchId: "999" })));
+      expect(first.result.current.count).toBe(2);
+    } finally {
+      spy.mockRestore();
+      act(() => first.result.current.clear());
+    }
+  });
   beforeEach(() => {
     window.localStorage.clear();
   });
@@ -33,6 +48,33 @@ describe("useCart — initial state", () => {
 });
 
 describe("useCart — addItem", () => {
+  it("replaces the previous option in the same match, period and market", () => {
+    window.localStorage.clear();
+    const { result } = renderHook(() => useCart());
+    act(() => {
+      result.current.addItem(makeCartItem());
+      result.current.addItem(makeCartItem({ selectionLabel: "X" }));
+    });
+    expect(result.current.items.map((x) => x.selectionLabel)).toEqual(["X"]);
+  });
+  it("does not multiply related selections, including different periods", () => {
+    window.localStorage.clear();
+    const { result } = renderHook(() => useCart());
+    act(() => {
+      result.current.addItem(makeCartItem());
+      result.current.addItem(makeCartItem({ period: "ht" }));
+    });
+    expect(result.current.count).toBe(2);
+    expect(result.current.jointProb).toBeNull();
+    expect(result.current.estOdds).toBeNull();
+  });
+  it("does not turn a zero frequency into an invented finite odds value", () => {
+    window.localStorage.clear();
+    const { result } = renderHook(() => useCart());
+    act(() => result.current.addItem(makeCartItem({ pct: 0 })));
+    expect(result.current.jointProb).toBe(0);
+    expect(result.current.estOdds).toBeNull();
+  });
   beforeEach(() => {
     window.localStorage.clear();
   });
@@ -56,11 +98,11 @@ describe("useCart — addItem", () => {
     expect(result.current.count).toBe(1);
   });
 
-  it("farklı selectionLabel → her ikisi de eklenir", () => {
+  it("farklı maçlar → her ikisi de eklenir", () => {
     const { result } = renderHook(() => useCart());
     act(() => {
       result.current.addItem(stripAddedAt(makeCartItem({ selectionLabel: "1" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ selectionLabel: "X" })));
+      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "999", selectionLabel: "X" })));
     });
     expect(result.current.count).toBe(2);
   });
@@ -86,7 +128,7 @@ describe("useCart — removeItem", () => {
     const { result } = renderHook(() => useCart());
     act(() => {
       result.current.addItem(stripAddedAt(makeCartItem({ selectionLabel: "1" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ selectionLabel: "X" })));
+      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "999", selectionLabel: "X" })));
     });
     act(() => {
       result.current.removeItem(0);
@@ -99,10 +141,10 @@ describe("useCart — removeItem", () => {
     const { result } = renderHook(() => useCart());
     act(() => {
       result.current.addItem(stripAddedAt(makeCartItem({ selectionLabel: "1" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ selectionLabel: "X" })));
+      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "999", selectionLabel: "X" })));
     });
     act(() => {
-      result.current.removeItem("2813084|ft|result|X");
+      result.current.removeItem("999|ft|result|X");
     });
     expect(result.current.count).toBe(1);
     expect(result.current.items[0].selectionLabel).toBe("1");
@@ -118,7 +160,7 @@ describe("useCart — clear / has / hesaplar", () => {
     const { result } = renderHook(() => useCart());
     act(() => {
       result.current.addItem(stripAddedAt(makeCartItem({ selectionLabel: "1" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ selectionLabel: "X" })));
+      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "999", selectionLabel: "X" })));
     });
     expect(result.current.count).toBe(2);
     act(() => {
@@ -142,8 +184,8 @@ describe("useCart — clear / has / hesaplar", () => {
     const { result } = renderHook(() => useCart());
     act(() => {
       result.current.addItem(stripAddedAt(makeCartItem({ pct: 50, selectionLabel: "1" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ pct: 60, selectionLabel: "X", marketKey: "kg" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ pct: 70, selectionLabel: "Üst 2.5", marketKey: "ou_25" })));
+      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "2", pct: 60, selectionLabel: "X", marketKey: "kg" })));
+      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "3", pct: 70, selectionLabel: "Üst 2.5", marketKey: "ou_25" })));
     });
     expect(result.current.jointProb).toBeCloseTo(0.21, 3);
   });
@@ -152,8 +194,8 @@ describe("useCart — clear / has / hesaplar", () => {
     const { result } = renderHook(() => useCart());
     act(() => {
       result.current.addItem(stripAddedAt(makeCartItem({ pct: 50, selectionLabel: "1" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ pct: 60, selectionLabel: "X", marketKey: "kg" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ pct: 70, selectionLabel: "Üst 2.5", marketKey: "ou_25" })));
+      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "2", pct: 60, selectionLabel: "X", marketKey: "kg" })));
+      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "3", pct: 70, selectionLabel: "Üst 2.5", marketKey: "ou_25" })));
     });
     expect(result.current.estOdds).toBeCloseTo(1 / 0.21, 2);
   });

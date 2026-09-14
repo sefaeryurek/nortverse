@@ -1,13 +1,14 @@
 // Akıllı kombinasyon kuponu — Top Picks'ten otomatik 2/3/4-5 leg kombolar üretir.
-// Joint olasılık: bağımsızlık varsayımıyla ∏ p_i (kullanıcıya "≈" ile yaklaşıklık belirtilir).
+// Aynı maça ait seçimlerde ortak gözlem olmadan birleşik olasılık hesaplanmaz.
 
 import type { Pick } from "./confidence";
 import { resolveConflicts } from "./confidence";
+import { canCombineFields } from "./selection-compatibility";
 
 export interface Combo {
   legs: Pick[];
-  jointProb: number;        // 0..1
-  estDecimalOdds: number;   // 1/jointProb
+  jointProb: null;
+  estDecimalOdds: null;
   tier: "double" | "triple" | "super";
   avgConfidence: number;
   avgPct: number;
@@ -15,7 +16,7 @@ export interface Combo {
 
 // Bir leg seçildiğinde aynı "domain"den ikinci leg yasaklanır.
 // Domain: mantıksal olarak ilişkili pazarlar grubu (aynı doğal olayı parçalı şekilde tarifleyen).
-// Farklı domain'lerden alınan leg'ler bağımsızlık varsayımına daha uyumlu.
+// Farklı gruplar bağımsız değildir; skor uyumluluğu ayrıca kontrol edilir.
 const DOMAIN_OF: Record<string, string> = {
   // Maç sonucu domeni — sonuç türevleri burada toplanır
   result: "match_result",
@@ -26,7 +27,7 @@ const DOMAIN_OF: Record<string, string> = {
   hnd_a20: "match_result",
   hnd_h20: "match_result",
 
-  // İY/MS bağımsız bir domain — sonuçla kombo izinli
+  // İY/MS: sonuçla uyumluluğu skor kontrolünde doğrulanır
   iy_ms: "iy_ms",
 
   // Toplam gol domeni
@@ -101,9 +102,6 @@ function pickConflict(p: Pick, others: Pick[]): boolean {
   return false;
 }
 
-function jointProb(legs: Pick[]): number {
-  return legs.reduce((acc, p) => acc * (p.pct / 100), 1);
-}
 
 function avgPct(legs: Pick[]): number {
   if (legs.length === 0) return 0;
@@ -123,8 +121,8 @@ function buildLegs(picks: Pick[], minPct: number, targetCount: number): Pick[] {
   const sorted = [...picks].sort((a, b) => b.confidence - a.confidence);
   const legs: Pick[] = [];
   for (const p of sorted) {
-    if (p.pct < minPct) continue;
-    if (pickConflict(p, legs)) continue;
+    if (!Number.isFinite(p.pct) || p.pct < minPct || p.pct > 100 || !Number.isFinite(p.confidence)) continue;
+    if (pickConflict(p, legs) || !canCombineFields([...legs, p].map((leg) => leg.field))) continue;
     legs.push(p);
     if (legs.length >= targetCount) break;
   }
@@ -142,11 +140,10 @@ export function generateCombos(picks: Pick[]): Combo[] {
   // Çift kombo: 2 leg, ≥%75 — en güvenli
   const doubleLegs = buildLegs(cleaned, 75, 2);
   if (doubleLegs.length === 2) {
-    const jp = jointProb(doubleLegs);
     out.push({
       legs: doubleLegs,
-      jointProb: jp,
-      estDecimalOdds: 1 / jp,
+      jointProb: null,
+      estDecimalOdds: null,
       tier: "double",
       avgConfidence: avgConf(doubleLegs),
       avgPct: avgPct(doubleLegs),
@@ -156,11 +153,10 @@ export function generateCombos(picks: Pick[]): Combo[] {
   // Üçlü kombo: 3 leg, ≥%70 — dengeli
   const tripleLegs = buildLegs(cleaned, 70, 3);
   if (tripleLegs.length === 3) {
-    const jp = jointProb(tripleLegs);
     out.push({
       legs: tripleLegs,
-      jointProb: jp,
-      estDecimalOdds: 1 / jp,
+      jointProb: null,
+      estDecimalOdds: null,
       tier: "triple",
       avgConfidence: avgConf(tripleLegs),
       avgPct: avgPct(tripleLegs),
@@ -168,22 +164,21 @@ export function generateCombos(picks: Pick[]): Combo[] {
   }
 
   // Süper kombo: 4-5 leg, ≥%75, sadece yüksek eşleşme (≥20 maç) ve avg confidence ≥0.65
-  const minMatchCount = Math.max(
-    cleaned.reduce((m, p) => Math.max(m, p.matchCountA, p.matchCountB), 0),
-  );
-  if (minMatchCount >= 20) {
-    const superLegs = buildLegs(cleaned, 75, 5);
-    if (superLegs.length >= 4 && avgConf(superLegs) >= 0.65) {
-      const jp = jointProb(superLegs);
-      out.push({
-        legs: superLegs,
-        jointProb: jp,
-        estDecimalOdds: 1 / jp,
-        tier: "super",
-        avgConfidence: avgConf(superLegs),
-        avgPct: avgPct(superLegs),
-      });
-    }
+  const wellSampled = cleaned.filter((p) => {
+    const count = p.archive === "AB" ? Math.min(p.matchCountA, p.matchCountB)
+      : p.archive === "A" ? p.matchCountA : p.matchCountB;
+    return Number.isFinite(count) && count >= 20;
+  });
+  const superLegs = buildLegs(wellSampled, 75, 5);
+  if (superLegs.length >= 4 && avgConf(superLegs) >= 0.65) {
+    out.push({
+      legs: superLegs,
+      jointProb: null,
+      estDecimalOdds: null,
+      tier: "super",
+      avgConfidence: avgConf(superLegs),
+      avgPct: avgPct(superLegs),
+    });
   }
 
   return out;

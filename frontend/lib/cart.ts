@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useSyncExternalStore, useMemo, useCallback } from "react";
 import type { Period } from "./labels";
 
 export interface CartItem {
@@ -21,11 +21,26 @@ export interface CartItem {
 
 export const STORAGE_KEY = "nortverse_bet_cart";
 export const CART_EVENT = "nortverse-cart-updated";
+let memoryItems: CartItem[] = [];
+let storageFailed = false;
+
+function subscribe(listener: () => void) {
+  window.addEventListener("storage", listener);
+  window.addEventListener(CART_EVENT, listener);
+  return () => {
+    window.removeEventListener("storage", listener);
+    window.removeEventListener(CART_EVENT, listener);
+  };
+}
+
+const getSnapshot = () => JSON.stringify(readStorage());
+const getServerSnapshot = () => null;
 
 // Helper'lar test edilebilirlik için export edildi (Sprint 10 Faz B).
 // Production'da useCart hook'u içinde tüketilirler.
 export function readStorage(): CartItem[] {
   if (typeof window === "undefined") return [];
+  if (storageFailed) return memoryItems;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
@@ -33,21 +48,28 @@ export function readStorage(): CartItem[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
       (x): x is CartItem =>
-        x && typeof x === "object" && typeof x.matchId === "string" && typeof x.marketKey === "string",
+        x && typeof x === "object" &&
+        [x.matchId, x.marketKey, x.homeTeam, x.awayTeam, x.selectionLabel, x.marketLabel]
+          .every((value) => typeof value === "string" && value.trim().length > 0) &&
+        typeof x.pct === "number" && Number.isFinite(x.pct) && x.pct >= 0 && x.pct <= 100 &&
+        ["A", "B", "AB"].includes(x.archive) && ["ht", "h2", "ft"].includes(x.period) &&
+        typeof x.addedAt === "number" && Number.isFinite(x.addedAt),
     );
   } catch {
-    return [];
+    return memoryItems;
   }
 }
 
 export function writeStorage(items: CartItem[]): void {
   if (typeof window === "undefined") return;
+  memoryItems = items;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    window.dispatchEvent(new CustomEvent(CART_EVENT));
+    storageFailed = false;
   } catch {
-    /* quota / disabled — sessizce yut */
+    storageFailed = true;
   }
+  window.dispatchEvent(new CustomEvent(CART_EVENT));
 }
 
 export function itemKey(it: Pick<CartItem, "matchId" | "marketKey" | "selectionLabel" | "period">): string {
@@ -59,29 +81,18 @@ export function itemKey(it: Pick<CartItem, "matchId" | "marketKey" | "selectionL
  * Cross-tab senkronizasyon: storage event + custom event.
  */
 export function useCart() {
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setItems(readStorage());
-    setHydrated(true);
-
-    const sync = () => setItems(readStorage());
-    window.addEventListener("storage", sync);
-    window.addEventListener(CART_EVENT, sync as EventListener);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.removeEventListener(CART_EVENT, sync as EventListener);
-    };
-  }, []);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const hydrated = snapshot !== null;
+  const items = useMemo<CartItem[]>(() => snapshot === null ? [] : JSON.parse(snapshot), [snapshot]);
 
   const addItem = useCallback((it: Omit<CartItem, "addedAt">) => {
     const cur = readStorage();
     const k = itemKey(it);
     if (cur.some((x) => itemKey(x) === k)) return; // idempotent
-    const next = [...cur, { ...it, addedAt: Date.now() }];
+    // A market is a choice: selecting another option replaces the old one.
+    const next = [...cur.filter((x) => !(x.matchId === it.matchId && x.period === it.period &&
+      x.marketKey === it.marketKey)), { ...it, addedAt: Date.now() }];
     writeStorage(next);
-    setItems(next);
   }, []);
 
   const removeItem = useCallback((idxOrKey: number | string) => {
@@ -93,12 +104,10 @@ export function useCart() {
       next = cur.filter((x) => itemKey(x) !== idxOrKey);
     }
     writeStorage(next);
-    setItems(next);
   }, []);
 
   const clear = useCallback(() => {
     writeStorage([]);
-    setItems([]);
   }, []);
 
   const has = useCallback(
@@ -109,9 +118,10 @@ export function useCart() {
     [items],
   );
 
-  // Joint olasılık (bağımsızlık varsayımı) ve tahmini kombi oran
-  const jointProb = items.reduce((acc, x) => acc * (x.pct / 100), 1);
-  const estOdds = items.length === 0 ? 0 : 1 / Math.max(jointProb, 1e-9);
+  // Related selections require joint observations; marginal rates cannot be multiplied.
+  const hasRelatedSelections = new Set(items.map((x) => x.matchId)).size < items.length;
+  const jointProb = hasRelatedSelections ? null : items.reduce((acc, x) => acc * (x.pct / 100), 1);
+  const estOdds = items.length === 0 ? 0 : jointProb === null || jointProb === 0 ? null : 1 / jointProb;
 
   return {
     items,
@@ -122,6 +132,7 @@ export function useCart() {
     has,
     jointProb,
     estOdds,
+    hasRelatedSelections,
     count: items.length,
   };
 }

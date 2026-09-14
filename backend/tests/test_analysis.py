@@ -9,7 +9,7 @@ from app.analysis.engine import analyze_match
 from app.analysis.filtering import check_match_filters
 from app.analysis.pattern_c import _ratios_match
 from app.analysis.scores import ALL_SCORES
-from app.models import HistoricalMatch, MatchRawData, Period, SkipReason
+from app.models import HistoricalMatch, MatchRawData, SkipReason
 
 
 def _make_match(

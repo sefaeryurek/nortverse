@@ -1,36 +1,79 @@
 import type { AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
 import { getApiBase } from "./env";
+import { validMatchList } from "./list-validation";
+import { validAnalysis, validSummaries } from "./analysis-validation";
 
-// Davranış: getApiBase() açıklamasında — Vercel SSR direkt, CSR proxy, lokal dev proxy.
-const BASE = getApiBase();
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function request<T>(path: string, options: RequestInit & { next?: { revalidate: number } } = {}): Promise<T> {
+  const timeout = AbortSignal.timeout(95_000);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  let response: Response;
+  try {
+    response = await fetch(`${getApiBase()}${path}`, { ...options, signal });
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    throw new ApiError(timeout.aborted
+      ? "İşlem beklenenden uzun sürdü. Lütfen yeniden deneyin."
+      : "Sunucuya ulaşılamadı. Lütfen bağlantınızı kontrol edip yeniden deneyin.", 0);
+  }
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: "İstek geçersiz. Lütfen seçtiğiniz tarih veya maç bilgisini kontrol edin.",
+      404: "Maç bulunamadı veya artık erişilebilir değil.",
+      422: "Tarih veya maç bilgisi geçerli değil.",
+      429: "Çok fazla istek gönderildi. Lütfen biraz sonra yeniden deneyin.",
+      503: "Veri hizmeti geçici olarak kullanılamıyor. Lütfen biraz sonra yeniden deneyin.",
+      504: "Veri kaynağı zamanında yanıt vermedi. Lütfen yeniden deneyin.",
+    };
+    throw new ApiError(messages[response.status] ?? "Veriler yüklenemedi. Lütfen yeniden deneyin.", response.status);
+  }
+  try { return await response.json() as T; }
+  catch (error) {
+    if (options.signal?.aborted) throw error;
+    if (timeout.aborted) throw new ApiError("İşlem beklenenden uzun sürdü. Lütfen yeniden deneyin.", 0);
+    throw new ApiError("Sunucudan geçersiz bir yanıt alındı. Lütfen yeniden deneyin.", response.status);
+  }
+}
+
+function checkedList<T>(value: T, results = false): T {
+  if (!validMatchList(value, results)) {
+    throw new ApiError("Sunucudan geçersiz maç verisi alındı. Lütfen yeniden deneyin.", 200);
+  }
+  return value;
+}
 
 export async function getFixture(date: string): Promise<FixtureMatch[]> {
   // Server-side fetch (Vercel SSR): Next.js Data Cache 5dk
   // Sprint 8.10b: 60sn → 300sn — Supabase egress azaltma; bültende dakikalık
   // güncelleme nadir olduğu için kullanıcı UX etkisi yok.
-  const res = await fetch(`${BASE}/api/fixture?date=${date}`, {
+  return checkedList(await request<FixtureMatch[]>(`/api/fixture?${new URLSearchParams({ date })}`, {
     next: { revalidate: 300 },
-  });
-  if (!res.ok) throw new Error(`Fixture alınamadı: ${res.status}`);
-  return res.json();
+  }));
 }
 
-export async function analyzeMatch(matchId: string): Promise<AnalyzeResponse> {
-  const res = await fetch(`${BASE}/api/analyze/${matchId}`, {
+export async function analyzeMatch(matchId: string, signal?: AbortSignal): Promise<AnalyzeResponse> {
+  const data = await request<unknown>(`/api/analyze/${encodeURIComponent(matchId)}`, {
     cache: "no-store",
+    signal,
   });
-  if (!res.ok) throw new Error(`Analiz başarısız: ${res.status}`);
-  return res.json();
+  if (!validAnalysis(data, matchId)) {
+    throw new ApiError("Sunucudan geçersiz analiz verisi alındı. Lütfen yeniden deneyin.", 200);
+  }
+  return data;
 }
 
 export async function getResults(date: string): Promise<ResultMatch[]> {
   // Sonuçlar 2dk cache — Sprint 8.10b: 60sn → 120sn (egress azaltma)
   // Saatlik update-scores cron olduğu için 2dk gecikme kabul edilebilir
-  const res = await fetch(`${BASE}/api/results?date=${date}`, {
+  return checkedList(await request<ResultMatch[]>(`/api/results?${new URLSearchParams({ date })}`, {
     next: { revalidate: 120 },
-  });
-  if (!res.ok) throw new Error(`Sonuçlar alınamadı: ${res.status}`);
-  return res.json();
+  }), true);
 }
 
 export async function getMatches(
@@ -39,9 +82,11 @@ export async function getMatches(
 ): Promise<MatchSummary[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (league) params.set("league", league);
-  const res = await fetch(`${BASE}/api/matches?${params}`, {
+  const data = await request<unknown>(`/api/matches?${params}`, {
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`Maçlar alınamadı: ${res.status}`);
-  return res.json();
+  if (!validSummaries(data)) {
+    throw new ApiError("Sunucudan geçersiz maç özeti alındı. Lütfen yeniden deneyin.", 200);
+  }
+  return data;
 }

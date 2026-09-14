@@ -9,7 +9,7 @@ Pydantic kullanıyoruz çünkü:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -61,6 +61,7 @@ class FixtureMatch(BaseModel):
 class HistoricalMatch(BaseModel):
     """Bir takımın geçmiş maçı (form maçı veya h2h maçı)."""
 
+    match_id: Optional[str] = None
     opponent: str
     home_team: str  # Bu maçta ev sahibi hangisi
     away_team: str
@@ -144,7 +145,7 @@ class MatchAnalysisResult(BaseModel):
     half2: PeriodAnalysis
     ft: PeriodAnalysis
 
-    analyzed_at: datetime = Field(default_factory=datetime.utcnow)
+    analyzed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def has_any_archive1_row(self) -> bool:

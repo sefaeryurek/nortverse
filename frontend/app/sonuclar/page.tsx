@@ -1,5 +1,8 @@
+import { redirect } from "next/navigation";
+import { resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
+import RetryButton from "@/components/RetryButton";
 import { getResults } from "@/lib/api";
 import { leagueDisplay } from "@/lib/leagues";
 import type { ResultMatch } from "@/lib/types";
@@ -30,7 +33,7 @@ function ResultSkeleton() {
 }
 
 interface Props {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string | string[] }>;
 }
 
 function formatTime(iso: string | null): string {
@@ -59,7 +62,7 @@ function ResultRow({ match }: { match: ResultMatch }) {
 
   return (
     <div
-      className="flex items-center gap-3 px-4 py-3 border-b hover:bg-slate-900/40 transition-colors"
+      className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-b hover:bg-slate-900/40 transition-colors"
       style={{ borderColor: "#1e293b" }}
     >
       {/* Saat */}
@@ -86,13 +89,13 @@ function ResultRow({ match }: { match: ResultMatch }) {
       })()}
 
       {/* Takımlar */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium truncate" style={{ color: "#e2e8f0" }}>
+      <div className="w-full min-w-0 sm:w-auto sm:flex-1">
+        <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+          <span className="max-w-full break-words text-sm font-medium sm:truncate" style={{ color: "#e2e8f0" }}>
             {match.home_team}
           </span>
-          <span className="text-xs flex-shrink-0" style={{ color: "#475569" }}>vs</span>
-          <span className="text-sm font-medium truncate" style={{ color: "#e2e8f0" }}>
+          <span className="hidden sm:inline text-xs flex-shrink-0" style={{ color: "#475569" }}>vs</span>
+          <span className="max-w-full break-words text-sm font-medium sm:truncate" style={{ color: "#e2e8f0" }}>
             {match.away_team}
           </span>
         </div>
@@ -111,6 +114,10 @@ function ResultRow({ match }: { match: ResultMatch }) {
             style={{ backgroundColor: "#14532d", color: "#4ade80" }}
           >
             {scoreStr ? `Canlı ${scoreStr}` : "Canlı"}
+          </span>
+        ) : match.status === "pending" || match.status === "scheduled" ? (
+          <span className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-300">
+            {match.status === "pending" ? "Sonuç bekleniyor" : "Başlamadı"}
           </span>
         ) : (
           <span
@@ -149,6 +156,7 @@ async function ResultList({ date }: { date: string }) {
         <div className="text-center space-y-3">
           <div className="text-5xl">⚠️</div>
           <p className="text-sm font-medium" style={{ color: "#ef4444" }}>{error}</p>
+          <RetryButton />
         </div>
       </div>
     );
@@ -163,12 +171,12 @@ async function ResultList({ date }: { date: string }) {
           <div className="text-5xl">📭</div>
           <p className="text-sm font-medium" style={{ color: "#64748b" }}>
             {isToday
-              ? "Henüz oynanan veya canlı maç yok."
+              ? "Bugün için kayıtlı maç bulunamadı."
               : "Bu tarihe ait maç bulunamadı."}
           </p>
           {isToday && (
             <p className="text-xs" style={{ color: "#475569" }}>
-              Maçlar başladıkça canlı, bittikçe skor olarak burada görünür.
+              Günlük maç verileri güncellendiğinde burada görünür.
             </p>
           )}
         </div>
@@ -180,7 +188,7 @@ async function ResultList({ date }: { date: string }) {
     <>
       {/* Özet */}
       <div
-        className="flex items-center gap-4 px-4 py-2 text-xs border-b"
+        className="flex flex-wrap items-center gap-3 px-4 py-2 text-xs border-b"
         style={{ borderColor: "#1e293b", color: "#475569" }}
       >
         <span className="flex items-center gap-1.5">
@@ -191,6 +199,7 @@ async function ResultList({ date }: { date: string }) {
           Canlı: {matches.filter((m) => m.status === "live").length}
         </span>
         <span>Bitti: {matches.filter((m) => m.status === "finished").length}</span>
+        <span>Bekleyen: {matches.filter((m) => m.status === "pending").length}</span>
         <span>KG: {matches.filter((m) => m.kg_var === true).length}</span>
         <span>2.5 Üst: {matches.filter((m) => m.over_25 === true).length}</span>
       </div>
@@ -207,7 +216,8 @@ export default async function SonuclarPage({ searchParams }: Props) {
   const today = new Date().toLocaleDateString("sv-SE", {
     timeZone: "Europe/Istanbul",
   });
-  const date = params.date ?? today;
+  const date = resolvePageDate(params.date, today);
+  if (date === null) redirect("/sonuclar");
 
   return (
     <div className="flex flex-col h-full">
@@ -227,7 +237,7 @@ export default async function SonuclarPage({ searchParams }: Props) {
       </div>
 
       {/* Gün sekmeleri */}
-      <DayTabs activeDate={date} basePath="/sonuclar" />
+      <DayTabs referenceDate={today} activeDate={date} basePath="/sonuclar" />
 
       {/* Sonuç listesi */}
       <div className="flex-1 overflow-y-auto">

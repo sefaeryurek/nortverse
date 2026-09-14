@@ -9,10 +9,25 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Awaitable, Callable, Optional, TypeVar
 
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.dialects.postgresql import insert
 
+from app.analysis import analyze_match, check_match_filters
+from app.analysis.league_filter import canonical_league_name, is_supported_league
+from app.analysis.persist import compute_all_patterns
+from app.analysis.trends import compute_trends
+from app.db.connection import get_session
+from app.db.models import Match
+from app.models import MatchAnalysisResult, MatchRawData
+from app.scraper.browser import browser_context
+from app.scraper.fixture import fetch_fixture
+from app.scraper.match_detail import fetch_match_detail
+
 T = TypeVar("T")
+
+
+class StaleAnalysisWrite(ValueError):
+    """An older analysis cannot replace a newer or deleted record."""
 
 
 async def _with_retry(
@@ -31,6 +46,8 @@ async def _with_retry(
     for i in range(attempts):
         try:
             return await op()
+        except ValueError:
+            raise  # Invalid data will not be repaired by retrying the same operation.
         except Exception as exc:
             last_exc = exc
             if i == attempts - 1:
@@ -41,17 +58,6 @@ async def _with_retry(
             await asyncio.sleep(wait)
     # mantık olarak buraya gelinmez ama tip checker memnun olsun
     raise last_exc if last_exc else RuntimeError("retry tükendi")
-
-from app.analysis import analyze_match, check_match_filters
-from app.analysis.league_filter import canonical_league_name, is_supported_league
-from app.analysis.persist import compute_all_patterns
-from app.analysis.trends import compute_trends
-from app.db.connection import get_session
-from app.db.models import Match
-from app.models import MatchAnalysisResult, MatchRawData
-from app.scraper.browser import browser_context
-from app.scraper.fixture import fetch_fixture
-from app.scraper.match_detail import fetch_match_detail
 
 log = logging.getLogger(__name__)
 
@@ -148,16 +154,24 @@ async def _upsert(
     ok, reason = _validate_row(row)
     if not ok:
         log.error("DB write reddedildi [%s]: %s", result.match_id, reason)
-        return  # Yazma yapma; pipeline devam eder
+        raise ValueError(f"DB write reddedildi [{result.match_id}]: {reason}")
 
     async def _do():
+        updates = dict(row)
+        for key in ("kickoff_time", "actual_ft_home", "actual_ft_away", "actual_ht_home",
+                    "actual_ht_away", "actual_h2_home", "actual_h2_away"):
+            updates[key] = func.coalesce(row[key], getattr(Match, key))
         stmt = (
             insert(Match)
             .values(**row)
-            .on_conflict_do_update(index_elements=["match_id"], set_=row)
+            .on_conflict_do_update(index_elements=["match_id"], set_=updates,
+                                  where=(Match.deleted_at.is_(None) & or_(
+                                      Match.analyzed_at.is_(None), Match.analyzed_at <= result.analyzed_at)))
         )
         async with get_session() as session:
-            await session.execute(stmt)
+            written = await session.execute(stmt)
+            if written.rowcount == 0:
+                raise StaleAnalysisWrite(f"Newer or deleted analysis exists: {result.match_id}")
 
     await _with_retry(_do, label=f"_upsert[{result.match_id}]")
 
@@ -226,6 +240,39 @@ async def run_pipeline(
     return stats
 
 
+def _merge_result_scores(raw: MatchRawData, existing: Match) -> dict:
+    """Keep missing halves only if the final result is unchanged and consistent."""
+    ft = (raw.actual_ft_home, raw.actual_ft_away)
+    if not all(type(v) is int and 0 <= v <= 30 for v in ft):
+        raise ValueError("Invalid final score")
+
+    def valid(pair):
+        return all(type(v) is int and 0 <= v <= total for v, total in zip(pair, ft))
+
+    ht = (raw.actual_ht_home, raw.actual_ht_away)
+    h2 = (raw.actual_h2_home, raw.actual_h2_away)
+    for pair in (ht, h2):
+        if any(v is not None for v in pair) and not valid(pair):
+            raise ValueError("Invalid or incomplete half score")
+    if valid(ht) and valid(h2) and tuple(a + b for a, b in zip(ht, h2)) != ft:
+        raise ValueError("Half scores do not match final score")
+
+    if not valid(ht) and not valid(h2) and ft == (existing.actual_ft_home, existing.actual_ft_away):
+        previous_ht = (existing.actual_ht_home, existing.actual_ht_away)
+        previous_h2 = (existing.actual_h2_home, existing.actual_h2_away)
+        if valid(previous_ht):
+            ht = previous_ht
+        elif valid(previous_h2):
+            h2 = previous_h2
+    if valid(ht):
+        h2 = tuple(total - first for total, first in zip(ft, ht))
+    elif valid(h2):
+        ht = tuple(total - second for total, second in zip(ft, h2))
+    return dict(actual_ft_home=ft[0], actual_ft_away=ft[1],
+                actual_ht_home=ht[0], actual_ht_away=ht[1],
+                actual_h2_home=h2[0], actual_h2_away=h2[1])
+
+
 async def update_results(target_date: Optional[date] = None) -> dict:
     """DB'deki maçların gerçek sonuçlarını günceller — Katman A/B/C verisi dokunulmaz.
 
@@ -242,7 +289,7 @@ async def update_results(target_date: Optional[date] = None) -> dict:
         d = (now_ist - timedelta(days=1)).date() if now_ist.hour < 4 else now_ist.date()
 
     day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=istanbul_tz)
-    day_end = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=istanbul_tz)
+    day_end = day_start + timedelta(days=1)
 
     async with get_session() as session:
         match_ids = list(
@@ -250,40 +297,50 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                 select(Match.match_id)
                 .where(
                     Match.kickoff_time >= day_start,
-                    Match.kickoff_time <= day_end,
+                    Match.kickoff_time < day_end,
                     Match.deleted_at.is_(None),  # Sprint 8.9: silinmiş maçların skoru güncellenmez
                 )
             )).scalars().all()
         )
 
     log.info("Sonuç güncellemesi: %s için %d maç bulundu", d, len(match_ids))
-    stats = {"updated": 0, "not_finished": 0, "errors": 0}
+    stats = {"updated": 0, "not_finished": 0, "errors": 0, "skipped": 0}
+    if not match_ids:
+        return stats
 
     async with browser_context() as ctx:
         for match_id in match_ids:
             try:
                 raw = await fetch_match_detail(match_id, ctx=ctx)
-                if raw.actual_ft_home is None:
+                if raw.actual_ft_home is None or raw.actual_ft_away is None:
                     stats["not_finished"] += 1
                     continue
 
                 async def _do_update(_raw=raw, _mid=match_id):
                     async with get_session() as session:
+                        existing = (await session.execute(
+                            select(Match).where(Match.match_id == _mid, Match.deleted_at.is_(None))
+                            .with_for_update()
+                        )).scalar_one_or_none()
+                        if existing is None:
+                            return False
+                        if _raw.match_id != _mid:
+                            raise ValueError("Result match ID does not match requested match")
+                        scores = _merge_result_scores(_raw, existing)
                         await session.execute(
                             sa_update(Match)
-                            .where(Match.match_id == _mid)
+                            .where(Match.match_id == _mid, Match.deleted_at.is_(None))
                             .values(
-                                actual_ft_home=_raw.actual_ft_home,
-                                actual_ft_away=_raw.actual_ft_away,
-                                actual_ht_home=_raw.actual_ht_home,
-                                actual_ht_away=_raw.actual_ht_away,
-                                actual_h2_home=_raw.actual_h2_home,
-                                actual_h2_away=_raw.actual_h2_away,
+                                **scores,
                                 result_fetched_at=datetime.now(timezone.utc),
                             )
                         )
+                        return True
 
-                await _with_retry(_do_update, label=f"update_results[{match_id}]")
+                updated = await _with_retry(_do_update, label=f"update_results[{match_id}]")
+                if not updated:
+                    stats["skipped"] += 1
+                    continue
                 stats["updated"] += 1
                 log.info(
                     "Güncellendi [%s]: %s vs %s | %d-%d",
@@ -295,7 +352,7 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                 stats["errors"] += 1
 
     log.info(
-        "Sonuç güncellemesi tamamlandı: %d güncellendi, %d bitmemiş, %d hata",
-        stats["updated"], stats["not_finished"], stats["errors"],
+        "Sonuç güncellemesi tamamlandı: %d güncellendi, %d bitmemiş, %d atlandı, %d hata",
+        stats["updated"], stats["not_finished"], stats["skipped"], stats["errors"],
     )
     return stats

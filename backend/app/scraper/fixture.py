@@ -22,17 +22,17 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-# Nowgoal data-t attribute'u UTC saatiyle çalışır
-_SITE_TZ = timezone.utc
-# Tarih hesaplamaları için İstanbul
-_ISTANBUL_TZ = timezone(timedelta(hours=3))
-
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
 from app.config import SCRAPER
 from app.models import FixtureMatch
 from app.scraper.browser import browser_context, close_ad_overlay, goto_with_retry
+
+# Nowgoal data-t attribute'u UTC saatiyle çalışır
+_SITE_TZ = timezone.utc
+# Tarih hesaplamaları için İstanbul
+_ISTANBUL_TZ = timezone(timedelta(hours=3))
 
 log = logging.getLogger(__name__)
 
@@ -178,26 +178,28 @@ async def _fetch_fixture_with_ctx(
 ) -> str:
     """Verilen browser context ile fixture sayfasının HTML'ini çeker."""
     page = await ctx.new_page()
-    await goto_with_retry(page, url)
-
     try:
-        await page.wait_for_selector('tr[id^="tr1_"]', timeout=10000)
-    except Exception:
-        log.warning("Maç satırları beklenen sürede yüklenmedi, devam ediliyor")
-    await page.wait_for_timeout(int(SCRAPER.default_wait * 1000))
+        await goto_with_retry(page, url)
 
-    await close_ad_overlay(page)
-
-    if only_hot:
         try:
-            await page.click("#li_FilterHot")
-            await page.wait_for_timeout(2000)
-            log.debug("Hot filtresi aktive edildi")
-        except Exception as e:
-            log.warning("Hot filtresi tıklanamadı: %s", e)
+            await page.wait_for_selector('tr[id^="tr1_"]', timeout=10000)
+        except Exception:
+            log.warning("Maç satırları beklenen sürede yüklenmedi, devam ediliyor")
+        await page.wait_for_timeout(int(SCRAPER.default_wait * 1000))
 
-    html = await page.content()
-    await page.close()
+        await close_ad_overlay(page)
+
+        if only_hot:
+            try:
+                await page.click("#li_FilterHot")
+                await page.wait_for_timeout(2000)
+                log.debug("Hot filtresi aktive edildi")
+            except Exception as e:
+                log.warning("Hot filtresi tıklanamadı: %s", e)
+
+        html = await page.content()
+    finally:
+        await page.close()
 
     if SCRAPER.save_html_on_error:
         SCRAPER.debug_dir.mkdir(parents=True, exist_ok=True)

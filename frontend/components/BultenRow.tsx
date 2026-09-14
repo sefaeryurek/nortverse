@@ -32,10 +32,10 @@ export default function BultenRow({ match, timeStr }: Props) {
 
       {/* İçerik */}
       <div
-        className="flex-1 flex items-center gap-3 px-4 py-3 transition-colors group-hover:bg-white/5"
+        className="min-w-0 flex-1 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 transition-colors group-hover:bg-white/5"
       >
         {/* Lig */}
-        <div className="flex-shrink-0 flex items-center gap-1.5 w-32">
+        <div className="flex-shrink-0 flex items-center gap-1.5 w-full sm:w-32">
           <span className="text-lg leading-none">{flag}</span>
           <span className="text-xs font-medium leading-tight" style={{ color: "#64748b" }}>
             {leagueName}
@@ -44,17 +44,17 @@ export default function BultenRow({ match, timeStr }: Props) {
 
         {/* Takımlar */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>
+          <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <span className="max-w-full break-words text-sm font-semibold sm:truncate" style={{ color: "#e2e8f0" }}>
               {match.home_team}
             </span>
             <span
-              className="flex-shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded"
+              className="hidden sm:inline flex-shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded"
               style={{ color: "#475569", backgroundColor: "#1e293b" }}
             >
               vs
             </span>
-            <span className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>
+            <span className="max-w-full break-words text-sm font-semibold sm:truncate" style={{ color: "#e2e8f0" }}>
               {match.away_team}
             </span>
           </div>

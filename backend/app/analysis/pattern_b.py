@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import cast, select
+from sqlalchemy import and_, cast, select
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.analysis.pattern_stats import PatternResult, compute_stats
@@ -37,15 +37,19 @@ async def find_pattern_b_matches(
     Returns:
         PatternResult veya None (eşleşme < min_matches ise)
     """
+    if type(min_matches) is not int or min_matches < 1:
+        raise ValueError("min_matches must be a positive integer")
     if period == "ht":
         col_1, col_x, col_2 = Match.ht_scores_1, Match.ht_scores_x, Match.ht_scores_2
-        actual_check = Match.actual_ht_home.isnot(None)
+        actual_check = and_(Match.actual_ht_home.isnot(None), Match.actual_ht_away.isnot(None))
     elif period == "h2":
         col_1, col_x, col_2 = Match.h2_scores_1, Match.h2_scores_x, Match.h2_scores_2
-        actual_check = Match.actual_h2_home.isnot(None)
-    else:
+        actual_check = and_(Match.actual_h2_home.isnot(None), Match.actual_h2_away.isnot(None))
+    elif period == "ft":
         col_1, col_x, col_2 = Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2
-        actual_check = Match.actual_ft_home.isnot(None)
+        actual_check = and_(Match.actual_ft_home.isnot(None), Match.actual_ft_away.isnot(None))
+    else:
+        raise ValueError(f"Geçersiz periyot: {period}")
 
     async with get_session() as session:
         filters = [
@@ -70,4 +74,5 @@ async def find_pattern_b_matches(
         return None
 
     log.info("Katman B [%s]: %d eşleşme bulundu", period, len(rows))
-    return compute_stats(list(rows), period)
+    result = compute_stats(list(rows), period)
+    return result if result is not None and result.match_count >= min_matches else None

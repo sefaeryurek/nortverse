@@ -177,9 +177,10 @@ class PatternResult(BaseModel):
     h2_result_2_pct: float = 0.0
 
 
-def _hnd_result(h: int, a: int, home_minus: int, away_minus: int) -> str:
-    eff_h = h - home_minus
-    eff_a = a - away_minus
+def _hnd_result(h: int, a: int, home_start: int, away_start: int) -> str:
+    """Apply the starting score displayed by the UI, e.g. (0:1)."""
+    eff_h = h + home_start
+    eff_a = a + away_start
     if eff_h > eff_a:
         return "1"
     elif eff_h == eff_a:
@@ -188,14 +189,24 @@ def _hnd_result(h: int, a: int, home_minus: int, away_minus: int) -> str:
 
 
 def _period_scores(row, period: str) -> tuple[Optional[int], Optional[int]]:
-    if period == "ht":
-        return row.actual_ht_home, row.actual_ht_away
-    elif period == "h2":
-        return row.actual_h2_home, row.actual_h2_away
-    return row.actual_ft_home, row.actual_ft_away
+    pair = (getattr(row, f"actual_{period}_home"), getattr(row, f"actual_{period}_away"))
+    if not all(type(v) is int and 0 <= v <= 30 for v in pair):
+        return None, None
+    if period != "ft":
+        ft = (row.actual_ft_home, row.actual_ft_away)
+        if any(total is not None and score > total for score, total in zip(pair, ft)):
+            return None, None
+        if period == "h2":
+            ht = (row.actual_ht_home, row.actual_ht_away)
+            if any(first is not None and total is not None and first + second != total
+                   for first, second, total in zip(ht, pair, ft)):
+                return None, None
+    return pair
 
 
 def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
+    if period not in {"ft", "ht", "h2"}:
+        raise ValueError(f"Invalid period: {period}")
     valid: list[tuple] = []
     for row in rows:
         h, a = _period_scores(row, period)
@@ -305,10 +316,8 @@ def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
             gol_6p += 1
 
         if period == "ft":
-            ht_h = row.actual_ht_home
-            ht_a = row.actual_ht_away
-            h2_h = row.actual_h2_home
-            h2_a = row.actual_h2_away
+            ht_h, ht_a = _period_scores(row, "ht")
+            h2_h, h2_a = _period_scores(row, "h2")
             if ht_h is not None and ht_a is not None:
                 ht_pairs.append((ht_h, ht_a))
             if h2_h is not None and h2_a is not None:

@@ -458,7 +458,7 @@ export function getMarkets(): readonly MarketSpec[] {
 function isMarketActive(market: MarketSpec, period: Period, sample: PatternResult): boolean {
   if (market.ftOnly && period !== "ft") return false;
   if (market.excludePeriods?.includes(period)) return false;
-  if (market.ftZeroCheck && (sample[market.ftZeroCheck] as number) <= 0) return false;
+  if (market.ftZeroCheck && !market.fields.some((f) => (sample[f.field] as number) > 0)) return false;
   return true;
 }
 
@@ -655,12 +655,10 @@ export function getMarketSummary(
   for (const key of SUMMARY_MARKET_KEYS) {
     const market = MARKETS.find((m) => m.key === key);
     if (!market) continue;
-    const sampleForCheck = patternA ?? patternB;
-    if (!sampleForCheck) continue;
-    if (!isMarketActive(market, period, sampleForCheck)) continue;
+    if (![patternA, patternB].some((sample) => sample && isMarketActive(market, period, sample))) continue;
 
     const pickWinner = (result: PatternResult | null) => {
-      if (!result) return null;
+      if (!result || !isMarketActive(market, period, result)) return null;
       let best: { selectionLabel: string; pct: number } | null = null;
       for (const f of market.fields) {
         const pct = result[f.field] as number;

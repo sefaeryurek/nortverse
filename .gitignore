@@ -44,3 +44,9 @@ screenshots/
 # Outputs
 output/
 exports/
+
+# Excel referans dosyaları
+xx/
+
+# Claude Code local settings
+.claude/settings.local.json

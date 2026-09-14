@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import update as sa_update
@@ -19,6 +20,14 @@ from app.db.connection import get_session
 from app.db.models import Match
 
 log = logging.getLogger(__name__)
+
+
+class PatternComputationError(RuntimeError):
+    """An incomplete computation must never replace saved analysis."""
+
+
+class StalePatternWrite(ValueError):
+    """The source analysis changed while patterns were being computed."""
 
 
 async def compute_all_patterns(
@@ -42,7 +51,7 @@ async def compute_all_patterns(
 
     Returns:
         {"pattern_ht_b": dict|None, "pattern_ht_c": ..., ...} 6 anahtarlı dict.
-        compute başarısız olursa ilgili anahtar None değeri taşır.
+        None yalnızca başarılı hesaplamada eşleşme yoksa döner; hatada yazma yapılmaz.
     """
 
     async def _b(period: str, s1, sx, s2) -> Optional[dict]:
@@ -53,7 +62,7 @@ async def compute_all_patterns(
             return res.model_dump() if res else None
         except Exception as exc:
             log.warning("Pattern B [%s] hesaplanamadı [%s]: %s", period, match_id, exc)
-            return None
+            raise
 
     async def _c_all() -> tuple[Optional[dict], Optional[dict], Optional[dict]]:
         if not ft_ratios:
@@ -69,16 +78,21 @@ async def compute_all_patterns(
             )
         except Exception as exc:
             log.warning("Pattern C hesaplanamadı [%s]: %s", match_id, exc)
-            return None, None, None
+            raise
 
-    (ht_b, h2_b, ft_b), (ht_c, h2_c, ft_c) = await asyncio.gather(
-        asyncio.gather(
-            _b("ht", *ht_scores),
-            _b("h2", *h2_scores),
-            _b("ft", *ft_scores),
-        ),
+    outcomes = await asyncio.gather(
+        _b("ht", *ht_scores),
+        _b("h2", *h2_scores),
+        _b("ft", *ft_scores),
         _c_all(),
+        return_exceptions=True,
     )
+    for outcome in outcomes:
+        if isinstance(outcome, asyncio.CancelledError):
+            raise outcome
+        if isinstance(outcome, Exception):
+            raise PatternComputationError(f"Pattern computation failed for {match_id}") from outcome
+    ht_b, h2_b, ft_b, (ht_c, h2_c, ft_c) = outcomes
 
     return {
         "pattern_ht_b": ht_b,
@@ -90,7 +104,8 @@ async def compute_all_patterns(
     }
 
 
-async def update_match_patterns(match_id: str, patterns: dict[str, dict | None]) -> None:
+async def update_match_patterns(match_id: str, patterns: dict[str, dict | None], *,
+                                expected_analyzed_at: datetime | None) -> None:
     """matches satırının sadece 6 pattern kolonunu günceller.
 
     Lazy backfill için kullanılır: _build_from_db DB'de pattern bulamazsa
@@ -98,9 +113,13 @@ async def update_match_patterns(match_id: str, patterns: dict[str, dict | None])
     """
     try:
         async with get_session() as session:
-            await session.execute(
-                sa_update(Match).where(Match.match_id == match_id).values(**patterns)
+            result = await session.execute(
+                sa_update(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None),
+                                       Match.analyzed_at == expected_analyzed_at).values(**patterns)
             )
+            if result.rowcount == 0:
+                raise StalePatternWrite(f"Analysis changed or was deleted: {match_id}")
         log.info("Pattern'ler DB'ye kaydedildi (lazy backfill): %s", match_id)
     except Exception as exc:
         log.warning("Pattern'leri DB'ye yazamadık [%s]: %s", match_id, exc)
+        raise

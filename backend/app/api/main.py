@@ -8,14 +8,15 @@ import sys
 import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
+from weakref import WeakValueDictionary
 from typing import Optional
 
 # Windows'ta Playwright subprocess için ProactorEventLoop gerekiyor
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -23,7 +24,7 @@ from sqlalchemy import select
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
-from app.analysis.persist import compute_all_patterns, update_match_patterns
+from app.analysis.persist import PatternComputationError, StalePatternWrite, compute_all_patterns, update_match_patterns
 from app.analysis.trends import TrendsData, compute_trends
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
@@ -35,38 +36,43 @@ log = logging.getLogger(__name__)
 
 # LRU bound — uzun süre çalışan container'da bellek koruması
 _CACHE_MAX = 500
+ANALYSIS_CACHE_TTL = 600.0
+ANALYSIS_TIMEOUT = 90.0
+_analysis_cached_at: dict[str, float] = {}
 
 # Analiz sonuçları: match_id → AnalyzeResponse (LRU)
 _analysis_cache: "OrderedDict[str, AnalyzeResponse]" = OrderedDict()
-# Aynı match için tek seferde scrape garantisi (LRU)
-_analysis_locks: "OrderedDict[str, asyncio.Lock]" = OrderedDict()
+# Kullanımda olan lock cache tahliyesinden etkilenmez; boşta olanlar otomatik silinir.
+_analysis_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
 
 
 def _cache_put(match_id: str, value: "AnalyzeResponse") -> None:
     """LRU semantiği: ekle, en sona taşı, sınırı aşarsa en eskiyi at."""
     _analysis_cache[match_id] = value
+    _analysis_cached_at[match_id] = time.monotonic()
     _analysis_cache.move_to_end(match_id)
     while len(_analysis_cache) > _CACHE_MAX:
         evicted, _ = _analysis_cache.popitem(last=False)
-        _analysis_locks.pop(evicted, None)  # ilgili lock'u da temizle
+        _analysis_cached_at.pop(evicted, None)
 
 
-def _cache_touch(match_id: str) -> None:
-    """LRU sırasını güncellemek için: son erişimi en sona al."""
-    if match_id in _analysis_cache:
-        _analysis_cache.move_to_end(match_id)
+def _cache_get(match_id: str) -> "AnalyzeResponse | None":
+    if match_id not in _analysis_cache:
+        return None
+    if time.monotonic() - _analysis_cached_at.get(match_id, 0) >= ANALYSIS_CACHE_TTL:
+        _analysis_cache.pop(match_id, None)
+        _analysis_cached_at.pop(match_id, None)
+        return None
+    _analysis_cache.move_to_end(match_id)
+    return _analysis_cache[match_id]
 
 
 def _get_or_make_lock(match_id: str) -> asyncio.Lock:
-    """match_id için lock döndür; yeni oluşturulursa LRU'ya ekler."""
+    """İşlem ve bekleyenleri yaşadığı sürece aynı lock'u döndür."""
     lock = _analysis_locks.get(match_id)
     if lock is None:
         lock = asyncio.Lock()
         _analysis_locks[match_id] = lock
-        while len(_analysis_locks) > _CACHE_MAX:
-            _analysis_locks.popitem(last=False)
-    else:
-        _analysis_locks.move_to_end(match_id)
     return lock
 
 
@@ -147,7 +153,13 @@ async def _build_from_db(row: Match) -> "AnalyzeResponse | None":
             ft_ratios=ft_ratios,
         )
         # Write-through: DB'ye sessiz yaz (hata olursa bile yanıt dönsün)
-        await update_match_patterns(mid, patterns)
+        try:
+            await update_match_patterns(mid, patterns, expected_analyzed_at=row.analyzed_at)
+        except StalePatternWrite:
+            raise HTTPException(409, "Analiz bu sırada güncellendi. Lütfen yeniden deneyin.")
+        except Exception:
+            # Successfully computed results can still be served if cache persistence fails.
+            log.warning("Lazy backfill kaydedilemedi [%s]; hesaplanan yanıt kullanılacak", mid)
 
         ht_b, ht_c = _pat(patterns["pattern_ht_b"]), _pat(patterns["pattern_ht_c"])
         h2_b, h2_c = _pat(patterns["pattern_h2_b"]), _pat(patterns["pattern_h2_c"])
@@ -170,13 +182,18 @@ async def _build_from_db(row: Match) -> "AnalyzeResponse | None":
 
 
 async def _analyze_db_only(match_id: str) -> bool:
+    # Background warming and foreground refresh must serialize cache writes.
+    async with _get_or_make_lock(match_id):
+        return await _analyze_db_only_locked(match_id)
+
+
+async def _analyze_db_only_locked(match_id: str) -> bool:
     """Sadece DB hit denemesi — Playwright YOK.
 
     Arka plan worker'ı bunu kullanır. Container'ı Playwright fırtınasından korur.
     DB'de yoksa False döner; kullanıcı maça tıkladığında foreground tam analiz tetiklenir.
     """
-    if match_id in _analysis_cache:
-        _cache_touch(match_id)
+    if _cache_get(match_id) is not None:
         return True
     try:
         async with get_session() as session:
@@ -197,22 +214,26 @@ async def _analyze_db_only(match_id: str) -> bool:
 
 async def _analyze_and_cache(match_id: str) -> "AnalyzeResponse":
     """DB kontrol et → bulursa B/C hesapla (hızlı). Yoksa Playwright scrape (yavaş)."""
-    if match_id in _analysis_cache:
-        _cache_touch(match_id)
-        return _analysis_cache[match_id]
+    cached = _cache_get(match_id)
+    if cached is not None:
+        return cached
     lock = _get_or_make_lock(match_id)
     async with lock:
-        if match_id in _analysis_cache:
-            _cache_touch(match_id)
-            return _analysis_cache[match_id]
+        cached = _cache_get(match_id)
+        if cached is not None:
+            return cached
 
         # 1. DB kontrolü — önce DB'den dene (Playwright YOK)
-        async with get_session() as session:
-            db_row = (
-                await session.execute(
-                    select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
-                )
-            ).scalar_one_or_none()
+        db_row = None
+        try:
+            async with get_session() as session:
+                db_row = (
+                    await session.execute(
+                        select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                    )
+                ).scalar_one_or_none()
+        except Exception as exc:
+            log.warning("Analiz DB okunamadı [%s]: %s", match_id, exc)
 
         if db_row is not None:
             response = await _build_from_db(db_row)
@@ -257,12 +278,16 @@ async def lifespan(app: FastAPI):
     global _bg_queue
     _bg_queue = asyncio.Queue()
     worker = asyncio.create_task(_bg_worker())
-    yield
-    worker.cancel()
     try:
-        await worker
-    except asyncio.CancelledError:
-        pass
+        yield
+    finally:
+        worker.cancel()
+        try:
+            await worker
+        except asyncio.CancelledError:
+            pass
+        _bg_queued.clear()
+        _bg_queue = None
 
 
 # ─── FastAPI uygulaması ───────────────────────────────────────────────────────
@@ -273,6 +298,14 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(PatternComputationError)
+async def pattern_computation_error(request, exc):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=503, headers={"Cache-Control": "no-store"}, content={
+        "detail": "Analiz arşivi şu anda işlenemiyor. Lütfen tekrar deneyin.",
+    })
 
 app.add_middleware(
     CORSMiddleware,
@@ -302,11 +335,13 @@ _CACHE_RULES: dict[str, str] = {
 async def add_cache_headers(request, call_next):
     response = await call_next(request)
     # Sadece path eşleşen GET istekleri için cache header
-    if request.method in ("GET", "HEAD"):
+    if request.method in ("GET", "HEAD") and response.status_code == 200:
         for prefix, rule in _CACHE_RULES.items():
-            if request.url.path.startswith(prefix):
+            if request.url.path == prefix:
                 response.headers["Cache-Control"] = rule
                 break
+    if response.status_code >= 400:
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -400,7 +435,7 @@ class ResultOut(BaseModel):
     actual_ft_away: Optional[int] = None
     actual_ht_home: Optional[int] = None
     actual_ht_away: Optional[int] = None
-    status: str          # "scheduled" / "live" / "finished"
+    status: str          # "scheduled" / "pending" / "finished"
     result: Optional[str] = None        # "1" / "X" / "2"  (sadece finished)
     kg_var: Optional[bool] = None       # sadece finished
     over_25: Optional[bool] = None      # sadece finished
@@ -438,8 +473,10 @@ async def _do_analyze(match_id: str) -> AnalyzeResponse:
 
     # Sonraki kullanıcılar hızlı görsün diye DB'ye tam upsert (analiz + pattern)
     try:
-        from app.pipeline.runner import _upsert as _persist_full
+        from app.pipeline.runner import StaleAnalysisWrite, _upsert as _persist_full
         await _persist_full(result, raw, patterns)
+    except StaleAnalysisWrite:
+        raise HTTPException(409, "Daha güncel bir analiz var. Lütfen yeniden deneyin.")
     except Exception as exc:
         # ERROR seviyesi — DB yazısı başarısız olursa lazy-backfill yine tetiklenir
         # ama bu durum monitoring'de görünür olmalı (Railway logs)
@@ -480,7 +517,6 @@ async def health() -> HealthResponse:
     HEAD ve GET'i de kabul eder (UptimeRobot free tier varsayılan HEAD gönderir).
     Container'ı uyandırır + DB durumu + son pipeline zamanı bilgisi döndürür.
     """
-    from datetime import date as _date
     from sqlalchemy import func
 
     db_ok = False
@@ -496,7 +532,7 @@ async def health() -> HealthResponse:
             last_pipeline = row.scalar_one_or_none()
 
             # Bugünün fixture cache zamanı
-            fc = await session.get(FixtureCache, _date.today().isoformat())
+            fc = await session.get(FixtureCache, datetime.now(timezone(timedelta(hours=3))).date().isoformat())
             if fc:
                 last_fixture_cached = fc.cached_at
 
@@ -548,7 +584,8 @@ async def admin_quality() -> DataQuality:
             select(func.count(Match.id)).where(
                 Match.deleted_at.is_(None),
                 or_(Match.pattern_ft_b.is_(None), Match.pattern_ft_c.is_(None),
-                    Match.pattern_ht_b.is_(None), Match.pattern_h2_b.is_(None)),
+                    Match.pattern_ht_b.is_(None), Match.pattern_h2_b.is_(None),
+                    Match.pattern_ht_c.is_(None), Match.pattern_h2_c.is_(None)),
             )
         )).scalar() or 0
         missing_trends = (await session.execute(
@@ -561,11 +598,11 @@ async def admin_quality() -> DataQuality:
             select(func.count(Match.id)).where(
                 Match.deleted_at.is_(None),
                 Match.kickoff_time < cutoff,
-                Match.actual_ft_home.is_(None),
+                or_(Match.actual_ft_home.is_(None), Match.actual_ft_away.is_(None)),
             )
         )).scalar() or 0
 
-    if total == 0:
+    if active == 0:
         score = 0.0
     else:
         penalties = (
@@ -606,7 +643,7 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz tarih formatı. Kullanım: YYYY-MM-DD")
 
-    today = date.today()
+    today = datetime.now(timezone(timedelta(hours=3))).date()
     cache_key = parsed_date.isoformat() if parsed_date else today.isoformat()
     req_date = parsed_date or today
 
@@ -637,17 +674,24 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
         log.warning("Fixture DB cache okunamadı (migration uygulanmamış olabilir): %s", exc)
 
     if db_row is not None:
-        age = (datetime.now(timezone.utc) - db_row.cached_at).total_seconds()
-        is_stale = req_date >= today and age >= 3600  # geçmiş tarih = kalıcı, diğerleri 1 saat
-        if not is_stale:
-            result = [FixtureMatchOut(**m) for m in db_row.matches_json]
-            # Sprint 8.9: eski DB cache'lerde kupa olabilir — defansif filtre
-            result = [m for m in result if is_supported_league(m.league_name, m.league_code)]
-            _fixture_cache[cache_key] = (time.time(), result)
-            log.info("Fixture DB cache hit: %s (%.0f sn önce, %d lig maçı)",
-                     cache_key, age, len(result))
-            _enqueue_bg_analysis(result)
-            return result
+        try:
+            cached_at = db_row.cached_at
+            if cached_at.tzinfo is None:
+                cached_at = cached_at.replace(tzinfo=timezone.utc)
+            age = (datetime.now(timezone.utc) - cached_at).total_seconds()
+            is_stale = age < 0 or (req_date >= today and age >= 3600)
+            if not is_stale:
+                if not isinstance(db_row.matches_json, list):
+                    raise ValueError("Fixture cache must contain a list")
+                result = [FixtureMatchOut(**m) for m in db_row.matches_json]
+                result = [m for m in result if is_supported_league(m.league_name, m.league_code)]
+                _fixture_cache[cache_key] = (time.time(), result)
+                log.info("Fixture DB cache hit: %s (%.0f sn önce, %d lig maçı)",
+                         cache_key, age, len(result))
+                _enqueue_bg_analysis(result)
+                return result
+        except (ValueError, TypeError, AttributeError) as exc:
+            log.warning("Fixture DB cache geçersiz, yeniden çekilecek [%s]: %s", cache_key, exc)
 
     # 3. Playwright scrape — hard timeout ile sarmalı (Vercel SSR 25sn'de düşer)
     log.info("Fixture Playwright scrape başlıyor: %s", cache_key)
@@ -700,30 +744,40 @@ def _enqueue_bg_analysis(matches: list[FixtureMatchOut]) -> None:
     if _bg_queue is None:
         return
     for m in matches:
-        if m.match_id not in _analysis_cache and m.match_id not in _bg_queued:
+        if _cache_get(m.match_id) is None and m.match_id not in _bg_queued:
             _bg_queued.add(m.match_id)
             _bg_queue.put_nowait(m.match_id)
     log.info("Arka plan kuyruğu: %d bekleyen maç", _bg_queue.qsize())
 
 
 @app.get("/api/analyze/{match_id}", response_model=AnalyzeResponse)
-async def get_analyze(match_id: str) -> AnalyzeResponse:
+async def get_analyze(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> AnalyzeResponse:
     """Maçı analiz eder. Cache'te varsa anında döner, yoksa scrape eder."""
-    return await _analyze_and_cache(match_id)
+    try:
+        return await asyncio.wait_for(_analyze_and_cache(match_id), timeout=ANALYSIS_TIMEOUT)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "Analiz zaman aşımına uğradı")
 
 
 @app.post("/api/analyze/{match_id}", response_model=AnalyzeResponse)
-async def post_analyze(match_id: str) -> AnalyzeResponse:
+async def post_analyze(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> AnalyzeResponse:
     """Maçı her zaman scrape eder ve cache'i günceller."""
-    response = await _do_analyze(match_id)
-    _cache_put(match_id, response)
-    return response
+    async def refresh():
+        async with _get_or_make_lock(match_id):
+            response = await _do_analyze(match_id)
+            _cache_put(match_id, response)
+            return response
+
+    try:
+        return await asyncio.wait_for(refresh(), timeout=ANALYSIS_TIMEOUT)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "Analiz zaman aşımına uğradı")
 
 
 @app.get("/api/matches", response_model=list[MatchSummary])
 async def list_matches(
     league: Optional[str] = Query(None, description="Lig kodu (örn: ENG PR)"),
-    limit: int = Query(50, le=200),
+    limit: int = Query(50, ge=1, le=200),
 ) -> list[MatchSummary]:
     async with get_session() as session:
         stmt = (
@@ -759,11 +813,11 @@ async def list_matches(
 async def get_results(target_date: Optional[str] = Query(None, alias="date")) -> list[ResultOut]:
     """Belirli bir tarihte oynanan/oynanacak TÜM maçları döndürür.
 
-    actual_ft_home filtresi YOK — canlı/başlamamış maçlar da listede yer alır.
+    Skoru bulunmayan maçlar da listede yer alır; saatten canlı durumu çıkarılmaz.
     Frontend `status` alanına göre uygun gösterimi yapar:
       - "finished": skor + KG/2.5 istatistikleri
-      - "live"    : Canlı rozet
-      - "scheduled": Sadece saat
+      - "pending": Başlama saati geçmiş, kesin sonuç bekleniyor
+      - "scheduled": Henüz başlamamış maç
     """
     from datetime import datetime, timezone, timedelta
 
@@ -773,18 +827,18 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz tarih formatı. Kullanım: YYYY-MM-DD")
     else:
-        d = date.today()
+        d = datetime.now(timezone(timedelta(hours=3))).date()
 
     # Günün başı ve sonu (UTC+3 Istanbul → UTC)
     day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=timezone(timedelta(hours=3)))
-    day_end = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=timezone(timedelta(hours=3)))
+    day_end = day_start + timedelta(days=1)
 
     async with get_session() as session:
         rows = (
             await session.execute(
                 select(Match)
                 .where(Match.kickoff_time >= day_start)
-                .where(Match.kickoff_time <= day_end)
+                .where(Match.kickoff_time < day_end)
                 .where(Match.deleted_at.is_(None))  # Sprint 8.9
                 .order_by(Match.kickoff_time)
             )
@@ -802,17 +856,14 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         a = row.actual_ft_away
         kickoff = row.kickoff_time
 
-        # Status hesapla — sadece "finished" ve "live" maçlar gösterilir.
-        # Henüz başlamamış (scheduled) ve skor güncellemesi bekleyen eski (stale)
-        # maçlar /sonuclar'dan gizlenir; bültende veya update-scores cron'undan sonra görünür.
+        # Başlama saatinin geçmiş olması maçın canlı olduğunu kanıtlamaz.
+        # Kaynaktan doğrulanmış sonuç gelene kadar belirsizliği kullanıcıya göster.
         if h is not None and a is not None:
             status = "finished"
-        elif kickoff and now_utc >= kickoff and (now_utc - kickoff).total_seconds() < 130 * 60:
-            # Kick-off geçmiş, son 130dk içinde, skor henüz yok → canlı
-            status = "live"
+        elif kickoff and now_utc >= kickoff:
+            status = "pending"
         else:
-            # scheduled (kickoff > now) veya stale (kickoff > 130dk önce, skor yok)
-            continue
+            status = "scheduled"
 
         result = None
         kg_var = None
@@ -851,7 +902,7 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
 
 
 @app.get("/api/match/{match_id}", response_model=MatchSummary)
-async def get_match(match_id: str) -> MatchSummary:
+async def get_match(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> MatchSummary:
     """Maçın özet bilgisi. DB'de yoksa Playwright ile çek + DB'ye kaydet, sonra dön.
 
     Hard timeout 25sn (Vercel SSR limiti dahilinde). Scrape de başarısız olursa 404.

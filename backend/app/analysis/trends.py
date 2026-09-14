@@ -16,6 +16,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.models import HistoricalMatch, MatchRawData
+from app.analysis.history import prepare_history
 
 MIN_SAMPLE = 3  # Bu sayının altında trend gösterilmez (yetersiz veri)
 MAX_SAMPLE = 10  # En fazla son N maça bakılır
@@ -133,6 +134,7 @@ def _compute_block(
 
 def compute_trends(raw: MatchRawData) -> TrendsData:
     """Bir maç için 3 trend bloğu üretir. Veri yetersizse ilgili blok None döner."""
+    raw = prepare_history(raw)
     home_form = _compute_block(
         raw.home_recent_matches,
         raw.home_team,

@@ -29,7 +29,7 @@ export default function IddaaCoupon({ patternB, patternC, period, trends }: Prop
           Bu periyot için yeterli arşiv verisi bulunamadı.
         </p>
         <p className="text-xs mt-1" style={{ color: "#374151" }}>
-          Minimum 5 eşleşme gerekiyor
+          Arşiv 1 için en az 5, Arşiv 2 için en az 1 eşleşme gerekiyor
         </p>
       </div>
     );

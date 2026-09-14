@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.analysis.league_filter import is_supported_league
+from app.analysis.history import prepare_history
 from app.config import ANALYSIS
 from app.models import MatchRawData, SkipReason
 
@@ -40,6 +41,9 @@ def check_match_filters(
     Returns:
         FilterCheck. passed=True ise analiz edilebilir.
     """
+    if any(not name.strip() or name.strip() == "?" for name in (data.home_team, data.away_team)):
+        return FilterCheck(False, SkipReason.DATA_FETCH_FAILED, "Takım bilgisi alınamadı")
+    data = prepare_history(data)
     # 0. Maçın kendisi lig maçı mı? (Sprint 8.9)
     # Kupa, Avrupa kupaları, friendly, milli takım maçları → atlanır.
     if not is_supported_league(data.league_name, data.league_code):

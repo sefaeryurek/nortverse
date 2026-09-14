@@ -16,8 +16,8 @@ interface Props {
 
 function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
   const accent = comboTierAccent(combo.tier);
-  const probPct = (combo.jointProb * 100).toFixed(1);
-  const odds = combo.estDecimalOdds.toFixed(2);
+
+
   const tierLabel = comboTierLabel(combo.tier);
   const match = useMatchInfo();
   const { addItem } = useCart();
@@ -50,7 +50,7 @@ function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
           {tierLabel}
         </h4>
         <span className="text-[10px] font-mono" style={{ color: accent.color, opacity: 0.7 }}>
-          {combo.legs.length} maç
+          {combo.legs.length} seçim
         </span>
       </div>
 
@@ -76,29 +76,6 @@ function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
         ))}
       </div>
 
-      {/* Özet */}
-      <div
-        className="grid grid-cols-2 gap-2 pt-2 border-t"
-        style={{ borderColor: accent.border }}
-      >
-        <div className="text-center">
-          <div className="text-[9px] uppercase tracking-wider" style={{ color: "#475569" }}>
-            Olasılık
-          </div>
-          <div className="text-sm font-bold font-mono" style={{ color: accent.color }}>
-            ≈%{probPct}
-          </div>
-        </div>
-        <div className="text-center">
-          <div className="text-[9px] uppercase tracking-wider" style={{ color: "#475569" }}>
-            Tahmini Oran
-          </div>
-          <div className="text-sm font-bold font-mono" style={{ color: accent.color }}>
-            ≈{odds}
-          </div>
-        </div>
-      </div>
-
       {/* Sepete ekle (tüm leg'ler) */}
       {match && (
         <button
@@ -110,7 +87,7 @@ function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
             border: `1px solid ${accent.border}`,
           }}
         >
-          + Sepete Ekle ({combo.legs.length} maç)
+          + Sepete Ekle ({combo.legs.length} seçim)
         </button>
       )}
     </div>
@@ -135,7 +112,7 @@ export default function ComboSuggestion({ patternB, patternC, period }: Props) {
         <div className="flex items-center gap-2">
           <span className="text-base">🎯</span>
           <h3 className="text-sm font-bold tracking-wide" style={{ color: "#cbd5e1" }}>
-            Önerilen Kuponlar
+            Birlikte Değerlendirilebilen Seçimler
           </h3>
           <span
             className="text-[10px] px-1.5 py-0.5 rounded font-mono"
@@ -145,7 +122,7 @@ export default function ComboSuggestion({ patternB, patternC, period }: Props) {
           </span>
         </div>
         <span className="text-[10px]" style={{ color: "#475569" }}>
-          Top Picks tahminlerinden otomatik kombine
+          Bu maçın tahminlerinden oluşturulan seçimler
         </span>
       </div>
 
@@ -157,8 +134,8 @@ export default function ComboSuggestion({ patternB, patternC, period }: Props) {
       </div>
 
       <p className="text-[10px] leading-snug" style={{ color: "#475569" }}>
-        Olasılık ve oran <span style={{ color: "#94a3b8" }}>≈ yaklaşık</span> hesaplanmıştır
-        (her tahmin bağımsız varsayımıyla). Gerçek iddaa oranları farklı olabilir.
+        Seçimler aynı maça aittir ve birbirini etkileyebilir. Ortak sonuç verisi
+        bulunmadığı için birleşik olasılık ve oran hesaplanmaz.
       </p>
     </div>
   );

@@ -4,7 +4,6 @@
 DB-side JSONB equality yapar — ayrı integration test gerektirir.
 """
 
-import pytest
 
 from app.analysis.pattern_c import _ratios_match
 
@@ -37,9 +36,8 @@ class TestRatiosMatch:
         b = {"1-0": 4.5}  # 0.5 fark, tolerance=0 reddetmeli
         assert _ratios_match(a, b, 0.0) is False
 
-    def test_empty_target_passes(self) -> None:
-        # Boş target — döngü çalışmaz, True döner
-        assert _ratios_match({}, {"1-0": 4.0}, 0.5) is True
+    def test_empty_target_does_not_match_every_archive_row(self) -> None:
+        assert _ratios_match({}, {"1-0": 4.0}, 0.5) is False
 
 
 # Not: tolerance=0 yolu DB-side JSONB equality kullanır.

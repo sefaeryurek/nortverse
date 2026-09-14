@@ -4,15 +4,13 @@ import { useRouter } from "next/navigation";
 
 const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 
-function getRollingDates(): { label: string; date: string; today: boolean }[] {
-  const now = new Date();
-  const todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+export function getRollingDates(now = new Date(), todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" })): { label: string; date: string; today: boolean }[] {
   // Dün + bugün + 6 gün = 8 günlük pencere
   return Array.from({ length: 8 }, (_, i) => {
-    const d = new Date(now);
-    d.setDate(now.getDate() - 1 + i);
-    const iso = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
-    const dayIdx = (d.getDay() + 6) % 7; // 0=Pzt
+    const d = new Date(`${todayIso}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1 + i);
+    const iso = d.toISOString().slice(0, 10);
+    const dayIdx = (d.getUTCDay() + 6) % 7; // 0=Pzt
     return { label: DAYS[dayIdx], date: iso, today: iso === todayIso };
   });
 }
@@ -20,11 +18,12 @@ function getRollingDates(): { label: string; date: string; today: boolean }[] {
 interface Props {
   activeDate: string;
   basePath?: string;
+  referenceDate?: string;
 }
 
-export default function DayTabs({ activeDate, basePath = "/bulten" }: Props) {
+export default function DayTabs({ activeDate, basePath = "/bulten", referenceDate }: Props) {
   const router = useRouter();
-  const days = getRollingDates();
+  const days = getRollingDates(undefined, referenceDate);
 
   return (
     <div

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore, useState } from "react";
 import type { PatternResult } from "@/lib/types";
 import { type Period, periodLabels } from "@/lib/labels";
 
@@ -137,7 +137,7 @@ function ArchiveDetailCard({
         ]} />
       </Section>
 
-      {isFT && result.iy_ms_xx_pct > 0 && (
+      {isFT && Object.entries(result).some(([key, value]) => key.startsWith("iy_ms_") && typeof value === "number" && value > 0) && (
         <Section title="İlk Yarı / Maç Sonucu">
           <Row items={[
             { label: "1/1", value: result.iy_ms_11_pct },
@@ -245,7 +245,7 @@ function ArchiveDetailCard({
                 { label: "Üst 1.5", sub: "Dep", value: result.dep_ust_15_pct },
               ]
         } />
-        {isFT && result.ev_ht_ust_05_pct > 0 && (
+        {isFT && (result.ev_ht_ust_05_pct + result.ev_ht_alt_05_pct > 0) && (
           <>
             <SubLabel text="1. Yarı" />
             <Row items={[
@@ -266,7 +266,7 @@ function ArchiveDetailCard({
           { label: "4-5 Gol", value: result.gol_45_pct },
           { label: "6+ Gol", value: result.gol_6p_pct },
         ]} />
-        {isFT && result.encok_gol_1y_pct > 0 && (
+        {isFT && (result.encok_gol_1y_pct + result.encok_gol_2y_pct + result.encok_gol_esit_pct > 0) && (
           <>
             <SubLabel text="En Çok Gol Olacak Yarı" />
             <Row items={[
@@ -278,7 +278,7 @@ function ArchiveDetailCard({
         )}
       </Section>
 
-      {isFT && result.iy_ust_05_pct > 0 && (
+      {isFT && (result.iy_ust_05_pct + result.iy_alt_05_pct > 0) && (
         <Section title="Yarı Alt/Üst">
           <SubLabel text="1. Yarı" />
           <Row items={[
@@ -341,7 +341,7 @@ function ArchiveDetailCard({
         ]} />
       </Section>
 
-      {isFT && result.ht_kg_var_pct > 0 && (
+      {isFT && (result.ht_kg_var_pct + result.ht_kg_yok_pct > 0) && (
         <Section title="Yarı KG Detayı">
           <SubLabel text="1. Yarı Karşılıklı Gol" />
           <Row items={[
@@ -380,9 +380,9 @@ function ArchiveDetailCard({
         </Section>
       )}
 
-      {isFT && (result.ht_result_1_pct > 0 || result.h2_result_1_pct > 0) && (
+      {isFT && ((result.ht_result_1_pct + result.ht_result_x_pct + result.ht_result_2_pct > 0) || (result.h2_result_1_pct + result.h2_result_x_pct + result.h2_result_2_pct > 0)) && (
         <Section title="Yarı Sonuçları">
-          {result.ht_result_1_pct > 0 && (
+          {(result.ht_result_1_pct + result.ht_result_x_pct + result.ht_result_2_pct > 0) && (
             <>
               <SubLabel text="1. Yarı Sonucu" />
               <Row items={[
@@ -401,7 +401,7 @@ function ArchiveDetailCard({
               ]} />
             </>
           )}
-          {result.h2_result_1_pct > 0 && (
+          {(result.h2_result_1_pct + result.h2_result_x_pct + result.h2_result_2_pct > 0) && (
             <>
               <SubLabel text="2. Yarı Sonucu" />
               <Row items={[
@@ -424,17 +424,9 @@ function ArchiveDetailCard({
 }
 
 export default function DetailedStats({ patternB, patternC, period }: Props) {
-  const [open, setOpen] = useState(false);
-
-  // localStorage'dan başlangıç state'ini hydration sonrası oku.
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved === "1") setOpen(true);
-    } catch {
-      // erişim yoksa default kapalı
-    }
-  }, []);
+  const [override, setOpen] = useState<boolean | null>(null);
+  const savedOpen = useSyncExternalStore(subscribeDetails, readDetails, () => false);
+  const open = override ?? savedOpen;
 
   const toggle = () => {
     const next = !open;
@@ -496,4 +488,14 @@ export default function DetailedStats({ patternB, patternC, period }: Props) {
       )}
     </div>
   );
+}
+
+function subscribeDetails(listener: () => void) {
+  window.addEventListener("storage", listener);
+  return () => window.removeEventListener("storage", listener);
+}
+
+function readDetails() {
+  try { return window.localStorage.getItem(STORAGE_KEY) === "1"; }
+  catch { return false; }
 }

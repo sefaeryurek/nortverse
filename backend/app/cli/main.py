@@ -694,7 +694,7 @@ def build_archive_cmd(
                         stats["skipped"] += 1
                         continue
 
-                    result = analyze_match(raw)
+                    result = analyze_match(raw, season=s)
                     await _upsert(result, raw)
                     stats["analyzed"] += 1
                     score_str = ""
@@ -870,7 +870,7 @@ def build_multi_archive_cmd(
                             if not check.passed:
                                 stats["skipped"] += 1
                                 continue
-                            result = analyze_match(raw)
+                            result = analyze_match(raw, season=season)
                             await _upsert(result, raw)
                             stats["analyzed"] += 1
                             if i % 20 == 0:
@@ -928,6 +928,7 @@ def update_scores_cmd(
             f"\n[bold green]Sonuç güncellemesi tamamlandı:[/bold green] "
             f"[green]{stats['updated']} güncellendi[/green] · "
             f"[yellow]{stats['not_finished']} bitmemiş[/yellow] · "
+            f"{stats['skipped']} atlandı · "
             f"[red]{stats['errors']} hata[/red]"
         )
 
@@ -1362,7 +1363,7 @@ def recompute_patterns_cmd(
                         ft_ratios=row.ft_all_ratios,
                     )
                     await _with_retry(
-                        lambda: update_match_patterns(mid, patterns),
+                        lambda: update_match_patterns(mid, patterns, expected_analyzed_at=row.analyzed_at),
                         label=f"recompute {mid}",
                     )
                     processed += 1

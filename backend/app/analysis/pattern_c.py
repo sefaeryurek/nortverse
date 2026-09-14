@@ -13,6 +13,7 @@ Neden tek set?
 from __future__ import annotations
 
 import logging
+import math
 
 from sqlalchemy import cast, select
 from sqlalchemy.dialects.postgresql import JSONB
@@ -34,9 +35,14 @@ def _ratios_match(
     Sadece tolerance > 0 yolunda kullanılır (Sprint 8.10 öncesi davranış).
     Tolerance == 0 için DB-side JSONB equality kullanılır (egress optimize).
     """
+    if not target or target.keys() != candidate.keys():
+        return False
+    if not math.isfinite(tolerance) or tolerance < 0:
+        return False
     for key, target_val in target.items():
         cand_val = candidate.get(key)
-        if cand_val is None:
+        if any(type(value) not in (int, float) or not math.isfinite(value) or value < 0
+               for value in (target_val, cand_val)):
             return False
         if abs(target_val - cand_val) > tolerance:
             return False
@@ -69,6 +75,14 @@ async def find_pattern_c_all_periods(
     Returns:
         (ht_result, h2_result, ft_result) — eşleşme yetersizse hepsi None
     """
+    if type(min_matches) is not int or min_matches < 1:
+        raise ValueError("min_matches must be a positive integer")
+    if not math.isfinite(tolerance) or tolerance < 0:
+        raise ValueError("tolerance must be finite and non-negative")
+    if not ft_ratios:
+        return None, None, None
+    if not _ratios_match(ft_ratios, ft_ratios, 0):
+        raise ValueError("ratios must contain finite non-negative numbers")
     if tolerance == 0.0:
         # HIZLI YOL — DB-side JSONB equality (Sprint 8.10)
         # PostgreSQL JSONB karşılaştırması kanoniktir (key sırası önemsiz; aynı içerik = aynı).
@@ -76,6 +90,7 @@ async def find_pattern_c_all_periods(
             filters = [
                 cast(Match.ft_all_ratios, JSONB) == cast(ft_ratios, JSONB),
                 Match.actual_ft_home.isnot(None),
+                Match.actual_ft_away.isnot(None),
                 Match.deleted_at.is_(None),  # Sprint 8.9: soft-deleted (kupa) hariç
             ]
             if exclude_match_id:
@@ -88,6 +103,7 @@ async def find_pattern_c_all_periods(
             filters = [
                 Match.ft_all_ratios.isnot(None),
                 Match.actual_ft_home.isnot(None),
+                Match.actual_ft_away.isnot(None),
                 Match.deleted_at.is_(None),
             ]
             if exclude_match_id:
@@ -109,8 +125,6 @@ async def find_pattern_c_all_periods(
         return None, None, None
 
     log.info("Katman C: %d eşleşme bulundu (tolerance=%.1f)", len(matched), tolerance)
-    return (
-        compute_stats(matched, "ht"),
-        compute_stats(matched, "h2"),
-        compute_stats(matched, "ft"),
-    )
+    results = [compute_stats(matched, period) for period in ("ht", "h2", "ft")]
+    return tuple(result if result is not None and result.match_count >= min_matches else None
+                 for result in results)
