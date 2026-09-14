@@ -78,11 +78,13 @@ LEAGUE_ALIASES: dict[str, str] = {
     "english championship": "English Championship",
     "england championship": "English Championship",
     "eng ch": "English Championship",
+    "eng lch": "English Championship",
     # İspanya
     "spanish la liga": "Spanish La Liga",
     "spain la liga": "Spanish La Liga",
     "la liga": "Spanish La Liga",
     "esp pr": "Spanish La Liga",
+    "spa d1": "Spanish La Liga",
     "primera division": "Spanish La Liga",
     # İtalya
     "italy serie a": "Italy Serie A",
@@ -107,8 +109,10 @@ LEAGUE_ALIASES: dict[str, str] = {
     # Hollanda
     "dutch eredivisie": "Dutch Eredivisie",
     "netherlands eredivisie": "Dutch Eredivisie",
+    "holland eredivisie": "Dutch Eredivisie",
     "eredivisie": "Dutch Eredivisie",
     "ned d1": "Dutch Eredivisie",
+    "hol d1": "Dutch Eredivisie",
     # Portekiz
     "portuguese primeira liga": "Portuguese Primeira Liga",
     "portugal primeira liga": "Portuguese Primeira Liga",
@@ -119,6 +123,29 @@ LEAGUE_ALIASES: dict[str, str] = {
     "belgium pro league": "Belgian Pro League",
     "jupiler pro league": "Belgian Pro League",
     "bel d1": "Belgian Pro League",
+    # İskoçya
+    "scottish premiership": "Scottish Premiership",
+    "scotland premiership": "Scottish Premiership",
+    "sco pr": "Scottish Premiership",
+    # İspanya 2. Lig
+    "spanish segunda": "Spanish Segunda",
+    "spain segunda": "Spanish Segunda",
+    "spa d2": "Spanish Segunda",
+    # İtalya 2. Lig
+    "italy serie b": "Italy Serie B",
+    "italian serie b": "Italy Serie B",
+    "serie b": "Italy Serie B",
+    "ita d2": "Italy Serie B",
+    # Almanya 2. Lig
+    "german 2. bundesliga": "German 2. Bundesliga",
+    "germany 2. bundesliga": "German 2. Bundesliga",
+    "2. bundesliga": "German 2. Bundesliga",
+    "ger d2": "German 2. Bundesliga",
+    # İngiltere League One/Two
+    "england league one": "England League One",
+    "eng l1": "England League One",
+    "england league two": "England League Two",
+    "eng l2": "England League Two",
     # ABD
     "major league soccer": "Major League Soccer",
     "mls": "Major League Soccer",
@@ -127,6 +154,39 @@ LEAGUE_ALIASES: dict[str, str] = {
     "brazilian serie a": "Brazilian Serie A",
     "brazil serie a": "Brazilian Serie A",
     "bra d1": "Brazilian Serie A",
+    # Arjantin
+    "argentine division 1": "Argentine Division 1",
+    "argentina primera": "Argentine Division 1",
+    "arg d1": "Argentine Division 1",
+    # Mısır
+    "egyptian premier league": "Egyptian Premier League",
+    "egypt premier league": "Egyptian Premier League",
+    "egy d1": "Egyptian Premier League",
+    # İrlanda
+    "ireland premier division": "Ireland Premier Division",
+    "ire pr": "Ireland Premier Division",
+    # Kolombiya
+    "categoria primera a": "Colombian Primera A",
+    "col d1": "Colombian Primera A",
+    # Uruguay
+    "liga auf uruguaya": "Uruguayan Primera",
+    "uru d1": "Uruguayan Primera",
+    # Tunus
+    "tunisian ligue 1": "Tunisian Ligue 1",
+    "tun d1": "Tunisian Ligue 1",
+    # İsviçre
+    "switzerland super league": "Swiss Super League",
+    "swiss super league": "Swiss Super League",
+    "swi d1": "Swiss Super League",
+    # Polonya
+    "poland ekstraklasa": "Polish Ekstraklasa",
+    "polish ekstraklasa": "Polish Ekstraklasa",
+    "pol d1": "Polish Ekstraklasa",
+    # İsveç
+    "sweden superettan": "Swedish Superettan",
+    "swe d2": "Swedish Superettan",
+    "sweden allsvenskan": "Swedish Allsvenskan",
+    "swe d1": "Swedish Allsvenskan",
 }
 
 
