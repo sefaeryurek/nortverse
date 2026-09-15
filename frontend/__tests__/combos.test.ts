@@ -35,8 +35,9 @@ describe("generateCombos — temel davranış", () => {
     expect(combos).toHaveLength(1);
     expect(combos[0].tier).toBe("double");
     expect(combos[0].legs).toHaveLength(2);
-    expect(combos[0].jointProb).toBeNull();
-    expect(combos[0].estDecimalOdds).toBeNull();
+    expect(combos[0].jointProb).toBeTypeOf("number");
+    expect(combos[0].jointProb).toBeGreaterThan(0);
+    expect(combos[0].estDecimalOdds).toBeTypeOf("number");
   });
 
   it("aynı domain'den iki leg çift kombo'ya birlikte alınmaz (result + dc her ikisi match_result)", () => {
@@ -120,7 +121,8 @@ describe("generateCombos — temel davranış", () => {
     const triple = combos.find((c) => c.tier === "triple");
     expect(triple).toBeDefined();
     expect(triple!.legs).toHaveLength(3);
-    expect(triple!.jointProb).toBeNull();
+    expect(triple!.jointProb).toBeTypeOf("number");
+    expect(triple!.jointProb).toBeGreaterThan(0);
   });
 
   it("süper kombo eşleşme<20 → üretilmez", () => {

@@ -21,7 +21,7 @@ export default function BetCart() {
 }
 
 function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
-  const { items, removeItem, clear, jointProb, estOdds, count, hasRelatedSelections } = cart;
+  const { items, removeItem, clear, jointProb, estOdds, count } = cart;
   const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const desktopTrigger = useRef<HTMLButtonElement>(null);
@@ -90,7 +90,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
             {count} seçim
           </span>
           <div className="flex-1 flex items-center justify-center gap-3 text-xs font-mono" style={{ color: "#86efac" }}>
-            <span>{hasRelatedSelections ? "İlişkili seçimler" : probPct}</span>
+            <span>{probPct}</span>
             <span style={{ color: "#475569" }}>·</span>
             <span>{odds}</span>
           </div>
@@ -212,9 +212,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
               </div>
 
               <p className="text-xs text-slate-400" role="status">
-                {hasRelatedSelections
-                  ? "Aynı maçın seçimleri birbirini etkileyebilir veya çelişebilir. Ortak veri olmadan toplam olasılık hesaplanmaz."
-                  : "Geçmiş yüzdelerden, maçların bağımsızlığı varsayımıyla hesaplanır. Gösterilen oran bir bahis şirketi teklifi değildir."}
+                Geçmiş yüzdelerden korelasyon düzeltmesiyle hesaplanır. Gösterilen oran bir bahis şirketi teklifi değildir.
               </p>
               <button
                 onClick={clear}

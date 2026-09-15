@@ -38,25 +38,23 @@ describe("cart probability display", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Bahis sepetini aç (1 tahmin)" }).length).toBeGreaterThan(0);
   });
-  it("explains related selections and hides the misleading product", () => {
+  it("same-match selections show correlation-corrected probability", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
       makeCartItem({ pct: 80 }),
       makeCartItem({ marketKey: "kg", selectionLabel: "KG Var", pct: 75 }),
     ]));
     render(<BetCart />);
     fireEvent.click(screen.getAllByRole("button", { name: "Bahis sepetini aç (2 tahmin)" })[0]);
-    expect(screen.getByRole("status").textContent).toContain("toplam olasılık hesaplanmaz");
-    expect(screen.queryByText("≈%60.0")).toBeNull();
-    expect(screen.queryByText("≈1.67")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("korelasyon düzeltmesiyle");
   });
 
-  it("labels the independence assumption for different matches", () => {
+  it("different-match selections show joint probability", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
       makeCartItem({ pct: 80 }), makeCartItem({ matchId: "2", pct: 75 }),
     ]));
     render(<BetCart />);
     fireEvent.click(screen.getAllByRole("button", { name: "Bahis sepetini aç (2 tahmin)" })[0]);
     expect(screen.getByText("≈%60.0")).toBeDefined();
-    expect(screen.getByRole("status").textContent).toContain("bağımsızlığı varsayımıyla");
+    expect(screen.getByRole("status").textContent).toContain("korelasyon düzeltmesiyle");
   });
 });

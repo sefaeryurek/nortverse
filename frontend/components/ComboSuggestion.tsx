@@ -76,6 +76,23 @@ function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
         ))}
       </div>
 
+      {/* Birleşik olasılık + oran */}
+      {combo.jointProb !== null && (
+        <div
+          className="flex items-center justify-between px-2 py-1.5 rounded text-xs font-mono"
+          style={{ backgroundColor: "#0a0f17" }}
+        >
+          <span style={{ color: "#94a3b8" }}>
+            ≈%{(combo.jointProb * 100).toFixed(1)}
+          </span>
+          {combo.estDecimalOdds !== null && (
+            <span style={{ color: accent.color }}>
+              ≈{combo.estDecimalOdds.toFixed(2)} oran
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Sepete ekle (tüm leg'ler) */}
       {match && (
         <button
@@ -134,8 +151,8 @@ export default function ComboSuggestion({ patternB, patternC, period }: Props) {
       </div>
 
       <p className="text-[10px] leading-snug" style={{ color: "#475569" }}>
-        Seçimler aynı maça aittir ve birbirini etkileyebilir. Ortak sonuç verisi
-        bulunmadığı için birleşik olasılık ve oran hesaplanmaz.
+        Olasılıklar Poisson korelasyon düzeltmesiyle hesaplanır. Gösterilen oran
+        bir bahis şirketi teklifi değildir.
       </p>
     </div>
   );

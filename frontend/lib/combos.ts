@@ -4,11 +4,12 @@
 import type { Pick } from "./confidence";
 import { resolveConflicts } from "./confidence";
 import { canCombineFields } from "./selection-compatibility";
+import { computeJointProb } from "./correlations";
 
 export interface Combo {
   legs: Pick[];
-  jointProb: null;
-  estDecimalOdds: null;
+  jointProb: number | null;
+  estDecimalOdds: number | null;
   tier: "double" | "triple" | "super";
   avgConfidence: number;
   avgPct: number;
@@ -140,10 +141,11 @@ export function generateCombos(picks: Pick[]): Combo[] {
   // Çift kombo: 2 leg, ≥%75 — en güvenli
   const doubleLegs = buildLegs(cleaned, 75, 2);
   if (doubleLegs.length === 2) {
+    const jp = computeJointProb(doubleLegs);
     out.push({
       legs: doubleLegs,
-      jointProb: null,
-      estDecimalOdds: null,
+      jointProb: jp,
+      estDecimalOdds: jp > 0 ? 1 / jp : null,
       tier: "double",
       avgConfidence: avgConf(doubleLegs),
       avgPct: avgPct(doubleLegs),
@@ -153,10 +155,11 @@ export function generateCombos(picks: Pick[]): Combo[] {
   // Üçlü kombo: 3 leg, ≥%70 — dengeli
   const tripleLegs = buildLegs(cleaned, 70, 3);
   if (tripleLegs.length === 3) {
+    const jp = computeJointProb(tripleLegs);
     out.push({
       legs: tripleLegs,
-      jointProb: null,
-      estDecimalOdds: null,
+      jointProb: jp,
+      estDecimalOdds: jp > 0 ? 1 / jp : null,
       tier: "triple",
       avgConfidence: avgConf(tripleLegs),
       avgPct: avgPct(tripleLegs),
@@ -171,10 +174,11 @@ export function generateCombos(picks: Pick[]): Combo[] {
   });
   const superLegs = buildLegs(wellSampled, 75, 5);
   if (superLegs.length >= 4 && avgConf(superLegs) >= 0.65) {
+    const jp = computeJointProb(superLegs);
     out.push({
       legs: superLegs,
-      jointProb: null,
-      estDecimalOdds: null,
+      jointProb: jp,
+      estDecimalOdds: jp > 0 ? 1 / jp : null,
       tier: "super",
       avgConfidence: avgConf(superLegs),
       avgPct: avgPct(superLegs),

@@ -30,12 +30,12 @@ describe("useCart — initial state", () => {
     window.localStorage.clear();
   });
 
-  it("boş localStorage → boş items, hydrated=true, count=0, jointProb=1, estOdds=0", () => {
+  it("boş localStorage → boş items, hydrated=true, count=0, jointProb=null, estOdds=0", () => {
     const { result } = renderHook(() => useCart());
     expect(result.current.items).toEqual([]);
     expect(result.current.hydrated).toBe(true);
     expect(result.current.count).toBe(0);
-    expect(result.current.jointProb).toBe(1);
+    expect(result.current.jointProb).toBeNull();
     expect(result.current.estOdds).toBe(0);
   });
 
@@ -57,7 +57,7 @@ describe("useCart — addItem", () => {
     });
     expect(result.current.items.map((x) => x.selectionLabel)).toEqual(["X"]);
   });
-  it("does not multiply related selections, including different periods", () => {
+  it("same-match selections use correlation correction instead of null", () => {
     window.localStorage.clear();
     const { result } = renderHook(() => useCart());
     act(() => {
@@ -65,8 +65,9 @@ describe("useCart — addItem", () => {
       result.current.addItem(makeCartItem({ period: "ht" }));
     });
     expect(result.current.count).toBe(2);
-    expect(result.current.jointProb).toBeNull();
-    expect(result.current.estOdds).toBeNull();
+    expect(result.current.jointProb).toBeTypeOf("number");
+    expect(result.current.jointProb).toBeGreaterThan(0);
+    expect(result.current.estOdds).toBeTypeOf("number");
   });
   it("does not turn a zero frequency into an invented finite odds value", () => {
     window.localStorage.clear();
