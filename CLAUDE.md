@@ -337,7 +337,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 14 — TAMAMLANDI ✅ — Production CANLI + Otomasyon Aktif)
+## Mevcut Durum (Sprint 15 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
 
 ### Backend
 
@@ -690,6 +690,13 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Fixture cache otomasyonu:** `run_pipeline` artık fixture'ları çektikten sonra `fixture_cache` tablosunu da dolduruyor — Render Playwright çalıştıramadığı için bu kritik; GitHub Actions'ta pipeline çalışınca `/bulten` verisi hazır
 - **Eski Supabase/Oracle yorumları kaldırıldı:** Workflow dosyalarındaki devre dışı yorumları Neon'a güncellendi
 
+### Sprint 15 — TAMAMLANDI ✅ (Pattern Recompute — Yeni Kurallarla)
+- **Bağlam:** Sprint 8.9+ denetim kuralları (tolerance=0.0, skor doğrulama, history filtreleme) ile pattern B/C yeniden hesaplanması gerekiyordu
+- **Tam recompute:** 4,406 aktif maç, batch=200, 0 hata — `recompute-patterns` CLI komutu ile
+- **`--only-missing` temizlik:** İlk run timeout sonrası kalan 88 eksik pattern ayrıca tamamlandı
+- **prune-non-league:** Tüm 4,408 maç lig maçı, kupa maçı yok — temizleme gerekmedi
+- **Sonuçlar:** Pattern eksik 3,161 → 0, tutarsızlık 0, quality score 75.1 → 89.4/100
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -894,7 +901,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-15 — Sprint 14 sonu, Production CANLI + Otomasyon Aktif)
+## Kaldığımız Yer (2026-09-15 — Sprint 15 sonu, Production CANLI + Veri Kalitesi 89.4)
 
 ### ✅ Production Durumu — CANLI
 
@@ -910,13 +917,23 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 **Render.com free tier kısıtları:** 15dk inaktivite → uyku (~30sn cold start), 512 MB RAM, Playwright timeout alıyor.
 **Neon free tier:** Sınırsız egress, 0.5 GB depo, `statement_cache_size=0` zorunlu.
 
+### Veri Kalitesi (Sprint 15 sonrası)
 
-### Sıradaki Adım: Sprint 15 — Pattern Recompute (Yeni Kurallarla)
+| Metrik | Değer |
+|---|---|
+| Aktif maç | 4,406 |
+| Pattern eksik | 0 |
+| Pattern tutarsızlık | 0 |
+| Quality score | 89.4 / 100 |
+| Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
 
-1. **Küçük test:** `recompute-patterns --limit 100 --batch-size 50`
-2. **Tam recompute:** `recompute-patterns` (tüm arşiv)
-3. **`audit-db`** → missing_pattern = 0 hedefi
-4. **`prune-non-league` dry-run** → kupa maçı varsa `--apply`
+### Sıradaki Adım: Sprint 16 — CLAUDE.md Kapsamlı Güncelleme
+
+1. DB sağlayıcı Supabase → Neon güncelleme
+2. Test sayıları: 160 backend, 146 frontend
+3. Yeni modüller dokümantasyonu
+4. Sprint 12-15 geçmişi
+5. Kod yapısı tree güncelleme
 
 ### Bilinen Açık Konular
 
