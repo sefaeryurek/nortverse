@@ -1059,7 +1059,7 @@ def audit_db_cmd(
 
     from datetime import datetime, timezone, timedelta
     from sqlalchemy import select, func, or_
-    from app.analysis.league_filter import is_supported_league
+    from app.analysis.league_filter import is_supported_league, canonical_league_name
     from app.db.connection import get_session
     from app.db.models import Match
 
@@ -1123,6 +1123,37 @@ def audit_db_cmd(
                 select(func.max(Match.analyzed_at)).where(Match.deleted_at.is_(None))
             )).scalar()
 
+            # Sorunlu skorlar (Sprint 20)
+            score_rows = (await session.execute(
+                select(
+                    Match.match_id,
+                    Match.actual_ft_home, Match.actual_ft_away,
+                    Match.actual_ht_home, Match.actual_ht_away,
+                ).where(Match.deleted_at.is_(None))
+            )).all()
+            bad_scores = 0
+            inconsistent_halves = 0
+            for sr in score_rows:
+                for val in (sr.actual_ft_home, sr.actual_ft_away,
+                            sr.actual_ht_home, sr.actual_ht_away):
+                    if val is not None and (val < 0 or val > 15):
+                        bad_scores += 1
+                        break
+                else:
+                    if (sr.actual_ht_home is not None and sr.actual_ft_home is not None
+                            and sr.actual_ht_home > sr.actual_ft_home):
+                        inconsistent_halves += 1
+                    elif (sr.actual_ht_away is not None and sr.actual_ft_away is not None
+                            and sr.actual_ht_away > sr.actual_ft_away):
+                        inconsistent_halves += 1
+
+            # Normalize edilmemiş lig adları (Sprint 20)
+            unnormalized = sum(
+                1 for r in active_rows
+                if (r.league_code and canonical_league_name(r.league_code) != r.league_code)
+                or (r.league_name and canonical_league_name(r.league_name) != r.league_name)
+            )
+
             # Pattern self-check (Madde 18) — aktif maçların pattern_ft_b'sinde
             # result_1+x+2 toplamı 100 değilse anomali
             ftb_rows = (await session.execute(
@@ -1142,7 +1173,8 @@ def audit_db_cmd(
                 if abs(total_pct - 100) > 1:  # 0.1 yuvarlama toleransı
                     pattern_anomalies.append((r.match_id, total_pct))
 
-            # Quality score
+            # Quality score (Sprint 20 — sorunlu skor penaltisi eklendi)
+            repair_candidates = bad_scores + inconsistent_halves
             if total == 0:
                 quality = 0.0
             else:
@@ -1151,6 +1183,8 @@ def audit_db_cmd(
                     + (missing_pattern / max(active, 1)) * 20
                     + (missing_actual / max(active, 1)) * 30
                     + (missing_trends / max(active, 1)) * 10
+                    + (repair_candidates / max(active, 1)) * 15
+                    + (unnormalized / max(active, 1)) * 5
                 )
                 quality = max(0.0, 100.0 - penalties)
 
@@ -1172,6 +1206,9 @@ def audit_db_cmd(
             t.add_row(label, f"{n:,}", status)
 
         _row("Aktif kupa/turnuva (prune lazım)", len(non_league_active))
+        _row("Sorunlu skor (negatif/>15)", bad_scores)
+        _row("Tutarsız yarı (İY > MS)", inconsistent_halves)
+        _row("Normalize edilmemiş lig adı", unnormalized)
         _row("Pattern eksik (en az bir kolon)", missing_pattern, ok_if_zero=False)
         _row("Trends NULL (Sprint 8.8 öncesi)", missing_trends, ok_if_zero=False)
         _row("Skor eksik (kickoff +130dk)", missing_actual, ok_if_zero=False)
@@ -1200,6 +1237,18 @@ def audit_db_cmd(
                 f"\n[yellow]Öneri:[/yellow] "
                 f"[cyan]python -m app.cli.main prune-non-league --apply[/cyan] "
                 f"ile {len(non_league_active)} kupa maçını temizle."
+            )
+        if repair_candidates > 0:
+            console.print(
+                f"\n[yellow]Öneri:[/yellow] "
+                f"[cyan]python -m app.cli.main repair-archive --apply[/cyan] "
+                f"ile {repair_candidates} sorunlu kaydı onar."
+            )
+        if unnormalized > 0:
+            console.print(
+                f"\n[yellow]Öneri:[/yellow] "
+                f"[cyan]python -m app.cli.main normalize-leagues --apply[/cyan] "
+                f"ile {unnormalized} lig adını normalize et."
             )
         if pattern_anomalies:
             console.print(
@@ -1464,6 +1513,264 @@ def self_test_cmd(
             f"{'evet' if patterns['pattern_ft_b'] else 'hayır'}",
             border_style="green",
         ))
+
+    asyncio.run(_run())
+
+
+@app.command("repair-archive")
+def repair_archive_cmd(
+    apply: bool = typer.Option(False, "--apply", help="Gerçekten soft-delete yap (default dry-run)."),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Sprint 20 — Sorunlu arşiv kayıtlarını tespit edip onar (soft delete).
+
+    Tespit kuralları:
+    - Negatif veya aşırı skor (>15)
+    - Tutarsız yarılar: İY skoru > MS skorundan büyük
+    - Boş/geçersiz takım adı
+    - Kupa/turnuva maçı (lig filtresi)
+
+    Default dry-run: sadece rapor. --apply ile soft delete + audit_log.
+    """
+    _setup_logging("DEBUG" if verbose else "INFO")
+
+    from datetime import datetime, timezone
+    from sqlalchemy import select, update as sa_update
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from app.analysis.league_filter import is_supported_league
+    from app.db.connection import get_session
+    from app.db.models import AuditLog, Match
+
+    async def _run() -> None:
+        async with get_session() as session:
+            rows = (await session.execute(
+                select(
+                    Match.match_id, Match.home_team, Match.away_team,
+                    Match.league_code, Match.league_name,
+                    Match.actual_ft_home, Match.actual_ft_away,
+                    Match.actual_ht_home, Match.actual_ht_away,
+                    Match.actual_h2_home, Match.actual_h2_away,
+                ).where(Match.deleted_at.is_(None))
+            )).all()
+
+        issues: list[tuple[str, str, str]] = []  # (match_id, reason, detail)
+
+        for r in rows:
+            mid = r.match_id
+            label = f"{r.home_team} vs {r.away_team}"
+
+            # 1. Boş/geçersiz takım
+            if not r.home_team or r.home_team.strip() in ("", "?"):
+                issues.append((mid, "empty_team", f"home_team='{r.home_team}'"))
+                continue
+            if not r.away_team or r.away_team.strip() in ("", "?"):
+                issues.append((mid, "empty_team", f"away_team='{r.away_team}'"))
+                continue
+
+            # 2. Kupa/turnuva
+            if not is_supported_league(r.league_name, r.league_code):
+                issues.append((mid, "non_league", f"league={r.league_code or r.league_name}"))
+                continue
+
+            # 3. Skor aralık kontrolü
+            score_fields = [
+                ("actual_ft_home", r.actual_ft_home),
+                ("actual_ft_away", r.actual_ft_away),
+                ("actual_ht_home", r.actual_ht_home),
+                ("actual_ht_away", r.actual_ht_away),
+                ("actual_h2_home", r.actual_h2_home),
+                ("actual_h2_away", r.actual_h2_away),
+            ]
+            bad_score = False
+            for fname, val in score_fields:
+                if val is not None and (val < 0 or val > 15):
+                    issues.append((mid, "bad_score", f"{fname}={val} ({label})"))
+                    bad_score = True
+                    break
+            if bad_score:
+                continue
+
+            # 4. Tutarsız yarılar: İY > MS
+            if (r.actual_ht_home is not None and r.actual_ft_home is not None
+                    and r.actual_ht_home > r.actual_ft_home):
+                issues.append((mid, "inconsistent_half",
+                               f"ht_home={r.actual_ht_home} > ft_home={r.actual_ft_home} ({label})"))
+                continue
+            if (r.actual_ht_away is not None and r.actual_ft_away is not None
+                    and r.actual_ht_away > r.actual_ft_away):
+                issues.append((mid, "inconsistent_half",
+                               f"ht_away={r.actual_ht_away} > ft_away={r.actual_ft_away} ({label})"))
+                continue
+
+        if not issues:
+            console.print(f"[green]✓ Temiz! {len(rows)} aktif kayıtta sorun bulunamadı.[/green]")
+            return
+
+        # Kategorilere ayır
+        from collections import Counter
+        cats = Counter(reason for _, reason, _ in issues)
+
+        console.print(Panel.fit(
+            f"[bold yellow]{len(issues)} sorunlu kayıt tespit edildi[/bold yellow]\n\n"
+            + "\n".join(f"  {reason}: {count}" for reason, count in cats.most_common()),
+            title="[cyan]Repair Archive Raporu[/cyan]", border_style="yellow",
+        ))
+
+        t = Table(title="Sorunlu Kayıtlar (ilk 20)")
+        t.add_column("Match ID", style="cyan", width=10)
+        t.add_column("Sebep", style="magenta", width=20)
+        t.add_column("Detay", style="yellow")
+        for mid, reason, detail in issues[:20]:
+            t.add_row(mid, reason, detail)
+        console.print(t)
+        if len(issues) > 20:
+            console.print(f"[dim]... ve {len(issues) - 20} kayıt daha[/dim]")
+
+        if not apply:
+            console.print("\n[yellow]Dry-run modu: hiçbir şey değişmedi.[/yellow]")
+            console.print("[dim]Gerçekten silmek için: repair-archive --apply[/dim]")
+            return
+
+        # Apply: soft delete + audit log
+        ts = datetime.now(timezone.utc)
+        match_ids = [mid for mid, _, _ in issues]
+
+        async with get_session() as session:
+            await session.execute(
+                sa_update(Match)
+                .where(Match.match_id.in_(match_ids))
+                .values(deleted_at=ts, deleted_reason="repair_archive")
+            )
+            await session.execute(
+                pg_insert(AuditLog).values(
+                    operation="repair_archive",
+                    actor="cli:repair-archive",
+                    details={
+                        "total_repaired": len(match_ids),
+                        "categories": dict(cats),
+                        "match_ids_sample": match_ids[:50],
+                        "issues_sample": [
+                            {"match_id": mid, "reason": reason, "detail": detail}
+                            for mid, reason, detail in issues[:50]
+                        ],
+                    },
+                )
+            )
+
+        console.print(
+            f"\n[green]✓ {len(issues)} kayıt soft-delete edildi.[/green] "
+            f"[dim](audit_log'a kayıt düştü; geri almak için: restore-deleted <match_id>)[/dim]"
+        )
+
+    asyncio.run(_run())
+
+
+@app.command("normalize-leagues")
+def normalize_leagues_cmd(
+    apply: bool = typer.Option(False, "--apply", help="Gerçekten güncelle (default dry-run)."),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Sprint 20 — Lig adlarını kanonik forma normalize et.
+
+    Tüm aktif maçlarda league_code ve league_name alanlarını
+    canonical_league_name() ile normalize eder. Tutarsız adları tek forma çevirir.
+
+    Default dry-run: kaç kayıt değişeceğini gösterir. --apply ile uygular.
+    """
+    _setup_logging("DEBUG" if verbose else "INFO")
+
+    from collections import Counter
+    from sqlalchemy import select, update as sa_update
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from app.analysis.league_filter import canonical_league_name
+    from app.db.connection import get_session
+    from app.db.models import AuditLog, Match
+
+    async def _run() -> None:
+        async with get_session() as session:
+            rows = (await session.execute(
+                select(Match.match_id, Match.league_code, Match.league_name)
+                .where(Match.deleted_at.is_(None))
+            )).all()
+
+        changes: list[tuple[str, str, str, str, str]] = []  # (mid, old_code, new_code, old_name, new_name)
+
+        for r in rows:
+            mid = r.match_id
+            old_code = r.league_code or ""
+            old_name = r.league_name or ""
+
+            new_code = canonical_league_name(old_code)
+            new_name = canonical_league_name(old_name)
+
+            if new_code != old_code or new_name != old_name:
+                changes.append((mid, old_code, new_code, old_name, new_name))
+
+        if not changes:
+            console.print(f"[green]✓ {len(rows)} kayıt zaten kanonik formda.[/green]")
+            return
+
+        # Dönüşüm istatistikleri
+        code_changes = Counter(
+            f"{old_c} → {new_c}" for _, old_c, new_c, _, _ in changes if old_c != new_c
+        )
+        name_changes = Counter(
+            f"{old_n} → {new_n}" for _, _, _, old_n, new_n in changes if old_n != new_n
+        )
+
+        console.print(Panel.fit(
+            f"[bold]{len(changes)} kayıtta normalize gerekiyor[/bold]",
+            title="[cyan]Lig Normalizasyonu[/cyan]", border_style="cyan",
+        ))
+
+        if code_changes:
+            t = Table(title="League Code Dönüşümleri")
+            t.add_column("Eski → Yeni", style="yellow")
+            t.add_column("Sayı", justify="right", style="cyan")
+            for transform, count in code_changes.most_common(20):
+                t.add_row(transform, str(count))
+            console.print(t)
+
+        if name_changes:
+            t = Table(title="League Name Dönüşümleri")
+            t.add_column("Eski → Yeni", style="yellow")
+            t.add_column("Sayı", justify="right", style="cyan")
+            for transform, count in name_changes.most_common(20):
+                t.add_row(transform, str(count))
+            console.print(t)
+
+        if not apply:
+            console.print("\n[yellow]Dry-run modu: hiçbir şey değişmedi.[/yellow]")
+            console.print("[dim]Uygulamak için: normalize-leagues --apply[/dim]")
+            return
+
+        # Apply: tek tek güncelle (batch bulk update SQLAlchemy'de karmaşık)
+        updated = 0
+        async with get_session() as session:
+            for mid, _, new_code, _, new_name in changes:
+                await session.execute(
+                    sa_update(Match)
+                    .where(Match.match_id == mid)
+                    .values(league_code=new_code, league_name=new_name)
+                )
+                updated += 1
+
+            await session.execute(
+                pg_insert(AuditLog).values(
+                    operation="normalize_leagues",
+                    actor="cli:normalize-leagues",
+                    details={
+                        "total_normalized": updated,
+                        "code_transforms": dict(code_changes),
+                        "name_transforms": dict(name_changes),
+                    },
+                )
+            )
+
+        console.print(
+            f"\n[green]✓ {updated} kayıt normalize edildi.[/green] "
+            f"[dim](audit_log'a kayıt düştü)[/dim]"
+        )
 
     asyncio.run(_run())
 
