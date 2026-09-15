@@ -1,0 +1,72 @@
+name: Veri Onarımı (Sprint 20)
+
+# Manuel tetikleme — repair-archive ve normalize-leagues komutları
+# Playwright gerekmez, sadece DB bağlantısı yeterli
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Çalıştırılacak komut'
+        required: true
+        type: choice
+        options:
+          - repair-archive
+          - normalize-leagues
+          - audit-db
+      apply:
+        description: 'Gerçekten uygula (false = dry-run)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bağımlılıkları yükle
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Komutu çalıştır
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cd backend
+          CMD="${{ github.event.inputs.command }}"
+          APPLY="${{ github.event.inputs.apply }}"
+
+          if [ "$CMD" = "audit-db" ]; then
+            echo "=== audit-db çalışıyor ==="
+            python -m app.cli.main audit-db --verbose
+          elif [ "$CMD" = "repair-archive" ]; then
+            if [ "$APPLY" = "true" ]; then
+              echo "=== repair-archive --apply çalışıyor ==="
+              python -m app.cli.main repair-archive --apply
+            else
+              echo "=== repair-archive (dry-run) çalışıyor ==="
+              python -m app.cli.main repair-archive
+            fi
+          elif [ "$CMD" = "normalize-leagues" ]; then
+            if [ "$APPLY" = "true" ]; then
+              echo "=== normalize-leagues --apply çalışıyor ==="
+              python -m app.cli.main normalize-leagues --apply
+            else
+              echo "=== normalize-leagues (dry-run) çalışıyor ==="
+              python -m app.cli.main normalize-leagues
+            fi
+          fi
