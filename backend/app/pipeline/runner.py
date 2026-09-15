@@ -17,7 +17,7 @@ from app.analysis.league_filter import canonical_league_name, is_supported_leagu
 from app.analysis.persist import compute_all_patterns
 from app.analysis.trends import compute_trends
 from app.db.connection import get_session
-from app.db.models import Match
+from app.db.models import FixtureCache, Match
 from app.models import MatchAnalysisResult, MatchRawData
 from app.scraper.browser import browser_context
 from app.scraper.fixture import fetch_fixture
@@ -186,9 +186,37 @@ async def run_pipeline(
     """
     stats = {"analyzed": 0, "skipped": 0, "errors": 0}
 
+    IST = timezone(timedelta(hours=3))
+
     async with browser_context() as ctx:
         fixtures = await fetch_fixture(target_date=target_date, only_hot=only_hot, ctx=ctx)
         log.info("Pipeline başladı: %d maç işlenecek", len(fixtures))
+
+        # fixture_cache tablosunu doldur — Render Playwright çalıştıramıyor,
+        # bu yüzden GitHub Actions'ta pipeline çalışınca cache'i biz yazıyoruz.
+        cache_date = (target_date or datetime.now(IST).date()).isoformat()
+        league_fixtures = [f for f in fixtures if is_supported_league(f.league_name, f.league_code)]
+        cache_json = [
+            {
+                "match_id": f.match_id,
+                "home_team": f.home_team,
+                "away_team": f.away_team,
+                "league_code": f.league_code,
+                "league_name": f.league_name,
+                "kickoff_time": f.kickoff_time.isoformat() if f.kickoff_time else None,
+            }
+            for f in league_fixtures
+        ]
+        try:
+            async with get_session() as session:
+                await session.merge(FixtureCache(
+                    date=cache_date,
+                    matches_json=cache_json,
+                    cached_at=datetime.now(timezone.utc),
+                ))
+            log.info("fixture_cache yazıldı: %s (%d lig maçı)", cache_date, len(cache_json))
+        except Exception as exc:
+            log.warning("fixture_cache yazılamadı: %s", exc)
 
         for fixture in fixtures:
             mid = fixture.match_id

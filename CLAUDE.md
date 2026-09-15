@@ -337,7 +337,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 13 — TAMAMLANDI ✅ — Production CANLI)
+## Mevcut Durum (Sprint 14 — TAMAMLANDI ✅ — Production CANLI + Otomasyon Aktif)
 
 ### Backend
 
@@ -685,6 +685,11 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **GitHub Actions:** `DATABASE_URL` secret Neon'a güncellendi (cron hâlâ devre dışı — Sprint 14)
 - **Sonuç:** 4 aylık downtime sona erdi, production CANLI
 
+### Sprint 14 — TAMAMLANDI ✅ (GitHub Actions Cron Yeniden Aktif + Fixture Cache Otomasyonu)
+- **GitHub Actions cron schedule yeniden açıldı:** `daily_pipeline.yml` 7 cron entry (08:00/09:00 pipeline + 14:00/18:00/22:00/00:30/02:00 update-scores), `recompute_patterns.yml` Pazar 03:00 İstanbul
+- **Fixture cache otomasyonu:** `run_pipeline` artık fixture'ları çektikten sonra `fixture_cache` tablosunu da dolduruyor — Render Playwright çalıştıramadığı için bu kritik; GitHub Actions'ta pipeline çalışınca `/bulten` verisi hazır
+- **Eski Supabase/Oracle yorumları kaldırıldı:** Workflow dosyalarındaki devre dışı yorumları Neon'a güncellendi
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -841,7 +846,9 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Backend Cache-Control middleware (Sprint 8.10b):** `app/api/main.py` `add_cache_headers` middleware'i — `/api/fixture` (5dk), `/api/results` (2dk), `/api/matches` (5dk), `/api/health` (30sn) için `Cache-Control: public, s-maxage=N, stale-while-revalidate=60` header'ları ekler. Cloudflare CDN önüne alındığında edge cache çalışır → origin call (Render → DB) %80 azalır. Vercel `revalidate` SSR cache'inden farklı, ortogonal: birlikte çalışırlar.
 
-- **GitHub Actions cron'ları geçici devre dışı (Sprint 8.10b):** `.github/workflows/daily_pipeline.yml` schedule bloku yorum satırına alındı. Egress sınırı geri gelene + Oracle migration tamamlanana kadar `workflow_dispatch` (manuel tetik) modunda. Migration sonrası 5 cron'la geri açılacak (08:00 pipeline + 4 update-scores entry: 14/18/22 + gece toplu).
+- **GitHub Actions cron'ları aktif (Sprint 14):** `.github/workflows/daily_pipeline.yml` 7 cron entry (08:00/09:00 pipeline + 14:00/18:00/22:00/00:30/02:00 update-scores), `recompute_patterns.yml` Pazar 03:00 İstanbul. Sprint 8.10b'de Supabase egress aşımı yüzünden kapatılmıştı, Neon geçişi sonrası yeniden açıldı.
+
+- **`run_pipeline` fixture_cache yazıyor (Sprint 14):** Pipeline fixture'ları çektikten sonra `fixture_cache` tablosunu da dolduruyor. Render free tier Playwright çalıştıramadığı için bu kritik — GitHub Actions'ta pipeline çalışınca `/api/fixture` cache'den döner, Playwright'a gerek kalmaz.
 
 - **Neon PostgreSQL geçişi (Sprint 13):** Supabase egress limiti aşılıp Oracle Cloud başarısız olunca Neon free tier seçildi. asyncpg `sslmode` URL param desteklemez — `connection.py` URL'den strip edip `ssl.create_default_context()` ile bağlanır. `channel_binding` de strip edilir. Supabase'den 4394 maç aktarıldı.
 
@@ -887,7 +894,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-15 — Sprint 13 sonu, Production CANLI)
+## Kaldığımız Yer (2026-09-15 — Sprint 14 sonu, Production CANLI + Otomasyon Aktif)
 
 ### ✅ Production Durumu — CANLI
 
@@ -898,25 +905,25 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | **Frontend** | Vercel | `https://nortverse.vercel.app` |
 | **Backend** | Render.com (free tier) | `https://nortverse-backend.onrender.com` |
 | **Veritabanı** | Neon PostgreSQL (free tier) | Sınırsız egress, 0.5 GB depo, 19.6 MB kullanımda |
-| **CI/CD** | GitHub Actions | `DATABASE_URL` secret güncellendi (cron hâlâ devre dışı) |
+| **CI/CD** | GitHub Actions | 7 cron aktif (2× pipeline + 5× update-scores) + haftalık recompute |
 
 **Render.com free tier kısıtları:** 15dk inaktivite → uyku (~30sn cold start), 512 MB RAM, Playwright timeout alıyor.
 **Neon free tier:** Sınırsız egress, 0.5 GB depo, `statement_cache_size=0` zorunlu.
 
 
-### Sıradaki Adım: Sprint 14 — GitHub Actions Cron + Canlı Doğrulama
+### Sıradaki Adım: Sprint 15 — Pattern Recompute (Yeni Kurallarla)
 
-1. **GitHub Actions cron schedule yeniden aç** — `daily_pipeline.yml` + `recompute_patterns.yml`
-2. **Fixture cache daily popülasyon çözümü** — Render Playwright çalıştıramıyor → GitHub Actions veya local pipeline
-3. **UptimeRobot URL güncelle** — `https://nortverse-backend.onrender.com/api/health`
-4. **Canlı doğrulama** — `/bulten`, `/sonuclar`, analiz sayfası, mobil test
+1. **Küçük test:** `recompute-patterns --limit 100 --batch-size 50`
+2. **Tam recompute:** `recompute-patterns` (tüm arşiv)
+3. **`audit-db`** → missing_pattern = 0 hedefi
+4. **`prune-non-league` dry-run** → kupa maçı varsa `--apply`
 
 ### Bilinen Açık Konular
 
-- **Render Playwright timeout:** Free tier 512 MB RAM + 20sn limit → fixture_cache populate edilemiyor; local script veya GitHub Actions gerekli
 - **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction gelecek sprint
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
 - **Frontend component/E2E test:** Birim test 146 case yeşil; component test ve E2E henüz yok
 - **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir
+- **Render Playwright timeout:** Free tier 512 MB RAM + 20sn limit → on-demand scrape çalışmıyor; fixture_cache artık pipeline üzerinden dolduruluyor (Sprint 14)
 
 > **Not:** Eski Oracle Cloud migration yol haritası git history'de `08ae36a` ve `fa89bd3` commit'lerinde mevcut — artık geçersiz (Neon'a geçildi).

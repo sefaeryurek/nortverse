@@ -3,14 +3,11 @@ name: Pattern Recompute (Haftalık)
 # Tüm matches tablosunda Pattern B/C alanlarını yeniden hesaplar.
 # Sprint 8 lazy backfill ile yan yana çalışır — bu workflow toplu güncelleme yapar.
 #
-# ⚠️ Sprint 10 — schedule GEÇİCİ olarak DEVRE DIŞI.
-# Sebep: Supabase egress aşımı + Oracle migration ertelendi → DB erişimi yok.
-# DB hazır olunca aşağıdaki schedule blokunu yorum satırından çıkar.
-# workflow_dispatch ile manuel tetiklenebilir (DB erişimi gelince spot test için).
+# Sprint 14 — Haftalık recompute yeniden aktif (Neon PostgreSQL)
 
 on:
-  # schedule:
-  #   - cron: "0 0 * * 0"   # Her Pazar 03:00 İstanbul (UTC 00:00) — düşük yük zamanı
+  schedule:
+    - cron: "0 0 * * 0"   # Her Pazar 03:00 İstanbul (UTC 00:00) — düşük yük zamanı
   workflow_dispatch:
     inputs:
       only_missing:

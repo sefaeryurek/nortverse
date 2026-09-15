@@ -1,21 +1,16 @@
 name: Pipeline & Sonuç Güncelleme
 
-# ⚠️ Sprint 8.10 — Tüm cron'lar GEÇİCİ olarak DEVRE DIŞI
-# Sebep: Supabase egress aşımı (25 GB / 5 GB). Cron tetiklenirse erişim geri
-# döndüğünde anında yeni egress yaratır. Egress optimize edildikten + DB
-# erişimi sağlanınca aşağıdaki schedule blokunu yorum satırından çıkar.
-# Bu süre boyunca workflow_dispatch ile manuel tetiklenebilir.
+# Sprint 14 — Cron'lar yeniden aktif (Neon PostgreSQL, sınırsız egress)
 
 on:
-  # schedule:
-  #   - cron: "0 5 * * *"    # 08:00 İstanbul — sabah analiz (run-pipeline)
-  #   - cron: "0 6 * * *"    # 09:00 İstanbul — yedek analiz (08:00 cron kaçırırsa)
-  #   # Saat başı update-scores — Sprint 8.10b'de azaltılacak (12 → 3 entry)
-  #   - cron: "0 11 * * *"   # 14:00 İstanbul (update-scores)
-  #   - cron: "0 15 * * *"   # 18:00 İstanbul (update-scores)
-  #   - cron: "0 19 * * *"   # 22:00 İstanbul (update-scores)
-  #   - cron: "30 21 * * *"  # 00:30 İstanbul — gece toplu güncelleme
-  #   - cron: "0 23 * * *"   # 02:00 İstanbul — geç maçlar
+  schedule:
+    - cron: "0 5 * * *"    # 08:00 İstanbul — sabah analiz (run-pipeline)
+    - cron: "0 6 * * *"    # 09:00 İstanbul — yedek analiz (08:00 cron kaçırırsa)
+    - cron: "0 11 * * *"   # 14:00 İstanbul (update-scores)
+    - cron: "0 15 * * *"   # 18:00 İstanbul (update-scores)
+    - cron: "0 19 * * *"   # 22:00 İstanbul (update-scores)
+    - cron: "30 21 * * *"  # 00:30 İstanbul — gece toplu güncelleme
+    - cron: "0 23 * * *"   # 02:00 İstanbul — geç maçlar
   workflow_dispatch:
     inputs:
       command:
