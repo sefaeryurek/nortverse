@@ -191,7 +191,7 @@ nortverse/
 │   └── repair_archive.yml         # Manuel: repair-archive + normalize-leagues + audit-db (Sprint 20)
 ├── backend/
 │   ├── app/
-│   │   ├── config.py              # ScraperConfig, AnalysisConfig (frozen dataclass)
+│   │   ├── config.py              # ScraperConfig, AnalysisConfig (env-aware frozen dataclass)
 │   │   ├── models.py              # Pydantic: FixtureMatch, HistoricalMatch, MatchRawData
 │   │   ├── db/
 │   │   │   ├── connection.py      # SQLAlchemy async engine + get_session() — Neon pooler uyumlu (env-driven pool/cache)
@@ -215,13 +215,18 @@ nortverse/
 │   │   │   ├── repair.py          # detect_issues + needs_normalization — tarihsel veri onarımı (Sprint 20)
 │   │   │   └── trends.py          # compute_trends — form & H2H trend verileri (Sprint 8.8)
 │   │   ├── api/
-│   │   │   └── main.py            # FastAPI — fixture cache, bg queue, DB-first analiz
+│   │   │   ├── main.py            # FastAPI — fixture cache, bg queue, DB-first analiz
+│   │   │   └── schemas.py         # Pydantic response modelleri (Sprint 21)
 │   │   ├── pipeline/
 │   │   │   └── runner.py          # run_pipeline + update_results: fetch → analiz → upsert
 │   │   └── cli/
-│   │       └── main.py            # Typer + Rich CLI (20+ komut)
+│   │       ├── main.py            # Hub — import + app.command() kayıtları (Sprint 21)
+│   │       ├── _helpers.py        # Ortak yardımcılar: console, logging, render (Sprint 21)
+│   │       ├── pipeline_cmds.py   # analyze, fetch-fixture, run-pipeline, serve (Sprint 21)
+│   │       ├── archive_cmds.py    # build-archive, repair-archive, normalize-leagues (Sprint 21)
+│   │       └── audit_cmds.py      # audit-db, self-test, prune-non-league (Sprint 21)
 │   ├── alembic/                   # DB migration (6 migration)
-│   ├── tests/                     # 202 test
+│   ├── tests/                     # 232 test
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -241,7 +246,8 @@ nortverse/
 │   │   ├── test_result_updates.py         # Skor güncelleme
 │   │   ├── test_results_contract.py       # Results API sözleşmesi
 │   │   ├── test_correlation.py            # Korelasyon faktörleri (16 test, Sprint 19)
-│   │   └── test_repair.py                # Veri onarımı testleri (26 test, Sprint 20)
+│   │   ├── test_repair.py                # Veri onarımı testleri (26 test, Sprint 20)
+│   │   └── test_fixture_parser.py        # Fixture parser birim testleri (30 test, Sprint 21)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
@@ -862,6 +868,28 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Testler:** 26 yeni test (test_repair.py) — detect_issues (18 test) + needs_normalization (8 test)
 - **Sonuç:** 202 backend + 241 frontend + 28 E2E = **471 toplam test**
 
+### Sprint 21 — TAMAMLANDI ✅ (Kod Sağlığı & Kritik Test Kapsamı)
+- **Bağlam:** 9-sprint yol haritası (12-20) tamamlanmış, codebase büyümüş — tek dosyada 1786 satır CLI, scraper parse testleri sıfır, config hala hardcode
+- **Fixture parser testleri (`d06a156`):**
+  - `tests/test_fixture_parser.py` — 30 yeni test: `_parse_fixture_html`, `_extract_match_info`, `_build_fixture_url`, `_is_row_hidden`, `_build_league_map`, regex sabitleri
+  - Mock HTML ile pure fonksiyon testi, DB bağımlılığı yok
+  - nowgoal HTML değişikliklerini erken yakalayan güvenlik ağı
+- **CLI modüler bölme (`6e1d828`):**
+  - `cli/main.py` 1786 → 73 satır hub (import + `app.command()` kayıtları)
+  - `_helpers.py`: console, logging, render yardımcıları (249 satır)
+  - `pipeline_cmds.py`: analyze, fetch-fixture, run-pipeline, serve, update-scores (7 komut)
+  - `archive_cmds.py`: build-archive, repair-archive, normalize-leagues (5 komut)
+  - `audit_cmds.py`: audit-db, self-test, prune-non-league, recompute-patterns (6 komut)
+  - Dış API değişmedi — tüm `python -m app.cli.main <komut>` aynı çalışır
+- **API response model ayrıştırma (`cdd37fa`):**
+  - 7 Pydantic model `api/main.py`'den `api/schemas.py`'ye taşındı
+  - `api/main.py` 963 → 875 satır
+- **Config env-aware (`be1aaa7`):**
+  - Sprint 1'den beri açık TODO kapatıldı
+  - 9 env var ile override: `SCRAPER_BASE_URL`, `SCRAPER_HEADLESS`, `SCRAPER_TIMEOUT`, `SCRAPER_WAIT`, `SCRAPER_BETWEEN_REQUESTS`, `ANALYSIS_N_MATCHES`, `ANALYSIS_THRESHOLD`, `ANALYSIS_MIN_H2H`, `ANALYSIS_MIN_LEAGUE_MATCHES`
+  - Default değerler mevcut hardcode ile aynı — geriye uyumlu
+- **Sonuç:** 232 backend + 241 frontend + 28 E2E = **501 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1078,9 +1106,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-16 — Sprint 20 sonu, Production CANLI + Veri Kalitesi 89.4+)
+## Kaldığımız Yer (2026-09-16 — Sprint 21 sonu, Production CANLI + Veri Kalitesi 89.4+)
 
-### ✅ Production Durumu — CANLI + Sprint 12-20 Tamamlandı
+### ✅ Production Durumu — CANLI + Sprint 12-21 Tamamlandı
 
 4 aylık downtime sona erdi. Tam altyapı:
 
@@ -1104,18 +1132,18 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | Quality score | 89.4 / 100 |
 | Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
 
-### Test Durumu (Sprint 20 sonrası)
+### Test Durumu (Sprint 21 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 202 | ✅ Yeşil |
+| **Backend** | pytest | 232 | ✅ Yeşil |
 | **Frontend birim** | vitest | 241 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 471 | — |
+| **Toplam** | — | 501 | — |
 
 ### Sıradaki Adım: Yol haritasının sonuna gelindi
 
-Sprint 12-20 tamamlandı. Uzun vadeli planlanmamış konular (Canlı maç + WebSocket, Auth/Premium vb.) kullanıcı talebiyle başlayacak.
+Sprint 12-21 tamamlandı. Uzun vadeli planlanmamış konular (Canlı maç + WebSocket, Auth/Premium vb.) kullanıcı talebiyle başlayacak.
 
 ### Bilinen Açık Konular
 
