@@ -180,6 +180,10 @@ Maç atlanır eğer:
 
 ```
 nortverse/
+├── .github/workflows/
+│   ├── quality.yml                # CI: push/PR → ruff + pytest (backend) + vitest + tsc + build (frontend)
+│   ├── daily_pipeline.yml         # Cron: 7 entry (2× run-pipeline + 5× update-scores)
+│   └── recompute_patterns.yml     # Cron: Pazar 03:00 İstanbul — haftalık pattern recompute
 ├── backend/
 │   ├── app/
 │   │   ├── config.py              # ScraperConfig, AnalysisConfig (frozen dataclass)
@@ -194,26 +198,47 @@ nortverse/
 │   │   │   └── league.py          # Lig sayfasından maç ID listesi (arşiv için)
 │   │   ├── analysis/
 │   │   │   ├── scores.py          # ALL_SCORES sabiti
-│   │   │   ├── filtering.py       # check_match_filters
+│   │   │   ├── filtering.py       # check_match_filters (lig, min maç, H2H kontrolleri)
 │   │   │   ├── engine.py          # analyze_match (Katman A)
+│   │   │   ├── history.py         # select_history — merkezi veri seçimi (Sprint 12 denetim)
+│   │   │   ├── league_filter.py   # is_supported_league + canonical_league_name (Sprint 8.9)
 │   │   │   ├── pattern_b.py       # find_pattern_b_matches — JSONB equality
-│   │   │   ├── pattern_c.py       # find_pattern_c_all_periods — FT oranları ±0.5 fuzzy, TEK sorgu
-│   │   │   └── pattern_stats.py   # PatternResult model + compute_stats — ~130 istatistik alanı
+│   │   │   ├── pattern_c.py       # find_pattern_c_all_periods — FT oranları, TEK sorgu
+│   │   │   ├── pattern_stats.py   # PatternResult model + compute_stats — ~130 istatistik alanı
+│   │   │   ├── persist.py         # compute_all_patterns + update_match_patterns (Sprint 8)
+│   │   │   └── trends.py          # compute_trends — form & H2H trend verileri (Sprint 8.8)
 │   │   ├── api/
 │   │   │   └── main.py            # FastAPI — fixture cache, bg queue, DB-first analiz
 │   │   ├── pipeline/
 │   │   │   └── runner.py          # run_pipeline + update_results: fetch → analiz → upsert
 │   │   └── cli/
-│   │       └── main.py            # Typer + Rich CLI
-│   ├── alembic/                   # DB migration
-│   ├── tests/
-│   │   └── test_analysis.py
+│   │       └── main.py            # Typer + Rich CLI (20+ komut)
+│   ├── alembic/                   # DB migration (6 migration)
+│   ├── tests/                     # 160 test
+│   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
+│   │   ├── test_analysis.py       # Katman A oran hesaplama
+│   │   ├── test_league_filter.py  # Lig filtresi (28 test)
+│   │   ├── test_pre_write_validation.py  # Pre-write doğrulama (10 test)
+│   │   ├── test_trends.py         # Trend hesaplama (6 test)
+│   │   ├── test_pattern_c.py      # Pattern C fuzzy match (6 test)
+│   │   ├── test_history.py        # History seçim kuralları
+│   │   ├── test_api_regressions.py        # API regresyon testleri
+│   │   ├── test_scraper_regressions.py    # Scraper regresyon testleri
+│   │   ├── test_pattern_stats_regressions.py  # Pattern stats regresyon
+│   │   ├── test_persistence_regressions.py    # DB yazma regresyon
+│   │   ├── test_stale_writes.py           # Stale write koruması
+│   │   ├── test_fixture_cache_recovery.py # Fixture cache kurtarma
+│   │   ├── test_pattern_failure_handling.py  # Pattern hata yönetimi
+│   │   ├── test_pattern_sample_limits.py  # Pattern örneklem sınırları
+│   │   ├── test_analysis_refresh.py       # Analiz yenileme
+│   │   ├── test_result_updates.py         # Skor güncelleme
+│   │   └── test_results_contract.py       # Results API sözleşmesi
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
-│   │   ├── layout.tsx             # Root layout (dark tema, sidebar)
+│   │   ├── layout.tsx             # Root layout (dark tema, sidebar, BetCart)
 │   │   ├── page.tsx               # Root → /bulten redirect
-│   │   ├── error.tsx              # Global error boundary (Sprint 8.3) — React crash fallback
+│   │   ├── error.tsx              # Global error boundary (Sprint 8.3)
 │   │   ├── bulten/
 │   │   │   └── page.tsx           # Server component — fixture listesi (Suspense)
 │   │   ├── sonuclar/
@@ -221,17 +246,51 @@ nortverse/
 │   │   └── analyze/[match_id]/
 │   │       └── page.tsx           # Client component — maç analiz sayfası
 │   ├── components/
+│   │   ├── AddToCartButton.tsx    # "+" / "✓" sepet toggle butonu (Sprint 8.7)
+│   │   ├── BetCart.tsx            # Floating bahis sepeti — desktop panel + mobile sheet (Sprint 8.7)
 │   │   ├── BultenRow.tsx          # Maç satırı (link ?home=&away= param ile, lig bayrak)
+│   │   ├── ComboSuggestion.tsx    # 3 hazır kombo kartı (Sprint 8.5)
 │   │   ├── DayTabs.tsx            # 8 günlük kayan pencere, basePath prop ile
-│   │   ├── IddaaCoupon.tsx        # Arşiv istatistik kartları (Katman B + C) + Altın Oranlar
+│   │   ├── DetailedStats.tsx      # Tüm 137 alan, accordion (Sprint 8.4)
+│   │   ├── IddaaCoupon.tsx        # Arşiv istatistik kartları — orchestrator
+│   │   ├── MarketSummary.tsx      # Ana pazar kazananları (Sprint 8.4)
+│   │   ├── RetryButton.tsx        # Yeniden deneme butonu (Sprint 12 denetim)
 │   │   ├── ScoreList.tsx          # Katman A 3.5+ skor listesi
 │   │   ├── Sidebar.tsx            # Sol menü (md altı gizli — mobile)
-│   │   └── StatBadge.tsx          # Yeniden kullanılabilir yüzde rozeti
+│   │   ├── StatBadge.tsx          # Yeniden kullanılabilir yüzde rozeti
+│   │   ├── TopPicks.tsx           # Confidence sıralı en güçlü tahminler (Sprint 8.4)
+│   │   └── TrendsPanel.tsx        # Form & H2H trend kartları (Sprint 8.8)
 │   ├── lib/
-│   │   ├── api.ts                 # Backend API çağrıları (BASE = BACKEND_URL ?? "" — SSR'da Render, CSR'da proxy)
+│   │   ├── analysis-validation.ts # Analiz verisi doğrulama (Sprint 12 denetim)
+│   │   ├── api.ts                 # Backend API çağrıları
+│   │   ├── cart.ts                # useCart hook — localStorage çok-maç sepet (Sprint 8.7)
+│   │   ├── combos.ts             # generateCombos — kombo üretimi (Sprint 8.5)
+│   │   ├── confidence.ts          # Confidence hesaplama + Top Picks (Sprint 8.4)
+│   │   ├── dates.ts               # Tarih yardımcıları (Sprint 12 denetim)
+│   │   ├── env.ts                 # getApiBase + getProxyTarget (Sprint 10)
+│   │   ├── labels.ts              # Periyot etiketleri (Sprint 8.4)
 │   │   ├── leagues.ts             # Lig adı → bayrak + kısa kod sözlüğü (Sprint 8.3)
+│   │   ├── list-validation.ts     # Liste veri doğrulama (Sprint 12 denetim)
+│   │   ├── match-context.tsx      # MatchProvider — match metadata paylaşımı (Sprint 8.7)
+│   │   ├── pattern-fields.ts      # Pattern alan isimleri (Sprint 12 denetim)
+│   │   ├── selection-compatibility.ts  # Seçim uyumluluk kontrolü (Sprint 12 denetim)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
+│   ├── __tests__/                 # 146 test
+│   │   ├── fixtures.ts            # Test factory'leri
+│   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
+│   │   ├── combos.test.ts         # Kombo üretimi (~15 test)
+│   │   ├── cart.test.ts           # Sepet helper'ları (~14 test)
+│   │   ├── use-cart.test.tsx      # useCart hook (14 test)
+│   │   ├── env.test.ts            # URL fallback
+│   │   ├── day-tabs.test.ts       # DayTabs
+│   │   ├── api.test.ts            # API çağrıları
+│   │   ├── analysis-validation.test.ts    # Analiz doğrulama
+│   │   ├── selection-compatibility.test.ts # Seçim uyumluluk
+│   │   ├── date-validation.test.ts        # Tarih doğrulama
+│   │   ├── market-regressions.test.ts     # Pazar regresyon
+│   │   └── cart-display.test.tsx           # Sepet görüntüleme
 │   ├── AGENTS.md                  # ⚠️ Next.js özel sürüm uyarısı — kod yazmadan önce oku
+│   ├── vitest.config.mts          # Vitest yapılandırması (Sprint 10)
 │   └── next.config.ts             # Rewrite proxy: /api/* → localhost:8000/api/*
 └── CLAUDE.md
 ```
@@ -337,7 +396,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 15 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
+## Mevcut Durum (Sprint 16 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
 
 ### Backend
 
@@ -697,6 +756,11 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **prune-non-league:** Tüm 4,408 maç lig maçı, kupa maçı yok — temizleme gerekmedi
 - **Sonuçlar:** Pattern eksik 3,161 → 0, tutarsızlık 0, quality score 75.1 → 89.4/100
 
+### Sprint 16 — TAMAMLANDI ✅ (CLAUDE.md Kapsamlı Güncelleme)
+- **Kod yapısı tree güncellendi:** 28 backend modül + 18 test dosyası + 14 frontend component + 13 lib modül + 13 test dosyası + 3 CI workflow — tüm dosyalar açıklamalı
+- **Sprint 12 denetim korumaları belgelendi:** `history.py`, `conftest.py`, frontend doğrulama modülleri, stale write koruması, PatternComputationError yönetimi, CI pipeline
+- **CI pipeline dokümantasyonu eklendi:** `quality.yml` (push/PR tetikli), `daily_pipeline.yml` (7 cron), `recompute_patterns.yml` (haftalık)
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -859,6 +923,18 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Neon PostgreSQL geçişi (Sprint 13):** Supabase egress limiti aşılıp Oracle Cloud başarısız olunca Neon free tier seçildi. asyncpg `sslmode` URL param desteklemez — `connection.py` URL'den strip edip `ssl.create_default_context()` ile bağlanır. `channel_binding` de strip edilir. Supabase'den 4394 maç aktarıldı.
 
+- **`history.py` merkezi veri seçimi (Sprint 12 denetim):** `select_history(matches, team, ...)` — gelecek veri sızıntısı (future leakage), self-inclusion, duplicate ve kupa maçı filtreleri tek merkezde. `engine.py`, `trends.py` ve pattern hesaplamaları bu fonksiyonu kullanır. Eski dağınık filtreleme kaldırıldı.
+
+- **`conftest.py` test DB izolasyonu (Sprint 12 denetim):** `tests/conftest.py` test başlamadan önce `DATABASE_URL`'yi dummy değere override eder — testlerin yanlışlıkla production DB'ye bağlanması engellenir.
+
+- **Frontend doğrulama modülleri (Sprint 12 denetim):** `analysis-validation.ts` (analiz verisi şekil kontrolü), `list-validation.ts` (liste veri doğrulama), `selection-compatibility.ts` (seçim uyumluluk), `pattern-fields.ts` (pattern alan isimleri), `dates.ts` (tarih yardımcıları) — frontend'e gelen backend verisinin beklenen formatta olduğunu doğrular, bozuk veri UI crash'i önler.
+
+- **Stale write koruması (Sprint 12 denetim):** `_upsert` fonksiyonu `analyzed_at` karşılaştırır — DB'deki kaydın daha yeni bir analizi varsa eski veriyle üzerine yazılmaz. `test_stale_writes.py` ile doğrulanır.
+
+- **PatternComputationError yönetimi (Sprint 12 denetim):** Pattern hesaplamasında hata olursa maç atlanır, pipeline devam eder. Hata log'a yazılır. `test_pattern_failure_handling.py` ile doğrulanır.
+
+- **CI pipeline `quality.yml` (Sprint 12):** Her push/PR'da otomatik çalışır. Backend: `ruff check` + `pytest`. Frontend: `vitest` + `tsc --noEmit` + `npm run build`. İki bağımsız job — biri düşerse diğeri devam eder.
+
 ---
 
 ## Teknoloji Kararları
@@ -901,7 +977,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-15 — Sprint 15 sonu, Production CANLI + Veri Kalitesi 89.4)
+## Kaldığımız Yer (2026-09-15 — Sprint 16 sonu, Production CANLI + Veri Kalitesi 89.4)
 
 ### ✅ Production Durumu — CANLI
 
@@ -927,13 +1003,12 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | Quality score | 89.4 / 100 |
 | Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
 
-### Sıradaki Adım: Sprint 16 — CLAUDE.md Kapsamlı Güncelleme
+### Sıradaki Adım: Sprint 17 — Teknik Borç Temizliği
 
-1. DB sağlayıcı Supabase → Neon güncelleme
-2. Test sayıları: 160 backend, 146 frontend
-3. Yeni modüller dokümantasyonu
-4. Sprint 12-15 geçmişi
-5. Kod yapısı tree güncelleme
+1. **`_flag()` → `Annotated[bool]` migration:** Typer 0.25 native desteği var, 13 çağrı noktası
+2. **`.gitignore` düzenleme:** `xx/` (Excel referans dosyaları), `.claude/settings.local.json`
+3. **BeautifulSoup/lxml deprecation uyarıları:** Parser açıkça belirtilmeli
+4. **Neon compute hour izleme:** Aylık kullanım tahmini ~25-30 saat / 191.9 limit
 
 ### Bilinen Açık Konular
 
