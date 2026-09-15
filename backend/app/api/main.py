@@ -18,8 +18,16 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from sqlalchemy import select
+from app.api.schemas import (
+    AnalyzeResponse,
+    DataQuality,
+    FixtureMatchOut,
+    HealthResponse,
+    MatchSummary,
+    PeriodOut,
+    ResultOut,
+)
 
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.correlation import compute_poisson_correlations
@@ -345,102 +353,6 @@ async def add_cache_headers(request, call_next):
         response.headers["Cache-Control"] = "no-store"
     return response
 
-
-# ─── Response şemaları ────────────────────────────────────────────────────────
-
-class DataQuality(BaseModel):
-    """Sprint 8.9 — DB sağlığı/veri kalitesi göstergesi."""
-    total_matches: int = 0
-    active_matches: int = 0
-    soft_deleted: int = 0
-    non_league_active: int = 0  # 0 olmalı (yeni filtre sonrası)
-    missing_pattern: int = 0
-    missing_trends: int = 0
-    missing_actual_score: int = 0
-    quality_score: float = 100.0  # 0-100
-
-
-class HealthResponse(BaseModel):
-    """Hafif sağlık göstergesi — UptimeRobot her 5dk ping atıyor.
-
-    Sprint 8.10: data_quality buradan KALDIRILDI (tüm matches taraması egress
-    aşımına yol açıyordu). Detaylı kalite raporu için /api/admin/quality.
-    """
-    status: str
-    version: str = "0.2.0"
-    db_ok: bool
-    last_pipeline_at: Optional[str] = None  # son maç analiz zamanı (ISO)
-    last_fixture_cached_at: Optional[str] = None  # bugünün fixture cache zamanı (ISO)
-    bg_queue_size: int = 0
-    cached_analyses: int = 0
-
-
-class FixtureMatchOut(BaseModel):
-    match_id: str
-    home_team: str
-    away_team: str
-    league_code: str
-    league_name: Optional[str]
-    kickoff_time: Optional[str]
-
-
-class PeriodOut(BaseModel):
-    scores_1: list[str]
-    scores_x: list[str]
-    scores_2: list[str]
-
-
-class AnalyzeResponse(BaseModel):
-    match_id: str
-    home_team: str
-    away_team: str
-    league_code: str
-    season: str
-    ht: PeriodOut
-    half2: PeriodOut
-    ft: PeriodOut
-    ht_b: Optional[PatternResult] = None
-    ht_c: Optional[PatternResult] = None
-    h2_b: Optional[PatternResult] = None
-    h2_c: Optional[PatternResult] = None
-    ft_b: Optional[PatternResult] = None
-    ft_c: Optional[PatternResult] = None
-    trends: Optional[TrendsData] = None  # form & H2H trendleri (FT periyodunda gösterilir)
-    skipped: bool = False
-    skip_reason: Optional[str] = None
-
-
-class MatchSummary(BaseModel):
-    match_id: str
-    home_team: str
-    away_team: str
-    league_code: Optional[str]
-    season: Optional[str]
-    actual_ft_home: Optional[int]
-    actual_ft_away: Optional[int]
-    actual_ht_home: Optional[int]
-    actual_ht_away: Optional[int]
-    ft_scores_1: Optional[list]
-    ft_scores_x: Optional[list]
-    ft_scores_2: Optional[list]
-
-
-class ResultOut(BaseModel):
-    match_id: str
-    home_team: str
-    away_team: str
-    league_code: Optional[str]
-    league_name: Optional[str]
-    kickoff_time: Optional[str]
-    actual_ft_home: Optional[int] = None
-    actual_ft_away: Optional[int] = None
-    actual_ht_home: Optional[int] = None
-    actual_ht_away: Optional[int] = None
-    status: str          # "scheduled" / "pending" / "finished"
-    result: Optional[str] = None        # "1" / "X" / "2"  (sadece finished)
-    kg_var: Optional[bool] = None       # sadece finished
-    over_25: Optional[bool] = None      # sadece finished
-    katman_a_covered: Optional[bool] = None  # sadece finished
 
 
 # ─── Ortak analiz fonksiyonu ──────────────────────────────────────────────────
