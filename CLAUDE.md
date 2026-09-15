@@ -275,7 +275,7 @@ nortverse/
 │   │   ├── pattern-fields.ts      # Pattern alan isimleri (Sprint 12 denetim)
 │   │   ├── selection-compatibility.ts  # Seçim uyumluluk kontrolü (Sprint 12 denetim)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
-│   ├── __tests__/                 # 146 test
+│   ├── __tests__/                 # 231 vitest test
 │   │   ├── fixtures.ts            # Test factory'leri
 │   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
 │   │   ├── combos.test.ts         # Kombo üretimi (~15 test)
@@ -288,8 +288,24 @@ nortverse/
 │   │   ├── selection-compatibility.test.ts # Seçim uyumluluk
 │   │   ├── date-validation.test.ts        # Tarih doğrulama
 │   │   ├── market-regressions.test.ts     # Pazar regresyon
-│   │   └── cart-display.test.tsx           # Sepet görüntüleme
+│   │   ├── cart-display.test.tsx           # Sepet görüntüleme
+│   │   ├── score-list.test.tsx            # ScoreList component (4 test)
+│   │   ├── stat-badge.test.tsx            # StatBadge component (7 test)
+│   │   ├── bulten-row.test.tsx            # BultenRow component (8 test)
+│   │   ├── top-picks.test.tsx             # TopPicks component (9 test)
+│   │   ├── market-summary.test.tsx        # MarketSummary component (7 test)
+│   │   ├── combo-suggestion.test.tsx      # ComboSuggestion component (7 test)
+│   │   ├── add-to-cart-button.test.tsx    # AddToCartButton component (7 test)
+│   │   ├── day-tabs-render.test.tsx       # DayTabs render (7 test)
+│   │   ├── leagues.test.ts               # Lig eşleme (12 test)
+│   │   ├── trends-panel.test.tsx          # TrendsPanel component (13 test)
+│   │   └── retry-button.test.tsx          # RetryButton component (4 test)
+│   ├── e2e/                       # 14 Playwright E2E test (×2 viewport = 28)
+│   │   ├── navigation.spec.ts     # Sayfa yükleme, redirect, DayTabs (6 test)
+│   │   ├── analyze.spec.ts        # Analiz sayfası, periyot sekmeleri (4 test)
+│   │   └── mobile.spec.ts         # Mobil görünüm, sidebar, scroll (4 test)
 │   ├── AGENTS.md                  # ⚠️ Next.js özel sürüm uyarısı — kod yazmadan önce oku
+│   ├── playwright.config.ts       # Playwright E2E yapılandırması (Sprint 18)
 │   ├── vitest.config.mts          # Vitest yapılandırması (Sprint 10)
 │   └── next.config.ts             # Rewrite proxy: /api/* → localhost:8000/api/*
 └── CLAUDE.md
@@ -396,7 +412,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 17 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
+## Mevcut Durum (Sprint 18 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
 
 ### Backend
 
@@ -767,6 +783,33 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **`.gitignore` zaten güncel:** `xx/` ve `.claude/settings.local.json` Sprint 9'da eklenmişti
 - **Neon compute izleme:** Aylık ~25-30 saat / 191.9 limit, free tier güvenli alanda
 
+### Sprint 18 — TAMAMLANDI ✅ (Component + E2E Test)
+- **Bağlam:** Frontend test coverage artırılması — 146 vitest birim test → 231 vitest + 28 Playwright E2E
+- **Component testleri (1/n) — `7823b6e`:** 7 yeni test dosyası, 148→215 test
+  - `score-list.test.tsx` (4 test): skor rendering, boş durum, tek skor, MS2 tipi
+  - `stat-badge.test.tsx` (7 test): yüzde yuvarlama, etiket, 0/100%, boyutlar
+  - `bulten-row.test.tsx` (8 test): takım adları, saat, Link href, lig, URL encoding
+  - `top-picks.test.tsx` (9 test): null pattern, yüksek pct, arşiv rozetleri, sepet, 8-pick limiti
+  - `market-summary.test.tsx` (7 test): null pattern, pazar satırları, uyum işaretçileri, sepet
+  - `combo-suggestion.test.tsx` (7 test): null pattern, kombo kartları, localStorage entegrasyonu
+  - `add-to-cart-button.test.tsx` (7 test): +/✓ toggle, sepet ekle/çıkar, olay yayılımı, boyutlar
+- **Component testleri (2/n) — `3cbaca5`:** 215→231 test
+  - `day-tabs-render.test.tsx` (7 test): 8 buton, aktif devre dışı, navigasyon, Türkçe gün adları
+  - `leagues.test.ts` (12 test): bilinen ligler, fallback, null/undefined, alias, UEFA/Güney Amerika/Asya
+  - `trends-panel.test.tsx` (13 test): null trends, bölüm başlığı, ev/dep/h2h kartları, G/B/M noktalar
+  - `retry-button.test.tsx` (4 test): metin, buton rolü, router.refresh, mavi arka plan
+- **Playwright E2E kurulumu:**
+  - `@playwright/test` + Chromium tarayıcı kurulumu
+  - `playwright.config.ts`: desktop (Chrome) + mobile (Pixel 5) projeler, webServer dev, CI retry
+  - `e2e/navigation.spec.ts` (6 test): root redirect, bülten/sonuçlar yükleme, sidebar, DayTabs
+  - `e2e/analyze.spec.ts` (4 test): analiz sayfası yükleme, geri buton, periyot sekmeleri
+  - `e2e/mobile.spec.ts` (4 test): mobil viewport, sidebar gizli, yatay scroll, analiz mobil
+  - **28 E2E test** (14 test × 2 viewport = 28) — backend gerektirir, CI'da workflow_dispatch ile
+- **CI entegrasyonu:** `quality.yml`'e `e2e` job eklendi (workflow_dispatch ile tetiklenir)
+- **Next.js mock desenleri:** `next/link` (BultenRow), `next/navigation` useRouter (DayTabs, RetryButton)
+- **MatchProvider context:** TopPicks, MarketSummary, ComboSuggestion, AddToCartButton testlerinde gerekli
+- **Sonuç:** 231 vitest (yeşil) + 28 Playwright E2E (yapı doğrulanmış), hedef 200+ aşıldı
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -939,7 +982,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **PatternComputationError yönetimi (Sprint 12 denetim):** Pattern hesaplamasında hata olursa maç atlanır, pipeline devam eder. Hata log'a yazılır. `test_pattern_failure_handling.py` ile doğrulanır.
 
-- **CI pipeline `quality.yml` (Sprint 12):** Her push/PR'da otomatik çalışır. Backend: `ruff check` + `pytest`. Frontend: `vitest` + `tsc --noEmit` + `npm run build`. İki bağımsız job — biri düşerse diğeri devam eder.
+- **CI pipeline `quality.yml` (Sprint 12+18):** Her push/PR'da otomatik çalışır. Backend: `ruff check` + `pytest`. Frontend: `vitest` + `tsc --noEmit` + `npm run build`. E2E (Playwright): sadece `workflow_dispatch` ile tetiklenir (backend gerektirir). Üç bağımsız job — biri düşerse diğeri devam eder.
 
 ---
 
@@ -983,7 +1026,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-15 — Sprint 17 sonu, Production CANLI + Veri Kalitesi 89.4)
+## Kaldığımız Yer (2026-09-15 — Sprint 18 sonu, Production CANLI + Veri Kalitesi 89.4)
 
 ### ✅ Production Durumu — CANLI
 
@@ -1009,19 +1052,26 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | Quality score | 89.4 / 100 |
 | Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
 
-### Sıradaki Adım: Sprint 18 — Component + E2E Test
+### Test Durumu (Sprint 18 sonrası)
 
-1. **Playwright E2E kurulumu:** `@playwright/test`, desktop + mobil viewport
-2. **Kritik akış testleri:** Bülten → maça tıklama → analiz sayfası, periyot sekmeleri, sepet, sonuçlar
-3. **Component testleri:** BetCart, DayTabs, BultenRow, ComboSuggestion, TopPicks
-4. **CI entegrasyonu:** `quality.yml`'e Playwright job ekle
-5. **Hedef:** 200+ frontend test
+| Katman | Araç | Test Sayısı | Durum |
+|---|---|---|---|
+| **Backend** | pytest | 160 | ✅ Yeşil |
+| **Frontend birim** | vitest | 231 | ✅ Yeşil |
+| **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
+| **Toplam** | — | 419 | — |
+
+### Sıradaki Adım: Sprint 19 — Joint Probability İyileştirmesi
+
+1. Arşiv verisinden korelasyon matrisi oluştur (pazar çiftleri arası gözlemlenen ortak olasılık)
+2. Düzeltme faktörü uygula: `P(A,B) = P(A) × P(B) × corr(A,B)`
+3. Backend endpoint: korelasyon verisi
+4. Frontend: `combos.ts` ve `cart.ts`'te düzeltilmiş hesaplama
 
 ### Bilinen Açık Konular
 
-- **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction gelecek sprint
+- **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction Sprint 19'da
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
-- **Frontend component/E2E test:** Birim test 148 case yeşil; component test ve E2E henüz yok
 - **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir
 - **Render Playwright timeout:** Free tier 512 MB RAM + 20sn limit → on-demand scrape çalışmıyor; fixture_cache artık pipeline üzerinden dolduruluyor (Sprint 14)
 
