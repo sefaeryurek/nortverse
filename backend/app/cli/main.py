@@ -39,21 +39,6 @@ console = Console()
 DEBUG_DIR = Path("debug")
 
 
-def _flag(v: object) -> bool:
-    """Typer 0.12 + Python 3.11 bool flag uyum katmanı.
-
-    Typer bu kombinasyonda bool option'ları string veya None döndürüyor:
-      - Flag geçilmeden → 'False' (str, truthy — yanlış!)
-      - Flag geçilerek  → None
-    Bu helper her iki durumu düzgün çözüyor.
-    """
-    # None = flag geçildi, 'False'/False = geçilmedi
-    if v is None:
-        return True
-    if isinstance(v, bool):
-        return v
-    return str(v).lower() in ("true", "1", "yes")
-
 
 def _setup_logging(level: str = "INFO") -> None:
     logging.basicConfig(
@@ -310,10 +295,10 @@ def analyze(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Tek bir maçı analiz eder."""
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
 
     async def _run() -> None:
-        con = _make_recording_console() if _flag(save) else console
+        con = _make_recording_console() if save else console
         con.print(f"[cyan]Match detail çekiliyor: {match_id}[/cyan]")
         raw = await fetch_match_detail(match_id)
 
@@ -332,7 +317,7 @@ def analyze(
                 f"[dim]İpucu: Tüm oranları görmek için 'analyze-debug {match_id}' komutunu kullanın.[/dim]",
                 title="[yellow]Atlandı[/yellow]", border_style="yellow",
             ))
-            if _flag(save):
+            if save:
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                 txt_path = _save_text(con.export_text(), f"analyze_{match_id}_{ts}.txt")
                 console.print(f"[dim]Kaydedildi: {txt_path}[/dim]")
@@ -340,7 +325,7 @@ def analyze(
 
         con.print("[green]Filtreleme: GECTI[/green]")
         result = analyze_match(raw, n_matches=n, threshold=threshold)
-        _render_result(result, show_all_ratios=_flag(ratios), con=con)
+        _render_result(result, show_all_ratios=ratios, con=con)
 
         # Katman B — pattern matching (FT)
         try:
@@ -367,7 +352,7 @@ def analyze(
         except Exception as e:
             con.print(f"[dim]Katman C sorgusu yapılamadı: {e}[/dim]")
 
-        if _flag(save):
+        if save:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             txt_path = _save_text(con.export_text(), f"analyze_{match_id}_{ts}.txt")
             json_path = DEBUG_DIR / f"analyze_{match_id}_{ts}.json"
@@ -397,10 +382,10 @@ def analyze_debug(
     - Her takım × her periyot için gol dağılımı (formül girdisi)
     - 35 skor × 3 periyot için tüm oranlar
     """
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
 
     async def _run() -> None:
-        con = _make_recording_console() if _flag(save) else console
+        con = _make_recording_console() if save else console
         con.print(f"[cyan]Match detail çekiliyor: {match_id}[/cyan]")
         raw = await fetch_match_detail(match_id)
 
@@ -455,7 +440,7 @@ def analyze_debug(
         except Exception as e:
             con.print(f"[dim]Katman C sorgusu yapılamadı: {e}[/dim]")
 
-        if _flag(save):
+        if save:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             txt_path = _save_text(con.export_text(), f"debug_{match_id}_{ts}.txt")
             json_path = DEBUG_DIR / f"debug_{match_id}_{ts}.json"
@@ -478,14 +463,14 @@ def fetch_fixture_cmd(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Bülteni çek ve maç listesini yazdır. Varsayılan: sitenin Hot moduyla gösterdikleri."""
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
 
     dt: Optional[date] = None
     if target_date:
         dt = datetime.strptime(target_date, "%Y-%m-%d").date()
 
     async def _run() -> None:
-        matches = await fetch_fixture(target_date=dt, only_hot=not _flag(all_matches))
+        matches = await fetch_fixture(target_date=dt, only_hot=not all_matches)
 
         if not matches:
             console.print("[yellow]Hiç maç bulunamadı[/yellow]")
@@ -497,7 +482,7 @@ def fetch_fixture_cmd(
         for m in matches:
             by_league[m.league_code].append(m)
 
-        mode_label = "Hot (site görünümü)" if not _flag(all_matches) else "Tümü (gizli dahil)"
+        mode_label = "Hot (site görünümü)" if not all_matches else "Tümü (gizli dahil)"
         t = Table(title=f"{mode_label} — {len(matches)} maç, {len(by_league)} lig")
         t.add_column("ID", style="cyan")
         t.add_column("Lig", style="magenta")
@@ -510,7 +495,7 @@ def fetch_fixture_cmd(
                 time_str = m.kickoff_time.strftime("%H:%M") if m.kickoff_time else "?"
                 t.add_row(m.match_id, league, time_str, m.home_team, m.away_team)
 
-        if _flag(save):
+        if save:
             rec = _make_recording_console()
             rec.print(t)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -549,7 +534,7 @@ def fetch_and_analyze_cmd(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Bültendeki Hot maçların hepsini çek ve analiz et."""
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
 
     dt: Optional[date] = None
     if target_date:
@@ -587,7 +572,7 @@ def fetch_and_analyze_cmd(
                         fm.match_id, f"{fm.home_team}-{fm.away_team}",
                         f"[yellow]{check.reason.value}[/yellow]", "-", "-", "-",
                     )
-                    if _flag(save):
+                    if save:
                         all_results.append({
                             "match_id": fm.match_id,
                             "home": fm.home_team,
@@ -605,7 +590,7 @@ def fetch_and_analyze_cmd(
                     " / ".join(result.ft.scores_x) or "-",
                     " / ".join(result.ft.scores_2) or "-",
                 )
-                if _flag(save):
+                if save:
                     all_results.append(_result_to_json(result))
             except Exception as e:
                 console.print(f"[red]Hata ({fm.match_id}): {e}[/red]")
@@ -613,7 +598,7 @@ def fetch_and_analyze_cmd(
                     fm.match_id, f"{fm.home_team}-{fm.away_team}",
                     "[red]HATA[/red]", "-", "-", "-",
                 )
-                if _flag(save):
+                if save:
                     all_results.append({
                         "match_id": fm.match_id,
                         "home": fm.home_team,
@@ -624,7 +609,7 @@ def fetch_and_analyze_cmd(
 
         console.print(summary_table)
 
-        if _flag(save):
+        if save:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             date_label = (dt or date.today()).strftime("%Y%m%d")
 
@@ -656,7 +641,7 @@ def build_archive_cmd(
         build-archive 36 2024-2025
         build-archive 36   (güncel sezon)
     """
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
 
     from app.pipeline.runner import _upsert
     from app.scraper.browser import browser_context
@@ -725,7 +710,7 @@ def run_pipeline_cmd(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Hot maçları çek → analiz et → Supabase'e kaydet."""
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
 
     dt: Optional[date] = None
     if target_date:
@@ -734,7 +719,7 @@ def run_pipeline_cmd(
     from app.pipeline import run_pipeline
 
     async def _run() -> None:
-        stats = await run_pipeline(target_date=dt, only_hot=not _flag(all_matches))
+        stats = await run_pipeline(target_date=dt, only_hot=not all_matches)
         console.print(
             f"\n[bold green]Pipeline tamamlandı:[/bold green] "
             f"[green]{stats['analyzed']} kaydedildi[/green] · "
@@ -766,7 +751,7 @@ def serve(
         "app.api.main:app",
         host=host,
         port=port,
-        reload=_flag(reload),
+        reload=reload,
         loop="none",
     )
 
@@ -779,7 +764,7 @@ def list_leagues_cmd(
 
     Çıkan ID'leri build-archive veya build-multi-archive komutlarında kullanın.
     """
-    _setup_logging("DEBUG" if _flag(verbose) else "WARNING")
+    _setup_logging("DEBUG" if verbose else "WARNING")
 
     async def _run() -> None:
         console.print("[cyan]Fixture sayfasından lig listesi çekiliyor...[/cyan]")
@@ -810,7 +795,7 @@ def build_multi_archive_cmd(
     Örnek: build-multi-archive 36 60 65 --seasons 4
            → ENG PR, TUR D1, ... için son 4 sezon
     """
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
     # Typer 0.12.5: int option'lar None dönebiliyor, str olarak alıp çeviriyoruz
     n_seasons = int(seasons) if seasons and str(seasons).isdigit() else 5
     from app.pipeline.runner import _upsert
@@ -881,7 +866,7 @@ def build_multi_archive_cmd(
                                 )
                         except Exception as e:
                             stats["errors"] += 1
-                            if _flag(verbose):
+                            if verbose:
                                 console.print(f"  [red]Hata [{mid}]: {e}[/red]")
 
                     console.print(
@@ -914,7 +899,7 @@ def update_scores_cmd(
     Gece çalıştırılır: sabah pipeline ile kaydedilen maçları scrape edip
     actual_ft/ht skorlarını doldurur. Sonuçlar sayfasında görünür hale gelir.
     """
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
 
     dt: Optional[date] = None
     if target_date:
@@ -945,7 +930,7 @@ def prune_non_league_cmd(
     Default dry-run: kaç maç temizleneceğinin preview'i. --apply ile gerçek silme.
     Soft delete (deleted_at SET) — geri alınabilir. Audit log'a kayıt düşer.
     """
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
 
     from datetime import datetime, timezone
     from sqlalchemy import select, update as sa_update
@@ -983,7 +968,7 @@ def prune_non_league_cmd(
         if len(non_league) > 15:
             console.print(f"[dim]... ve {len(non_league) - 15} maç daha[/dim]")
 
-        if not _flag(apply):
+        if not apply:
             console.print("\n[yellow]Dry-run modu: hiçbir şey değişmedi.[/yellow]")
             console.print("[dim]Gerçekten silmek için: prune-non-league --apply[/dim]")
             return
@@ -1026,7 +1011,7 @@ def restore_deleted_cmd(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Sprint 8.9 — Soft-deleted bir maçı geri al."""
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
     from sqlalchemy import select, update as sa_update
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from app.db.connection import get_session
@@ -1070,7 +1055,7 @@ def audit_db_cmd(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Sprint 8.9 — DB sağlık raporu: aktif/silinmiş, eksik veri, kalite skoru."""
-    _setup_logging("DEBUG" if _flag(verbose) else "WARNING")
+    _setup_logging("DEBUG" if verbose else "WARNING")
 
     from datetime import datetime, timezone, timedelta
     from sqlalchemy import select, func, or_
@@ -1236,7 +1221,7 @@ def audit_patterns_cmd(
     Pattern B IY/2Y/MS sekmelerinde farklı eşleşme sayıları gösterir.
     Pattern C tek FT setiyle 3 periyot — tutarlılık varsayımını doğrular.
     """
-    _setup_logging("DEBUG" if _flag(verbose) else "WARNING")
+    _setup_logging("DEBUG" if verbose else "WARNING")
 
     from app.analysis.pattern_b import find_pattern_b_matches
     from app.analysis.pattern_c import find_pattern_c_all_periods
@@ -1311,7 +1296,7 @@ def recompute_patterns_cmd(
     Soft-deleted maçlar atlanır (deleted_at IS NULL filtresi).
     Hata olan satır atlanır, pipeline devam eder.
     """
-    _setup_logging("DEBUG" if _flag(verbose) else "INFO")
+    _setup_logging("DEBUG" if verbose else "INFO")
 
     from sqlalchemy import select, and_
     from app.db.connection import get_session
@@ -1322,7 +1307,7 @@ def recompute_patterns_cmd(
     async def _run() -> None:
         async with get_session() as session:
             filters = [Match.deleted_at.is_(None)]
-            if _flag(only_missing):
+            if only_missing:
                 filters.append(Match.pattern_ft_b.is_(None))
             stmt = select(Match.match_id).where(and_(*filters)).order_by(Match.match_id)
             if limit:
@@ -1337,7 +1322,7 @@ def recompute_patterns_cmd(
 
         console.print(
             f"[cyan]Recompute başladı:[/cyan] {total} maç · batch={batch_size}"
-            f"{' · only-missing' if _flag(only_missing) else ''}"
+            f"{' · only-missing' if only_missing else ''}"
         )
         processed = 0
         errors = 0
@@ -1396,7 +1381,7 @@ def self_test_cmd(
 
     Adım adım kontrol: scrape → filtre → analiz → pattern → trends → DB write → roundtrip.
     """
-    _setup_logging("DEBUG" if _flag(verbose) else "WARNING")
+    _setup_logging("DEBUG" if verbose else "WARNING")
 
     from app.analysis.league_filter import is_supported_league
     from app.analysis.persist import compute_all_patterns

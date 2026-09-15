@@ -396,7 +396,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 16 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
+## Mevcut Durum (Sprint 17 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
 
 ### Backend
 
@@ -761,6 +761,12 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Sprint 12 denetim korumaları belgelendi:** `history.py`, `conftest.py`, frontend doğrulama modülleri, stale write koruması, PatternComputationError yönetimi, CI pipeline
 - **CI pipeline dokümantasyonu eklendi:** `quality.yml` (push/PR tetikli), `daily_pipeline.yml` (7 cron), `recompute_patterns.yml` (haftalık)
 
+### Sprint 17 — TAMAMLANDI ✅ (Teknik Borç Temizliği)
+- **`_flag()` kaldırıldı:** Typer 0.25.1'de bool option'lar native çalışıyor, 35 çağrı noktasında `_flag(x)` → `x` değiştirildi, helper fonksiyon silindi
+- **BeautifulSoup 4.12.3 → 4.15.0 upgrade:** lxml `strip_cdata` DeprecationWarning (17 adet) tamamen gitti, 160 test 0 warning
+- **`.gitignore` zaten güncel:** `xx/` ve `.claude/settings.local.json` Sprint 9'da eklenmişti
+- **Neon compute izleme:** Aylık ~25-30 saat / 191.9 limit, free tier güvenli alanda
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -820,7 +826,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **DB-first analiz:** `_analyze_and_cache` önce DB kontrol eder. `run-pipeline` çalıştırıldıktan sonra tüm maçlar DB'de olur ve Playwright hiç açılmaz.
 
-- **Typer 0.12.5 + Python 3.11 bug:** `bool` Option'lar string `'False'` dönebilir. `cli/main.py`'de `_flag()` yardımcısı çözüyor.
+- **Typer 0.12.5 + Python 3.11 bug (çözüldü):** Eski Typer'da `bool` Option'lar string `'False'` dönebilirdi. Sprint 11'de Typer 0.25.1'e upgrade edildi, Sprint 17'de `_flag()` helper'ı kaldırılıp tüm çağrılar direkt bool'a çevrildi.
 
 - **Next.js proxy & BACKEND_URL:** `next.config.ts`'te `/api/*` → `http://localhost:8000/api/*` rewrite var. `lib/env.ts` `getApiBase()` SSR/CSR ayrımı yapar. Sebep: Vercel SSR (server component) `BACKEND_URL` üzerinden Render'a direkt gider; tarayıcı tarafı (CSR) `BACKEND_URL` görmez → boş string → Next.js proxy üzerinden Render'a ulaşır. Local'de hiç `BACKEND_URL` yoksa proxy yine local backend'e gider.
 
@@ -977,7 +983,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-15 — Sprint 16 sonu, Production CANLI + Veri Kalitesi 89.4)
+## Kaldığımız Yer (2026-09-15 — Sprint 17 sonu, Production CANLI + Veri Kalitesi 89.4)
 
 ### ✅ Production Durumu — CANLI
 
@@ -1003,18 +1009,19 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | Quality score | 89.4 / 100 |
 | Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
 
-### Sıradaki Adım: Sprint 17 — Teknik Borç Temizliği
+### Sıradaki Adım: Sprint 18 — Component + E2E Test
 
-1. **`_flag()` → `Annotated[bool]` migration:** Typer 0.25 native desteği var, 13 çağrı noktası
-2. **`.gitignore` düzenleme:** `xx/` (Excel referans dosyaları), `.claude/settings.local.json`
-3. **BeautifulSoup/lxml deprecation uyarıları:** Parser açıkça belirtilmeli
-4. **Neon compute hour izleme:** Aylık kullanım tahmini ~25-30 saat / 191.9 limit
+1. **Playwright E2E kurulumu:** `@playwright/test`, desktop + mobil viewport
+2. **Kritik akış testleri:** Bülten → maça tıklama → analiz sayfası, periyot sekmeleri, sepet, sonuçlar
+3. **Component testleri:** BetCart, DayTabs, BultenRow, ComboSuggestion, TopPicks
+4. **CI entegrasyonu:** `quality.yml`'e Playwright job ekle
+5. **Hedef:** 200+ frontend test
 
 ### Bilinen Açık Konular
 
 - **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction gelecek sprint
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
-- **Frontend component/E2E test:** Birim test 146 case yeşil; component test ve E2E henüz yok
+- **Frontend component/E2E test:** Birim test 148 case yeşil; component test ve E2E henüz yok
 - **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir
 - **Render Playwright timeout:** Free tier 512 MB RAM + 20sn limit → on-demand scrape çalışmıyor; fixture_cache artık pipeline üzerinden dolduruluyor (Sprint 14)
 
