@@ -187,7 +187,8 @@ nortverse/
 ├── .github/workflows/
 │   ├── quality.yml                # CI: push/PR → ruff + pytest (backend) + vitest + tsc + build (frontend)
 │   ├── daily_pipeline.yml         # Cron: 7 entry (2× run-pipeline + 5× update-scores)
-│   └── recompute_patterns.yml     # Cron: Pazar 03:00 İstanbul — haftalık pattern recompute
+│   ├── recompute_patterns.yml     # Cron: Pazar 03:00 İstanbul — haftalık pattern recompute
+│   └── repair_archive.yml         # Manuel: repair-archive + normalize-leagues + audit-db (Sprint 20)
 ├── backend/
 │   ├── app/
 │   │   ├── config.py              # ScraperConfig, AnalysisConfig (frozen dataclass)
