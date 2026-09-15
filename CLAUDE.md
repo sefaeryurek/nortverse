@@ -206,6 +206,7 @@ nortverse/
 │   │   │   ├── pattern_c.py       # find_pattern_c_all_periods — FT oranları, TEK sorgu
 │   │   │   ├── pattern_stats.py   # PatternResult model + compute_stats — ~130 istatistik alanı
 │   │   │   ├── persist.py         # compute_all_patterns + update_match_patterns (Sprint 8)
+│   │   │   ├── correlation.py      # Poisson korelasyon faktörleri — pazar çiftleri arası (Sprint 19)
 │   │   │   └── trends.py          # compute_trends — form & H2H trend verileri (Sprint 8.8)
 │   │   ├── api/
 │   │   │   └── main.py            # FastAPI — fixture cache, bg queue, DB-first analiz
@@ -214,7 +215,7 @@ nortverse/
 │   │   └── cli/
 │   │       └── main.py            # Typer + Rich CLI (20+ komut)
 │   ├── alembic/                   # DB migration (6 migration)
-│   ├── tests/                     # 160 test
+│   ├── tests/                     # 176 test
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -232,7 +233,8 @@ nortverse/
 │   │   ├── test_pattern_sample_limits.py  # Pattern örneklem sınırları
 │   │   ├── test_analysis_refresh.py       # Analiz yenileme
 │   │   ├── test_result_updates.py         # Skor güncelleme
-│   │   └── test_results_contract.py       # Results API sözleşmesi
+│   │   ├── test_results_contract.py       # Results API sözleşmesi
+│   │   └── test_correlation.py            # Korelasyon faktörleri (16 test, Sprint 19)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
@@ -264,7 +266,9 @@ nortverse/
 │   │   ├── analysis-validation.ts # Analiz verisi doğrulama (Sprint 12 denetim)
 │   │   ├── api.ts                 # Backend API çağrıları
 │   │   ├── cart.ts                # useCart hook — localStorage çok-maç sepet (Sprint 8.7)
-│   │   ├── combos.ts             # generateCombos — kombo üretimi (Sprint 8.5)
+│   │   ├── combos.ts             # generateCombos — kombo üretimi + korelasyonlu jointProb (Sprint 8.5/19)
+│   │   ├── correlations.ts       # Poisson korelasyon tablosu + getCorrectionFactor (Sprint 19)
+│   │   ├── correlation-table.json # 299 korelasyon faktörü statik tablo (Sprint 19)
 │   │   ├── confidence.ts          # Confidence hesaplama + Top Picks (Sprint 8.4)
 │   │   ├── dates.ts               # Tarih yardımcıları (Sprint 12 denetim)
 │   │   ├── env.ts                 # getApiBase + getProxyTarget (Sprint 10)
@@ -275,7 +279,7 @@ nortverse/
 │   │   ├── pattern-fields.ts      # Pattern alan isimleri (Sprint 12 denetim)
 │   │   ├── selection-compatibility.ts  # Seçim uyumluluk kontrolü (Sprint 12 denetim)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
-│   ├── __tests__/                 # 231 vitest test
+│   ├── __tests__/                 # 241 vitest test
 │   │   ├── fixtures.ts            # Test factory'leri
 │   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
 │   │   ├── combos.test.ts         # Kombo üretimi (~15 test)
@@ -299,7 +303,8 @@ nortverse/
 │   │   ├── day-tabs-render.test.tsx       # DayTabs render (7 test)
 │   │   ├── leagues.test.ts               # Lig eşleme (12 test)
 │   │   ├── trends-panel.test.tsx          # TrendsPanel component (13 test)
-│   │   └── retry-button.test.tsx          # RetryButton component (4 test)
+│   │   ├── retry-button.test.tsx          # RetryButton component (4 test)
+│   │   └── correlations.test.ts          # Korelasyon faktörleri (10 test, Sprint 19)
 │   ├── e2e/                       # 14 Playwright E2E test (×2 viewport = 28)
 │   │   ├── navigation.spec.ts     # Sayfa yükleme, redirect, DayTabs (6 test)
 │   │   ├── analyze.spec.ts        # Analiz sayfası, periyot sekmeleri (4 test)
@@ -412,7 +417,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 18 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
+## Mevcut Durum (Sprint 19 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
 
 ### Backend
 
@@ -810,6 +815,26 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **MatchProvider context:** TopPicks, MarketSummary, ComboSuggestion, AddToCartButton testlerinde gerekli
 - **Sonuç:** 231 vitest (yeşil) + 28 Playwright E2E (yapı doğrulanmış), hedef 200+ aşıldı
 
+### Sprint 19 — TAMAMLANDI ✅ (Joint Probability İyileştirmesi — Korelasyon Düzeltmesi)
+- **Bağlam:** Combo ve sepet hesaplamalarında naif bağımsızlık varsayımı (`∏ P(Aᵢ)`) yerine korelasyon düzeltmesi: `P(A,B) = P(A) × P(B) × corr(A,B)`
+- **Backend `app/analysis/correlation.py` (yeni modül):**
+  - Poisson modeli (λ_h=1.37, λ_a=1.12) ile 299 pazar çifti korelasyon faktörü hesaplanıyor
+  - `compute_poisson_correlations()`: teorik hesaplama (DB gerekmez)
+  - `compute_from_matches()`: arşiv verisinden gözlemlenen korelasyon (≥100 maç gerekli, yoksa Poisson'a fallback)
+  - `get_correction_factor()`: iki pazar sonucu arası düzeltme faktörü bulma
+  - `_outcomes_for_score()`: skor → pazar sonuçları eşlemesi
+- **Frontend `lib/correlations.ts` + `correlation-table.json` (yeni):**
+  - 299 korelasyon faktörü statik JSON tablosu
+  - `getCorrectionFactor(mktA, selA, mktB, selB)` → düzeltme faktörü (bilinmeyen çift → 1.0)
+  - `computeJointProb(legs)` → korelasyon düzeltmeli birleşik olasılık
+- **`combos.ts` güncellendi:** `Combo.jointProb: number | null` (literal `null` değil), `computeJointProb` ile hesaplanıyor; `estDecimalOdds = 1/jp`
+- **`cart.ts` güncellendi:** Aynı maç seçimlerinde korelasyon düzeltmesi uygulanıyor; `hasRelatedSelections` kaldırıldı; tüm seçimler (farklı/aynı maç) artık hesaplanıyor
+- **`ComboSuggestion.tsx` güncellendi:** Kombo kartlarında `≈%X.Y` olasılık ve `≈Z.ZZ oran` gösteriliyor
+- **`BetCart.tsx` güncellendi:** "İlişkili seçimler" mesajı kaldırıldı, "korelasyon düzeltmesiyle hesaplanır" metni eklendi
+- **Backend API:** `/api/correlations` GET endpoint (statik Poisson tablo, cache'li)
+- **Testler:** 16 backend pytest (korelasyon) + 10 frontend vitest (getCorrectionFactor + computeJointProb) = 26 yeni test
+- **Sonuç:** 176 backend + 241 frontend + 28 E2E = **445 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -919,7 +944,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Combo domain mantığı (Sprint 8.5):** `combos.ts:DOMAIN_OF` 30+ pazarı 14 domain'e gruplar (`match_result`, `total_goals`, `btts`, `home_total`, `away_total`, `iy_ms`, vs.). Bir leg seçilince aynı domain'den ikinci leg yasaklanır → bağımsızlık varsayımı daha sağlam. `HARD_CONFLICTS` ekstra keskin çelişki çiftleri (örn. `result_x` + `fark_ev1`).
 
-- **Joint olasılık yaklaşıklığı (Sprint 8.5/8.7):** `combos.ts` ve `cart.ts` `∏ (pct/100)` ile joint hesaplar (bağımsız olay varsayımı). UI'da `≈` ile yaklaşık olduğu belirtilir. Gerçekte futbol pazarları arasında korelasyon var; ileride profesyonelleştirilebilir (corr matrisi → `Pₐᵦ ≈ Pₐ × Pᵦ × 1.05` gibi).
+- **Joint olasılık korelasyon düzeltmesi (Sprint 19):** `combos.ts` ve `cart.ts` artık `P(A,B) = P(A) × P(B) × corr(A,B)` formülüyle hesaplıyor. Poisson modeli (λ_h=1.37, λ_a=1.12) ile 299 pazar çifti korelasyon faktörü hesaplandı ve `correlation-table.json`'da statik tablo olarak saklanıyor. `lib/correlations.ts` getCorrectionFactor + computeJointProb sağlar. Bilinmeyen çiftler için corr=1.0 (bağımsız varsayım) uygulanır. Backend'de `/api/correlations` endpoint'i dinamik güncelleme için hazır.
 
 - **Dinamik eşik formülü (Sprint 8.6):** `dynamicMinPct = max(64, 80 - log10(n+1) × 8)`. Wilson alt sınırının pragmatik yaklaşımı. Küçük örneklemde yanıltıcı yüksek yüzdeyi eler, büyük örneklemde gerçek değerli tahminleri keser. `getTopPicks` artık `{picks, effectiveMinPct, matchCount}` döner — UI başlıkta gösterir.
 
@@ -1052,25 +1077,25 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | Quality score | 89.4 / 100 |
 | Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
 
-### Test Durumu (Sprint 18 sonrası)
+### Test Durumu (Sprint 19 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 160 | ✅ Yeşil |
-| **Frontend birim** | vitest | 231 | ✅ Yeşil |
+| **Backend** | pytest | 176 | ✅ Yeşil |
+| **Frontend birim** | vitest | 241 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 419 | — |
+| **Toplam** | — | 445 | — |
 
-### Sıradaki Adım: Sprint 19 — Joint Probability İyileştirmesi
+### Sıradaki Adım: Sprint 20 — Tarihsel Veri Onarımı
 
-1. Arşiv verisinden korelasyon matrisi oluştur (pazar çiftleri arası gözlemlenen ortak olasılık)
-2. Düzeltme faktörü uygula: `P(A,B) = P(A) × P(B) × corr(A,B)`
-3. Backend endpoint: korelasyon verisi
-4. Frontend: `combos.ts` ve `cart.ts`'te düzeltilmiş hesaplama
+1. Sorunlu kayıtları tespit et (negatif/aşırı skor, tutarsız yarılar, boş takım, kupa adı)
+2. `repair-archive` CLI komutu oluştur (soft delete + audit_log)
+3. Lig adlarını kanonik forma normalize et
+4. `audit-db` quality_score > 90 hedefi
 
 ### Bilinen Açık Konular
 
-- **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction Sprint 19'da
+- **Joint olasılık korelasyon düzeltmesi (Sprint 19 tamamlandı):** Combo/sepet artık Poisson korelasyon düzeltmesi kullanıyor. Gelecekte arşiv verisinden empirik korelasyon ile iyileştirilebilir
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
 - **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir
 - **Render Playwright timeout:** Free tier 512 MB RAM + 20sn limit → on-demand scrape çalışmıyor; fixture_cache artık pipeline üzerinden dolduruluyor (Sprint 14)
