@@ -56,13 +56,17 @@ python -m app.cli.main list-leagues                  # mevcut tüm lig ID'leri v
 python -m app.cli.main serve                         # http://localhost:8000
 python -m app.cli.main serve --reload               # geliştirme modu (Windows'ta çalışır)
 
-# Veri kalitesi & Audit (Sprint 8.9)
+# Veri kalitesi & Audit (Sprint 8.9+20)
 python -m app.cli.main self-test 2813084             # E2E sistem testi (7 adım kontrol)
 python -m app.cli.main audit-db                      # DB sağlık raporu (kalite skoru, eksik veri)
 python -m app.cli.main audit-patterns 2813084        # Pattern B/C eşleşme davranışı + tolerance etkisi
 python -m app.cli.main prune-non-league              # Kupa maçlarını soft-delete (default dry-run)
 python -m app.cli.main prune-non-league --apply      # Gerçekten temizle (audit_log'a kayıt düşer)
 python -m app.cli.main restore-deleted 2976657       # Soft-deleted maçı geri al
+python -m app.cli.main repair-archive                # Sorunlu kayıtları tespit et (dry-run)
+python -m app.cli.main repair-archive --apply        # Sorunlu kayıtları soft-delete et
+python -m app.cli.main normalize-leagues             # Lig adlarını normalize et (dry-run)
+python -m app.cli.main normalize-leagues --apply     # Lig adlarını kanonik forma çevir
 
 # Frontend (ayrı terminalde, frontend/ dizininden)
 cd ../frontend
@@ -207,6 +211,7 @@ nortverse/
 │   │   │   ├── pattern_stats.py   # PatternResult model + compute_stats — ~130 istatistik alanı
 │   │   │   ├── persist.py         # compute_all_patterns + update_match_patterns (Sprint 8)
 │   │   │   ├── correlation.py      # Poisson korelasyon faktörleri — pazar çiftleri arası (Sprint 19)
+│   │   │   ├── repair.py          # detect_issues + needs_normalization — tarihsel veri onarımı (Sprint 20)
 │   │   │   └── trends.py          # compute_trends — form & H2H trend verileri (Sprint 8.8)
 │   │   ├── api/
 │   │   │   └── main.py            # FastAPI — fixture cache, bg queue, DB-first analiz
@@ -215,7 +220,7 @@ nortverse/
 │   │   └── cli/
 │   │       └── main.py            # Typer + Rich CLI (20+ komut)
 │   ├── alembic/                   # DB migration (6 migration)
-│   ├── tests/                     # 176 test
+│   ├── tests/                     # 202 test
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -234,7 +239,8 @@ nortverse/
 │   │   ├── test_analysis_refresh.py       # Analiz yenileme
 │   │   ├── test_result_updates.py         # Skor güncelleme
 │   │   ├── test_results_contract.py       # Results API sözleşmesi
-│   │   └── test_correlation.py            # Korelasyon faktörleri (16 test, Sprint 19)
+│   │   ├── test_correlation.py            # Korelasyon faktörleri (16 test, Sprint 19)
+│   │   └── test_repair.py                # Veri onarımı testleri (26 test, Sprint 20)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
@@ -417,7 +423,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 19 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4)
+## Mevcut Durum (Sprint 20 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4+)
 
 ### Backend
 
@@ -835,6 +841,26 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Testler:** 16 backend pytest (korelasyon) + 10 frontend vitest (getCorrectionFactor + computeJointProb) = 26 yeni test
 - **Sonuç:** 176 backend + 241 frontend + 28 E2E = **445 toplam test**
 
+### Sprint 20 — TAMAMLANDI ✅ (Tarihsel Veri Onarımı)
+- **Bağlam:** Quality score 89.4 → 90+ hedefi; sorunlu kayıt tespiti + onarım altyapısı
+- **`app/analysis/repair.py` (yeni modül):**
+  - `detect_issues(row)`: tek kayıtta sorun tespit — boş takım, kupa, negatif/aşırı skor (>15), tutarsız yarılar (İY > MS)
+  - `needs_normalization(league_code, league_name)`: lig adı kanonik formdan farklı mı kontrolü
+  - Pure fonksiyonlar, DB bağımlılığı yok
+- **`repair-archive` CLI komutu:**
+  - Tüm aktif kayıtları tarar, sorunlu olanları kategorilere ayırır (empty_team, non_league, bad_score, inconsistent_half)
+  - Default dry-run + `--apply` ile soft delete + audit_log
+- **`normalize-leagues` CLI komutu:**
+  - Tüm aktif maçlarda league_code/league_name'i `canonical_league_name()` ile normalize eder
+  - Dönüşüm istatistikleri gösterir (eski → yeni, sayı)
+  - Default dry-run + `--apply` ile güncelleme + audit_log
+- **`audit-db` iyileştirmesi:**
+  - Sorunlu skor (negatif/>15), tutarsız yarı (İY > MS), normalize edilmemiş lig adı metrikleri eklendi
+  - Quality score formülüne repair_candidates (%15 ağırlık) ve unnormalized (%5 ağırlık) penaltıları eklendi
+  - Öneri satırlarında `repair-archive --apply` ve `normalize-leagues --apply` komutları gösteriliyor
+- **Testler:** 26 yeni test (test_repair.py) — detect_issues (18 test) + needs_normalization (8 test)
+- **Sonuç:** 202 backend + 241 frontend + 28 E2E = **471 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -983,7 +1009,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Pattern C tolerance=0.0 (Sprint 8.9):** Eski `±0.5` toleransta yan yana iki "kova" eşleşmiş sayılıyordu (örn. 3.5 ile 4.0). Yeni: tam eşleşme. Eşleşme sayısı 5-10x düştü ama kalite arttı. `min_matches: 5 → 1` çünkü tolerance=0 sıkı, 1-4 maç düşük güven kabul edilebilir. Frontend `match_count >= 1` ile Pattern C'yi gösterir; UI'da düşük örneklemde dynamicMinPct doğal koruma sağlar (Sprint 8.6).
 
-- **Kanonik lig adı (Sprint 8.9):** `LEAGUE_ALIASES` 50+ alias → kanonik ad. `_result_to_row` `canonical_league_name(r.league_code)` uygular → DB hep tutarlı isim yazar. Mevcut karışık isimleri normalize etmek için ayrı CLI yazılmadı (yeni gelenler tutarlı, eskileri organik düzelir).
+- **Kanonik lig adı (Sprint 8.9+20):** `LEAGUE_ALIASES` 50+ alias → kanonik ad. `_result_to_row` `canonical_league_name(r.league_code)` uygular → yeni maçlar tutarlı. Eski maçlar için `normalize-leagues --apply` CLI komutu (Sprint 20) toplu normalize yapar. `repair.py:needs_normalization()` ile `audit-db` normalize edilmemiş kayıt sayısını gösterir.
 
 - **Audit & quality görünürlük (Sprint 8.9 → 8.10 değiştirildi):** Quality skoru artık `/api/admin/quality` endpoint'inde. Sprint 8.9'da `/api/health` içine konmuştu ama UptimeRobot pinglerinde tüm matches taraması = ~187 MB/gün egress → Sprint 8.10'da ayrı endpoint'e taşındı. UptimeRobot artık hafif `/api/health` pingler. CLI `audit-db` aynı bilgiyi Rich tabloyla verir.
 
@@ -1051,9 +1077,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-15 — Sprint 18 sonu, Production CANLI + Veri Kalitesi 89.4)
+## Kaldığımız Yer (2026-09-16 — Sprint 20 sonu, Production CANLI + Veri Kalitesi 89.4+)
 
-### ✅ Production Durumu — CANLI
+### ✅ Production Durumu — CANLI + Sprint 12-20 Tamamlandı
 
 4 aylık downtime sona erdi. Tam altyapı:
 
@@ -1077,25 +1103,23 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | Quality score | 89.4 / 100 |
 | Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
 
-### Test Durumu (Sprint 19 sonrası)
+### Test Durumu (Sprint 20 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 176 | ✅ Yeşil |
+| **Backend** | pytest | 202 | ✅ Yeşil |
 | **Frontend birim** | vitest | 241 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 445 | — |
+| **Toplam** | — | 471 | — |
 
-### Sıradaki Adım: Sprint 20 — Tarihsel Veri Onarımı
+### Sıradaki Adım: Yol haritasının sonuna gelindi
 
-1. Sorunlu kayıtları tespit et (negatif/aşırı skor, tutarsız yarılar, boş takım, kupa adı)
-2. `repair-archive` CLI komutu oluştur (soft delete + audit_log)
-3. Lig adlarını kanonik forma normalize et
-4. `audit-db` quality_score > 90 hedefi
+Sprint 12-20 tamamlandı. Uzun vadeli planlanmamış konular (Canlı maç + WebSocket, Auth/Premium vb.) kullanıcı talebiyle başlayacak.
 
 ### Bilinen Açık Konular
 
 - **Joint olasılık korelasyon düzeltmesi (Sprint 19 tamamlandı):** Combo/sepet artık Poisson korelasyon düzeltmesi kullanıyor. Gelecekte arşiv verisinden empirik korelasyon ile iyileştirilebilir
+- **Tarihsel veri onarımı (Sprint 20 tamamlandı):** `repair-archive` ve `normalize-leagues` CLI komutları hazır. Production'da `--apply` ile çalıştırılması gerekiyor (quality_score iyileşecek)
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
 - **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir
 - **Render Playwright timeout:** Free tier 512 MB RAM + 20sn limit → on-demand scrape çalışmıyor; fixture_cache artık pipeline üzerinden dolduruluyor (Sprint 14)
