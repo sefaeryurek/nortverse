@@ -185,7 +185,7 @@ nortverse/
 │   │   ├── config.py              # ScraperConfig, AnalysisConfig (frozen dataclass)
 │   │   ├── models.py              # Pydantic: FixtureMatch, HistoricalMatch, MatchRawData
 │   │   ├── db/
-│   │   │   ├── connection.py      # SQLAlchemy async engine + get_session() — pool_size=2, statement_cache_size=0 (Supabase PgBouncer)
+│   │   │   ├── connection.py      # SQLAlchemy async engine + get_session() — Neon pooler uyumlu (env-driven pool/cache)
 │   │   │   └── models.py          # Match + FixtureCache ORM — JSONB kolonlar, actual skorlar
 │   │   ├── scraper/
 │   │   │   ├── browser.py         # Playwright wrapper (browser_context context manager)
@@ -228,7 +228,7 @@ nortverse/
 │   │   ├── Sidebar.tsx            # Sol menü (md altı gizli — mobile)
 │   │   └── StatBadge.tsx          # Yeniden kullanılabilir yüzde rozeti
 │   ├── lib/
-│   │   ├── api.ts                 # Backend API çağrıları (BASE = BACKEND_URL ?? "" — SSR'da Railway, CSR'da proxy)
+│   │   ├── api.ts                 # Backend API çağrıları (BASE = BACKEND_URL ?? "" — SSR'da Render, CSR'da proxy)
 │   │   ├── leagues.ts             # Lig adı → bayrak + kısa kod sözlüğü (Sprint 8.3)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
 │   ├── AGENTS.md                  # ⚠️ Next.js özel sürüm uyarısı — kod yazmadan önce oku
@@ -337,7 +337,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 8.10b — TAMAMLANDI ✅ — Oracle Cloud Migration Bekleniyor)
+## Mevcut Durum (Sprint 13 — TAMAMLANDI ✅ — Production CANLI)
 
 ### Backend
 
@@ -360,7 +360,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - ✅ **Sonuçlar smart filtering (Sprint 8.1):** `/api/results` endpoint'i artık tüm günün maçlarını döndürür, her maça `status` (scheduled/live/finished); scheduled ve stale (>130dk skorsuz) gizlenir
 - ✅ **Saat başı update-scores cron (Sprint 8.1):** 12:00–23:00 İstanbul her saat — biten skorlar dakikalar içinde sonuçlar sayfasında
 - ✅ **Playwright path ERROR seviyesi (Sprint 8.2):** `_do_analyze` upsert hatası `log.error` + `exc_info=True` (Railway logs'ta stack trace)
-- ✅ **DB write retry (Sprint 8.3):** `_with_retry` yardımcısı — `_upsert` ve `update_results` 3 deneme + exponential backoff (Supabase PgBouncer drop koruması)
+- ✅ **DB write retry (Sprint 8.3):** `_with_retry` yardımcısı — `_upsert` ve `update_results` 3 deneme + exponential backoff (pooler drop koruması)
 - ✅ **`/api/match/{id}` lazy fallback (Sprint 8.3):** DB miss → Playwright scrape + upsert (25sn timeout); 404 yerine maç hep gelir
 - ✅ **Fixture tarih sınırı (Sprint 8.3):** -30 / +14 gün dışına çıkılamaz (uçuk tarih → 400, Playwright açılmaz)
 - ✅ **Form & H2H Trendleri (Sprint 8.8):** `app/analysis/trends.py` — `compute_trends(raw)` 3 blok döner (home_form / away_form / h2h); `matches.trends` JSONB (migration `f5c8d2a1b394`); `_do_analyze` ve `_result_to_row` write
@@ -376,11 +376,11 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - ✅ **Pattern C egress optimizasyonu (Sprint 8.10):** tolerance=0.0 fast-path DB-side JSONB equality — eski 130MB/çağrı → yeni 50KB/çağrı (%99.96 azaltma); tolerance > 0 fallback yolu korundu
 - ✅ **`/api/health` hafifletildi (Sprint 8.10):** Sprint 8.9'da eklenmiş `data_quality` UptimeRobot pinglerinde 187 MB/gün egress yaratıyordu → kaldırıldı; yeni `/api/admin/quality` endpoint detay rapor için (UptimeRobot çağırmaz)
 - ✅ `pattern_stats.py`: ~130 alan, 9 bölüm
-- ✅ Railway deployment: `https://nortverse-production.up.railway.app`
+- ✅ Render.com deployment: `https://nortverse-backend.onrender.com`
 - ✅ `fixture_cache` DB tablosu: bülten verileri kalıcı, server restart'tan etkilenmez
 - ✅ `/api/results` endpoint: günlük biten maçlar + Katman A kapsamı
 - ✅ `update-scores` CLI: biten maçların actual skorlarını DB'ye yazar
-- ✅ Supabase PgBouncer uyumu: `pool_size=2`, `statement_cache_size=0`
+- ✅ Neon pooler uyumu: `pool_size=2`, `statement_cache_size=0` (env-driven)
 - ✅ Date bug düzeltildi: fixture İstanbul tz bazlı, tarih filtresi eklendi
 - ✅ **Yedek pipeline cron (09:00 İstanbul):** 08:00 cron kaçırırsa devreye girer
 - ❌ `_score_updater` kaldırıldı: Playwright fırtınası sebebiyle (Sprint 7 acil)
@@ -395,7 +395,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - ✅ IddaaCoupon: her arşiv kartının üstünde "Altın Oranlar" (%79+) bölümü
 - ✅ IddaaCoupon: handikap (2:0)/(0:2) convention düzeltildi
 - ✅ Vercel deployment: `https://nortverse.vercel.app`
-- ✅ SSR URL düzeltildi: `BACKEND_URL` env var ile Vercel → Railway direkt
+- ✅ SSR URL düzeltildi: `BACKEND_URL` env var ile Vercel → Render direkt
 - ✅ **Next.js Data Cache 60sn (Sprint 7):** `getFixture`/`getResults` server cache → tarih değişimi anlık
 - ✅ **Skeleton fallback (Sprint 7):** Suspense'te 8 satırlık iskelet, "Yükleniyor..." flash bitti
 - ✅ **DayTabs disable (Sprint 7):** Aktif tarihe tıklayınca reload yok
@@ -429,7 +429,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ### Altyapı / Monitoring
 
-- ✅ **UptimeRobot kuruldu:** `/api/health`'e 5dk'da bir HEAD ping → Railway uyumaz
+- ✅ **UptimeRobot kuruldu:** `/api/health`'e 5dk'da bir HEAD ping → Render uyumaz
 - ✅ Backend memory cache TTL: 5dk → 10dk
 
 ### Henüz Yok
@@ -623,7 +623,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 **Sprint 10 (4/5) — `5a2d181`:** URL fallback centralize — `lib/env.ts`.
 - `next.config.ts` ve `lib/api.ts`'teki ikili kaynak duplicate kaldırıldı
 - `lib/env.ts` yeni modül: `getApiBase()` (CSR+SSR) + `getProxyTarget()` (rewrite)
-- Davranış değişmedi: Vercel SSR direkt Railway, CSR proxy üzerinden, lokal dev proxy localhost:8000
+- Davranış değişmedi: Vercel SSR direkt Render, CSR proxy üzerinden, lokal dev proxy localhost:8000
 
 **Sprint 10 (5/5):** Pattern recompute CLI + haftalık workflow + CLAUDE.md güncelleme.
 - `recompute-patterns` CLI komutu: `--limit N`, `--batch-size N`, `--only-missing`. `deleted_at IS NULL` filtresi, `_with_retry` ile lazy backfill, batch sonu progress log.
@@ -656,6 +656,34 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - İçerik: 🧾 + count + ≈%prob + ≈odds + "Aç" butonu; tıklayınca mevcut BetCart sheet açar
 - Boş sepette zaten guard'lı (BetCart hidden if `!hydrated || count === 0`)
 - 88 test yeşil, npm run build temiz
+
+### Sprint 12 — TAMAMLANDI ✅ (Kapsamlı Kod Denetimi)
+- **Commit `1038c8a`:** 14 Eylül 2026'da 10 turlu kapsamlı kod denetimi
+- 42 değiştirilmiş + 29 yeni dosya (906 ekleme, 437 silme)
+- Backend: 67 → 160 test, Frontend: 88 → 146 test
+- CI pipeline eklendi (`.github/workflows/quality.yml`)
+- Veri bütünlüğü, eşzamanlılık güvenliği, scraper doğruluğu, API sağlamlaştırma, istatistiksel dürüstlük iyileştirmeleri
+
+### Sprint 13 — TAMAMLANDI ✅ (Neon PostgreSQL Migration — Production Geri Açıldı)
+- **Bağlam:** 4 aydır production down (Supabase egress aşımı). Neon PostgreSQL + Render.com + Vercel ile tam yeniden kurulum.
+- **Neon PostgreSQL geçişi (`c243aa3`):**
+  - `connection.py`: asyncpg SSL + Neon pooler uyumu (`sslmode`/`channel_binding` URL'den strip, `ssl.create_default_context()` connect_args)
+  - Alembic 6 migration zinciri Neon'da uygulandı
+  - Supabase'den 4394 maç Neon'a aktarıldı (0 hata, batch 50)
+  - DB: 19.6 MB / 512 MB kullanımda
+- **Nowgoal lig kodu aliases genişletildi (`bb2b401`):**
+  - `league_filter.py` LEAGUE_ALIASES'a 60+ yeni alias eklendi (SPA D1, ENG LCH, HOL D1, vs.)
+  - Pipeline lig=0 bug'ı düzeltildi: `expected_league_name` (tam ad) vs H2H kısa kodları uyumsuzluğu
+- **Railway → Render.com geçişi:**
+  - Railway trial doldu → Render.com free tier (kullanıcının mevcut hesabı)
+  - Backend: `https://nortverse-backend.onrender.com`
+  - Render free tier: 15dk inaktivite uyku, ~30sn cold start, Docker
+- **Fixture cache local popülasyon:**
+  - Render Playwright timeout alıyor (512MB RAM, 20sn limit) → local'den `populate_fixture_cache.py` ile Neon'a yazıldı
+  - Kalıcı çözüm: Sprint 14'te GitHub Actions
+- **Vercel frontend:** `BACKEND_URL` güncellendi, clean redeploy ile çalıştı
+- **GitHub Actions:** `DATABASE_URL` secret Neon'a güncellendi (cron hâlâ devre dışı — Sprint 14)
+- **Sonuç:** 4 aylık downtime sona erdi, production CANLI
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -718,15 +746,15 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Typer 0.12.5 + Python 3.11 bug:** `bool` Option'lar string `'False'` dönebilir. `cli/main.py`'de `_flag()` yardımcısı çözüyor.
 
-- **Next.js proxy & BACKEND_URL:** `next.config.ts`'te `/api/*` → `http://localhost:8000/api/*` rewrite var. `lib/api.ts`'te `BASE = process.env.BACKEND_URL || ""`. Sebep: Vercel SSR (server component) `BACKEND_URL` üzerinden Railway'e direkt gider; tarayıcı tarafı (CSR) `BACKEND_URL` görmez → boş string → Next.js proxy üzerinden Railway'e ulaşır. Local'de hiç `BACKEND_URL` yoksa proxy yine local backend'e gider.
+- **Next.js proxy & BACKEND_URL:** `next.config.ts`'te `/api/*` → `http://localhost:8000/api/*` rewrite var. `lib/env.ts` `getApiBase()` SSR/CSR ayrımı yapar. Sebep: Vercel SSR (server component) `BACKEND_URL` üzerinden Render'a direkt gider; tarayıcı tarafı (CSR) `BACKEND_URL` görmez → boş string → Next.js proxy üzerinden Render'a ulaşır. Local'de hiç `BACKEND_URL` yoksa proxy yine local backend'e gider.
 
 - **Frontend Next.js — özel sürüm:** `frontend/AGENTS.md` Next.js'in eğitim verisindekinden farklı olabileceğini, `node_modules/next/dist/docs/` okunmadan kod yazılmaması gerektiğini söylüyor. Frontend kodu değiştirmeden önce **mutlaka** `frontend/AGENTS.md` okunacak.
 
-- **Supabase PgBouncer:** Transaction mode pooler (port 5432) ile asyncpg kullanırken `pool_size=2, max_overflow=0, connect_args={"statement_cache_size": 0}` zorunlu. Aksi halde GitHub Actions gibi ortamlarda ECIRCUITBREAKER hatası alınır.
+- **Neon pooler:** Transaction mode pooler ile asyncpg kullanırken `pool_size=2, max_overflow=0, connect_args={"statement_cache_size": 0}` zorunlu. asyncpg URL'de `sslmode` desteklemez — `connection.py` URL'den strip edip `ssl.create_default_context()` ile connect_args'a ekler. `channel_binding` parametresi de strip edilir.
 
 - **fixture_cache tablosu:** `/api/fixture` 3 katmanlı cache kullanır: memory (5dk) → DB (geçmiş=kalıcı, bugün=1saat) → Playwright. Migration zinciri: `641438be3ff8` (initial schema) → `c1b1b4cd333b` (h2 skorları + kickoff_time) → `a3f9e2b1c4d5` (fixture_cache).
 
-- **Otomatik skor güncelleme:** `api/main.py`'de `_score_updater` async task her 30 dakikada `update_results()` çağırır. Railway container ayakta olduğu sürece çalışır. Ayrıca GitHub Actions'da gece 00:30 ve 02:00 İstanbul'da da çalışır (yedek).
+- **Otomatik skor güncelleme:** `_score_updater` Sprint 7'de kaldırıldı. Skor güncelleme sadece GitHub Actions gece cron'u (`update-scores`) ve CLI ile yapılır.
 
 - **Arşive ekleme yapılmıyor:** Mevcut arşiv sabittir, yeni lig/sezon eklenmeyecek. Var olan maçların yüzdeleri değişmesin diye bu karar alındı.
 
@@ -736,19 +764,19 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Canlı maç tespiti:** Sonuçlar sayfasında `kickoff_time + 110 dakika > now` ise maç muhtemelen hâlâ oynuyor → "Canlı" rozeti gösterilir. `_score_updater` canlı skorları da kaydedebilir (gerçek bitişi takip etmiyor), bu yüzden frontend tarafı tespit yapılıyor.
 
-- **Railway uyku modu — ÇÖZÜLDÜ (Sprint 7):** UptimeRobot 5dk'da bir HEAD ping atıyor (`/api/health`). Container hep ayakta. Free tier yeterli.
+- **Render.com uyku modu:** Render free tier 15dk inaktivite sonrası uyku + ~30sn cold start. UptimeRobot 5dk'da bir HEAD ping (`/api/health`) ile sıcak tutulabilir. (Eski Railway devre dışı.)
 
 - **Bg worker DB-only (Sprint 7 acil):** Önceki tasarım fixture yüklendikten sonra TÜM maçlar için arka planda Playwright açıyordu — pipeline'sız günlerde container OOM olurdu. Yeni tasarım: bg worker SADECE DB-hit yapar (`_analyze_db_only`). DB miss'ler atlanır; kullanıcı tıkladığında foreground tek seferlik scrape yapar. Bg worker + Sprint 8 lazy backfill kombinasyonu sayesinde DB'deki maçların pattern'lerini de arka planda ısıtır.
 
 - **`/api/fixture` hard timeout (Sprint 7 acil):** Playwright scrape `asyncio.wait_for(timeout=20)` ile sarmalı. Vercel SSR ~25sn'de düşer, biz 20sn'de 503 dönüyoruz — backend ölmez, kullanıcı "fetch failed" görür ama sistem ayakta kalır.
 
-- **Pattern saklama (Sprint 8):** `matches` tablosunda 6 JSONB kolon (`pattern_ht/h2/ft_b/c`). `exclude_match_id=match_id` ile hesaplanıp saklanır → okuma sırasında ek filtre gerekmez. Pattern eksikse `_build_from_db` runtime hesabı yapıp **write-through** ile DB'ye yazar (lazy backfill). Storage tahmini ~450MB Supabase free tier 500MB sınırına yakın — aşılırsa arşiv prune.
+- **Pattern saklama (Sprint 8):** `matches` tablosunda 6 JSONB kolon (`pattern_ht/h2/ft_b/c`). `exclude_match_id=match_id` ile hesaplanıp saklanır → okuma sırasında ek filtre gerekmez. Pattern eksikse `_build_from_db` runtime hesabı yapıp **write-through** ile DB'ye yazar (lazy backfill). Storage tahmini ~450MB Neon free tier 500MB sınırına yakın — aşılırsa arşiv prune.
 
 - **`compute_all_patterns` (Sprint 8):** `app/analysis/persist.py` — pipeline ve API tek bir kanaldan pattern üretir. 3 paralel pattern_b çağrısı + 1 pattern_c (3 periyot döner) `asyncio.gather` ile aynı anda hesaplanır.
 
 - **Yedek pipeline cron (Sprint 8):** GitHub Actions free tier cron kırılgan (1-2 saat geç çalışabilir). 08:00 ve 09:00 İstanbul olmak üzere 2 cron tanımlı. İdempotent upsert sayesinde ikisi de başarılı olursa veri zarar görmez.
 
-- **DB write retry (Sprint 8.3):** `_with_retry` helper (`app/pipeline/runner.py`) — Supabase PgBouncer ara sıra connection drop yapıyor; `_upsert` ve `update_results` write'ları 3 deneme + 0.5/1.0/2.0s exponential backoff ile sarmalı. Geçici hatalar sessizce iyileşir.
+- **DB write retry (Sprint 8.3):** `_with_retry` helper (`app/pipeline/runner.py`) — pooler ara sıra connection drop yapabiliyor; `_upsert` ve `update_results` write'ları 3 deneme + 0.5/1.0/2.0s exponential backoff ile sarmalı. Geçici hatalar sessizce iyileşir.
 
 - **`/api/match/{id}` fallback (Sprint 8.3):** DB miss'te Playwright scrape + upsert; `asyncio.wait_for(timeout=25)` ile sarılı (Vercel SSR ~25-30sn limiti içinde). Scrape başarısız olursa 404; timeout olursa 504. Sonraki ziyaret hızlı (DB'de hazır).
 
@@ -776,7 +804,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Trends mimarisi (Sprint 8.8):** `compute_trends(raw)` ham `MatchRawData`'dan 3 blok üretir. `_result_to_row` pipeline path'inde, `_do_analyze` API path'inde DB'ye `trends` JSONB yazar. `_build_from_db` DB'den okur, parse hatası warning + None döner. **Lazy backfill yok** — eski maçlarda `trends` null kalır, frontend sessizce gizler. Yeni gelen maçlar (her run-pipeline veya foreground scrape) trends ile yazılır.
 
-- **Trends migration adımı (Sprint 8.8):** Railway Dockerfile alembic koşturmuyor. Yeni migration eklendiğinde kullanıcı manuel olarak Supabase SQL Editor'den `ALTER TABLE matches ADD COLUMN <kolon> JSONB;` çalıştırmalı. `f5c8d2a1b394` (trends) bu yolla 2026-05-07'de uygulandı.
+- **Trends migration adımı (Sprint 8.8):** Dockerfile'daki `alembic upgrade head` sayesinde (Sprint 9) container her açılışta schema güncel. Eski not: `f5c8d2a1b394` (trends) Supabase'da 2026-05-07'de manuel uygulanmıştı.
 
 - **Lig filtresi `is_supported_league` (Sprint 8.9):** Hibrit yaklaşım — kara liste keyword (champions/europa/cup/friendly/qualifier/...) + beyaz liste override (`LEAGUE_ALIASES` içindeki ad zaten geçer). Çoklu parametre kabul eder (`is_supported_league(name, code)`); biri lig sayılırsa True.
 
@@ -811,11 +839,11 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Pattern C egress optimizasyonu (Sprint 8.10):** Sprint 8.9'da `tolerance=0.0` koyduktan sonra fast-path mümkün oldu — `cast(Match.ft_all_ratios, JSONB) == cast(ft_ratios, JSONB)` ile DB-side filter. Eski yol 13K+ satır çekip Python'da filtere = ~130 MB/çağrı egress; yeni yol ~50 KB/çağrı (%99.96 azaltma). PostgreSQL JSONB karşılaştırması kanonik (key sırası önemsiz). tolerance > 0 fallback yolu `_ratios_match` Python fonksiyonu ile korundu.
 
-- **Backend Cache-Control middleware (Sprint 8.10b):** `app/api/main.py` `add_cache_headers` middleware'i — `/api/fixture` (5dk), `/api/results` (2dk), `/api/matches` (5dk), `/api/health` (30sn) için `Cache-Control: public, s-maxage=N, stale-while-revalidate=60` header'ları ekler. Cloudflare CDN önüne alındığında edge cache çalışır → origin call (Railway → DB) %80 azalır. Vercel `revalidate` SSR cache'inden farklı, ortogonal: birlikte çalışırlar.
+- **Backend Cache-Control middleware (Sprint 8.10b):** `app/api/main.py` `add_cache_headers` middleware'i — `/api/fixture` (5dk), `/api/results` (2dk), `/api/matches` (5dk), `/api/health` (30sn) için `Cache-Control: public, s-maxage=N, stale-while-revalidate=60` header'ları ekler. Cloudflare CDN önüne alındığında edge cache çalışır → origin call (Render → DB) %80 azalır. Vercel `revalidate` SSR cache'inden farklı, ortogonal: birlikte çalışırlar.
 
 - **GitHub Actions cron'ları geçici devre dışı (Sprint 8.10b):** `.github/workflows/daily_pipeline.yml` schedule bloku yorum satırına alındı. Egress sınırı geri gelene + Oracle migration tamamlanana kadar `workflow_dispatch` (manuel tetik) modunda. Migration sonrası 5 cron'la geri açılacak (08:00 pipeline + 4 update-scores entry: 14/18/22 + gece toplu).
 
-- **Oracle Cloud Always Free migration kararı (Sprint 8.10b sonrası):** Supabase free tier 5 GB/ay egress sınırı yetersiz; Pro upgrade ($25/ay) reddedildi. Oracle Always Free Ampere A1 (4 vCPU + 24 GB RAM + 200 GB disk + 10 TB/ay outbound) ücretsiz alternatif. Self-hosted PostgreSQL 16 + Cloudflare R2 backup. Migration adımları "Kaldığımız Yer" bölümünde 10 madde detaylı.
+- **Neon PostgreSQL geçişi (Sprint 13):** Supabase egress limiti aşılıp Oracle Cloud başarısız olunca Neon free tier seçildi. asyncpg `sslmode` URL param desteklemez — `connection.py` URL'den strip edip `ssl.create_default_context()` ile bağlanır. `channel_binding` de strip edilir. Supabase'den 4394 maç aktarıldı.
 
 ---
 
@@ -823,11 +851,11 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Python 3.11+** / FastAPI / SQLAlchemy 2.x async / Pydantic 2
 - **Playwright** (nowgoal Cloudflare/dinamik JS render — BS4 yetersiz)
-- **PostgreSQL** (Supabase free tier) — 30K+ maç hedefi için JSONB şart
+- **PostgreSQL** (Neon free tier — sınırsız egress, 0.5 GB depo) — 30K+ maç hedefi için JSONB şart
 - **Next.js App Router + TailwindCSS** frontend
 - **GitHub Actions** cron (günlük `run-pipeline` + gece `update-scores`)
-- **Railway** backend (Docker, `mcr.microsoft.com/playwright/python:v1.47.0-jammy`)
-- **Vercel** frontend (Next.js otomatik deploy, `BACKEND_URL` env var gerekli)
+- **Render.com** backend (Docker, `mcr.microsoft.com/playwright/python:v1.47.0-jammy`, free tier — 15dk uyku + cold start)
+- **Vercel** frontend (Next.js otomatik deploy, `BACKEND_URL=https://nortverse-backend.onrender.com`)
 - **Typer + Rich** CLI
 - Tamamen ücretsiz altyapı
 
@@ -859,296 +887,36 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-05-14 — Sprint 11 sonu, DB Alternatifi Araştırması Bekliyor)
+## Kaldığımız Yer (2026-09-15 — Sprint 13 sonu, Production CANLI)
 
-### 🚨 Aktif Sorun — Production Hâlâ Down
+### ✅ Production Durumu — CANLI
 
-- Supabase egress aşımı devam ediyor (Fair Use Policy %511); tüm DB istekleri 402
-- Oracle Cloud Always Free **bırakıldı** (hesap onayı / kart sorunu) — kullanıcı kararı
-- DB alternatifi (Neon, fly.io, Aiven free, vs.) **başka sohbette araştırılacak**
-- Bu sürede tüm GitHub Actions cron'ları DEVRE DIŞI; UptimeRobot Railway'i ping atmaya devam ediyor (uyku önler)
+4 aylık downtime sona erdi. Tam altyapı:
 
-### Sprint 8.10/8.10b/9/10/11 — Tamamlanan Hazırlıklar
-
-Production geri gelene kadar yapılabilecek her şey yapıldı:
-
-| Konu | Etki |
-|---|---|
-| Pattern C `tolerance=0.0` DB-side JSONB equality (Sprint 8.10) | 130 MB/çağrı → 50 KB (%99.96 azaltma) |
-| `/api/health.data_quality` → `/api/admin/quality` (Sprint 8.10) | UptimeRobot ping yükü 187 MB/gün → ~5 MB/gün |
-| GitHub Actions cron'ları devre dışı (8.10b) | Egress dönünce otomatik tetiklenip yine aşma yaratmaz |
-| Vercel SSR cache: 5dk fixture, 2dk results (8.10b) | Frontend çağrıları 5x azalır |
-| Backend `Cache-Control` middleware (8.10b) | CDN önüne alındığında origin call %80 düşer |
-| `connection.py` env-driven pool/cache (Sprint 9 1/n) | Oracle/Neon/her PostgreSQL'e tek env değişimiyle geçiş |
-| `Dockerfile` alembic upgrade head (Sprint 9 1/n) | Container açılışta schema otomatik güncel |
-| `/api/admin/quality` KRİTİK fix (Sprint 9 2/n) | `func` import eksik, NameError fırlatıyordu |
-| Repo temizlik + lint (Sprint 9 3/n) | ~60 MB, F-prefix bug'lar |
-| **Vitest birim test altyapısı (Sprint 10 + 11)** | Frontend test coverage sıfırdan kuruldu, **88 test** (confidence + combos + cart helpers + useCart hook) |
-| **Top Picks trend boost (Sprint 10 3/5)** | Sprint 8.8 trends → confidence formülüne kondu |
-| **URL fallback centralize (Sprint 10 4/5)** | `lib/env.ts` — next.config ve lib/api tek kaynaktan okur |
-| **Pattern recompute CLI + workflow (Sprint 10 5/5)** | `recompute-patterns` + haftalık cron şablonu (DB hazır olunca açılır) |
-| **pattern_stats.py cosmetic refactor (Sprint 11 1/4)** | E701/E702 13 lint bug temizliği — readability arttı |
-| **Typer 0.25 upgrade (Sprint 11 2/4)** | `--help` Click 8.3 ile uyumsuzluk düzeldi (Parameter.make_metavar bug) |
-| **useCart hook integration testi (Sprint 11 3/4)** | renderHook ile 14 ek test — addItem/idempotent/cleanup/storage event |
-| **Sticky bottom bar mobile (Sprint 11 4/4)** | Mobilde floating button yerine her zaman görünen özet bar (leg + prob + odds) |
-
----
-
-## Sıradaki Adım: DB Alternatifi Araştırması (Başka Sohbet)
-
-Production'ı geri ayağa kaldırmak için yeni bir DB sağlayıcısı seçilecek. Adaylar:
-
-| Aday | Bedava katmanı | Egress | Notlar |
-|---|---|---|---|
-| **Neon** | 0.5 GB depo + 191 saat compute/ay | Sınırsız | Postgres native, branching var, asyncpg uyumlu |
-| **Aiven Free** | 1 ay free trial sonrası ~5$/ay başlangıç | — | Free tier kısıtlı, Pro pahalı |
-| **fly.io Postgres** | 3 GB ücretsiz volume | Sınırsız | Self-managed, region seçimi var |
-| **Supabase Pro upgrade** | 25$/ay (kullanıcı reddetti) | 250 GB | Mevcut tüm veriyi korur |
-| **Self-hosted (lokal Docker)** | 0 | Sınırsız | Sürekli açık tutmak gerek |
-
-**Önerilen:** Neon (Postgres native + bedava + sınırsız egress + branching). Schema migration zinciri zaten Sprint 9 (1/n)'de hazır → tek env değişimi yeterli.
-
-Migration sonrası açılacak:
-1. GitHub Actions cron schedule (daily_pipeline.yml + recompute_patterns.yml)
-2. `prune-non-league --apply` — backup'tan gelen kupa temizliği (varsa)
-3. `self-test 2813084` — E2E doğrulama
-4. UptimeRobot zaten Railway'e ping atıyor, değişmez
-
-**Veri:** Supabase backup indirilebilirse direkt import; yoksa `build-multi-archive` ile yeniden topla (3-6 saat).
-
-> **Arşiv notu:** Bu sohbet öncesi Oracle Cloud Always Free için 10 adımlık detaylı migration yol haritası vardı (Ampere A1, schema migration, build-multi-archive, R2 backup, vs.). Oracle'da hesap/kart sorunu çıkınca vazgeçildi. Eski yol haritası git history'de `08ae36a` (Sprint 8.10 2/n) ve `fa89bd3` (Sprint 8.10b) commit'lerinde mevcut — Neon vs. seçilirse benzer adımlar uygulanır (alembic upgrade head zaten Sprint 9 1/n'de Dockerfile'a kondu).
-
-### Neden Oracle Cloud Always Free? (vazgeçildi, referans için)
-
-| Özellik | Oracle Always Free | Supabase Free |
+| Katman | Servis | Detay |
 |---|---|---|
-| RAM | **24 GB** (Ampere A1) | 0.5 GB |
-| CPU | **4 vCPU** ARM | 0.25 vCPU |
-| Disk | **200 GB** | 0.5 GB |
-| Egress | **10 TB/ay** (pratik sınırsız) | 5 GB/ay |
-| Maliyet | **0 ₺ ömür boyu** | 0 ₺ ama sınırlı |
-| Ücret çekimi | Hayır (kredi kartı sadece doğrulama) | — |
+| **Frontend** | Vercel | `https://nortverse.vercel.app` |
+| **Backend** | Render.com (free tier) | `https://nortverse-backend.onrender.com` |
+| **Veritabanı** | Neon PostgreSQL (free tier) | Sınırsız egress, 0.5 GB depo, 19.6 MB kullanımda |
+| **CI/CD** | GitHub Actions | `DATABASE_URL` secret güncellendi (cron hâlâ devre dışı) |
 
-### Migration Yol Haritası (10 Adım)
+**Render.com free tier kısıtları:** 15dk inaktivite → uyku (~30sn cold start), 512 MB RAM, Playwright timeout alıyor.
+**Neon free tier:** Sınırsız egress, 0.5 GB depo, `statement_cache_size=0` zorunlu.
 
-#### 1. Oracle Cloud Hesabı Açma
-- https://www.oracle.com/cloud/free/
-- "Start for free" → e-posta + kredi kartı doğrulama (ücret çekilmez, $0)
-- **Bölge seçimi:** Frankfurt (eu-frankfurt-1) veya Amsterdam → Türkiye latency ~30-50ms
-- Hesap onayı sonrası Cloud Console aç
 
-#### 2. Compute Instance Oluşturma (Ampere A1)
-- Compute → Instances → Create Instance
-- **Image:** Canonical Ubuntu 22.04 (ARM64-Server)
-- **Shape:** VM.Standard.A1.Flex → 4 OCPU + 24 GB RAM (Always Free hakkına dahil)
-- **Networking:** Yeni VCN + public subnet, public IP atansın
-- **SSH key:** kendi anahtarın yüklenir (Ed25519 önerili)
-- **Boot volume:** 200 GB
-- "Always Free Eligible" rozetine dikkat — bunu seçtiğinden emin ol
+### Sıradaki Adım: Sprint 14 — GitHub Actions Cron + Canlı Doğrulama
 
-#### 3. PostgreSQL 16 Kurulumu
-SSH ile bağlan (`ssh ubuntu@<PUBLIC_IP>`):
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y postgresql-16 postgresql-contrib ufw nginx certbot python3-certbot-nginx
-
-# PostgreSQL servisi
-sudo systemctl enable --now postgresql
-sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '<güçlü-şifre>';"
-
-# DB oluştur
-sudo -u postgres createdb nortverse
-sudo -u postgres psql -c "CREATE USER nortverse_app WITH PASSWORD '<app-şifre>';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE nortverse TO nortverse_app;"
-
-# Dış erişim için
-echo "listen_addresses = '*'" | sudo tee -a /etc/postgresql/16/main/postgresql.conf
-echo "host nortverse nortverse_app 0.0.0.0/0 scram-sha-256" | sudo tee -a /etc/postgresql/16/main/pg_hba.conf
-sudo systemctl restart postgresql
-```
-
-#### 4. Firewall (UFW + Oracle Cloud Security List)
-```bash
-# UFW (Ubuntu)
-sudo ufw allow OpenSSH
-sudo ufw allow 5432/tcp   # PostgreSQL
-sudo ufw allow 80/tcp     # HTTP (Let's Encrypt)
-sudo ufw allow 443/tcp    # HTTPS (opsiyonel API proxy)
-sudo ufw enable
-
-# Oracle Cloud Console: VCN → Security List → Ingress Rules
-# 5432 portunu Railway IP aralığından (veya 0.0.0.0/0 + güçlü şifre) aç
-```
-
-#### 5. Schema Migration Zinciri (yeni DB'de tek seferde)
-SSH bağlantısında veya `psql` ile yeni DB'ye bağlan, sırayla:
-
-```sql
--- 641438be3ff8 (initial schema): matches + temel kolonlar
--- c1b1b4cd333b: h2 skorları + kickoff_time
--- a3f9e2b1c4d5: fixture_cache tablosu
--- b7e4a2d8c901: 6 pattern JSONB kolonu
--- f5c8d2a1b394: trends JSONB kolonu
--- g4d2a7c9b815: deleted_at + audit_log
-
--- Pratik yol: alembic upgrade head (DATABASE_URL=Oracle bağlantısı ile)
-```
-
-Local'den:
-```bash
-cd backend
-DATABASE_URL="postgresql+asyncpg://nortverse_app:<şifre>@<PUBLIC_IP>:5432/nortverse" alembic upgrade head
-```
-
-#### 6. Veri Taşıma (3 alt seçenek)
-
-**6A. Eski Supabase'ten backup indirilebiliyorsa** (Egress aşımına rağmen backup indirme genelde bloklanmaz):
-```bash
-# Supabase Dashboard → eski proje → Database → Backups → Download .sql
-psql "postgresql://nortverse_app:<şifre>@<PUBLIC_IP>:5432/nortverse" < supabase_backup.sql
-```
-
-**6B. Backup indirilemiyorsa — Sıfırdan başla:**
-- Yeni DB boş olsun (sadece schema)
-- GitHub Actions cron'ları açıldığında `run-pipeline` her gün maç ekleyecek
-- 1-2 hafta sonra arşiv eski seviyede (~13K maç)
-- Backfill gereken pattern/trend kolonları organik dolar (idempotent upsert)
-
-**6C. `build-multi-archive` ile hızlandır:**
-- Local'den ana liglerin son 3 sezonunu yeniden scrape et:
-```bash
-cd backend
-DATABASE_URL="postgresql+asyncpg://nortverse_app:<şifre>@<PUBLIC_IP>:5432/nortverse" \
-  python -m app.cli.main build-multi-archive 36 78 88 87 60 --seasons 3
-```
-- 3-6 saatte ~5-10K maç birikir
-- ENG PR (36), Bundesliga (88), La Liga (87), Serie A (78), TUR D1 (60)
-
-#### 7. Railway Backend Bağlantısı
-Railway Dashboard → nortverse-production → Variables:
-- `DATABASE_URL` = `postgresql+asyncpg://nortverse_app:<şifre>@<PUBLIC_IP>:5432/nortverse`
-- (asyncpg URL şeması — `postgresql://` değil `postgresql+asyncpg://`)
-- Save → Railway otomatik yeniden deploy eder
-- `https://nortverse-production.up.railway.app/api/health` → `db_ok: true` görmeli
-
-#### 8. Smoke Test
-```bash
-# Lokal terminal:
-curl https://nortverse-production.up.railway.app/api/health | jq
-# beklenen: {"status":"ok","db_ok":true,...}
-
-curl https://nortverse-production.up.railway.app/api/analyze/2813084 | jq .skipped
-# beklenen: false (lig maçı, atlanmadı)
-
-# Eğer arşiv hazırsa:
-DATABASE_URL=... python -m app.cli.main self-test 2813084
-DATABASE_URL=... python -m app.cli.main audit-db
-```
-
-#### 9. GitHub Actions Cron'ları Yeniden Aç
-[`.github/workflows/daily_pipeline.yml`](github/workflows/daily_pipeline.yml) — yorum satırlı `schedule:` blokunu açığa çıkar:
-
-```yaml
-on:
-  schedule:
-    - cron: "0 5 * * *"    # 08:00 İstanbul — sabah analiz (run-pipeline)
-    - cron: "0 6 * * *"    # 09:00 İstanbul — yedek
-    - cron: "0 11 * * *"   # 14:00 İstanbul — update-scores
-    - cron: "0 15 * * *"   # 18:00 İstanbul — update-scores
-    - cron: "0 19 * * *"   # 22:00 İstanbul — update-scores
-    - cron: "30 21 * * *"  # 00:30 İstanbul — gece toplu
-    - cron: "0 23 * * *"   # 02:00 İstanbul — geç maçlar
-  workflow_dispatch: ...
-```
-
-GitHub Secrets → `DATABASE_URL` Oracle bağlantı string'iyle güncelle.
-
-#### 10. Otomatik Backup (Cloudflare R2 ücretsiz 10 GB)
-Oracle sunucuda crontab:
-```bash
-# /etc/cron.daily/pg_backup
-#!/bin/bash
-TIMESTAMP=$(date +%Y%m%d)
-pg_dump -h localhost -U postgres nortverse | gzip > /tmp/backup_$TIMESTAMP.sql.gz
-# rclone ile R2'ye gönder (Cloudflare R2 free tier 10GB)
-rclone copy /tmp/backup_$TIMESTAMP.sql.gz r2:nortverse-backups/
-# 30 gün eski olanları sil
-find /tmp/backup_*.sql.gz -mtime +30 -delete
-```
-
-### Migration Sonrası Kontrol Listesi
-
-- [ ] `/api/health` → 200 OK, `db_ok: true`
-- [ ] `/api/fixture` → bugünün maçları
-- [ ] `/api/analyze/2813084` → skipped: false, ft_b match_count > 0
-- [ ] `audit-db` → quality_score > 80
-- [ ] GitHub Actions cron manuel test → run-pipeline başarılı
-- [ ] Frontend `/bulten`, `/sonuclar`, `/analyze/<id>` çalışıyor
-- [ ] Otomatik backup script test
-- [ ] UptimeRobot ping yeşil
-
-### Bilinen Riskler
-
-- **Oracle hesap onayı bazen takılır:** "validating account" durumunda 24-48 saat sürebilir. Başka kart denemek veya destek bildirmek
-- **PostgreSQL public expose güvenliği:** Güçlü şifre + scram-sha-256 + IP whitelist (Railway IP'leri) — minimum
-- **Backup yoksa data kaybı:** Pattern arşivi 1-2 haftada organik birikir; kritik veri yok
-- **DNS ve Railway env:** DATABASE_URL public IP'ye bağlı, Oracle reboot/IP değişimi → reserved IP kullan (Always Free)
-
-### Önemli Commit Zinciri
-
-**Sprint 11 oturumu (kalan DB-bağımsız iyileştirmeler — 2026-05-14):**
-- `f77907e` Sprint 11 (1/4) — pattern_stats.py E701/E702 cosmetic refactor
-- `5600e33` Sprint 11 (2/4) — Typer 0.25 upgrade (--help TypeError fix)
-- `531c72d` Sprint 11 (3/4) — useCart hook integration testi (14 test, 88 toplam)
-- (4/4 bu commit) — Sepet sticky bottom bar (mobile) + CLAUDE.md
-
-**Sprint 10 oturumu (DB-bağımsız kod iyileştirme — 2026-05-13):**
-- `84c0761` Sprint 10 (1/5) — Vitest altyapı + confidence/combos testleri (48 test)
-- `a638389` Sprint 10 (2/5) — cart.ts helper testleri (14 test, 62 toplam)
-- `3c556e2` Sprint 10 (3/5) — Top Picks trend boost (TrendsData → confidence)
-- `5a2d181` Sprint 10 (4/5) — URL fallback centralize (lib/env.ts)
-- `22f845e` Sprint 10 (5/5) — Pattern recompute CLI + haftalık workflow + CLAUDE.md
-
-**Sprint 9 oturumu (Oracle hazırlığı + kritik fix + temizlik):**
-- `057a585` Sprint 9 (1/n) — connection.py env-driven + Dockerfile alembic upgrade head
-- `3a01d7e` Sprint 9 (2/n) — KRİTİK `/api/admin/quality` func import eksikti
-- `ae1c394` Sprint 9 (3/n) — Repo temizlik ~60 MB + F-prefix lint cleanup
-
-**Sprint 8.10 + 8.10b:**
-- `d9c8c4d` Sprint 8.10 ACİL — Pattern C DB-side JSONB equality (%99.96 azaltma)
-- `fa89bd3` Sprint 8.10b — Cron disable + Vercel cache 5x + Cache-Control middleware
-
-**Sprint 8.9:**
-- `6ab2821` Lig filtresi + Pattern C tam eşleşme
-- `72d4ab1` Soft delete + audit_log + pre-write validation
-- `2b7274b` 5 CLI komutu + 52 pytest + /api/health quality
-
-**Sprint 8.4-8.8:**
-- `cd49f4e` Sprint 8.4 — 3 katman mimari · `9203b3a` IY/2Y filtre
-- `92d95c9` Sprint 8.5 — Kombinasyon kuponu · `13a9db3` Sprint 8.6 — Dinamik eşik
-- `713cf79` Sprint 8.7 — Bahis sepeti · `e994468` Sprint 8.8 — Trendler
-
-### Bu Sohbetten Sonraki Yapılacaklar
-
-**Acil (production'ı geri aç):**
-1. **DB alternatifi seç + migration** — başka sohbette (Neon önerili)
-2. **GitHub Actions cron schedule yeniden aç** — daily_pipeline + recompute_patterns
-
-**Migration sonrası temizlik:**
-3. `prune-non-league --apply` — backup'tan gelen kupa maçları (varsa)
-4. `self-test 2813084` — E2E doğrulama
-5. `audit-db` — quality_score > 80 kontrol
-
-**Kod iyileştirme (Sprint 12+):**
-6. **`_flag()` helper'ı Annotated[bool, ...] pattern'ine migrate et** (Typer 0.25'te native, 13 çağrı yerini değiştirmek)
-7. **Component test ve E2E** (Vitest component + Playwright) — sticky bar gibi UI'lar için
-8. **Joint olasılık ML correction** — combo/sepet'te bağımsızlık varsayımı yerine korelasyon matrisi
-9. **Canlı maç & WebSocket** — uzun vade
-10. **Auth/Premium** — kullanıcı şu an istemiyor
+1. **GitHub Actions cron schedule yeniden aç** — `daily_pipeline.yml` + `recompute_patterns.yml`
+2. **Fixture cache daily popülasyon çözümü** — Render Playwright çalıştıramıyor → GitHub Actions veya local pipeline
+3. **UptimeRobot URL güncelle** — `https://nortverse-backend.onrender.com/api/health`
+4. **Canlı doğrulama** — `/bulten`, `/sonuclar`, analiz sayfası, mobil test
 
 ### Bilinen Açık Konular
 
+- **Render Playwright timeout:** Free tier 512 MB RAM + 20sn limit → fixture_cache populate edilemiyor; local script veya GitHub Actions gerekli
 - **Joint olasılık bağımsızlık varsayımı:** Combo/sepet `∏ p` — gerçekte korelasyon var; ML correction gelecek sprint
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
-- **Frontend component/E2E test:** Birim test 88 case yeşil; component test ve E2E (Playwright) henüz yok — sticky bar gibi UI davranışları manuel doğrulamayla geçildi
-- **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir (pre-existing, Linux/Mac'te yok)
+- **Frontend component/E2E test:** Birim test 146 case yeşil; component test ve E2E henüz yok
+- **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir
+
+> **Not:** Eski Oracle Cloud migration yol haritası git history'de `08ae36a` ve `fa89bd3` commit'lerinde mevcut — artık geçersiz (Neon'a geçildi).
