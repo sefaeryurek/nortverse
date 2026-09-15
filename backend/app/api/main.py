@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.analysis import analyze_match, check_match_filters
+from app.analysis.correlation import compute_poisson_correlations
 from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
 from app.analysis.persist import PatternComputationError, StalePatternWrite, compute_all_patterns, update_match_patterns
@@ -948,3 +949,15 @@ async def get_match(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> MatchSumm
         ft_scores_x=row.ft_scores_x,
         ft_scores_2=row.ft_scores_2,
     )
+
+
+_corr_cache: dict[str, float] | None = None
+
+
+@app.get("/api/correlations")
+async def get_correlations() -> dict[str, float]:
+    """Poisson model korelasyon faktörleri (statik, hesaplama bir kez yapılır)."""
+    global _corr_cache
+    if _corr_cache is None:
+        _corr_cache = compute_poisson_correlations()
+    return _corr_cache
