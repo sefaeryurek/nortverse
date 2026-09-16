@@ -7,6 +7,8 @@ import pytest
 
 from app.analysis import persist
 from app.api import main as api
+from app.api import routes_analysis
+from app.api import services as svc
 
 
 async def compute():
@@ -65,27 +67,26 @@ async def test_write_failure_propagates_to_retry_caller(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_failed_refresh_is_503_and_preserves_cached_result(monkeypatch):
-    monkeypatch.setattr(api, "_analysis_cache", {})
-    monkeypatch.setattr(api, "_analysis_cached_at", {})
-    # Seed directly; the failing computation must not attempt a cache write.
-    api._analysis_cache["123"] = "previous"
-    monkeypatch.setattr(api, "_do_analyze", AsyncMock(
+    monkeypatch.setattr(svc, "analysis_cache", {})
+    monkeypatch.setattr(svc, "_analysis_cached_at", {})
+    svc.analysis_cache["123"] = "previous"
+    monkeypatch.setattr(routes_analysis, "do_analyze", AsyncMock(
         side_effect=persist.PatternComputationError("sensitive internal error")))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.app), base_url="http://test") as client:
         response = await client.post("/api/analyze/123")
     assert response.status_code == 503
     assert response.headers["cache-control"] == "no-store"
     assert "sensitive" not in response.text
-    assert api._analysis_cache["123"] == "previous"
+    assert svc.analysis_cache["123"] == "previous"
 
 
 @pytest.mark.asyncio
 async def test_background_analysis_waits_for_foreground_refresh(monkeypatch):
     worker = AsyncMock(return_value=True)
-    monkeypatch.setattr(api, "_analyze_db_only_locked", worker)
-    lock = api._get_or_make_lock("123")
+    monkeypatch.setattr(svc, "_analyze_db_only_locked", worker)
+    lock = svc.get_or_make_lock("123")
     async with lock:
-        task = asyncio.create_task(api._analyze_db_only("123"))
+        task = asyncio.create_task(svc._analyze_db_only("123"))
         await asyncio.sleep(0)
         worker.assert_not_called()
         assert not task.done()

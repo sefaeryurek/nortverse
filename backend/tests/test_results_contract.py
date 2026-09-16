@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.api import main as api
+from app.api import routes_results as rr
 from app.db.models import Match
 
 
@@ -28,8 +28,8 @@ async def test_results_keep_scheduled_and_unconfirmed_matches(monkeypatch):
     async def fake_session():
         yield session
 
-    monkeypatch.setattr(api, "get_session", fake_session)
-    matches = await api.get_results("2026-09-14")
+    monkeypatch.setattr(rr, "get_session", fake_session)
+    matches = await rr.get_results("2026-09-14")
     assert [m.status for m in matches] == ["scheduled", "pending", "pending", "finished"]
     assert matches[-1].result == "1"
     assert all(m.result is None for m in matches[:-1])

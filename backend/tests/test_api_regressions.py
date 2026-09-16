@@ -6,14 +6,15 @@ import httpx
 import pytest
 
 from app.api import main as api
+from app.api import services as svc
 
 
 def test_analysis_cache_expires(monkeypatch):
-    monkeypatch.setattr(api.time, "monotonic", lambda: 1000)
-    api._cache_put("ttl", "old analysis")
-    assert api._cache_get("ttl") == "old analysis"
-    monkeypatch.setattr(api.time, "monotonic", lambda: 1000 + api.ANALYSIS_CACHE_TTL)
-    assert api._cache_get("ttl") is None
+    monkeypatch.setattr(svc.time, "monotonic", lambda: 1000)
+    svc.cache_put("ttl", "old analysis")
+    assert svc.cache_get("ttl") == "old analysis"
+    monkeypatch.setattr(svc.time, "monotonic", lambda: 1000 + svc.ANALYSIS_CACHE_TTL)
+    assert svc.cache_get("ttl") is None
 
 
 @pytest.mark.asyncio
@@ -36,19 +37,19 @@ async def test_fixture_bad_date_not_cached():
 
 @pytest.mark.asyncio
 async def test_live_lock_survives_cache_eviction(monkeypatch):
-    monkeypatch.setattr(api, "_CACHE_MAX", 1)
-    api._analysis_cache.clear()
-    lock = api._get_or_make_lock("1")
+    monkeypatch.setattr(svc, "_CACHE_MAX", 1)
+    svc.analysis_cache.clear()
+    lock = svc.get_or_make_lock("1")
     async with lock:
-        api._cache_put("1", None)
-        api._cache_put("2", None)
-        assert api._get_or_make_lock("1") is lock
-    api._analysis_cache.clear()
+        svc.cache_put("1", None)
+        svc.cache_put("2", None)
+        assert svc.get_or_make_lock("1") is lock
+    svc.analysis_cache.clear()
 
 
 @pytest.mark.asyncio
 async def test_concurrent_analysis_scrapes_once(monkeypatch):
-    api._analysis_cache.clear()
+    svc.analysis_cache.clear()
     session = AsyncMock()
     from unittest.mock import MagicMock
     result = MagicMock()
@@ -64,8 +65,8 @@ async def test_concurrent_analysis_scrapes_once(monkeypatch):
         return "result"
 
     mock = AsyncMock(side_effect=scrape)
-    monkeypatch.setattr(api, "get_session", fake_session)
-    monkeypatch.setattr(api, "_do_analyze", mock)
-    assert await asyncio.gather(*(api._analyze_and_cache("123") for _ in range(10))) == ["result"] * 10
+    monkeypatch.setattr(svc, "get_session", fake_session)
+    monkeypatch.setattr(svc, "do_analyze", mock)
+    assert await asyncio.gather(*(svc.analyze_and_cache("123") for _ in range(10))) == ["result"] * 10
     assert mock.await_count == 1
-    api._analysis_cache.clear()
+    svc.analysis_cache.clear()

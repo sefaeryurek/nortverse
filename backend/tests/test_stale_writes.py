@@ -8,7 +8,7 @@ from sqlalchemy.dialects import postgresql
 from app.analysis import analyze_match, persist
 from app.models import MatchRawData
 from app.pipeline import runner
-from app.api import main as api
+from app.api import services as svc
 from app.db.models import Match
 from fastapi import HTTPException
 
@@ -64,10 +64,10 @@ async def test_older_analysis_upsert_is_rejected_without_retries(monkeypatch):
 async def test_changed_analysis_does_not_return_stale_backfill(monkeypatch):
     version = datetime(2026, 9, 14, tzinfo=timezone.utc)
     row = Match(match_id="123", home_team="Home", away_team="Away", ft_scores_1=[], analyzed_at=version)
-    monkeypatch.setattr(api, "compute_all_patterns", AsyncMock(return_value={}))
+    monkeypatch.setattr(svc, "compute_all_patterns", AsyncMock(return_value={}))
     write = AsyncMock(side_effect=persist.StalePatternWrite("changed"))
-    monkeypatch.setattr(api, "update_match_patterns", write)
+    monkeypatch.setattr(svc, "update_match_patterns", write)
     with pytest.raises(HTTPException) as error:
-        await api._build_from_db(row)
+        await svc.build_from_db(row)
     assert error.value.status_code == 409
     write.assert_awaited_once_with("123", {}, expected_analyzed_at=version)

@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api import main as api
+from app.api import routes_fixture as rf
+from app.api import services as svc
 
 
 @pytest.mark.asyncio
@@ -18,12 +19,12 @@ async def test_invalid_cache_recovers_by_fetching_fixture(monkeypatch, payload):
     async def get_session():
         yield session
 
-    monkeypatch.setattr(api, "get_session", get_session)
-    monkeypatch.setattr(api, "_fixture_cache", {})
-    monkeypatch.setattr(api, "_bg_queue", None)
+    monkeypatch.setattr(rf, "get_session", get_session)
+    monkeypatch.setattr(rf, "fixture_cache", {})
+    monkeypatch.setattr(svc, "bg_queue", None)
     fetch = AsyncMock(return_value=[])
-    monkeypatch.setattr(api, "fetch_fixture", fetch)
-    assert await api.fixture(None) == []
+    monkeypatch.setattr(rf, "fetch_fixture", fetch)
+    assert await rf.fixture(None) == []
     fetch.assert_awaited_once()
     session.merge.assert_awaited_once()
 
@@ -38,10 +39,10 @@ async def test_legacy_naive_cache_timestamp_uses_utc(monkeypatch):
     async def get_session():
         yield session
 
-    monkeypatch.setattr(api, "get_session", get_session)
-    monkeypatch.setattr(api, "_fixture_cache", {})
-    monkeypatch.setattr(api, "_bg_queue", None)
+    monkeypatch.setattr(rf, "get_session", get_session)
+    monkeypatch.setattr(rf, "fixture_cache", {})
+    monkeypatch.setattr(svc, "bg_queue", None)
     fetch = AsyncMock()
-    monkeypatch.setattr(api, "fetch_fixture", fetch)
-    assert await api.fixture(None) == []
+    monkeypatch.setattr(rf, "fetch_fixture", fetch)
+    assert await rf.fixture(None) == []
     fetch.assert_not_called()

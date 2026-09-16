@@ -1,0 +1,340 @@
+"""API iş mantığı: cache, analiz, arka plan kuyruğu.
+
+Route modülleri bu modülden ortak state ve yardımcıları import eder.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from collections import OrderedDict
+from typing import Optional
+from weakref import WeakValueDictionary
+
+from fastapi import HTTPException
+from sqlalchemy import select
+
+from app.api.schemas import AnalyzeResponse, PeriodOut
+from app.analysis import analyze_match, check_match_filters
+from app.analysis.pattern_stats import PatternResult
+from app.analysis.persist import (
+    StalePatternWrite,
+    compute_all_patterns,
+    update_match_patterns,
+)
+from app.analysis.trends import TrendsData, compute_trends
+from app.db.connection import get_session
+from app.db.models import Match
+from app.scraper import fetch_match_detail
+
+log = logging.getLogger(__name__)
+
+# ─── Sabitler ────────────────────────────────────────────────────────────────
+
+_CACHE_MAX = 500
+ANALYSIS_CACHE_TTL = 600.0
+ANALYSIS_TIMEOUT = 90.0
+FIXTURE_CACHE_TTL = 600.0
+
+# ─── Cache & eşzamanlılık ────────────────────────────────────────────────────
+
+_analysis_cached_at: dict[str, float] = {}
+analysis_cache: OrderedDict[str, AnalyzeResponse] = OrderedDict()
+_analysis_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+
+fixture_cache: dict[str, tuple[float, list]] = {}
+
+bg_queue: asyncio.Queue[str] | None = None
+_bg_queued: set[str] = set()
+
+
+def cache_put(match_id: str, value: AnalyzeResponse) -> None:
+    """LRU semantiği: ekle, en sona taşı, sınırı aşarsa en eskiyi at."""
+    analysis_cache[match_id] = value
+    _analysis_cached_at[match_id] = time.monotonic()
+    analysis_cache.move_to_end(match_id)
+    while len(analysis_cache) > _CACHE_MAX:
+        evicted, _ = analysis_cache.popitem(last=False)
+        _analysis_cached_at.pop(evicted, None)
+
+
+def cache_get(match_id: str) -> AnalyzeResponse | None:
+    if match_id not in analysis_cache:
+        return None
+    if time.monotonic() - _analysis_cached_at.get(match_id, 0) >= ANALYSIS_CACHE_TTL:
+        analysis_cache.pop(match_id, None)
+        _analysis_cached_at.pop(match_id, None)
+        return None
+    analysis_cache.move_to_end(match_id)
+    return analysis_cache[match_id]
+
+
+def get_or_make_lock(match_id: str) -> asyncio.Lock:
+    """İşlem ve bekleyenleri yaşadığı sürece aynı lock'u döndür."""
+    lock = _analysis_locks.get(match_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _analysis_locks[match_id] = lock
+    return lock
+
+
+# ─── DB-first yardımcıları ───────────────────────────────────────────────────
+
+def _pat(blob: dict | None) -> Optional[PatternResult]:
+    """JSONB → PatternResult; None ise None döner."""
+    if not blob:
+        return None
+    try:
+        return PatternResult.model_validate(blob)
+    except Exception as exc:
+        log.warning("Saklı pattern parse edilemedi: %s", exc)
+        return None
+
+
+def _trends_parse(blob: dict | None) -> Optional[TrendsData]:
+    """JSONB → TrendsData; None ise None döner."""
+    if not blob:
+        return None
+    try:
+        return TrendsData.model_validate(blob)
+    except Exception as exc:
+        log.warning("Saklı trends parse edilemedi: %s", exc)
+        return None
+
+
+async def build_from_db(row: Match) -> AnalyzeResponse | None:
+    """DB satırından AnalyzeResponse üret.
+
+    HIZLI YOL: 6 pattern kolonu da doluysa doğrudan deserialize → ~50ms.
+    YAVAŞ YOL (lazy backfill): biri eksikse runtime hesabı yap + DB'ye geri yaz
+    → bu maç için bir kerelik 1-3sn, sonraki tıklar hızlı.
+    """
+    if row.ft_scores_1 is None:
+        return None
+
+    ht_s1 = row.ht_scores_1 or []
+    ht_sx = row.ht_scores_x or []
+    ht_s2 = row.ht_scores_2 or []
+    h2_s1 = row.h2_scores_1 or []
+    h2_sx = row.h2_scores_x or []
+    h2_s2 = row.h2_scores_2 or []
+    ft_s1 = row.ft_scores_1 or []
+    ft_sx = row.ft_scores_x or []
+    ft_s2 = row.ft_scores_2 or []
+    ft_ratios = row.ft_all_ratios or {}
+    mid = row.match_id
+
+    pattern_blobs = (
+        row.pattern_ht_b, row.pattern_ht_c,
+        row.pattern_h2_b, row.pattern_h2_c,
+        row.pattern_ft_b, row.pattern_ft_c,
+    )
+    if all(p is not None for p in pattern_blobs):
+        log.debug("Hızlı yol — saklı pattern'ler kullanıldı: %s", mid)
+        ht_b, ht_c = _pat(row.pattern_ht_b), _pat(row.pattern_ht_c)
+        h2_b, h2_c = _pat(row.pattern_h2_b), _pat(row.pattern_h2_c)
+        ft_b, ft_c = _pat(row.pattern_ft_b), _pat(row.pattern_ft_c)
+    else:
+        log.info("Yavaş yol — pattern eksik, hesaplanıyor + DB'ye yazılıyor: %s", mid)
+        patterns = await compute_all_patterns(
+            match_id=mid,
+            ht_scores=(ht_s1, ht_sx, ht_s2),
+            h2_scores=(h2_s1, h2_sx, h2_s2),
+            ft_scores=(ft_s1, ft_sx, ft_s2),
+            ft_ratios=ft_ratios,
+        )
+        try:
+            await update_match_patterns(mid, patterns, expected_analyzed_at=row.analyzed_at)
+        except StalePatternWrite:
+            raise HTTPException(409, "Analiz bu sırada güncellendi. Lütfen yeniden deneyin.")
+        except Exception:
+            log.warning("Lazy backfill kaydedilemedi [%s]; hesaplanan yanıt kullanılacak", mid)
+
+        ht_b, ht_c = _pat(patterns["pattern_ht_b"]), _pat(patterns["pattern_ht_c"])
+        h2_b, h2_c = _pat(patterns["pattern_h2_b"]), _pat(patterns["pattern_h2_c"])
+        ft_b, ft_c = _pat(patterns["pattern_ft_b"]), _pat(patterns["pattern_ft_c"])
+
+    return AnalyzeResponse(
+        match_id=row.match_id,
+        home_team=row.home_team,
+        away_team=row.away_team,
+        league_code=row.league_code or "",
+        season=row.season or "",
+        ht=PeriodOut(scores_1=ht_s1, scores_x=ht_sx, scores_2=ht_s2),
+        half2=PeriodOut(scores_1=h2_s1, scores_x=h2_sx, scores_2=h2_s2),
+        ft=PeriodOut(scores_1=ft_s1, scores_x=ft_sx, scores_2=ft_s2),
+        ht_b=ht_b, ht_c=ht_c,
+        h2_b=h2_b, h2_c=h2_c,
+        ft_b=ft_b, ft_c=ft_c,
+        trends=_trends_parse(row.trends),
+    )
+
+
+# ─── Analiz orchestration ───────────────────────────────────────────────────
+
+async def _analyze_db_only(match_id: str) -> bool:
+    async with get_or_make_lock(match_id):
+        return await _analyze_db_only_locked(match_id)
+
+
+async def _analyze_db_only_locked(match_id: str) -> bool:
+    """Sadece DB hit denemesi — Playwright YOK."""
+    if cache_get(match_id) is not None:
+        return True
+    try:
+        async with get_session() as session:
+            row = (await session.execute(
+                select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+            )).scalar_one_or_none()
+        if row is None:
+            return False
+        response = await build_from_db(row)
+        if response is None:
+            return False
+        cache_put(match_id, response)
+        return True
+    except Exception as exc:
+        log.warning("DB-only analiz başarısız [%s]: %s", match_id, exc)
+        return False
+
+
+async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
+    """DB kontrol et → bulursa B/C hesapla (hızlı). Yoksa Playwright scrape (yavaş)."""
+    cached = cache_get(match_id)
+    if cached is not None:
+        return cached
+    lock = get_or_make_lock(match_id)
+    async with lock:
+        cached = cache_get(match_id)
+        if cached is not None:
+            return cached
+
+        db_row = None
+        try:
+            async with get_session() as session:
+                db_row = (
+                    await session.execute(
+                        select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                    )
+                ).scalar_one_or_none()
+        except Exception as exc:
+            log.warning("Analiz DB okunamadı [%s]: %s", match_id, exc)
+
+        if db_row is not None:
+            response = await build_from_db(db_row)
+            if response is not None:
+                log.info("DB hit — anlık: %s", match_id)
+                cache_put(match_id, response)
+                return response
+
+        log.info("DB miss — Playwright scrape: %s", match_id)
+        response = await do_analyze(match_id)
+        cache_put(match_id, response)
+        return response
+
+
+async def do_analyze(match_id: str) -> AnalyzeResponse:
+    """Playwright ile scrape + analiz + DB'ye kaydet."""
+    raw = await fetch_match_detail(match_id)
+    check = check_match_filters(raw)
+
+    if not check.passed:
+        return AnalyzeResponse(
+            match_id=match_id,
+            home_team=raw.home_team,
+            away_team=raw.away_team,
+            league_code=raw.league_code or "",
+            season="",
+            ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+            half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+            ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+            skipped=True,
+            skip_reason=check.reason.value if check.reason else None,
+        )
+
+    result = analyze_match(raw)
+    patterns = await compute_all_patterns(
+        match_id=match_id,
+        ht_scores=(result.ht.scores_1, result.ht.scores_x, result.ht.scores_2),
+        h2_scores=(result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
+        ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
+        ft_ratios=result.ft.all_ratios,
+    )
+
+    try:
+        from app.pipeline.runner import StaleAnalysisWrite, _upsert as _persist_full
+        await _persist_full(result, raw, patterns)
+    except StalePatternWrite:
+        raise HTTPException(409, "Daha güncel bir analiz var. Lütfen yeniden deneyin.")
+    except Exception as exc:
+        log.error(
+            "Maç DB'ye kaydedilemedi (sonraki ziyarette tekrar Playwright açılacak) [%s]: %s",
+            match_id, exc, exc_info=True,
+        )
+
+    try:
+        trends_data: Optional[TrendsData] = compute_trends(raw)
+    except Exception as exc:
+        log.warning("Trends hesaplanamadı [%s]: %s", match_id, exc)
+        trends_data = None
+
+    return AnalyzeResponse(
+        match_id=result.match_id,
+        home_team=result.home_team,
+        away_team=result.away_team,
+        league_code=result.league_code,
+        season=result.season,
+        ht=PeriodOut(scores_1=result.ht.scores_1, scores_x=result.ht.scores_x, scores_2=result.ht.scores_2),
+        half2=PeriodOut(scores_1=result.half2.scores_1, scores_x=result.half2.scores_x, scores_2=result.half2.scores_2),
+        ft=PeriodOut(scores_1=result.ft.scores_1, scores_x=result.ft.scores_x, scores_2=result.ft.scores_2),
+        ht_b=_pat(patterns["pattern_ht_b"]), ht_c=_pat(patterns["pattern_ht_c"]),
+        h2_b=_pat(patterns["pattern_h2_b"]), h2_c=_pat(patterns["pattern_h2_c"]),
+        ft_b=_pat(patterns["pattern_ft_b"]), ft_c=_pat(patterns["pattern_ft_c"]),
+        trends=trends_data,
+    )
+
+
+# ─── Arka plan kuyruğu ───────────────────────────────────────────────────────
+
+def init_bg_queue() -> None:
+    global bg_queue
+    bg_queue = asyncio.Queue()
+
+
+def shutdown_bg_queue() -> None:
+    global bg_queue
+    _bg_queued.clear()
+    bg_queue = None
+
+
+async def bg_worker() -> None:
+    """Bülten yüklenince DB'de hazır olan maçların cache'ini ısıtır.
+
+    KRİTİK: Sadece DB-hit dener; Playwright AÇMAZ.
+    """
+    assert bg_queue is not None
+    while True:
+        match_id = await bg_queue.get()
+        try:
+            ok = await _analyze_db_only(match_id)
+            if ok:
+                log.info("Arka plan DB-cache hazırlandı: %s", match_id)
+            else:
+                log.debug("Arka plan: DB'de yok, atlandı (foreground tetikleyecek): %s", match_id)
+        except Exception as exc:
+            log.warning("Arka plan DB-cache hatası [%s]: %s", match_id, exc)
+        finally:
+            _bg_queued.discard(match_id)
+            bg_queue.task_done()
+
+
+def enqueue_bg_analysis(matches: list) -> None:
+    """Arka plan analiz kuyruğuna maçları ekler."""
+    if bg_queue is None:
+        return
+    for m in matches:
+        if cache_get(m.match_id) is None and m.match_id not in _bg_queued:
+            _bg_queued.add(m.match_id)
+            bg_queue.put_nowait(m.match_id)
+    log.info("Arka plan kuyruğu: %d bekleyen maç", bg_queue.qsize())
