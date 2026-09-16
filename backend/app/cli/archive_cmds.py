@@ -58,7 +58,6 @@ def build_archive_cmd(
                         check = check_match_filters(raw)
                         if not check.passed:
                             stats["skipped"] += 1
-                            stats["done"] += 1
                             return
 
                         result = analyze_match(raw, season=s)
@@ -159,7 +158,6 @@ def build_multi_archive_cmd(
                                 check = check_match_filters(raw)
                                 if not check.passed:
                                     stats["skipped"] += 1
-                                    stats["done"] += 1
                                     return
                                 result = analyze_match(raw, season=_season)
                                 await _upsert(result, raw)
