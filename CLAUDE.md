@@ -379,10 +379,9 @@ python -m app.cli.main run-pipeline
 Bu komut sabah çalıştırıldığında bugünün tüm maçlarını scrape edip DB'ye yazar. Gün içinde kullanıcılar maçlara tıkladığında **Playwright hiç açılmaz**, DB'den 1-3sn'de gelir.
 
 **GitHub Actions otomatik çalışır** (`.github/workflows/daily_pipeline.yml`):
-- `0 5 * * *` → 08:00 İstanbul → `run-pipeline` (sabah analiz, birinci deneme)
-- `0 6 * * *` → 09:00 İstanbul → `run-pipeline` (yedek; 08:00 cron kaçırırsa)
-- `30 21 * * *` → 00:30 İstanbul → `update-scores` (gece skor güncelleme)
-- `0 23 * * *` → 02:00 İstanbul → `update-scores` (geç maçlar)
+- `0 5 * * *` → 08:00 İstanbul → `run-pipeline` (sabah analiz)
+- `0 19 * * *` → 22:00 İstanbul → `update-scores` (akşam skor güncelleme)
+- `30 21 * * *` → 00:30 İstanbul → `update-scores` (gece geç maçlar)
 
 **Not:** `_score_updater` task'i Sprint 7 sırasında kaldırıldı (Playwright fırtınası sebebiyle). Skor güncelleme tek başına gece cron'una bırakıldı.
 
@@ -1086,7 +1085,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Backend Cache-Control middleware (Sprint 8.10b):** `app/api/main.py` `add_cache_headers` middleware'i — `/api/fixture` (5dk), `/api/results` (2dk), `/api/matches` (5dk), `/api/health` (30sn) için `Cache-Control: public, s-maxage=N, stale-while-revalidate=60` header'ları ekler. Cloudflare CDN önüne alındığında edge cache çalışır → origin call (Render → DB) %80 azalır. Vercel `revalidate` SSR cache'inden farklı, ortogonal: birlikte çalışırlar.
 
-- **GitHub Actions cron'ları aktif (Sprint 14):** `.github/workflows/daily_pipeline.yml` 7 cron entry (08:00/09:00 pipeline + 14:00/18:00/22:00/00:30/02:00 update-scores), `recompute_patterns.yml` Pazar 03:00 İstanbul. Sprint 8.10b'de Supabase egress aşımı yüzünden kapatılmıştı, Neon geçişi sonrası yeniden açıldı.
+- **GitHub Actions cron'ları aktif (Sprint 14.1):** `.github/workflows/daily_pipeline.yml` 3 cron entry (08:00 pipeline + 22:00/00:30 update-scores), `recompute_patterns.yml` aylık (her ayın 1'i 03:00 İstanbul). Neon kota optimizasyonu: 7→3 cron, haftalık→aylık recompute. Column pruning ile birlikte tahmini egress 3-4 GB/ay → 100-300 MB/ay.
 
 - **`run_pipeline` fixture_cache yazıyor (Sprint 14):** Pipeline fixture'ları çektikten sonra `fixture_cache` tablosunu da dolduruyor. Render free tier Playwright çalıştıramadığı için bu kritik — GitHub Actions'ta pipeline çalışınca `/api/fixture` cache'den döner, Playwright'a gerek kalmaz.
 
@@ -1157,7 +1156,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | **Frontend** | Vercel | `https://nortverse.vercel.app` |
 | **Backend** | Render.com (free tier) | `https://nortverse-backend.onrender.com` |
 | **Veritabanı** | Neon PostgreSQL (free tier) | Sınırsız egress, 0.5 GB depo, 19.6 MB kullanımda |
-| **CI/CD** | GitHub Actions | 7 cron aktif (2× pipeline + 5× update-scores) + haftalık recompute |
+| **CI/CD** | GitHub Actions | 3 cron aktif (1× pipeline + 2× update-scores) + aylık recompute |
 
 **Render.com free tier kısıtları:** 15dk inaktivite → uyku (~30sn cold start), 512 MB RAM, Playwright timeout alıyor.
 **Neon free tier:** Sınırsız egress, 0.5 GB depo, `statement_cache_size=0` zorunlu.

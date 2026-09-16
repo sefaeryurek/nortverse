@@ -61,8 +61,12 @@ async def find_pattern_b_matches(
         ]
         if exclude_match_id:
             filters.append(Match.match_id != exclude_match_id)
-        stmt = select(Match).where(*filters)
-        rows = (await session.execute(stmt)).scalars().all()
+        stmt = select(
+            Match.actual_ft_home, Match.actual_ft_away,
+            Match.actual_ht_home, Match.actual_ht_away,
+            Match.actual_h2_home, Match.actual_h2_away,
+        ).where(*filters)
+        rows = (await session.execute(stmt)).all()
 
     if len(rows) < min_matches:
         log.info(

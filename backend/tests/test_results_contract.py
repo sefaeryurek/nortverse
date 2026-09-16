@@ -20,7 +20,7 @@ async def test_results_keep_scheduled_and_unconfirmed_matches(monkeypatch):
                 (now - timedelta(hours=4), 2, 1),
             ])]
     result = MagicMock()
-    result.scalars.return_value.all.return_value = rows
+    result.all.return_value = rows
     session = AsyncMock()
     session.execute.return_value = result
 

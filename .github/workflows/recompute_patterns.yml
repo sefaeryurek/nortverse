@@ -3,11 +3,11 @@ name: Pattern Recompute (Haftalık)
 # Tüm matches tablosunda Pattern B/C alanlarını yeniden hesaplar.
 # Sprint 8 lazy backfill ile yan yana çalışır — bu workflow toplu güncelleme yapar.
 #
-# Sprint 14 — Haftalık recompute GEÇİCİ DEVRE DIŞI (Neon data transfer kota aşımı)
+# Sprint 14.1 — Aylık recompute (Neon kota optimizasyonu: haftalık→aylık)
 
 on:
-  # schedule:
-  #   - cron: "0 0 * * 0"   # Her Pazar 03:00 İstanbul (UTC 00:00) — düşük yük zamanı
+  schedule:
+    - cron: "0 0 1 * *"   # Her ayın 1'i 03:00 İstanbul (UTC 00:00) — aylık recompute
   workflow_dispatch:
     inputs:
       only_missing:

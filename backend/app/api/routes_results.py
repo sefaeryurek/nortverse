@@ -23,14 +23,21 @@ async def list_matches(
 ) -> list[MatchSummary]:
     async with get_session() as session:
         stmt = (
-            select(Match)
+            select(
+                Match.match_id, Match.home_team, Match.away_team,
+                Match.league_code, Match.season,
+                Match.actual_ft_home, Match.actual_ft_away,
+                Match.actual_ht_home, Match.actual_ht_away,
+                Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
+                Match.analyzed_at,
+            )
             .where(Match.deleted_at.is_(None))
             .order_by(Match.analyzed_at.desc())
             .limit(limit)
         )
         if league:
             stmt = stmt.where(Match.league_code == league)
-        rows = (await session.execute(stmt)).scalars().all()
+        rows = (await session.execute(stmt)).all()
 
     return [
         MatchSummary(
@@ -68,13 +75,19 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
     async with get_session() as session:
         rows = (
             await session.execute(
-                select(Match)
+                select(
+                    Match.match_id, Match.home_team, Match.away_team,
+                    Match.league_code, Match.league_name, Match.kickoff_time,
+                    Match.actual_ft_home, Match.actual_ft_away,
+                    Match.actual_ht_home, Match.actual_ht_away,
+                    Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
+                )
                 .where(Match.kickoff_time >= day_start)
                 .where(Match.kickoff_time < day_end)
                 .where(Match.deleted_at.is_(None))
                 .order_by(Match.kickoff_time)
             )
-        ).scalars().all()
+        ).all()
 
     now_utc = datetime.now(timezone.utc)
     out = []

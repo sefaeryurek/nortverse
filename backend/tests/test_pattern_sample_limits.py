@@ -9,7 +9,7 @@ from app.db.models import Match
 
 def mock_archive(monkeypatch, module, rows):
     result = MagicMock()
-    result.scalars.return_value.all.return_value = rows
+    result.all.return_value = rows
     session = AsyncMock()
     session.execute.return_value = result
 

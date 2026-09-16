@@ -95,8 +95,12 @@ async def find_pattern_c_all_periods(
             ]
             if exclude_match_id:
                 filters.append(Match.match_id != exclude_match_id)
-            stmt = select(Match).where(*filters)
-            matched = list((await session.execute(stmt)).scalars().all())
+            stmt = select(
+                Match.actual_ft_home, Match.actual_ft_away,
+                Match.actual_ht_home, Match.actual_ht_away,
+                Match.actual_h2_home, Match.actual_h2_away,
+            ).where(*filters)
+            matched = list((await session.execute(stmt)).all())
     else:
         # YAVAŞ YOL — fuzzy match (tolerance > 0), tüm satırlar çekilir
         async with get_session() as session:
@@ -108,8 +112,13 @@ async def find_pattern_c_all_periods(
             ]
             if exclude_match_id:
                 filters.append(Match.match_id != exclude_match_id)
-            stmt = select(Match).where(*filters)
-            rows = (await session.execute(stmt)).scalars().all()
+            stmt = select(
+                Match.ft_all_ratios,
+                Match.actual_ft_home, Match.actual_ft_away,
+                Match.actual_ht_home, Match.actual_ht_away,
+                Match.actual_h2_home, Match.actual_h2_away,
+            ).where(*filters)
+            rows = (await session.execute(stmt)).all()
         matched = [
             row for row in rows
             if row.ft_all_ratios and _ratios_match(ft_ratios, row.ft_all_ratios, tolerance)
