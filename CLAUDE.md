@@ -215,8 +215,13 @@ nortverse/
 │   │   │   ├── repair.py          # detect_issues + needs_normalization — tarihsel veri onarımı (Sprint 20)
 │   │   │   └── trends.py          # compute_trends — form & H2H trend verileri (Sprint 8.8)
 │   │   ├── api/
-│   │   │   ├── main.py            # FastAPI — fixture cache, bg queue, DB-first analiz
-│   │   │   └── schemas.py         # Pydantic response modelleri (Sprint 21)
+│   │   │   ├── main.py            # FastAPI hub — router include, lifespan, CORS, middleware (Sprint 22)
+│   │   │   ├── schemas.py         # Pydantic response modelleri (Sprint 21)
+│   │   │   ├── services.py        # Ortak iş mantığı: cache, lock, bg queue, analiz (Sprint 22)
+│   │   │   ├── routes_fixture.py  # /api/fixture endpoint (Sprint 22)
+│   │   │   ├── routes_analysis.py # /api/analyze, /api/match endpoint'leri (Sprint 22)
+│   │   │   ├── routes_results.py  # /api/results, /api/matches endpoint'leri (Sprint 22)
+│   │   │   └── routes_admin.py    # /api/health, /api/admin/quality, /api/correlations (Sprint 22)
 │   │   ├── pipeline/
 │   │   │   └── runner.py          # run_pipeline + update_results: fetch → analiz → upsert
 │   │   └── cli/
@@ -226,7 +231,7 @@ nortverse/
 │   │       ├── archive_cmds.py    # build-archive, repair-archive, normalize-leagues (Sprint 21)
 │   │       └── audit_cmds.py      # audit-db, self-test, prune-non-league (Sprint 21)
 │   ├── alembic/                   # DB migration (6 migration)
-│   ├── tests/                     # 232 test
+│   ├── tests/                     # 323 test
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -247,7 +252,10 @@ nortverse/
 │   │   ├── test_results_contract.py       # Results API sözleşmesi
 │   │   ├── test_correlation.py            # Korelasyon faktörleri (16 test, Sprint 19)
 │   │   ├── test_repair.py                # Veri onarımı testleri (26 test, Sprint 20)
-│   │   └── test_fixture_parser.py        # Fixture parser birim testleri (30 test, Sprint 21)
+│   │   ├── test_fixture_parser.py        # Fixture parser birim testleri (30 test, Sprint 21)
+│   │   ├── test_engine.py               # Katman A motor birim testleri (39 test, Sprint 22)
+│   │   ├── test_filtering.py            # Maç filtreleme birim testleri (25 test, Sprint 22)
+│   │   └── test_runner.py               # Pipeline runner birim testleri (27 test, Sprint 22)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
@@ -890,6 +898,24 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - Default değerler mevcut hardcode ile aynı — geriye uyumlu
 - **Sonuç:** 232 backend + 241 frontend + 28 E2E = **501 toplam test**
 
+### Sprint 22 — TAMAMLANDI ✅ (API Modülerleştirme & Kritik Test Kapsamı)
+- **Bağlam:** api/main.py 876 satır tek dosya — cache, lock, queue, endpoint'ler karışık. Motor, filtreleme ve pipeline fonksiyonları test edilmemiş.
+- **API route splitting (`c8b04a1`):**
+  - `api/main.py` 876 → ~95 satır hub (router include + lifespan + middleware)
+  - `services.py`: cache, lock, bg queue, analiz orkestrasyonu (ortak iş mantığı)
+  - `routes_fixture.py`: `/api/fixture` endpoint (3 katmanlı cache)
+  - `routes_analysis.py`: `/api/analyze/{id}` GET/POST + `/api/match/{id}` GET
+  - `routes_results.py`: `/api/results` + `/api/matches`
+  - `routes_admin.py`: `/api/health` + `/api/admin/quality` + `/api/correlations`
+  - 6 mevcut test dosyası import yolları güncellendi (monkeypatch target kuralı)
+- **engine.py birim testleri (`58cf28e`):**
+  - `tests/test_engine.py` — 39 test: `_get_goals_in_period`, `_goal_count_distribution`, `_current_season`, `is_match_analyzable`, `analyze_match` validasyon, edge case'ler
+- **filtering.py birim testleri (`1511b9d`):**
+  - `tests/test_filtering.py` — 25 test: `check_match_filters` geçen/reddedilen durumlar, öncelik sırası, `select_last_n_league_matches`
+- **pipeline/runner.py birim testleri (`9656631`):**
+  - `tests/test_runner.py` — 27 test: `_with_retry`, `_result_to_row`, `_validate_row`, `_merge_result_scores`, `StaleAnalysisWrite`
+- **Sonuç:** 323 backend + 241 frontend + 28 E2E = **592 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1106,9 +1132,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-16 — Sprint 21 sonu, Production CANLI + Veri Kalitesi 89.4+)
+## Kaldığımız Yer (2026-09-16 — Sprint 22 sonu, Production CANLI + Veri Kalitesi 89.4+)
 
-### ✅ Production Durumu — CANLI + Sprint 12-21 Tamamlandı
+### ✅ Production Durumu — CANLI + Sprint 12-22 Tamamlandı
 
 4 aylık downtime sona erdi. Tam altyapı:
 
@@ -1132,18 +1158,18 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | Quality score | 89.4 / 100 |
 | Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
 
-### Test Durumu (Sprint 21 sonrası)
+### Test Durumu (Sprint 22 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 232 | ✅ Yeşil |
+| **Backend** | pytest | 323 | ✅ Yeşil |
 | **Frontend birim** | vitest | 241 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 501 | — |
+| **Toplam** | — | 592 | — |
 
 ### Sıradaki Adım: Yol haritasının sonuna gelindi
 
-Sprint 12-21 tamamlandı. Uzun vadeli planlanmamış konular (Canlı maç + WebSocket, Auth/Premium vb.) kullanıcı talebiyle başlayacak.
+Sprint 12-22 tamamlandı. Uzun vadeli planlanmamış konular (Canlı maç + WebSocket, Auth/Premium vb.) kullanıcı talebiyle başlayacak.
 
 ### Bilinen Açık Konular
 
