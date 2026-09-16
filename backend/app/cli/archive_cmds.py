@@ -16,9 +16,10 @@ from app.scraper import fetch_leagues, fetch_match_detail
 def build_archive_cmd(
     league: str = typer.Argument(..., help="Nowgoal lig ID'si (örn: 36 = ENG PR)"),
     season: Optional[str] = typer.Argument(None, help="Sezon (örn: 2024-2025). Boşsa güncel sezon."),
+    concurrency: int = typer.Option(5, "--concurrency", "-c", help="Aynı anda kaç maç çekilsin (default 5)."),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """Geçmiş sezon maçlarını çekip DB'ye arşivle."""
+    """Geçmiş sezon maçlarını çekip DB'ye arşivle (paralel)."""
     _setup_logging("DEBUG" if verbose else "INFO")
 
     from app.pipeline.runner import _upsert
@@ -29,7 +30,7 @@ def build_archive_cmd(
     seasons = [season] if season else [None]
 
     async def _run() -> None:
-        stats = {"analyzed": 0, "skipped": 0, "errors": 0}
+        stats = {"analyzed": 0, "skipped": 0, "errors": 0, "done": 0}
         total_ids: list[tuple[str, str | None]] = []
 
         async with browser_context() as ctx:
@@ -45,31 +46,39 @@ def build_archive_cmd(
                 console.print("[yellow]Hiç maç ID'si bulunamadı. Debug HTML'ini inceleyin.[/yellow]")
                 return
 
-            console.print(f"\n[bold]{len(total_ids)} maç arşivlenecek...[/bold]\n")
+            total = len(total_ids)
+            console.print(f"\n[bold]{total} maç arşivlenecek (concurrency={concurrency})...[/bold]\n")
 
-            for i, (mid, s) in enumerate(total_ids, 1):
-                try:
-                    console.print(f"[dim]({i}/{len(total_ids)}) {mid}...[/dim]", end="")
-                    raw = await fetch_match_detail(mid, ctx=ctx)
-                    check = check_match_filters(raw)
-                    if not check.passed:
-                        console.print(f" [yellow]atlandı ({check.reason.value})[/yellow]")
-                        stats["skipped"] += 1
-                        continue
+            sem = asyncio.Semaphore(concurrency)
 
-                    result = analyze_match(raw, season=s)
-                    await _upsert(result, raw)
-                    stats["analyzed"] += 1
-                    score_str = ""
-                    if raw.actual_ft_home is not None:
-                        score_str = f" | Skor: {raw.actual_ft_home}-{raw.actual_ft_away}"
-                    console.print(
-                        f" [green]kaydedildi[/green] — "
-                        f"{raw.home_team} vs {raw.away_team}{score_str}"
-                    )
-                except Exception as e:
-                    console.print(f" [red]hata: {e}[/red]")
-                    stats["errors"] += 1
+            async def _process(mid: str, s: str | None) -> None:
+                async with sem:
+                    try:
+                        raw = await fetch_match_detail(mid, ctx=ctx)
+                        check = check_match_filters(raw)
+                        if not check.passed:
+                            stats["skipped"] += 1
+                            stats["done"] += 1
+                            return
+
+                        result = analyze_match(raw, season=s)
+                        await _upsert(result, raw)
+                        stats["analyzed"] += 1
+                    except Exception as e:
+                        stats["errors"] += 1
+                    finally:
+                        stats["done"] += 1
+                        done = stats["done"]
+                        if done % 10 == 0 or done == total:
+                            console.print(
+                                f"  [{done}/{total}] "
+                                f"[green]{stats['analyzed']} kayıt[/green] · "
+                                f"[yellow]{stats['skipped']} atlandı[/yellow] · "
+                                f"[red]{stats['errors']} hata[/red]"
+                            )
+
+            tasks = [_process(mid, s) for mid, s in total_ids]
+            await asyncio.gather(*tasks)
 
         console.print(
             f"\n[bold green]Arşiv tamamlandı:[/bold green] "
@@ -84,9 +93,10 @@ def build_archive_cmd(
 def build_multi_archive_cmd(
     league_ids: list[str] = typer.Argument(..., help="Lig ID listesi (boşlukla ayırın: 36 60 65)"),
     seasons: Optional[str] = typer.Option(None, "--seasons", "-s", help="Her lig için kaç sezon geriye git (varsayılan: 5)"),
+    concurrency: int = typer.Option(5, "--concurrency", "-c", help="Aynı anda kaç maç çekilsin (default 5)."),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """Birden fazla lig için arşiv oluşturur — her ligi son N sezonda çeker."""
+    """Birden fazla lig için arşiv oluşturur — her ligi son N sezonda çeker (paralel)."""
     _setup_logging("DEBUG" if verbose else "INFO")
     n_seasons = int(seasons) if seasons and str(seasons).isdigit() else 5
     from app.pipeline.runner import _upsert
@@ -103,6 +113,8 @@ def build_multi_archive_cmd(
         total_stats = {"analyzed": 0, "skipped": 0, "errors": 0, "leagues": 0}
 
         async with browser_context() as ctx:
+            sem = asyncio.Semaphore(concurrency)
+
             for lid_str in league_ids:
                 if lid_str.startswith("-"):
                     continue
@@ -134,31 +146,40 @@ def build_multi_archive_cmd(
                         console.print(f"  [yellow]{season}: maç ID bulunamadı — atlandı[/yellow]")
                         continue
 
+                    total = len(match_ids)
                     console.print(
-                        f"  [cyan]{season}[/cyan]: {len(match_ids)} maç işlenecek"
+                        f"  [cyan]{season}[/cyan]: {total} maç işlenecek (concurrency={concurrency})"
                     )
-                    stats = {"analyzed": 0, "skipped": 0, "errors": 0}
+                    stats = {"analyzed": 0, "skipped": 0, "errors": 0, "done": 0}
 
-                    for i, mid in enumerate(match_ids, 1):
-                        try:
-                            raw = await _fetch_detail(mid, ctx=ctx)
-                            check = check_match_filters(raw)
-                            if not check.passed:
-                                stats["skipped"] += 1
-                                continue
-                            result = analyze_match(raw, season=season)
-                            await _upsert(result, raw)
-                            stats["analyzed"] += 1
-                            if i % 20 == 0:
-                                console.print(
-                                    f"  ({i}/{len(match_ids)}) "
-                                    f"[green]{stats['analyzed']} kayıt[/green] · "
-                                    f"[yellow]{stats['skipped']} atlandı[/yellow]"
-                                )
-                        except Exception as e:
-                            stats["errors"] += 1
-                            if verbose:
-                                console.print(f"  [red]Hata [{mid}]: {e}[/red]")
+                    async def _process(mid: str, _season: str = season) -> None:
+                        async with sem:
+                            try:
+                                raw = await _fetch_detail(mid, ctx=ctx)
+                                check = check_match_filters(raw)
+                                if not check.passed:
+                                    stats["skipped"] += 1
+                                    stats["done"] += 1
+                                    return
+                                result = analyze_match(raw, season=_season)
+                                await _upsert(result, raw)
+                                stats["analyzed"] += 1
+                            except Exception as e:
+                                stats["errors"] += 1
+                                if verbose:
+                                    console.print(f"  [red]Hata [{mid}]: {e}[/red]")
+                            finally:
+                                stats["done"] += 1
+                                done = stats["done"]
+                                if done % 10 == 0 or done == total:
+                                    console.print(
+                                        f"  ({done}/{total}) "
+                                        f"[green]{stats['analyzed']} kayıt[/green] · "
+                                        f"[yellow]{stats['skipped']} atlandı[/yellow]"
+                                    )
+
+                    tasks = [_process(mid) for mid in match_ids]
+                    await asyncio.gather(*tasks)
 
                     console.print(
                         f"  [bold]{season} bitti:[/bold] "
