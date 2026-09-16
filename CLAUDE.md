@@ -231,7 +231,7 @@ nortverse/
 │   │       ├── archive_cmds.py    # build-archive, repair-archive, normalize-leagues (Sprint 21)
 │   │       └── audit_cmds.py      # audit-db, self-test, prune-non-league (Sprint 21)
 │   ├── alembic/                   # DB migration (6 migration)
-│   ├── tests/                     # 323 test
+│   ├── tests/                     # 432 test
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -255,7 +255,10 @@ nortverse/
 │   │   ├── test_fixture_parser.py        # Fixture parser birim testleri (30 test, Sprint 21)
 │   │   ├── test_engine.py               # Katman A motor birim testleri (39 test, Sprint 22)
 │   │   ├── test_filtering.py            # Maç filtreleme birim testleri (25 test, Sprint 22)
-│   │   └── test_runner.py               # Pipeline runner birim testleri (27 test, Sprint 22)
+│   │   ├── test_runner.py               # Pipeline runner birim testleri (27 test, Sprint 22)
+│   │   ├── test_match_detail_parser.py  # H2H parser birim testleri (58 test, Sprint 23)
+│   │   ├── test_services.py             # API services birim testleri (26 test, Sprint 23)
+│   │   └── test_config.py              # Config env override testleri (25 test, Sprint 23)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
@@ -916,6 +919,17 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - `tests/test_runner.py` — 27 test: `_with_retry`, `_result_to_row`, `_validate_row`, `_merge_result_scores`, `StaleAnalysisWrite`
 - **Sonuç:** 323 backend + 241 frontend + 28 E2E = **592 toplam test**
 
+### Sprint 23 — TAMAMLANDI ✅ (H2H Parser Test & API/Config Birim Testleri)
+- **Bağlam:** Sprint 22 ile motor/filtre/pipeline testleri eklenmişti. H2H parser, API services ve config modülleri hâlâ testsizdi.
+- **match_detail.py parser testleri (`54c29f5`):**
+  - `tests/test_match_detail_parser.py` — 58 test: `_text_of`, `_parse_source_datetime`, `_extract_main_match_kickoff`, `_extract_main_match_info`, `_extract_main_match_score`, `_parse_score_cell`, `_parse_match_row`, `_detect_main_league_code`, `_parse_history_table`
+  - Mock HTML ile pure fonksiyon testi, nowgoal HTML değişikliklerini erken yakalayan güvenlik ağı
+- **services.py birim testleri (`e9158cd`):**
+  - `tests/test_services.py` — 26 test: `cache_put`/`cache_get` LRU/TTL, `get_or_make_lock`, `_pat`/`_trends_parse` deserialize, `enqueue_bg_analysis`, `init/shutdown_bg_queue`
+- **config.py birim testleri (`6300247`):**
+  - `tests/test_config.py` — 25 test: `_env_float`/`_env_int`/`_env_bool` helper'lar, `ScraperConfig`/`AnalysisConfig` default ve override, frozen dataclass koruması
+- **Sonuç:** 432 backend + 241 frontend + 28 E2E = **701 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1132,9 +1146,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-16 — Sprint 22 sonu, Production CANLI + Veri Kalitesi 89.4+)
+## Kaldığımız Yer (2026-09-16 — Sprint 23 sonu, Production CANLI + Veri Kalitesi 89.4+)
 
-### ✅ Production Durumu — CANLI + Sprint 12-22 Tamamlandı
+### ✅ Production Durumu — CANLI + Sprint 12-23 Tamamlandı
 
 4 aylık downtime sona erdi. Tam altyapı:
 
@@ -1158,18 +1172,18 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 | Quality score | 89.4 / 100 |
 | Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
 
-### Test Durumu (Sprint 22 sonrası)
+### Test Durumu (Sprint 23 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 323 | ✅ Yeşil |
+| **Backend** | pytest | 432 | ✅ Yeşil |
 | **Frontend birim** | vitest | 241 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 592 | — |
+| **Toplam** | — | 701 | — |
 
 ### Sıradaki Adım: Yol haritasının sonuna gelindi
 
-Sprint 12-22 tamamlandı. Uzun vadeli planlanmamış konular (Canlı maç + WebSocket, Auth/Premium vb.) kullanıcı talebiyle başlayacak.
+Sprint 12-23 tamamlandı. Uzun vadeli planlanmamış konular (Canlı maç + WebSocket, Auth/Premium vb.) kullanıcı talebiyle başlayacak.
 
 ### Bilinen Açık Konular
 
