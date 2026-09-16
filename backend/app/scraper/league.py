@@ -71,6 +71,9 @@ async def fetch_league_seasons(league_id: int, ctx=None) -> list[str]:
                     seasons.append(str(item))
             return seasons
         elif isinstance(data, dict):
+            sl = data.get("SeasonList") or data.get("seasonList")
+            if isinstance(sl, list):
+                return [str(s) for s in sl if isinstance(s, (str, int))]
             return [str(v) for v in data.values() if isinstance(v, str)]
     except Exception as e:
         log.warning("Sezon listesi alınamadı: %s", e)
