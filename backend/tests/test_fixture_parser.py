@@ -4,12 +4,10 @@ _parse_fixture_html, _extract_match_info, _build_fixture_url, _is_row_hidden
 fonksiyonları icin mock HTML ile test. DB baglantisi gereksiz.
 """
 
-import sys
 from datetime import date, datetime, timezone
 from unittest.mock import patch
 
-import pytest
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from app.scraper.fixture import (
     _MATCH_ROW_RE,

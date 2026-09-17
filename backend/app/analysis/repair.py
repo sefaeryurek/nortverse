@@ -17,7 +17,6 @@ def detect_issues(row: dict[str, Any]) -> tuple[str, str] | None:
     Returns:
         (reason, detail) tuple'ı veya None (sorun yoksa).
     """
-    mid = row.get("match_id", "?")
     home = row.get("home_team", "")
     away = row.get("away_team", "")
     label = f"{home} vs {away}"

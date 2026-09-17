@@ -46,3 +46,29 @@ async def test_legacy_naive_cache_timestamp_uses_utc(monkeypatch):
     monkeypatch.setattr(rf, "fetch_fixture", fetch)
     assert await rf.fixture(None) == []
     fetch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_fixture_cache_hit_does_not_queue_all_matches_for_analysis(monkeypatch):
+    session = AsyncMock()
+    session.get.return_value = SimpleNamespace(
+        cached_at=datetime.now(timezone.utc),
+        matches_json=[{
+            "match_id": "123", "home_team": "Home", "away_team": "Away",
+            "league_code": "ENG PR", "league_name": "English Premier League",
+            "kickoff_time": None,
+        }],
+    )
+
+    @asynccontextmanager
+    async def get_session():
+        yield session
+
+    monkeypatch.setattr(rf, "get_session", get_session)
+    monkeypatch.setattr(rf, "fixture_cache", {})
+    svc.init_bg_queue()
+    try:
+        assert len(await rf.fixture(None)) == 1
+        assert svc.bg_queue.qsize() == 0
+    finally:
+        svc.shutdown_bg_queue()

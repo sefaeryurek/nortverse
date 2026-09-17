@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import time
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 
@@ -27,8 +26,6 @@ from app.api.services import (
     get_or_make_lock,
     init_bg_queue,
     shutdown_bg_queue,
-    bg_queue,
-    _bg_queued,
 )
 
 

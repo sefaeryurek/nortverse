@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import canonical_league_name, is_supported_league
 from app.analysis.persist import compute_all_patterns
+from app.analysis.skip_cache import save_skip
 from app.analysis.trends import compute_trends
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
@@ -104,8 +105,12 @@ def _result_to_row(
         "actual_h2_home": raw.actual_h2_home if raw else None,
         "actual_h2_away": raw.actual_h2_away if raw else None,
     }
-    if patterns:
-        row.update(patterns)
+    # A completed calculation may legitimately find no matches in any pattern.
+    # Keep that state separate from the nullable pattern result columns.
+    for key in ("pattern_ht_b", "pattern_ht_c", "pattern_h2_b", "pattern_h2_c",
+                "pattern_ft_b", "pattern_ft_c"):
+        row[key] = patterns.get(key) if patterns is not None else None
+    row["pattern_computed_at"] = r.analyzed_at if patterns is not None else None
     if raw is not None:
         try:
             row["trends"] = compute_trends(raw).model_dump()
@@ -233,6 +238,11 @@ async def run_pipeline(
 
                 if not check.passed:
                     log.info("Atlandı [%s]: %s", mid, check.reason.value)
+                    if check.reason is not None:
+                        try:
+                            await save_skip(raw, check.reason)
+                        except Exception as exc:
+                            log.warning("Atlanmış analiz kaydedilemedi [%s]: %s", mid, exc)
                     stats["skipped"] += 1
                     continue
 

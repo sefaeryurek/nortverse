@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import update as sa_update
@@ -115,7 +115,9 @@ async def update_match_patterns(match_id: str, patterns: dict[str, dict | None],
         async with get_session() as session:
             result = await session.execute(
                 sa_update(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None),
-                                       Match.analyzed_at == expected_analyzed_at).values(**patterns)
+                                       Match.analyzed_at == expected_analyzed_at).values(
+                                           **patterns, pattern_computed_at=datetime.now(timezone.utc)
+                                       )
             )
             if result.rowcount == 0:
                 raise StalePatternWrite(f"Analysis changed or was deleted: {match_id}")

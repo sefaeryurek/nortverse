@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Nortverse frontend
 
-## Getting Started
+Next.js arayüzü FastAPI backend'inden maç, sonuç ve analiz verisi alır.
 
-First, run the development server:
+## Yerel çalıştırma
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Önce `backend/` dizininde veritabanı ayarlarını yapıp migration'ları uygulayın ve API'yi başlatın:
+
+```powershell
+cd backend
+..\.venv\Scripts\python.exe -m alembic upgrade head
+..\.venv\Scripts\python.exe -m app.cli.main serve
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ardından `frontend/.env.local` dosyasında `BACKEND_URL=http://localhost:8000` kullanın ve ayrı terminalde:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+cd frontend
+npm.cmd ci
+npm.cmd run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`BACKEND_URL` Next.js sunucusunun `/api/*` isteklerini backend'e yönlendirmesini sağlar. Tarayıcı aynı origin üzerinden istek gönderir. `NEXT_PUBLIC_API_URL` tarayıcıyı doğrudan verilen adrese yönlendirir; bunu yalnızca doğrudan erişim ve CORS yapılandırması gerekiyorsa kullanın.
 
-## Learn More
+## Kontroller
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```powershell
+npm.cmd run test:run
+npm.cmd run lint
+npx.cmd tsc --noEmit
+npm.cmd run build
+```

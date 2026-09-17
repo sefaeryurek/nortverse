@@ -14,7 +14,6 @@ from app.analysis.league_filter import is_supported_league
 from app.api.schemas import FixtureMatchOut
 from app.api.services import (
     FIXTURE_CACHE_TTL,
-    enqueue_bg_analysis,
     fixture_cache,
 )
 from app.db.connection import get_session
@@ -83,7 +82,6 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
                 fixture_cache[cache_key] = (time.time(), result)
                 log.info("Fixture DB cache hit: %s (%.0f sn önce, %d lig maçı)",
                          cache_key, age, len(result))
-                enqueue_bg_analysis(result)
                 return result
         except (ValueError, TypeError, AttributeError) as exc:
             log.warning("Fixture DB cache geçersiz, yeniden çekilecek [%s]: %s", cache_key, exc)
@@ -129,5 +127,4 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
         log.warning("Fixture DB'ye kaydedilemedi: %s", exc)
 
     fixture_cache[cache_key] = (time.time(), result)
-    enqueue_bg_analysis(result)
     return result

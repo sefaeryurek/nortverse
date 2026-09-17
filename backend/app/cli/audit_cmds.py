@@ -166,8 +166,7 @@ def audit_db_cmd(
             missing_pattern = (await session.execute(
                 select(func.count(Match.id)).where(
                     Match.deleted_at.is_(None),
-                    or_(Match.pattern_ft_b.is_(None), Match.pattern_ft_c.is_(None),
-                        Match.pattern_ht_b.is_(None), Match.pattern_h2_b.is_(None)),
+                    Match.pattern_computed_at.is_(None),
                 )
             )).scalar() or 0
 
@@ -182,7 +181,7 @@ def audit_db_cmd(
                 select(func.count(Match.id)).where(
                     Match.deleted_at.is_(None),
                     Match.kickoff_time < cutoff,
-                    Match.actual_ft_home.is_(None),
+                    or_(Match.actual_ft_home.is_(None), Match.actual_ft_away.is_(None)),
                 )
             )).scalar() or 0
 
@@ -281,7 +280,7 @@ def audit_db_cmd(
         _row("Sorunlu skor (negatif/>15)", bad_scores)
         _row("Tutarsız yarı (İY > MS)", inconsistent_halves)
         _row("Normalize edilmemiş lig adı", unnormalized)
-        _row("Pattern eksik (en az bir kolon)", missing_pattern, ok_if_zero=False)
+        _row("Pattern hesaplama durumu bilinmiyor", missing_pattern)
         _row("Trends NULL (Sprint 8.8 öncesi)", missing_trends, ok_if_zero=False)
         _row("Skor eksik (kickoff +130dk)", missing_actual, ok_if_zero=False)
         _row("Pattern tutarsızlık (1+X+2 ≠ 100)", len(pattern_anomalies))
@@ -398,7 +397,7 @@ def audit_patterns_cmd(
 def recompute_patterns_cmd(
     limit: Optional[int] = typer.Option(None, "--limit", help="En fazla N maç işle. Boşsa hepsi."),
     batch_size: int = typer.Option(500, "--batch-size", help="Batch boyutu (default 500)."),
-    only_missing: bool = typer.Option(False, "--only-missing", help="Sadece pattern_ft_b IS NULL olanları işle."),
+    only_missing: bool = typer.Option(False, "--only-missing", help="Hesaplama zamanı olmayan maçları işle."),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Tüm matches tablosunda Pattern B/C alanlarını yeniden hesaplayıp DB'ye yaz."""
@@ -414,7 +413,7 @@ def recompute_patterns_cmd(
         async with get_session() as session:
             filters = [Match.deleted_at.is_(None)]
             if only_missing:
-                filters.append(Match.pattern_ft_b.is_(None))
+                filters.append(Match.pattern_computed_at.is_(None))
             stmt = select(Match.match_id).where(and_(*filters)).order_by(Match.match_id)
             if limit:
                 stmt = stmt.limit(limit)

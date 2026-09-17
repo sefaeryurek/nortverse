@@ -1,6 +1,5 @@
 """Sprint 20 — Tarihsel veri onarımı testleri."""
 
-import pytest
 from app.analysis.repair import detect_issues, needs_normalization
 
 

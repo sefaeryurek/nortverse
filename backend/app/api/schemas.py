@@ -14,7 +14,7 @@ class DataQuality(BaseModel):
     active_matches: int = 0
     soft_deleted: int = 0
     non_league_active: int = 0
-    missing_pattern: int = 0
+    missing_pattern: int = 0  # Hesaplama durumu henüz bilinmeyen kayıtlar.
     missing_trends: int = 0
     missing_actual_score: int = 0
     quality_score: float = 100.0

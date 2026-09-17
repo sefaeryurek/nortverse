@@ -5,7 +5,6 @@ check_match_filters kuralları ve select_last_n_league_matches.
 
 from __future__ import annotations
 
-import pytest
 
 from app.analysis.filtering import FilterCheck, check_match_filters, select_last_n_league_matches
 from app.models import HistoricalMatch, MatchRawData, SkipReason

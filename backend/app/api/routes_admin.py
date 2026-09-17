@@ -73,10 +73,7 @@ async def admin_quality() -> DataQuality:
 
         missing_pattern = (await session.execute(
             select(func.count(Match.id)).where(
-                Match.deleted_at.is_(None),
-                or_(Match.pattern_ft_b.is_(None), Match.pattern_ft_c.is_(None),
-                    Match.pattern_ht_b.is_(None), Match.pattern_h2_b.is_(None),
-                    Match.pattern_ht_c.is_(None), Match.pattern_h2_c.is_(None)),
+                Match.deleted_at.is_(None), Match.pattern_computed_at.is_(None),
             )
         )).scalar() or 0
         missing_trends = (await session.execute(

@@ -23,6 +23,7 @@ class Match(Base):
     kickoff_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     season: Mapped[str | None] = mapped_column(String(10))
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pattern_computed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Katman A — İlk Yarı
     ht_scores_1: Mapped[dict | None] = mapped_column(JSONB)
@@ -106,3 +107,16 @@ class FixtureCache(Base):
     date: Mapped[str] = mapped_column(String(10), primary_key=True)  # "YYYY-MM-DD"
     matches_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     cached_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SkippedAnalysis(Base):
+    """Recent filter result so an ineligible match is not scraped on every visit."""
+
+    __tablename__ = "skipped_analysis"
+
+    match_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    home_team: Mapped[str] = mapped_column(String(100), nullable=False)
+    away_team: Mapped[str] = mapped_column(String(100), nullable=False)
+    league_code: Mapped[str | None] = mapped_column(String(50))
+    reason: Mapped[str] = mapped_column(String(50), nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

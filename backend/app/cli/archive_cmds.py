@@ -63,7 +63,7 @@ def build_archive_cmd(
                         result = analyze_match(raw, season=s)
                         await _upsert(result, raw)
                         stats["analyzed"] += 1
-                    except Exception as e:
+                    except Exception:
                         stats["errors"] += 1
                     finally:
                         stats["done"] += 1

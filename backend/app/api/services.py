@@ -23,6 +23,7 @@ from app.analysis.persist import (
     compute_all_patterns,
     update_match_patterns,
 )
+from app.analysis.skip_cache import get_recent_skip, save_skip
 from app.analysis.trends import TrendsData, compute_trends
 from app.db.connection import get_session
 from app.db.models import Match
@@ -106,9 +107,8 @@ def _trends_parse(blob: dict | None) -> Optional[TrendsData]:
 async def build_from_db(row: Match) -> AnalyzeResponse | None:
     """DB satırından AnalyzeResponse üret.
 
-    HIZLI YOL: 6 pattern kolonu da doluysa doğrudan deserialize → ~50ms.
-    YAVAŞ YOL (lazy backfill): biri eksikse runtime hesabı yap + DB'ye geri yaz
-    → bu maç için bir kerelik 1-3sn, sonraki tıklar hızlı.
+    HIZLI YOL: pattern hesabı tamamlandıysa (eşleşme bulunmasa bile) deserialize.
+    YAVAŞ YOL: hesaplama durumu bilinmiyorsa hesapla ve durumu DB'ye kaydet.
     """
     if row.ft_scores_1 is None:
         return None
@@ -125,18 +125,13 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
     ft_ratios = row.ft_all_ratios or {}
     mid = row.match_id
 
-    pattern_blobs = (
-        row.pattern_ht_b, row.pattern_ht_c,
-        row.pattern_h2_b, row.pattern_h2_c,
-        row.pattern_ft_b, row.pattern_ft_c,
-    )
-    if all(p is not None for p in pattern_blobs):
+    if row.pattern_computed_at is not None:
         log.debug("Hızlı yol — saklı pattern'ler kullanıldı: %s", mid)
         ht_b, ht_c = _pat(row.pattern_ht_b), _pat(row.pattern_ht_c)
         h2_b, h2_c = _pat(row.pattern_h2_b), _pat(row.pattern_h2_c)
         ft_b, ft_c = _pat(row.pattern_ft_b), _pat(row.pattern_ft_c)
     else:
-        log.info("Yavaş yol — pattern eksik, hesaplanıyor + DB'ye yazılıyor: %s", mid)
+        log.info("Yavaş yol — pattern durumu bilinmiyor, hesaplanıyor: %s", mid)
         patterns = await compute_all_patterns(
             match_id=mid,
             ht_scores=(ht_s1, ht_sx, ht_s2),
@@ -228,6 +223,27 @@ async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
                 cache_put(match_id, response)
                 return response
 
+        try:
+            skipped = await get_recent_skip(match_id)
+        except Exception as exc:
+            log.warning("Atlanmış analiz önbelleği okunamadı [%s]: %s", match_id, exc)
+            skipped = None
+        if skipped is not None:
+            response = AnalyzeResponse(
+                match_id=skipped.match_id,
+                home_team=skipped.home_team,
+                away_team=skipped.away_team,
+                league_code=skipped.league_code,
+                season="",
+                ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+                half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+                ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+                skipped=True,
+                skip_reason=skipped.reason,
+            )
+            cache_put(match_id, response)
+            return response
+
         log.info("DB miss — Playwright scrape: %s", match_id)
         response = await do_analyze(match_id)
         cache_put(match_id, response)
@@ -240,6 +256,11 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
     check = check_match_filters(raw)
 
     if not check.passed:
+        if check.reason is not None:
+            try:
+                await save_skip(raw, check.reason)
+            except Exception as exc:
+                log.warning("Atlanmış analiz kaydedilemedi [%s]: %s", match_id, exc)
         return AnalyzeResponse(
             match_id=match_id,
             home_team=raw.home_team,
@@ -265,7 +286,7 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
     try:
         from app.pipeline.runner import StaleAnalysisWrite, _upsert as _persist_full
         await _persist_full(result, raw, patterns)
-    except StalePatternWrite:
+    except StaleAnalysisWrite:
         raise HTTPException(409, "Daha güncel bir analiz var. Lütfen yeniden deneyin.")
     except Exception as exc:
         log.error(

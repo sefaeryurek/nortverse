@@ -1,6 +1,5 @@
 """Korelasyon faktörleri testleri — Poisson model ve yardımcı fonksiyonlar."""
 
-import pytest
 from app.analysis.correlation import (
     _outcomes_for_score,
     compute_from_matches,

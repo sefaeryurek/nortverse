@@ -22,5 +22,9 @@ COPY --from=builder /install /usr/local
 
 COPY . .
 
-# Migration başarısız olsa bile API başlasın (DB geçici erişilmez olabilir).
-CMD ["sh", "-c", "alembic upgrade head || echo 'Migration atlandı'; exec python -m uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Playwright Python paketi tarayıcı ikilisini kurmaz; fixture ve analiz scraper'ı Chromium gerektirir.
+RUN python -m playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+
+# Uygulama yeni şemayı gerektirir; migration başarısızsa başlatma da başarısız olsun.
+CMD ["sh", "-c", "alembic upgrade head && exec python -m uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

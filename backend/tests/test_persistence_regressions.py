@@ -34,6 +34,8 @@ async def test_upsert_preserves_existing_scores_when_scraper_returns_null(monkey
     update_sql = sql.split("DO UPDATE SET", 1)[1]
     assert "actual_ft_home = coalesce(NULL, matches.actual_ft_home)" in update_sql
     assert "kickoff_time = coalesce(NULL, matches.kickoff_time)" in update_sql
+    assert "pattern_computed_at =" in update_sql
+    assert "pattern_ft_b =" in update_sql
 
 
 @pytest.mark.asyncio

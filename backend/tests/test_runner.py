@@ -5,7 +5,6 @@ _with_retry, _result_to_row, _validate_row, _merge_result_scores.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock

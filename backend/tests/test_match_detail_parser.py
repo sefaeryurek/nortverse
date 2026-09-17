@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
 from bs4 import BeautifulSoup, Tag
 
 from app.scraper.match_detail import (
