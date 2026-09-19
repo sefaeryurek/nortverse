@@ -63,10 +63,36 @@ const LEAGUES: Record<string, LeagueDisplay> = {
   "Australian A-League": { flag: "🇦🇺", short: "AUS" },
 };
 
+const ALIASES: Record<string, string> = {
+  "England Championship": "English Championship",
+  "France Ligue 1": "French Ligue 1",
+  "France Ligue 2": "French Ligue 2",
+  "Liga Portugal 1": "Portuguese Primeira Liga",
+  "Holland Eredivisie": "Netherlands Eredivisie",
+  "Turkey Super Lig": "Turkish Super League",
+  "Switzerland Super League": "Swiss Super League",
+  "Poland Ekstraklasa": "Polish Ekstraklasa",
+  "Norway Eliteserien": "Norwegian Eliteserien",
+  "USA Major League Soccer": "Major League Soccer",
+  "Argentine Division 1": "Argentina Primera Division",
+  "Primera Division Liga MX": "Mexican Liga MX",
+  "Japan J1 League": "Japanese J1 League",
+  "K League 1": "Korean K League 1",
+};
+
 const FALLBACK: LeagueDisplay = { flag: "⚽", short: "—" };
 
 export function leagueDisplay(code: string | null | undefined, name?: string | null): LeagueDisplay {
   if (!code && !name) return FALLBACK;
   // Hem code hem name dene — code öncelikli
-  return LEAGUES[code ?? ""] ?? LEAGUES[name ?? ""] ?? FALLBACK;
+  const primary = code ?? "";
+  const secondary = name ?? "";
+  const known = LEAGUES[primary] ?? LEAGUES[ALIASES[primary]]
+    ?? LEAGUES[secondary] ?? LEAGUES[ALIASES[secondary]];
+  if (known) return known;
+  if (primary === "J2 League" || secondary === "J2 League") {
+    return { flag: "🇯🇵", short: "JPN2" };
+  }
+  const label = (name || code || "").trim().split(/\s+/).slice(0, 2).join(" ");
+  return { flag: FALLBACK.flag, short: label.length > 11 ? `${label.slice(0, 10)}…` : label };
 }

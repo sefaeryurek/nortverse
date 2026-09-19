@@ -18,7 +18,7 @@ from app.api.services import (
 )
 from app.db.connection import get_session
 from app.db.models import FixtureCache
-from app.scraper import fetch_fixture
+from app.scraper import fetch_istanbul_fixture
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -75,6 +75,9 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
                 raise ValueError("Fixture cache must contain a list")
             result = [FixtureMatchOut(**m) for m in db_row.matches_json]
             result = [m for m in result if is_supported_league(m.league_name, m.league_code)]
+            istanbul_tz = timezone(timedelta(hours=3))
+            result = [m for m in result if not m.kickoff_time or
+                      datetime.fromisoformat(m.kickoff_time).astimezone(istanbul_tz).date() == req_date]
             fixture_cache[cache_key] = (time.time(), result)
             log.info("Fixture DB cache hit: %s (%d lig maçı)", cache_key, len(result))
             return result
@@ -85,11 +88,11 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
     log.info("Fixture Playwright scrape başlıyor: %s", cache_key)
     try:
         matches = await asyncio.wait_for(
-            fetch_fixture(target_date=parsed_date, only_hot=True),
-            timeout=20.0,
+            fetch_istanbul_fixture(req_date, only_hot=True),
+            timeout=45.0,
         )
     except asyncio.TimeoutError:
-        log.error("Fixture scrape 20sn içinde dönmedi: %s", cache_key)
+        log.error("Fixture scrape 45sn içinde dönmedi: %s", cache_key)
         raise HTTPException(
             status_code=503,
             detail="Maç verisi çekilemedi (timeout). Lütfen birkaç dakika sonra tekrar deneyin.",

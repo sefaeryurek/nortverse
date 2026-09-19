@@ -21,7 +21,8 @@ from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
 from app.models import MatchAnalysisResult, MatchRawData
 from app.scraper.browser import browser_context
-from app.scraper.fixture import fetch_fixture
+from app.scraper.fixture import fetch_istanbul_fixture
+from app.scraper.fixture_scores import FixtureScore, fetch_fixture_scores
 from app.scraper.match_detail import fetch_match_detail
 
 T = TypeVar("T")
@@ -194,12 +195,13 @@ async def run_pipeline(
     IST = timezone(timedelta(hours=3))
 
     async with browser_context() as ctx:
-        fixtures = await fetch_fixture(target_date=target_date, only_hot=only_hot, ctx=ctx)
+        cache_day = target_date or datetime.now(IST).date()
+        fixtures = await fetch_istanbul_fixture(cache_day, only_hot=only_hot, ctx=ctx)
         log.info("Pipeline başladı: %d maç işlenecek", len(fixtures))
 
         # fixture_cache tablosunu doldur — Render Playwright çalıştıramıyor,
         # bu yüzden GitHub Actions'ta pipeline çalışınca cache'i biz yazıyoruz.
-        cache_date = (target_date or datetime.now(IST).date()).isoformat()
+        cache_date = cache_day.isoformat()
         league_fixtures = [f for f in fixtures if is_supported_league(f.league_name, f.league_code)]
         cache_json = [
             {
@@ -214,6 +216,25 @@ async def run_pipeline(
         ]
         try:
             async with get_session() as session:
+                previous = await session.get(FixtureCache, cache_date)
+                if previous is not None and isinstance(previous.matches_json, list):
+                    old_by_id = {item.get("match_id"): item for item in previous.matches_json
+                                 if isinstance(item, dict)}
+                    score_keys = ("score_status", "score_home", "score_away",
+                                  "score_checked_at", "actual_ht_home", "actual_ht_away")
+                    for item in cache_json:
+                        old = old_by_id.get(item["match_id"], {})
+                        item.update({key: old[key] for key in score_keys if key in old})
+                    new_ids = {item["match_id"] for item in cache_json}
+                    for old in old_by_id.values():
+                        if old.get("match_id") in new_ids or not old.get("kickoff_time"):
+                            continue
+                        try:
+                            old_day = datetime.fromisoformat(old["kickoff_time"]).astimezone(IST).date()
+                        except (ValueError, TypeError):
+                            continue
+                        if old_day == cache_day:
+                            cache_json.append(old)
                 await session.merge(FixtureCache(
                     date=cache_date,
                     matches_json=cache_json,
@@ -311,12 +332,33 @@ def _merge_result_scores(raw: MatchRawData, existing: Match) -> dict:
                 actual_h2_home=h2[0], actual_h2_away=h2[1])
 
 
-async def update_results(target_date: Optional[date] = None) -> dict:
-    """DB'deki maçların gerçek sonuçlarını günceller — Katman A/B/C verisi dokunulmaz.
+def _merge_fixture_scores(
+    fixtures: list[dict], snapshots: dict[str, FixtureScore], checked_at: datetime,
+) -> list[dict]:
+    """Attach observed scores to today's fixture list without losing its metadata."""
+    merged = []
+    for fixture in fixtures:
+        item = dict(fixture)
+        snapshot = snapshots.get(item.get("match_id"))
+        if snapshot is not None and item.get("score_status") != "finished":
+            item["score_status"] = snapshot.status
+            item["score_home"] = snapshot.home
+            item["score_away"] = snapshot.away
+            item["score_checked_at"] = checked_at.isoformat()
+            if snapshot.status == "finished":
+                item["actual_ht_home"] = snapshot.ht_home
+                item["actual_ht_away"] = snapshot.ht_away
+        elif snapshot is not None and snapshot.status == "finished":
+            # A verified correction to a final result may arrive later.
+            item.update(score_status="finished", score_home=snapshot.home,
+                        score_away=snapshot.away, score_checked_at=checked_at.isoformat(),
+                        actual_ht_home=snapshot.ht_home, actual_ht_away=snapshot.ht_away)
+        merged.append(item)
+    return merged
 
-    Gece çalıştırılır: sabah pipeline'ının kaydettiği maçları tekrar scrape eder,
-    actual_ft/ht skorlarını doldurur → /sonuclar sayfasında görünür hale gelir.
-    """
+
+async def update_results(target_date: Optional[date] = None) -> dict:
+    """Refresh scores from the source calendar pages and update analyzed matches."""
     istanbul_tz = timezone(timedelta(hours=3))
 
     if target_date:
@@ -329,65 +371,60 @@ async def update_results(target_date: Optional[date] = None) -> dict:
     day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=istanbul_tz)
     day_end = day_start + timedelta(days=1)
 
-    async with get_session() as session:
-        match_ids = list(
-            (await session.execute(
-                select(Match.match_id)
-                .where(
-                    Match.kickoff_time >= day_start,
-                    Match.kickoff_time < day_end,
-                    Match.deleted_at.is_(None),  # Sprint 8.9: silinmiş maçların skoru güncellenmez
-                )
-            )).scalars().all()
-        )
-
-    log.info("Sonuç güncellemesi: %s için %d maç bulundu", d, len(match_ids))
     stats = {"updated": 0, "not_finished": 0, "errors": 0, "skipped": 0}
-    if not match_ids:
+    async with get_session() as session:
+        fixture_row = await session.get(FixtureCache, d.isoformat())
+        match_rows = (await session.execute(
+            select(Match).where(
+                Match.kickoff_time >= day_start,
+                Match.kickoff_time < day_end,
+                Match.deleted_at.is_(None),
+            )
+        )).scalars().all()
+
+    fixtures = fixture_row.matches_json if fixture_row and isinstance(fixture_row.matches_json, list) else []
+    match_by_id = {row.match_id: row for row in match_rows}
+    fixture_ids = {item["match_id"] for item in fixtures if isinstance(item, dict) and "match_id" in item}
+    wanted_ids = fixture_ids | match_by_id.keys()
+    log.info("Sonuç güncellemesi: %s için %d bülten, %d analiz maçı", d, len(fixtures), len(match_rows))
+    if not wanted_ids:
         return stats
+    snapshots = {mid: score for mid, score in (await fetch_fixture_scores(d)).items() if mid in wanted_ids}
+    missing_ids = wanted_ids - snapshots.keys()
+    if missing_ids:
+        # UTC+8 calendar flips at 19:00 Istanbul; late fixtures live on the next page.
+        snapshots.update({mid: score for mid, score in (await fetch_fixture_scores(d + timedelta(days=1))).items()
+                          if mid in missing_ids})
+    if not snapshots:
+        raise RuntimeError(f"Kaynak bültende {d} için kayıtlı maç bulunamadı")
+    checked_at = datetime.now(timezone.utc)
+    stats["updated"] = sum(score.status == "finished" for score in snapshots.values())
+    stats["not_finished"] = len(wanted_ids) - stats["updated"]
 
-    async with browser_context() as ctx:
-        for match_id in match_ids:
-            try:
-                raw = await fetch_match_detail(match_id, ctx=ctx)
-                if raw.actual_ft_home is None or raw.actual_ft_away is None:
-                    stats["not_finished"] += 1
-                    continue
-
-                async def _do_update(_raw=raw, _mid=match_id):
-                    async with get_session() as session:
-                        existing = (await session.execute(
-                            select(Match).where(Match.match_id == _mid, Match.deleted_at.is_(None))
-                            .with_for_update()
-                        )).scalar_one_or_none()
-                        if existing is None:
-                            return False
-                        if _raw.match_id != _mid:
-                            raise ValueError("Result match ID does not match requested match")
-                        scores = _merge_result_scores(_raw, existing)
-                        await session.execute(
-                            sa_update(Match)
-                            .where(Match.match_id == _mid, Match.deleted_at.is_(None))
-                            .values(
-                                **scores,
-                                result_fetched_at=datetime.now(timezone.utc),
-                            )
-                        )
-                        return True
-
-                updated = await _with_retry(_do_update, label=f"update_results[{match_id}]")
-                if not updated:
-                    stats["skipped"] += 1
-                    continue
-                stats["updated"] += 1
-                log.info(
-                    "Güncellendi [%s]: %s vs %s | %d-%d",
-                    match_id, raw.home_team, raw.away_team,
-                    raw.actual_ft_home, raw.actual_ft_away,
+    async def _save():
+        async with get_session() as session:
+            if fixture_row is not None:
+                await session.execute(
+                    sa_update(FixtureCache).where(FixtureCache.date == d.isoformat())
+                    .values(matches_json=_merge_fixture_scores(fixtures, snapshots, checked_at))
                 )
-            except Exception as e:
-                log.error("Güncelleme hatası [%s]: %s", match_id, e, exc_info=True)
-                stats["errors"] += 1
+            for match_id, existing in match_by_id.items():
+                snapshot = snapshots.get(match_id)
+                if snapshot is None or snapshot.status != "finished":
+                    continue
+                raw = MatchRawData(
+                    match_id=match_id, home_team=existing.home_team,
+                    away_team=existing.away_team, league_code=existing.league_code or "",
+                    actual_ft_home=snapshot.home, actual_ft_away=snapshot.away,
+                    actual_ht_home=snapshot.ht_home, actual_ht_away=snapshot.ht_away,
+                )
+                scores = _merge_result_scores(raw, existing)
+                await session.execute(
+                    sa_update(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                    .values(**scores, result_fetched_at=checked_at)
+                )
+
+    await _with_retry(_save, label=f"update_results[{d}]")
 
     log.info(
         "Sonuç güncellemesi tamamlandı: %d güncellendi, %d bitmemiş, %d atlandı, %d hata",

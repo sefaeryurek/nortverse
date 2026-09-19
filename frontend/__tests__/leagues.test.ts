@@ -15,7 +15,7 @@ describe("leagueDisplay", () => {
   it("returns fallback for unknown league", () => {
     const d = leagueDisplay("Unknown League");
     expect(d.flag).toBe("⚽");
-    expect(d.short).toBe("—");
+    expect(d.short).toBe("Unknown Le…");
   });
 
   it("returns fallback for null code", () => {
@@ -60,6 +60,13 @@ describe("leagueDisplay", () => {
   it("handles Asian leagues", () => {
     expect(leagueDisplay("Saudi Pro League").short).toBe("KSA");
     expect(leagueDisplay("Japanese J1 League").short).toBe("JPN");
+  });
+
+  it("recognizes fixture source league names", () => {
+    expect(leagueDisplay("J2 League").short).toBe("JPN2");
+    expect(leagueDisplay("England Championship").short).toBe("ENG2");
+    expect(leagueDisplay("France Ligue 1").short).toBe("FRA");
+    expect(leagueDisplay("Turkey Super Lig").short).toBe("TUR");
   });
 
   it("returns fallback when both code and name are null", () => {

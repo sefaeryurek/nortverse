@@ -96,6 +96,9 @@ class ResultOut(BaseModel):
     actual_ft_away: Optional[int] = None
     actual_ht_home: Optional[int] = None
     actual_ht_away: Optional[int] = None
+    live_home: Optional[int] = None
+    live_away: Optional[int] = None
+    score_checked_at: Optional[str] = None
     status: str
     result: Optional[str] = None
     kg_var: Optional[bool] = None

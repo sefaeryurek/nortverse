@@ -136,7 +136,7 @@ async def test_pipeline_saves_skipped_fixture_for_later_visits(monkeypatch):
 
     monkeypatch.setattr(runner, "get_session", fake_session)
     monkeypatch.setattr(runner, "browser_context", fake_browser)
-    monkeypatch.setattr(runner, "fetch_fixture", AsyncMock(return_value=[fixture]))
+    monkeypatch.setattr(runner, "fetch_istanbul_fixture", AsyncMock(return_value=[fixture]))
     monkeypatch.setattr(runner, "fetch_match_detail", AsyncMock(return_value=raw))
     monkeypatch.setattr(runner, "check_match_filters", lambda _raw: SimpleNamespace(
         passed=False, reason=SkipReason.H2H_INSUFFICIENT,

@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.db.models import Match
+from app.db.models import FixtureCache, Match
 from app.models import MatchRawData
 from app.pipeline import runner
+from app.scraper.fixture_scores import FixtureScore
 
 
 def raw(**changes):
@@ -55,31 +56,78 @@ async def test_validation_failures_are_not_retried():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("ids", [[], ["123"]])
-async def test_empty_or_deleted_matches_are_not_counted_as_updated(monkeypatch, ids):
+async def test_no_fixture_or_match_does_not_scrape(monkeypatch):
     session = AsyncMock()
     selected = MagicMock()
-    selected.scalars.return_value.all.return_value = ids
-    missing = MagicMock()
-    missing.scalar_one_or_none.return_value = None
-    session.execute.side_effect = [selected, missing]
+    selected.scalars.return_value.all.return_value = []
+    session.execute.return_value = selected
+    session.get.return_value = None
 
     @asynccontextmanager
     async def get_session():
         yield session
 
-    browser_calls = []
-
-    @asynccontextmanager
-    async def browser():
-        browser_calls.append(True)
-        yield object()
-
     monkeypatch.setattr(runner, "get_session", get_session)
-    monkeypatch.setattr(runner, "browser_context", browser)
-    monkeypatch.setattr(runner, "fetch_match_detail", AsyncMock(return_value=raw()))
+    fetch = AsyncMock()
+    monkeypatch.setattr(runner, "fetch_fixture_scores", fetch)
     result = await runner.update_results(date(2026, 9, 14))
     assert result["updated"] == 0
-    assert result["skipped"] == len(ids)
-    assert len(browser_calls) == bool(ids)
-    assert session.execute.await_count == (2 if ids else 1)
+    fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_final_fixture_score_updates_all_results_without_detail_scrape(monkeypatch):
+    session = AsyncMock()
+    session.get.return_value = FixtureCache(
+        date="2026-09-14", cached_at=datetime.now(timezone.utc),
+        matches_json=[{"match_id": "123", "home_team": "A", "away_team": "B",
+                       "league_code": "ENG PR", "kickoff_time": "2026-09-14T12:00:00+00:00"}],
+    )
+    selected = MagicMock()
+    selected.scalars.return_value.all.return_value = []
+    session.execute.return_value = selected
+
+    @asynccontextmanager
+    async def get_session():
+        yield session
+
+    monkeypatch.setattr(runner, "get_session", get_session)
+    fetch = AsyncMock(return_value={"123": FixtureScore("123", "finished", 2, 1, 1, 0)})
+    monkeypatch.setattr(runner, "fetch_fixture_scores", fetch)
+    result = await runner.update_results(date(2026, 9, 14))
+    assert result["updated"] == 1
+    assert result["not_finished"] == 0
+    fetch.assert_awaited_once()
+    assert session.execute.await_count == 2  # select + one fixture-cache write
+
+
+@pytest.mark.asyncio
+async def test_late_istanbul_score_is_read_from_next_source_day(monkeypatch):
+    session = AsyncMock()
+    session.get.return_value = FixtureCache(
+        date="2026-09-14", cached_at=datetime.now(timezone.utc),
+        matches_json=[{"match_id": "123", "home_team": "A", "away_team": "B",
+                       "league_code": "ENG PR", "kickoff_time": "2026-09-14T20:00:00+00:00"}],
+    )
+    selected = MagicMock()
+    selected.scalars.return_value.all.return_value = []
+    session.execute.return_value = selected
+
+    @asynccontextmanager
+    async def get_session():
+        yield session
+
+    monkeypatch.setattr(runner, "get_session", get_session)
+    fetch = AsyncMock(side_effect=[{}, {"123": FixtureScore("123", "finished", 2, 1)}])
+    monkeypatch.setattr(runner, "fetch_fixture_scores", fetch)
+    result = await runner.update_results(date(2026, 9, 14))
+    assert result["updated"] == 1
+    assert [call.args[0] for call in fetch.await_args_list] == [date(2026, 9, 14), date(2026, 9, 15)]
+
+
+def test_finished_score_is_not_downgraded_by_later_live_snapshot():
+    old = [{"match_id": "123", "score_status": "finished", "score_home": 2, "score_away": 1}]
+    merged = runner._merge_fixture_scores(
+        old, {"123": FixtureScore("123", "live", 1, 1)}, datetime.now(timezone.utc))
+    assert merged[0]["score_status"] == "finished"
+    assert (merged[0]["score_home"], merged[0]["score_away"]) == (2, 1)

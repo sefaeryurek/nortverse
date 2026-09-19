@@ -1,6 +1,4 @@
-"use client";
-
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 
@@ -22,7 +20,6 @@ interface Props {
 }
 
 export default function DayTabs({ activeDate, basePath = "/bulten", referenceDate }: Props) {
-  const router = useRouter();
   const days = getRollingDates(undefined, referenceDate);
 
   return (
@@ -32,27 +29,22 @@ export default function DayTabs({ activeDate, basePath = "/bulten", referenceDat
     >
       {days.map(({ label, date, today }) => {
         const active = date === activeDate;
-        return (
-          <button
-            key={date}
-            onClick={() => {
-              if (active) return; // aynı tarihe tıklamak gereksiz reload üretmesin
-              router.push(`${basePath}?date=${date}`);
-            }}
-            disabled={active}
-            className="flex-shrink-0 flex flex-col items-center px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
-            style={{
-              backgroundColor: active ? "#1d4ed8" : today ? "#1e3a5f" : "#1c2333",
-              color: active ? "#fff" : today ? "#93c5fd" : "#94a3b8",
-              border: `1px solid ${active ? "#2563eb" : "#2d3748"}`,
-              cursor: active ? "default" : "pointer",
-            }}
-          >
-            <span>{label}</span>
-            <span className="text-[10px] font-normal mt-0.5 opacity-70">
-              {date.slice(5).replace("-", "/")}
-            </span>
-          </button>
+        const className = "flex-shrink-0 flex flex-col items-center px-4 py-2 rounded-lg text-xs font-semibold transition-colors";
+        const style = {
+          backgroundColor: active ? "#1d4ed8" : today ? "#1e3a5f" : "#1c2333",
+          color: active ? "#fff" : today ? "#93c5fd" : "#94a3b8",
+          border: `1px solid ${active ? "#2563eb" : "#2d3748"}`,
+        };
+        const content = <><span>{label}</span><span className="text-[10px] font-normal mt-0.5 opacity-70">
+          {date.slice(5).replace("-", "/")}
+        </span></>;
+        return active ? (
+          <span key={date} aria-current="date" className={className} style={style}>{content}</span>
+        ) : (
+          <Link key={date} href={`${basePath}?date=${date}`} prefetch={false}
+            aria-label={`${date} tarihindeki maçlar`} className={className} style={style}>
+            {content}
+          </Link>
         );
       })}
     </div>

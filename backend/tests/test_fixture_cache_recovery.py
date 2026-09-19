@@ -23,7 +23,7 @@ async def test_invalid_cache_recovers_by_fetching_fixture(monkeypatch, payload):
     monkeypatch.setattr(rf, "fixture_cache", {})
     monkeypatch.setattr(svc, "bg_queue", None)
     fetch = AsyncMock(return_value=[])
-    monkeypatch.setattr(rf, "fetch_fixture", fetch)
+    monkeypatch.setattr(rf, "fetch_istanbul_fixture", fetch)
     assert await rf.fixture(None) == []
     fetch.assert_awaited_once()
     session.merge.assert_awaited_once()
@@ -43,7 +43,7 @@ async def test_legacy_naive_cache_timestamp_uses_utc(monkeypatch):
     monkeypatch.setattr(rf, "fixture_cache", {})
     monkeypatch.setattr(svc, "bg_queue", None)
     fetch = AsyncMock()
-    monkeypatch.setattr(rf, "fetch_fixture", fetch)
+    monkeypatch.setattr(rf, "fetch_istanbul_fixture", fetch)
     assert await rf.fixture(None) == []
     fetch.assert_not_called()
 
@@ -67,7 +67,7 @@ async def test_old_daily_fixture_cache_returns_without_scraping(monkeypatch):
     monkeypatch.setattr(rf, "get_session", get_session)
     monkeypatch.setattr(rf, "fixture_cache", {})
     fetch = AsyncMock()
-    monkeypatch.setattr(rf, "fetch_fixture", fetch)
+    monkeypatch.setattr(rf, "fetch_istanbul_fixture", fetch)
 
     result = await rf.fixture(None)
     assert [match.match_id for match in result] == ["123"]

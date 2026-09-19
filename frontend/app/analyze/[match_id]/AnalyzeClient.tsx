@@ -138,7 +138,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
               Analiz yükleniyor...
             </p>
             <p className="text-xs mt-1" style={{ color: "#64748b" }}>
-              İlk açılışta ~15 saniye sürebilir
+              İlk analiz veri kaynağına göre daha uzun sürebilir.
             </p>
           </div>
         )}

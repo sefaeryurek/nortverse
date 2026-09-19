@@ -5,7 +5,9 @@ fonksiyonları icin mock HTML ile test. DB baglantisi gereksiz.
 """
 
 from datetime import date, datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from bs4 import BeautifulSoup, Tag
 
@@ -17,7 +19,25 @@ from app.scraper.fixture import (
     _extract_match_info,
     _is_row_hidden,
     _parse_fixture_html,
+    fetch_istanbul_fixture,
 )
+from app.models import FixtureMatch
+
+
+@pytest.mark.asyncio
+async def test_istanbul_day_joins_two_source_calendar_pages(monkeypatch):
+    def match(mid: str, hour: int) -> FixtureMatch:
+        return FixtureMatch(match_id=mid, home_team="A", away_team="B", league_code="ENG PR",
+                            kickoff_time=datetime(2026, 9, 18, hour, tzinfo=timezone.utc))
+
+    fetch = AsyncMock(side_effect=[
+        [match("early", 12), match("outside", 21)],
+        [match("late", 20), match("early", 12)],
+    ])
+    monkeypatch.setattr("app.scraper.fixture.fetch_fixture", fetch)
+    result = await fetch_istanbul_fixture(date(2026, 9, 18), ctx=object())
+    assert [item.match_id for item in result] == ["early", "late"]
+    assert [call.args[0] for call in fetch.await_args_list] == [date(2026, 9, 18), date(2026, 9, 19)]
 
 # ---------------------------------------------------------------------------
 # Test HTML sabitleri

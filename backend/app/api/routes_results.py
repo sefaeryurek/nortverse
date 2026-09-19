@@ -11,9 +11,19 @@ from sqlalchemy import select
 from app.analysis.league_filter import is_supported_league
 from app.api.schemas import MatchSummary, ResultOut
 from app.db.connection import get_session
-from app.db.models import Match
+from app.db.models import FixtureCache, Match
 
 router = APIRouter()
+
+
+def _utc_datetime(value: str | datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value) if isinstance(value, str) else value
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 
 @router.get("/api/matches", response_model=list[MatchSummary])
@@ -73,6 +83,7 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
     day_end = day_start + timedelta(days=1)
 
     async with get_session() as session:
+        fixture_row = await session.get(FixtureCache, d.isoformat())
         rows = (
             await session.execute(
                 select(
@@ -89,18 +100,45 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
             )
         ).all()
 
+    by_id = {row.match_id: row for row in rows}
+    fixtures = fixture_row.matches_json if fixture_row and isinstance(fixture_row.matches_json, list) else []
+    istanbul_tz = timezone(timedelta(hours=3))
+    listed = [
+        item for item in fixtures
+        if isinstance(item, dict) and item.get("match_id")
+        and (
+            (kickoff := _utc_datetime(item.get("kickoff_time"))) is None
+            or kickoff.astimezone(istanbul_tz).date() == d
+        )
+    ]
+    seen = {item["match_id"] for item in listed}
+    listed.extend({"match_id": row.match_id} for row in rows if row.match_id not in seen)
+
     now_utc = datetime.now(timezone.utc)
-    out = []
-    for row in rows:
-        if not is_supported_league(row.league_name, row.league_code):
+    out: list[ResultOut] = []
+    for item in listed:
+        row = by_id.get(item["match_id"])
+        league_code = item.get("league_code") or (row.league_code if row else None)
+        league_name = item.get("league_name") or (row.league_name if row else None)
+        if not is_supported_league(league_name, league_code):
             continue
 
-        h = row.actual_ft_home
-        a = row.actual_ft_away
-        kickoff = row.kickoff_time
+        h = row.actual_ft_home if row else None
+        a = row.actual_ft_away if row else None
+        checked_at = item.get("score_checked_at")
+        if (h is None or a is None) and item.get("score_status") == "finished":
+            h, a = item.get("score_home"), item.get("score_away")
+        kickoff = _utc_datetime(item.get("kickoff_time") or (row.kickoff_time if row else None))
+        checked_time = _utc_datetime(checked_at)
 
         if h is not None and a is not None:
             status = "finished"
+        elif item.get("score_status") == "postponed":
+            status = "postponed"
+        elif item.get("score_status") == "live" and checked_time and (
+            0 <= (now_utc - checked_time).total_seconds() < 900
+        ):
+            status = "live"
         elif kickoff and now_utc >= kickoff:
             status = "pending"
         else:
@@ -110,28 +148,36 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         kg_var = None
         over_25 = None
         katman_a_covered = None
+        live_home = item.get("score_home") if status == "live" else None
+        live_away = item.get("score_away") if status == "live" else None
         if status == "finished" and h is not None and a is not None:
             result = "1" if h > a else ("2" if a > h else "X")
             kg_var = h > 0 and a > 0
             over_25 = (h + a) >= 3
-            covered_list = (
-                row.ft_scores_1 if result == "1"
-                else row.ft_scores_2 if result == "2"
-                else row.ft_scores_x
-            ) or []
-            katman_a_covered = len(covered_list) > 0
+            if row is not None:
+                covered_list = (
+                    row.ft_scores_1 if result == "1"
+                    else row.ft_scores_2 if result == "2"
+                    else row.ft_scores_x
+                ) or []
+                katman_a_covered = f"{h}-{a}" in covered_list
 
         out.append(ResultOut(
-            match_id=row.match_id,
-            home_team=row.home_team,
-            away_team=row.away_team,
-            league_code=row.league_code,
-            league_name=row.league_name,
-            kickoff_time=row.kickoff_time.isoformat() if row.kickoff_time else None,
+            match_id=item["match_id"],
+            home_team=item.get("home_team") or (row.home_team if row else ""),
+            away_team=item.get("away_team") or (row.away_team if row else ""),
+            league_code=league_code,
+            league_name=league_name,
+            kickoff_time=kickoff.isoformat() if kickoff else None,
             actual_ft_home=h,
             actual_ft_away=a,
-            actual_ht_home=row.actual_ht_home,
-            actual_ht_away=row.actual_ht_away,
+            actual_ht_home=(row.actual_ht_home if row and row.actual_ht_home is not None
+                            else item.get("actual_ht_home")),
+            actual_ht_away=(row.actual_ht_away if row and row.actual_ht_away is not None
+                            else item.get("actual_ht_away")),
+            live_home=live_home,
+            live_away=live_away,
+            score_checked_at=checked_at,
             status=status,
             result=result,
             kg_var=kg_var,
@@ -139,4 +185,4 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
             katman_a_covered=katman_a_covered,
         ))
 
-    return out
+    return sorted(out, key=lambda match: match.kickoff_time or "")

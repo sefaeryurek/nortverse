@@ -31,6 +31,9 @@ from app.scraper.browser import browser_context, close_ad_overlay, goto_with_ret
 
 # Nowgoal data-t attribute'u UTC saatiyle çalışır
 _SITE_TZ = timezone.utc
+# Fixture sayfasındaki f=ft/sc gün seçimi kaynak sitenin UTC+8 takvimine göre.
+# Akşam İstanbul'da bir sonraki güne geçtiğinde UTC+3 kullanmak yanlış sayfayı açar.
+_SITE_CALENDAR_TZ = timezone(timedelta(hours=8))
 # Tarih hesaplamaları için İstanbul
 _ISTANBUL_TZ = timezone(timedelta(hours=3))
 
@@ -52,7 +55,7 @@ def _build_fixture_url(target_date: Optional[date] = None) -> str:
     if target_date is None:
         return base
 
-    today = datetime.now(_ISTANBUL_TZ).date()
+    today = datetime.now(_SITE_CALENDAR_TZ).date()
     diff = (target_date - today).days
 
     if diff == 0:
@@ -216,6 +219,7 @@ async def fetch_fixture(
     target_date: Optional[date] = None,
     only_hot: bool = True,
     ctx=None,
+    filter_istanbul_date: bool = True,
 ) -> list[FixtureMatch]:
     """Nowgoal26 fixture sayfasından maç listesini çeker.
 
@@ -233,7 +237,7 @@ async def fetch_fixture(
     matches = _parse_fixture_html(html, only_hot=only_hot)
 
     # Belirli bir tarih istendiyse İstanbul günü dışındaki maçları çıkar
-    if target_date is not None:
+    if target_date is not None and filter_istanbul_date:
         day_start = datetime(target_date.year, target_date.month, target_date.day,
                              0, 0, 0, tzinfo=_ISTANBUL_TZ)
         day_end = datetime(target_date.year, target_date.month, target_date.day,
@@ -246,6 +250,28 @@ async def fetch_fixture(
 
     log.info("Fixture: %d maç bulundu (only_hot=%s)", len(matches), only_hot)
     return matches
+
+
+async def fetch_istanbul_fixture(
+    target_date: date,
+    only_hot: bool = True,
+    ctx=None,
+) -> list[FixtureMatch]:
+    """Combine two UTC+8 source calendar pages into one Istanbul day."""
+    async def collect(browser_ctx):
+        first = await fetch_fixture(target_date, only_hot, browser_ctx, filter_istanbul_date=False)
+        second = await fetch_fixture(target_date + timedelta(days=1), only_hot, browser_ctx,
+                                     filter_istanbul_date=False)
+        selected: dict[str, FixtureMatch] = {}
+        for match in first + second:
+            if match.kickoff_time and match.kickoff_time.astimezone(_ISTANBUL_TZ).date() == target_date:
+                selected.setdefault(match.match_id, match)
+        return list(selected.values())
+
+    if ctx is not None:
+        return await collect(ctx)
+    async with browser_context() as new_ctx:
+        return await collect(new_ctx)
 
 
 async def fetch_leagues(ctx=None) -> dict[str, str]:

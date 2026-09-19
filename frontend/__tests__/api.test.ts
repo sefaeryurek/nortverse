@@ -51,6 +51,15 @@ it("rejects a finished result without a complete final score", async () => {
   await expect(getResults("2026-09-14")).rejects.toThrow("geçersiz maç verisi");
 });
 
+it("keeps a live score separate from a confirmed final result", async () => {
+  const row = { ...fixtureRow, actual_ft_home: null, actual_ft_away: null,
+    actual_ht_home: null, actual_ht_away: null, live_home: 2, live_away: 1,
+    score_checked_at: "2026-09-19T18:00:00+00:00", status: "live", result: null,
+    kg_var: null, over_25: null, katman_a_covered: null };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([row]))));
+  await expect(getResults("2026-09-19")).resolves.toEqual([row]);
+});
+
 it("preserves cancellation while reading the response body", async () => {
   const controller = new AbortController();
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => {
