@@ -63,7 +63,8 @@ def cache_put(match_id: str, value: AnalyzeResponse) -> None:
 def cache_get(match_id: str) -> AnalyzeResponse | None:
     if match_id not in analysis_cache:
         return None
-    if time.monotonic() - _analysis_cached_at.get(match_id, 0) >= ANALYSIS_CACHE_TTL:
+    cached_at = _analysis_cached_at.get(match_id)
+    if cached_at is None or time.monotonic() - cached_at >= ANALYSIS_CACHE_TTL:
         analysis_cache.pop(match_id, None)
         _analysis_cached_at.pop(match_id, None)
         return None

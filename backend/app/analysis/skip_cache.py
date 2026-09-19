@@ -13,7 +13,9 @@ from app.db.models import SkippedAnalysis
 from app.models import MatchRawData, SkipReason
 
 
-SKIP_CACHE_TTL = timedelta(hours=6)
+# Günlük pipeline saatlerce gecikebilir; filtre sonucu akşam bülteninde
+# geçerli kalsın, ertesi günkü çalışmada yenilensin.
+SKIP_CACHE_TTL = timedelta(hours=24)
 
 
 @dataclass(frozen=True)

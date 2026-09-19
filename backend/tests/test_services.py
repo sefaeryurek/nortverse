@@ -97,7 +97,9 @@ class TestCacheGet:
         cache_put("m1", _resp("m1"))
         assert cache_get("m1") is not None
 
-    def test_missing_cached_at_treated_as_expired(self):
+    def test_missing_cached_at_treated_as_expired(self, monkeypatch):
+        # A fresh CI runner can have monotonic() < CACHE_TTL.
+        monkeypatch.setattr(time, "monotonic", lambda: 100.0)
         cache_put("m1", _resp("m1"))
         _analysis_cached_at.pop("m1", None)
         result = cache_get("m1")
