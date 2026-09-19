@@ -30,8 +30,8 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
 
     3 katmanlı cache:
     1. Memory cache (10 dk TTL)
-    2. DB cache (kalıcı / bugün 1 saat)
-    3. Playwright scrape
+    2. DB cache (günlük pipeline tarafından güncellenir)
+    3. Yalnızca cache yoksa Playwright scrape
     """
     parsed_date: Optional[date] = None
     if target_date:
@@ -69,20 +69,15 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
 
     if db_row is not None:
         try:
-            cached_at = db_row.cached_at
-            if cached_at.tzinfo is None:
-                cached_at = cached_at.replace(tzinfo=timezone.utc)
-            age = (datetime.now(timezone.utc) - cached_at).total_seconds()
-            is_stale = age < 0 or (req_date >= today and age >= 3600)
-            if not is_stale:
-                if not isinstance(db_row.matches_json, list):
-                    raise ValueError("Fixture cache must contain a list")
-                result = [FixtureMatchOut(**m) for m in db_row.matches_json]
-                result = [m for m in result if is_supported_league(m.league_name, m.league_code)]
-                fixture_cache[cache_key] = (time.time(), result)
-                log.info("Fixture DB cache hit: %s (%.0f sn önce, %d lig maçı)",
-                         cache_key, age, len(result))
-                return result
+            # Bugünkü bülteni günlük pipeline zaten yeniliyor. Bir saatlik yaş sınırı,
+            # her cache miss'te 20 sn Playwright bekletip sonunda 503 üretiyordu.
+            if not isinstance(db_row.matches_json, list):
+                raise ValueError("Fixture cache must contain a list")
+            result = [FixtureMatchOut(**m) for m in db_row.matches_json]
+            result = [m for m in result if is_supported_league(m.league_name, m.league_code)]
+            fixture_cache[cache_key] = (time.time(), result)
+            log.info("Fixture DB cache hit: %s (%d lig maçı)", cache_key, len(result))
+            return result
         except (ValueError, TypeError, AttributeError) as exc:
             log.warning("Fixture DB cache geçersiz, yeniden çekilecek [%s]: %s", cache_key, exc)
 
