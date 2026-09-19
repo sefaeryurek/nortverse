@@ -6,5 +6,7 @@ __pycache__/
 tests/
 .git/
 .gitignore
+.env*
 debug/
+debug_html/
 *.md
