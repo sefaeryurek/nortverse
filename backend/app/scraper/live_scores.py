@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from bs4 import BeautifulSoup
 
 from app.scraper.browser import browser_context, goto_with_retry
