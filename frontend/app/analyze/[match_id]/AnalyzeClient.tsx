@@ -238,17 +238,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                   </div>
                 )}
 
-                {/* Arşiv İstatistikleri */}
-                {scores && (scores.scores_1.length > 0 || scores.scores_x.length > 0 || scores.scores_2.length > 0) ? (
-                  <MatchProvider value={{ matchId: data.match_id, homeTeam: data.home_team, awayTeam: data.away_team }}>
-                    <IddaaCoupon
-                      patternB={patternB}
-                      patternC={patternC}
-                      period={activePeriod}
-                      trends={data.trends}
-                    />
-                  </MatchProvider>
-                ) : (
+                {scores && scores.scores_1.length === 0 && scores.scores_x.length === 0 && scores.scores_2.length === 0 && (
                   <div
                     className="rounded-xl p-5 border text-center"
                     style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}
@@ -256,11 +246,18 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                     <p className="text-sm font-medium" style={{ color: "#475569" }}>
                       Bu periyotta 3.5+ oranı olan skor bulunamadı
                     </p>
-                    <p className="text-xs mt-1" style={{ color: "#334155" }}>
-                      Tahmin üretmek için en az 1 skor gerekiyor
-                    </p>
                   </div>
                 )}
+
+                {/* Arşiv 2, bu periyottaki 3.5+ skor listesinden bağımsız hesaplanır. */}
+                <MatchProvider value={{ matchId: data.match_id, homeTeam: data.home_team, awayTeam: data.away_team }}>
+                  <IddaaCoupon
+                    patternB={patternB}
+                    patternC={patternC}
+                    period={activePeriod}
+                    trends={data.trends}
+                  />
+                </MatchProvider>
                 </div>
               </>
             )}
