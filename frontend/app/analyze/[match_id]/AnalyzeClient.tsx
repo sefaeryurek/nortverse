@@ -249,7 +249,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                   </div>
                 )}
 
-                {/* Arşiv 2, bu periyottaki 3.5+ skor listesinden bağımsız hesaplanır. */}
+                {/* Boş skor listesinde de arşiv eşleşmeleri bulunabilir. */}
                 <MatchProvider value={{ matchId: data.match_id, homeTeam: data.home_team, awayTeam: data.away_team }}>
                   <IddaaCoupon
                     patternB={patternB}
