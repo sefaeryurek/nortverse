@@ -5,6 +5,11 @@ export interface FixtureMatch {
   league_code: string;
   league_name: string | null;
   kickoff_time: string | null;
+  status: "scheduled" | "pending" | "live";
+  live_home: number | null;
+  live_away: number | null;
+  live_minute: string | null;
+  score_checked_at: string | null;
 }
 
 export interface PeriodOut {

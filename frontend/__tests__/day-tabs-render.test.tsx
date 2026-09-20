@@ -28,6 +28,15 @@ describe("DayTabs render", () => {
     expect(screen.getAllByRole("link")[0].getAttribute("href")).toContain("/sonuclar?date=");
   });
 
+  it("shows past dates on the results page", () => {
+    render(<DayTabs activeDate="2026-09-15" basePath="/sonuclar" referenceDate="2026-09-15" range="past" />);
+    expect(screen.getByText("09/08")).toBeDefined();
+    expect(screen.getByText("09/15")).toBeDefined();
+    expect(screen.queryByText("09/16")).toBeNull();
+    expect(document.querySelector('[aria-current="date"]')?.parentElement?.firstElementChild)
+      .toBe(document.querySelector('[aria-current="date"]'));
+  });
+
   it("shows Turkish day names", () => {
     render(<DayTabs activeDate="2026-09-15" referenceDate="2026-09-15" />);
     const dayNames = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];

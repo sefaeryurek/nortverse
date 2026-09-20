@@ -16,6 +16,7 @@ def test_only_explicit_full_time_is_a_final_score():
       <tr id="tr1_104"><td class="status">FT</td><td class="handpoint">42 - 0</td></tr>
       <tr id="tr1_105"><td class="status">FT</td><td class="handpoint">1 - 0</td>
         <td>2-0</td><td class="toolimg"></td></tr>
+      <tr id="tr1_106"><td class="status">45+4</td><td class="handpoint">0 - 1</td></tr>
     </table>"""
     scores = parse_fixture_scores(html)
     assert (scores["101"].status, scores["101"].home, scores["101"].away) == ("finished", 2, 1)
@@ -24,6 +25,7 @@ def test_only_explicit_full_time_is_a_final_score():
     assert scores["103"].status == "postponed"
     assert "104" not in scores
     assert scores["105"].ht_home is None
+    assert scores["106"].minute == "45+4"
 
 
 @patch("app.scraper.fixture.datetime")

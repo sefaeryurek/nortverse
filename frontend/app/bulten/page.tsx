@@ -4,8 +4,10 @@ import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import RetryButton from "@/components/RetryButton";
 import BultenRow from "@/components/BultenRow";
+import AutoRefresh from "@/components/AutoRefresh";
 import { getFixture } from "@/lib/api";
 import type { FixtureMatch } from "@/lib/types";
+import Link from "next/link";
 
 function BultenSkeleton() {
   // 8 satırlık iskelet — gerçek BultenRow düzenine yakın boyutlarda
@@ -102,8 +104,11 @@ async function MatchList({ date }: { date: string }) {
         <div className="text-center space-y-3">
           <div className="text-5xl">📭</div>
           <p className="text-sm font-medium" style={{ color: "#64748b" }}>
-            Bu tarihte maç bulunamadı.
+            Bu tarihte bültende bekleyen maç yok.
           </p>
+          <Link href={`/sonuclar?date=${date}`} className="mt-3 inline-block text-sm text-blue-400 hover:text-blue-300">
+            Kesin sonuçlara bak
+          </Link>
         </div>
       </div>
     );
@@ -121,7 +126,12 @@ async function MatchList({ date }: { date: string }) {
           className="w-2 h-2 rounded-full flex-shrink-0"
           style={{ backgroundColor: "#22c55e" }}
         />
-        {matches.length} maç
+        <span>{matches.length} maç</span>
+        <span className="text-green-400">Canlı: {matches.filter((m) => m.status === "live").length}</span>
+        <span>Başlayacak: {matches.filter((m) => m.status === "scheduled").length}</span>
+        {matches.some((m) => m.status === "pending") && (
+          <span className="text-amber-300">Durum bekleniyor: {matches.filter((m) => m.status === "pending").length}</span>
+        )}
       </div>
       {sorted.map(({ match, timeStr }) => (
         <BultenRow key={match.match_id} match={match} timeStr={timeStr} />
@@ -158,6 +168,7 @@ export default async function BultenPage({ searchParams }: Props) {
 
       {/* Gün sekmeleri */}
       <DayTabs referenceDate={today} activeDate={date} />
+      {date === today && <AutoRefresh />}
 
       {/* Maç listesi */}
       <div className="flex-1 overflow-y-auto">

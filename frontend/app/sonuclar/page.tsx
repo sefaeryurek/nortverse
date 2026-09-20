@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
+import AutoRefresh from "@/components/AutoRefresh";
 import RetryButton from "@/components/RetryButton";
 import { getResults } from "@/lib/api";
 import { leagueDisplay } from "@/lib/leagues";
@@ -33,24 +34,7 @@ function ResultSkeleton() {
 }
 
 interface Props {
-  searchParams: Promise<{ date?: string | string[]; q?: string | string[]; status?: string | string[] }>;
-}
-
-type ResultStatus = "all" | ResultMatch["status"];
-const STATUS_FILTERS: { value: ResultStatus; label: string }[] = [
-  { value: "all", label: "Tümü" },
-  { value: "finished", label: "Biten" },
-  { value: "live", label: "Süren" },
-  { value: "pending", label: "Skor bekleyen" },
-  { value: "scheduled", label: "Başlamayan" },
-  { value: "postponed", label: "Ertelenen" },
-];
-
-function filterHref(date: string, status: ResultStatus, q: string): string {
-  const params = new URLSearchParams({ date });
-  if (status !== "all") params.set("status", status);
-  if (q) params.set("q", q);
-  return `/sonuclar?${params}`;
+  searchParams: Promise<{ date?: string | string[]; q?: string | string[] }>;
 }
 
 function formatTime(iso: string | null): string {
@@ -76,8 +60,6 @@ function ResultRow({ match }: { match: ResultMatch }) {
     match.actual_ft_home != null && match.actual_ft_away != null
       ? `${match.actual_ft_home} - ${match.actual_ft_away}`
       : null;
-  const liveScore = match.live_home != null && match.live_away != null
-    ? `${match.live_home} - ${match.live_away}` : null;
 
   return (
     <div
@@ -125,29 +107,14 @@ function ResultRow({ match }: { match: ResultMatch }) {
         )}
       </div>
 
-      {/* Status'e göre: Canlı veya Skor */}
+      {/* Kesin maç sonu skoru */}
       <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
-        {match.status === "live" ? (
-          <span
-            className="px-2 py-1 rounded text-xs font-bold"
-            style={{ backgroundColor: "#14532d", color: "#4ade80" }}
-          >
-            {`Canlı ${liveScore}`}
-          </span>
-        ) : match.status === "pending" || match.status === "scheduled" ? (
-          <span className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-300">
-            {match.status === "pending" ? "Skor doğrulanmadı" : "Başlamadı"}
-          </span>
-        ) : match.status === "postponed" ? (
-          <span className="rounded bg-amber-950 px-2 py-1 text-xs text-amber-300">Ertelendi</span>
-        ) : (
-          <span
-            className="text-sm font-bold font-mono px-2 py-0.5 rounded"
-            style={{ backgroundColor: "#0f172a", color: "#f1f5f9" }}
-          >
-            {scoreStr}
-          </span>
-        )}
+        <span
+          className="text-sm font-bold font-mono px-2 py-0.5 rounded"
+          style={{ backgroundColor: "#0f172a", color: "#f1f5f9" }}
+        >
+          {scoreStr}
+        </span>
       </div>
 
       {/* Analiz linki */}
@@ -163,7 +130,7 @@ function ResultRow({ match }: { match: ResultMatch }) {
   );
 }
 
-async function ResultList({ date, q, status }: { date: string; q: string; status: ResultStatus }) {
+async function ResultList({ date, q }: { date: string; q: string }) {
   let matches: ResultMatch[] = [];
   let error = "";
   try {
@@ -193,14 +160,17 @@ async function ResultList({ date, q, status }: { date: string; q: string; status
           <div className="text-5xl">📭</div>
           <p className="text-sm font-medium" style={{ color: "#64748b" }}>
             {isToday
-              ? "Bugün için kayıtlı maç bulunamadı."
-              : "Bu tarihe ait maç bulunamadı."}
+              ? "Bugün henüz kesinleşmiş maç sonucu yok."
+              : "Bu tarihte kesinleşmiş maç sonucu bulunamadı."}
           </p>
           {isToday && (
             <p className="text-xs" style={{ color: "#475569" }}>
-              Günlük maç verileri güncellendiğinde burada görünür.
+              Başlayacak ve süren maçlar Bülten sayfasında görünür.
             </p>
           )}
+          <Link href={`/bulten?date=${date}`} className="mt-3 inline-block text-sm text-blue-400 hover:text-blue-300">
+            Bültendeki maçlara bak
+          </Link>
         </div>
       </div>
     );
@@ -208,10 +178,8 @@ async function ResultList({ date, q, status }: { date: string; q: string; status
 
   const normalized = q.toLocaleLowerCase("tr-TR");
   const visible = matches.filter((match) =>
-    (status === "all" || match.status === status)
-    && (!normalized || [match.home_team, match.away_team, match.league_name ?? match.league_code ?? ""]
+    !normalized || [match.home_team, match.away_team, match.league_name ?? match.league_code ?? ""]
       .some((value) => value.toLocaleLowerCase("tr-TR").includes(normalized)))
-  );
   const lastChecked = matches.reduce<string | null>((latest, match) =>
     match.score_checked_at && (!latest || match.score_checked_at > latest)
       ? match.score_checked_at : latest, null);
@@ -225,26 +193,18 @@ async function ResultList({ date, q, status }: { date: string; q: string; status
       >
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#22c55e" }} />
-          {matches.length} maç
+          {matches.length} biten maç
         </span>
-        <span>Bitti: {matches.filter((m) => m.status === "finished").length}</span>
-        <span style={{ color: "#4ade80" }}>Sürüyor: {matches.filter((m) => m.status === "live").length}</span>
-        <span>Skor bekleniyor: {matches.filter((m) => m.status === "pending").length}</span>
-        <span>Başlamadı: {matches.filter((m) => m.status === "scheduled").length}</span>
-        {matches.some((m) => m.status === "postponed") && (
-          <span>Ertelendi: {matches.filter((m) => m.status === "postponed").length}</span>
-        )}
       </div>
       <p className="border-b border-slate-800 px-4 py-2 text-xs text-slate-400">
         {lastChecked
           ? `Son skor kontrolü: ${new Date(lastChecked).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", dateStyle: "short", timeStyle: "short" })}`
-          : "Skorlar henüz doğrulanmadı; kesin sonuçlar kontrol edildikten sonra görünür."}
+          : "Yalnızca kesin maç sonu skorları gösterilir."}
       </p>
 
       <div className="space-y-3 border-b border-slate-800 px-4 py-3">
         <form action="/sonuclar" className="flex max-w-xl gap-2">
           <input type="hidden" name="date" value={date} />
-          {status !== "all" && <input type="hidden" name="status" value={status} />}
           <input
             name="q"
             defaultValue={q}
@@ -257,22 +217,7 @@ async function ResultList({ date, q, status }: { date: string; q: string; status
             Ara
           </button>
         </form>
-        <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Sonuç durumuna göre filtrele">
-          {STATUS_FILTERS.map((filter) => (
-            <Link
-              key={filter.value}
-              href={filterHref(date, filter.value, q)}
-              prefetch={false}
-              aria-current={status === filter.value ? "page" : undefined}
-              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium ${status === filter.value
-                ? "border-blue-500 bg-blue-900 text-blue-100"
-                : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500"}`}
-            >
-              {filter.label}
-            </Link>
-          ))}
-        </div>
-        {(q || status !== "all") && <p className="text-xs text-slate-400">{visible.length} eşleşen maç</p>}
+        {q && <p className="text-xs text-slate-400">{visible.length} eşleşen maç</p>}
       </div>
 
       {visible.length === 0 && (
@@ -293,7 +238,6 @@ export default async function SonuclarPage({ searchParams }: Props) {
   const date = resolvePageDate(params.date, today);
   if (date === null) redirect("/sonuclar");
   const q = typeof params.q === "string" ? params.q.trim().slice(0, 80) : "";
-  const status = STATUS_FILTERS.find((item) => item.value === params.status)?.value ?? "all";
 
   return (
     <div className="flex flex-col h-full">
@@ -313,12 +257,13 @@ export default async function SonuclarPage({ searchParams }: Props) {
       </div>
 
       {/* Gün sekmeleri */}
-      <DayTabs referenceDate={today} activeDate={date} basePath="/sonuclar" />
+      <DayTabs referenceDate={today} activeDate={date} basePath="/sonuclar" range="past" />
+      {date === today && <AutoRefresh />}
 
       {/* Sonuç listesi */}
       <div className="flex-1 overflow-y-auto">
         <Suspense fallback={<ResultSkeleton />}>
-          <ResultList date={date} q={q} status={status} />
+          <ResultList date={date} q={q} />
         </Suspense>
       </div>
     </div>

@@ -42,6 +42,11 @@ class FixtureMatchOut(BaseModel):
     league_code: str
     league_name: Optional[str]
     kickoff_time: Optional[str]
+    status: str = "scheduled"
+    live_home: Optional[int] = None
+    live_away: Optional[int] = None
+    live_minute: Optional[str] = None
+    score_checked_at: Optional[str] = None
 
 
 class PeriodOut(BaseModel):

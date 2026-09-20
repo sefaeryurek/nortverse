@@ -19,6 +19,11 @@ function makeMatch(overrides: Partial<FixtureMatch> = {}): FixtureMatch {
     league_code: "Turkish Super League",
     league_name: "Turkish Super League",
     kickoff_time: "2026-09-15T18:00:00Z",
+    status: "scheduled",
+    live_home: null,
+    live_away: null,
+    live_minute: null,
+    score_checked_at: null,
     ...overrides,
   };
 }
@@ -33,6 +38,13 @@ describe("BultenRow", () => {
   it("renders kickoff time", () => {
     render(<BultenRow match={makeMatch()} timeStr="21:00" />);
     expect(screen.getAllByText("21:00").length).toBeGreaterThan(0);
+  });
+
+  it("shows a live minute and score in the bulletin", () => {
+    render(<BultenRow match={makeMatch({ status: "live", live_home: 1, live_away: 2,
+      live_minute: "67" })} timeStr="21:00" />);
+    expect(screen.getByText("67′")).toBeDefined();
+    expect(screen.getByText("1 - 2")).toBeDefined();
   });
 
   it("renders placeholder time with muted style", () => {

@@ -49,11 +49,9 @@ function checkedList<T>(value: T, results = false): T {
 }
 
 export async function getFixture(date: string): Promise<FixtureMatch[]> {
-  // Server-side fetch (Vercel SSR): Next.js Data Cache 5dk
-  // Sprint 8.10b: 60sn → 300sn — Supabase egress azaltma; bültende dakikalık
-  // güncelleme nadir olduğu için kullanıcı UX etkisi yok.
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   return checkedList(await request<FixtureMatch[]>(`/api/fixture?${new URLSearchParams({ date })}`, {
-    next: { revalidate: 300 },
+    next: { revalidate: date === today ? 15 : 300 },
   }));
 }
 
@@ -69,10 +67,9 @@ export async function analyzeMatch(matchId: string, signal?: AbortSignal): Promi
 }
 
 export async function getResults(date: string): Promise<ResultMatch[]> {
-  // Sonuçlar 2dk cache — Sprint 8.10b: 60sn → 120sn (egress azaltma)
-  // Saatlik update-scores cron olduğu için 2dk gecikme kabul edilebilir
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   return checkedList(await request<ResultMatch[]>(`/api/results?${new URLSearchParams({ date })}`, {
-    next: { revalidate: 120 },
+    next: { revalidate: date === today ? 15 : 300 },
   }), true);
 }
 

@@ -28,7 +28,8 @@ it("preserves caller cancellation", async () => {
 });
 
 const fixtureRow = { match_id: "123", home_team: "Home", away_team: "Away",
-  league_code: "ENG PR", league_name: "Premier League", kickoff_time: null };
+  league_code: "ENG PR", league_name: "Premier League", kickoff_time: null,
+  status: "scheduled", live_home: null, live_away: null, live_minute: null, score_checked_at: null };
 
 it.each([null, {}, [null], [{ ...fixtureRow, home_team: 7 }],
   [{ ...fixtureRow, kickoff_time: "not-a-date" }], [fixtureRow, fixtureRow]])(
@@ -51,13 +52,20 @@ it("rejects a finished result without a complete final score", async () => {
   await expect(getResults("2026-09-14")).rejects.toThrow("geçersiz maç verisi");
 });
 
-it("keeps a live score separate from a confirmed final result", async () => {
+it("rejects a live score from the finished results endpoint", async () => {
   const row = { ...fixtureRow, actual_ft_home: null, actual_ft_away: null,
     actual_ht_home: null, actual_ht_away: null, live_home: 2, live_away: 1,
     score_checked_at: "2026-09-19T18:00:00+00:00", status: "live", result: null,
     kg_var: null, over_25: null, katman_a_covered: null };
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([row]))));
-  await expect(getResults("2026-09-19")).resolves.toEqual([row]);
+  await expect(getResults("2026-09-19")).rejects.toThrow("geçersiz maç verisi");
+});
+
+it("accepts a live bulletin match with a source minute", async () => {
+  const row = { ...fixtureRow, status: "live", live_home: 1, live_away: 2,
+    live_minute: "67", score_checked_at: "2026-09-19T20:00:00+00:00" };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([row]))));
+  await expect(getFixture("2026-09-19")).resolves.toEqual([row]);
 });
 
 it("preserves cancellation while reading the response body", async () => {

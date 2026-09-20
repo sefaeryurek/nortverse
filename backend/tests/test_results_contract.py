@@ -9,7 +9,7 @@ from app.db.models import FixtureCache, Match
 
 
 @pytest.mark.asyncio
-async def test_results_keep_scheduled_and_unconfirmed_matches(monkeypatch):
+async def test_results_only_include_confirmed_final_scores(monkeypatch):
     now = datetime.now(timezone.utc)
     rows = [Match(match_id=str(i), home_team="A", away_team="B", league_code="ENG PR",
                   kickoff_time=kickoff, actual_ft_home=h, actual_ft_away=a)
@@ -32,15 +32,12 @@ async def test_results_keep_scheduled_and_unconfirmed_matches(monkeypatch):
     monkeypatch.setattr(rr, "get_session", fake_session)
     matches = await rr.get_results("2026-09-14")
     by_id = {match.match_id: match for match in matches}
-    assert {match_id: match.status for match_id, match in by_id.items()} == {
-        "0": "scheduled", "1": "pending", "2": "pending", "3": "finished",
-    }
+    assert {match_id: match.status for match_id, match in by_id.items()} == {"3": "finished"}
     assert by_id["3"].result == "1"
-    assert all(match.result is None for match_id, match in by_id.items() if match_id != "3")
 
 
 @pytest.mark.asyncio
-async def test_results_include_fixture_without_analysis_and_keep_live_score_unconfirmed(monkeypatch):
+async def test_results_exclude_unfinished_live_fixture(monkeypatch):
     now = datetime.now(timezone.utc)
     session = AsyncMock()
     session.get.return_value = FixtureCache(
@@ -63,11 +60,7 @@ async def test_results_include_fixture_without_analysis_and_keep_live_score_unco
 
     monkeypatch.setattr(rr, "get_session", fake_session)
     matches = await rr.get_results("2026-09-14")
-    assert len(matches) == 1
-    assert matches[0].status == "live"
-    assert (matches[0].live_home, matches[0].live_away) == (2, 1)
-    assert matches[0].actual_ft_home is None
-    assert matches[0].result is None
+    assert matches == []
 
 
 @pytest.mark.asyncio

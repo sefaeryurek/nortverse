@@ -2,11 +2,10 @@ import Link from "next/link";
 
 const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 
-export function getRollingDates(now = new Date(), todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" })): { label: string; date: string; today: boolean }[] {
-  // Dün + bugün + 6 gün = 8 günlük pencere
+export function getRollingDates(now = new Date(), todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" }), range: "upcoming" | "past" = "upcoming"): { label: string; date: string; today: boolean }[] {
   return Array.from({ length: 8 }, (_, i) => {
     const d = new Date(`${todayIso}T12:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 1 + i);
+    d.setUTCDate(d.getUTCDate() + (range === "past" ? -i : i - 1));
     const iso = d.toISOString().slice(0, 10);
     const dayIdx = (d.getUTCDay() + 6) % 7; // 0=Pzt
     return { label: DAYS[dayIdx], date: iso, today: iso === todayIso };
@@ -17,10 +16,11 @@ interface Props {
   activeDate: string;
   basePath?: string;
   referenceDate?: string;
+  range?: "upcoming" | "past";
 }
 
-export default function DayTabs({ activeDate, basePath = "/bulten", referenceDate }: Props) {
-  const days = getRollingDates(undefined, referenceDate);
+export default function DayTabs({ activeDate, basePath = "/bulten", referenceDate, range = "upcoming" }: Props) {
+  const days = getRollingDates(undefined, referenceDate, range);
 
   return (
     <div

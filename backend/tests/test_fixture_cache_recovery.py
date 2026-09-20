@@ -4,9 +4,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 
 from app.api import routes_fixture as rf
 from app.api import services as svc
+
+
+@pytest.fixture(autouse=True)
+def no_live_source(monkeypatch):
+    monkeypatch.setattr(rf, "get_live_snapshot", AsyncMock(return_value=None))
 
 
 @pytest.mark.asyncio
@@ -98,3 +104,20 @@ async def test_fixture_cache_hit_does_not_queue_all_matches_for_analysis(monkeyp
         assert svc.bg_queue.qsize() == 0
     finally:
         svc.shutdown_bg_queue()
+
+
+@pytest.mark.asyncio
+async def test_scraper_failure_returns_service_unavailable(monkeypatch):
+    session = AsyncMock()
+    session.get.return_value = None
+
+    @asynccontextmanager
+    async def get_session():
+        yield session
+
+    monkeypatch.setattr(rf, "get_session", get_session)
+    monkeypatch.setattr(rf, "fixture_cache", {})
+    monkeypatch.setattr(rf, "fetch_istanbul_fixture", AsyncMock(side_effect=RuntimeError("browser unavailable")))
+    with pytest.raises(HTTPException) as error:
+        await rf.fixture(None)
+    assert error.value.status_code == 503

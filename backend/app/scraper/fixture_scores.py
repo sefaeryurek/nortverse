@@ -13,6 +13,7 @@ from app.scraper.fixture import _build_fixture_url, _fetch_fixture_with_ctx, _MA
 
 _SCORE_RE = re.compile(r"^\s*(\d{1,2})\s*[-:]\s*(\d{1,2})\s*$")
 _LIVE_STATUSES = {"1st Half", "2nd Half", "HT"}
+_MINUTE_RE = re.compile(r"^(?:[1-9]|[1-9]\d|1[01]\d)(?:\+[1-9]\d?)?$", re.ASCII)
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class FixtureScore:
     away: int | None = None
     ht_home: int | None = None
     ht_away: int | None = None
+    minute: str | None = None
 
 
 def _score(value: str) -> tuple[int, int] | None:
@@ -44,7 +46,7 @@ def parse_fixture_scores(html: str) -> dict[str, FixtureScore]:
         if source_status == "Postp.":
             scores[match_id] = FixtureScore(match_id, "postponed")
             continue
-        if source_status != "FT" and source_status not in _LIVE_STATUSES:
+        if source_status != "FT" and source_status not in _LIVE_STATUSES and not _MINUTE_RE.fullmatch(source_status):
             continue
         score_cell = row.select_one("td.handpoint")
         pair = _score(score_cell.get_text(" ", strip=True)) if score_cell else None
@@ -63,6 +65,7 @@ def parse_fixture_scores(html: str) -> dict[str, FixtureScore]:
             home=pair[0], away=pair[1],
             ht_home=half_pair[0] if half_pair else None,
             ht_away=half_pair[1] if half_pair else None,
+            minute=source_status if _MINUTE_RE.fullmatch(source_status) else None,
         )
     return scores
 

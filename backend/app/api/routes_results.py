@@ -10,20 +10,12 @@ from sqlalchemy import select
 
 from app.analysis.league_filter import is_supported_league
 from app.api.schemas import MatchSummary, ResultOut
+from app.api.live_snapshot import get_live_snapshot
+from app.api.score_state import _utc as _utc_datetime, resolve_match_state
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
 
 router = APIRouter()
-
-
-def _utc_datetime(value: str | datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value) if isinstance(value, str) else value
-    except ValueError:
-        return None
-    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 
 @router.get("/api/matches", response_model=list[MatchSummary])
@@ -70,7 +62,7 @@ async def list_matches(
 
 @router.get("/api/results", response_model=list[ResultOut])
 async def get_results(target_date: Optional[str] = Query(None, alias="date")) -> list[ResultOut]:
-    """Belirli bir tarihte oynanan/oynanacak TÜM maçları döndürür."""
+    """Only confirmed full-time matches belong to the results page."""
     if target_date:
         try:
             d = date.fromisoformat(target_date)
@@ -101,6 +93,8 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         ).all()
 
     by_id = {row.match_id: row for row in rows}
+    today = datetime.now(timezone(timedelta(hours=3))).date()
+    live_snapshot = await get_live_snapshot() if today - timedelta(days=1) <= d <= today else None
     fixtures = fixture_row.matches_json if fixture_row and isinstance(fixture_row.matches_json, list) else []
     istanbul_tz = timezone(timedelta(hours=3))
     listed = [
@@ -123,34 +117,21 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         if not is_supported_league(league_name, league_code):
             continue
 
-        h = row.actual_ft_home if row else None
-        a = row.actual_ft_away if row else None
-        checked_at = item.get("score_checked_at")
-        if (h is None or a is None) and item.get("score_status") == "finished":
-            h, a = item.get("score_home"), item.get("score_away")
         kickoff = _utc_datetime(item.get("kickoff_time") or (row.kickoff_time if row else None))
-        checked_time = _utc_datetime(checked_at)
-
-        if h is not None and a is not None:
-            status = "finished"
-        elif item.get("score_status") == "postponed":
-            status = "postponed"
-        elif item.get("score_status") == "live" and checked_time and (
-            0 <= (now_utc - checked_time).total_seconds() < 900
-        ):
-            status = "live"
-        elif kickoff and now_utc >= kickoff:
-            status = "pending"
-        else:
-            status = "scheduled"
+        observed = live_snapshot.scores.get(item["match_id"]) if live_snapshot else None
+        state = resolve_match_state(
+            item, kickoff, row.actual_ft_home if row else None, row.actual_ft_away if row else None,
+            observed, live_snapshot.checked_at if live_snapshot else None, now_utc,
+        )
+        if state.status != "finished":
+            continue
+        h, a = state.final_home, state.final_away
 
         result = None
         kg_var = None
         over_25 = None
         katman_a_covered = None
-        live_home = item.get("score_home") if status == "live" else None
-        live_away = item.get("score_away") if status == "live" else None
-        if status == "finished" and h is not None and a is not None:
+        if h is not None and a is not None:
             result = "1" if h > a else ("2" if a > h else "X")
             kg_var = h > 0 and a > 0
             over_25 = (h + a) >= 3
@@ -175,10 +156,8 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
                             else item.get("actual_ht_home")),
             actual_ht_away=(row.actual_ht_away if row and row.actual_ht_away is not None
                             else item.get("actual_ht_away")),
-            live_home=live_home,
-            live_away=live_away,
-            score_checked_at=checked_at,
-            status=status,
+            score_checked_at=state.score_checked_at,
+            status="finished",
             result=result,
             kg_var=kg_var,
             over_25=over_25,
