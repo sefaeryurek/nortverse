@@ -20,13 +20,19 @@ function renderWithContext(ui: React.ReactElement) {
 describe("TopPicks", () => {
   it("shows empty message when no patterns", () => {
     renderWithContext(<TopPicks patternB={null} patternC={null} period="ft" />);
-    expect(screen.getByText(/yeterli örneklem ve sıklık eşiğini geçen seçim yok/)).toBeDefined();
+    expect(screen.getByText(/en büyük örneklem 0 maç/)).toBeDefined();
   });
 
   it("shows empty message when match_count is zero", () => {
     const empty = makePatternResult({ match_count: 0 });
     renderWithContext(<TopPicks patternB={empty} patternC={null} period="ft" />);
-    expect(screen.getByText(/yeterli örneklem ve sıklık eşiğini geçen seçim yok/)).toBeDefined();
+    expect(screen.getByText(/en büyük örneklem 0 maç/)).toBeDefined();
+  });
+
+  it("shows the actual sample when it is too small for a recommendation", () => {
+    const small = makePatternResult({ match_count: 7, result_1_pct: 100 });
+    renderWithContext(<TopPicks patternB={small} patternC={null} period="ft" />);
+    expect(screen.getByText(/en büyük örneklem 7 maç/)).toBeDefined();
   });
 
   it("renders picks when pattern has high percentages", () => {

@@ -127,6 +127,7 @@ export default function TopPicks({ patternB, patternC, period, trends }: Props) 
     () => getTopPicks(buildPicks(patternB, patternC, period, trends ?? null), { limit: 8 }),
     [patternB, patternC, period, trends],
   );
+  const largestSample = Math.max(patternB?.match_count ?? 0, patternC?.match_count ?? 0);
 
   if (picks.length === 0) {
     return (
@@ -141,7 +142,10 @@ export default function TopPicks({ patternB, patternC, period, trends }: Props) 
           </h3>
         </div>
         <p className="text-xs" style={{ color: "#475569" }}>
-          Bu periyotta yeterli örneklem ve sıklık eşiğini geçen seçim yok. Aşağıdaki arşiv özetini inceleyebilirsiniz.
+          {largestSample < MIN_RECOMMENDATION_SAMPLE
+            ? `Öneri için bir arşivde en az ${MIN_RECOMMENDATION_SAMPLE} benzer maç gerekiyor. Bu maçta en büyük örneklem ${largestSample} maç.`
+            : "Bu periyotta örneklem yeterli, fakat sıklık eşiğini geçen seçim yok."}{" "}
+          Arşiv özeti aşağıda gösteriliyor.
         </p>
       </div>
     );
