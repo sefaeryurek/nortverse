@@ -6,7 +6,7 @@ export interface Pick {
   field: keyof PatternResult; // ham alan adı
   marketLabel: string;     // UI: "Maç Sonucu", "2.5 Alt/Üst"
   selectionLabel: string;  // UI: "1", "Üst 2.5", "X/1"
-  pct: number;             // birleştirilmiş yüzde (AB için ortalama, tek için kendi)
+  pct: number;             // arşiv sıklığı (AB için iki arşivden düşük olan)
   pctA: number | null;
   pctB: number | null;
   matchCountA: number;
@@ -14,6 +14,15 @@ export interface Pick {
   marketWeight: number;
   archive: "A" | "B" | "AB";
   confidence: number;      // 0..~1.15
+}
+
+// A recommendation needs enough comparable archive matches in every source
+// that contributes to it. This is a display gate, not a calibrated hit rate.
+export const MIN_RECOMMENDATION_SAMPLE = 20;
+
+export function effectivePickSample(pick: Pick): number {
+  return pick.archive === "AB" ? Math.min(pick.matchCountA, pick.matchCountB)
+    : pick.archive === "A" ? pick.matchCountA : pick.matchCountB;
 }
 
 const DUAL_BONUS = 1.15;
@@ -501,10 +510,12 @@ export function buildPicks(
   period: Period,
   trends: TrendsData | null = null,
 ): Pick[] {
-  const rawA = patternA ? extractRaw(patternA, period) : [];
-  const rawB = patternB ? extractRaw(patternB, period) : [];
-  const matchCountA = patternA?.match_count ?? 0;
-  const matchCountB = patternB?.match_count ?? 0;
+  const eligibleA = patternA && patternA.match_count >= MIN_RECOMMENDATION_SAMPLE ? patternA : null;
+  const eligibleB = patternB && patternB.match_count >= MIN_RECOMMENDATION_SAMPLE ? patternB : null;
+  const rawA = eligibleA ? extractRaw(eligibleA, period) : [];
+  const rawB = eligibleB ? extractRaw(eligibleB, period) : [];
+  const matchCountA = eligibleA?.match_count ?? 0;
+  const matchCountB = eligibleB?.match_count ?? 0;
 
   const mapKey = (r: RawSelection) => `${r.marketKey}|${r.selectionLabel}`;
   const aMap = new Map<string, RawSelection>();
@@ -521,15 +532,18 @@ export function buildPicks(
     const ref = a ?? b!;
     const pctA = a?.pct ?? null;
     const pctB = b?.pct ?? null;
-    const dual = a !== undefined && b !== undefined && pctA! >= DUAL_THRESHOLD && pctB! >= DUAL_THRESHOLD;
+    // Two archives only corroborate a selection when each clears the same
+    // minimum frequency. A contradictory archive cannot confer an AB badge.
+    if (a && b && (pctA! < DUAL_THRESHOLD || pctB! < DUAL_THRESHOLD)) continue;
+    const dual = a !== undefined && b !== undefined;
 
     let archive: "A" | "B" | "AB";
     let combinedPct: number;
     let combinedMatchCount: number;
     if (a && b) {
       archive = "AB";
-      combinedPct = (pctA! + pctB!) / 2;
-      combinedMatchCount = Math.max(matchCountA, matchCountB);
+      combinedPct = Math.min(pctA!, pctB!);
+      combinedMatchCount = Math.min(matchCountA, matchCountB);
     } else if (a) {
       archive = "A";
       combinedPct = pctA!;
@@ -581,12 +595,12 @@ export interface TopPicksOptions {
   minConfidence?: number;  // default 0.55
   limit?: number;          // default 8
   minPct?: number;         // override: dinamik eşik yerine sabit eşik
-  matchCount?: number;     // dinamik eşik için örneklem boyutu (yoksa picks'ten en yüksek alınır)
+  matchCount?: number;     // özet gösterimi için örneklem boyutu (seçimler kendi örneklemini kullanır)
 }
 
 export interface TopPicksResult {
   picks: Pick[];
-  effectiveMinPct: number; // gerçekten uygulanan eşik (UI gösterimi için)
+  effectiveMinPct: number; // en büyük örneklemin eşiği; seçimler kendi örneklem eşiğini kullanır
   matchCount: number;
 }
 
@@ -610,9 +624,10 @@ export function getTopPicks(picks: Pick[], opts: TopPicksOptions = {}): TopPicks
   const matchCount =
     opts.matchCount ?? picks.reduce((m, p) => Math.max(m, p.matchCountA, p.matchCountB), 0);
   const minPct = opts.minPct ?? dynamicMinPct(matchCount);
-  const filtered = resolveConflicts(picks)
-    .filter((p) => p.confidence >= minConf && p.pct >= minPct)
-    .slice(0, limit);
+  const eligible = picks.filter((p) => p.confidence >= minConf
+      && effectivePickSample(p) >= MIN_RECOMMENDATION_SAMPLE
+      && p.pct >= (opts.minPct ?? dynamicMinPct(effectivePickSample(p))));
+  const filtered = resolveConflicts(eligible).slice(0, limit);
   return {
     picks: filtered,
     effectiveMinPct: minPct,

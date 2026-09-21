@@ -18,7 +18,7 @@ afterEach(() => {
   else Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
 });
 
-describe("cart probability display", () => {
+describe("cart selection display", () => {
   it("closes on cancel and returns focus to the opening control", () => {
     writeStorage([makeCartItem()]);
     render(<BetCart />);
@@ -38,23 +38,25 @@ describe("cart probability display", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Bahis sepetini aç (1 tahmin)" }).length).toBeGreaterThan(0);
   });
-  it("same-match selections show correlation-corrected probability", () => {
+  it("does not present archive frequencies as a joint probability", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
       makeCartItem({ pct: 80 }),
       makeCartItem({ marketKey: "kg", selectionLabel: "KG Var", pct: 75 }),
     ]));
     render(<BetCart />);
     fireEvent.click(screen.getAllByRole("button", { name: "Bahis sepetini aç (2 tahmin)" })[0]);
-    expect(screen.getByRole("status").textContent).toContain("korelasyon düzeltmesiyle");
+    expect(screen.getByRole("status").textContent).toContain("birlikte gerçekleşme olasılığı");
+    expect(screen.queryByText("Toplam Olasılık")).toBeNull();
+    expect(screen.queryByText("Tahmini Oran")).toBeNull();
   });
 
-  it("different-match selections show joint probability", () => {
+  it("keeps different-match selections without an invented price", () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
       makeCartItem({ pct: 80 }), makeCartItem({ matchId: "2", pct: 75 }),
     ]));
     render(<BetCart />);
     fireEvent.click(screen.getAllByRole("button", { name: "Bahis sepetini aç (2 tahmin)" })[0]);
-    expect(screen.getByText("≈%60.0")).toBeDefined();
-    expect(screen.getByRole("status").textContent).toContain("korelasyon düzeltmesiyle");
+    expect(screen.getByRole("status").textContent).toContain("bahis oranı olarak kullanılamaz");
+    expect(screen.queryByText("≈%60.0")).toBeNull();
   });
 });

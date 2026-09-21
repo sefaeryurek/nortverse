@@ -21,7 +21,7 @@ export default function BetCart() {
 }
 
 function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
-  const { items, removeItem, clear, jointProb, estOdds, count } = cart;
+  const { items, removeItem, clear, count } = cart;
   const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const desktopTrigger = useRef<HTMLButtonElement>(null);
@@ -38,9 +38,6 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
       restoreFocus.current = false;
     }
   }, [open]);
-
-  const probPct = jointProb === null ? "—" : `≈%${(jointProb * 100).toFixed(1)}`;
-  const odds = estOdds === null ? "—" : `≈${estOdds.toFixed(2)}`;
 
   return (
     <>
@@ -89,10 +86,8 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
           >
             {count} seçim
           </span>
-          <div className="flex-1 flex items-center justify-center gap-3 text-xs font-mono" style={{ color: "#86efac" }}>
-            <span>{probPct}</span>
-            <span style={{ color: "#475569" }}>·</span>
-            <span>{odds}</span>
+          <div className="flex-1 text-center text-xs" style={{ color: "#86efac" }}>
+            Arşiv seçimleri
           </div>
           <span
             className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
@@ -192,27 +187,8 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
               className="border-t px-4 py-3 space-y-2"
               style={{ borderColor: "#1e293b", backgroundColor: "#0a0f17" }}
             >
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-[10px] uppercase tracking-wider" style={{ color: "#475569" }}>
-                    Toplam Olasılık
-                  </div>
-                  <div className="text-base font-bold font-mono" style={{ color: "#86efac" }}>
-                    {probPct}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] uppercase tracking-wider" style={{ color: "#475569" }}>
-                    Tahmini Oran
-                  </div>
-                  <div className="text-base font-bold font-mono" style={{ color: "#86efac" }}>
-                    {odds}
-                  </div>
-                </div>
-              </div>
-
               <p className="text-xs text-slate-400" role="status">
-                Geçmiş yüzdelerden korelasyon düzeltmesiyle hesaplanır. Gösterilen oran bir bahis şirketi teklifi değildir.
+                Yüzdeler geçmiş arşiv eşleşmelerinin sıklığıdır. Seçimlerin birlikte gerçekleşme olasılığı veya bahis oranı olarak kullanılamaz.
               </p>
               <button
                 onClick={clear}

@@ -75,6 +75,7 @@ _CACHE_RULES: dict[str, str] = {
     "/api/results": "public, s-maxage=120, stale-while-revalidate=60",
     "/api/matches": "public, s-maxage=300, stale-while-revalidate=60",
     "/api/health": "public, s-maxage=30",
+    "/api/analysis-evidence": "public, s-maxage=300, stale-while-revalidate=60",
 }
 
 

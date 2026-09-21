@@ -1,11 +1,10 @@
 // Bahis sepeti — localStorage tabanlı, çok-maç destekli.
-// Kullanıcı farklı maçlardan tahminleri biriktirip kombo oranı görebilir.
+// Kullanıcı farklı maçlardan arşiv seçimlerini biriktirebilir.
 
 "use client";
 
 import { useSyncExternalStore, useMemo, useCallback } from "react";
 import type { Period } from "./labels";
-import { getCorrectionFactor } from "./correlations";
 
 export interface CartItem {
   matchId: string;
@@ -119,27 +118,6 @@ export function useCart() {
     [items],
   );
 
-  const jointProb = useMemo(() => {
-    if (items.length === 0) return null;
-    let prob = 1;
-    for (const it of items) {
-      prob *= it.pct / 100;
-    }
-    for (let i = 0; i < items.length; i++) {
-      for (let j = i + 1; j < items.length; j++) {
-        if (items[i].matchId === items[j].matchId) {
-          const corr = getCorrectionFactor(
-            items[i].marketKey, items[i].selectionLabel,
-            items[j].marketKey, items[j].selectionLabel,
-          );
-          prob *= corr;
-        }
-      }
-    }
-    return Math.max(0, Math.min(1, prob));
-  }, [items]);
-  const estOdds = items.length === 0 ? 0 : jointProb === null || jointProb === 0 ? null : 1 / jointProb;
-
   return {
     items,
     hydrated,
@@ -147,8 +125,6 @@ export function useCart() {
     removeItem,
     clear,
     has,
-    jointProb,
-    estOdds,
     count: items.length,
   };
 }

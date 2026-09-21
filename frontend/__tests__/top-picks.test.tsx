@@ -20,13 +20,13 @@ function renderWithContext(ui: React.ReactElement) {
 describe("TopPicks", () => {
   it("shows empty message when no patterns", () => {
     renderWithContext(<TopPicks patternB={null} patternC={null} period="ft" />);
-    expect(screen.getByText(/yeterince güvenli tahmin/)).toBeDefined();
+    expect(screen.getByText(/yeterli örneklem ve sıklık eşiğini geçen seçim yok/)).toBeDefined();
   });
 
   it("shows empty message when match_count is zero", () => {
     const empty = makePatternResult({ match_count: 0 });
     renderWithContext(<TopPicks patternB={empty} patternC={null} period="ft" />);
-    expect(screen.getByText(/yeterince güvenli tahmin/)).toBeDefined();
+    expect(screen.getByText(/yeterli örneklem ve sıklık eşiğini geçen seçim yok/)).toBeDefined();
   });
 
   it("renders picks when pattern has high percentages", () => {
@@ -41,7 +41,7 @@ describe("TopPicks", () => {
       alt_25_pct: 30,
     });
     renderWithContext(<TopPicks patternB={b} patternC={null} period="ft" />);
-    expect(screen.getByText("Önerilen Bahisler")).toBeDefined();
+    expect(screen.getByText("Arşivde Öne Çıkanlar")).toBeDefined();
     expect(screen.getByText("%80")).toBeDefined();
   });
 
@@ -53,8 +53,8 @@ describe("TopPicks", () => {
       result_2_pct: 10,
     });
     renderWithContext(<TopPicks patternB={b} patternC={null} period="ft" />);
-    expect(screen.getByText(/30 maç/)).toBeDefined();
-    expect(screen.getByText(/Eşik/)).toBeDefined();
+    expect(screen.getByText(/En az 20 maç/)).toBeDefined();
+    expect(screen.getByText(/eşik seçime göre/)).toBeDefined();
   });
 
   it("renders archive badge for single archive picks", () => {
@@ -104,7 +104,7 @@ describe("TopPicks", () => {
       result_2_pct: 5,
     });
     render(<TopPicks patternB={b} patternC={null} period="ft" />);
-    expect(screen.getByText("Önerilen Bahisler")).toBeDefined();
+    expect(screen.getByText("Arşivde Öne Çıkanlar")).toBeDefined();
     expect(screen.queryAllByLabelText("Sepete ekle")).toHaveLength(0);
   });
 

@@ -58,6 +58,7 @@ describe("ComboSuggestion", () => {
       <ComboSuggestion patternB={richPattern} patternC={null} period="ft" />,
     );
     expect(screen.getByText("Birlikte Değerlendirilebilen Seçimler")).toBeDefined();
+    expect(screen.queryAllByText(/^≈/)).toHaveLength(0);
   });
 
   it("shows combo count badge", () => {

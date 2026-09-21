@@ -180,6 +180,13 @@ export interface AnalyzeResponse {
   skip_reason: string | null;
 }
 
+export interface AnalysisEvidence {
+  eligible_matches: number;
+  archive_1_evaluated: number;
+  archive_2_evaluated: number;
+  minimum_for_rate: number;
+}
+
 export interface ResultMatch {
   match_id: string;
   home_team: string;

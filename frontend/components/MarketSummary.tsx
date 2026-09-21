@@ -4,8 +4,6 @@ import { useMemo } from "react";
 import type { PatternResult } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import { getMarketSummary } from "@/lib/confidence";
-import { useMatchInfo } from "@/lib/match-context";
-import AddToCartButton from "./AddToCartButton";
 
 interface Props {
   patternB: PatternResult | null;
@@ -23,19 +21,10 @@ function pctTone(pct: number): { color: string; muted: boolean } {
 function Cell({
   value,
   accent,
-  marketKey,
-  marketLabel,
-  archive,
-  period,
 }: {
   value: { selectionLabel: string; pct: number } | null;
   accent: string;
-  marketKey: string;
-  marketLabel: string;
-  archive: "A" | "B";
-  period: Period;
 }) {
-  const match = useMatchInfo();
   if (!value) {
     return (
       <div className="text-xs text-center font-mono" style={{ color: "#334155" }}>
@@ -56,21 +45,6 @@ function Cell({
       >
         %{pct}
       </span>
-      {match && pct >= 60 && (
-        <AddToCartButton
-          item={{
-            matchId: match.matchId,
-            homeTeam: match.homeTeam,
-            awayTeam: match.awayTeam,
-            marketKey,
-            marketLabel,
-            selectionLabel: value.selectionLabel,
-            pct: value.pct,
-            archive,
-            period,
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -90,7 +64,7 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
         <h3 className="text-sm font-bold tracking-wide" style={{ color: "#cbd5e1" }}>
           Ana Pazar Özeti
         </h3>
-        <span className="text-[10px]" style={{ color: "#475569" }}>her pazarın en olası seçimi</span>
+        <span className="text-[10px]" style={{ color: "#475569" }}>arşivde en sık görülen seçim</span>
       </div>
 
       {/* Sütun başlıkları */}
@@ -99,10 +73,10 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
           Pazar
         </div>
         <div className="text-[10px] uppercase tracking-wider text-right" style={{ color: "#4ade80" }}>
-          Arşiv 1
+          Arşiv 1{patternB ? ` · ${patternB.match_count} maç` : ""}
         </div>
         <div className="text-[10px] uppercase tracking-wider text-right" style={{ color: "#c084fc" }}>
-          Arşiv 2
+          Arşiv 2{patternC ? ` · ${patternC.match_count} maç` : ""}
         </div>
       </div>
 
@@ -130,25 +104,17 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
             <Cell
               value={row.winnerA}
               accent="#4ade80"
-              marketKey={row.marketKey}
-              marketLabel={row.marketLabel}
-              archive="A"
-              period={period}
             />
             <Cell
               value={row.winnerB}
               accent="#c084fc"
-              marketKey={row.marketKey}
-              marketLabel={row.marketLabel}
-              archive="B"
-              period={period}
             />
           </div>
         ))}
       </div>
 
       <p className="text-[10px] pt-1" style={{ color: "#475569" }}>
-        <span style={{ color: "#fbbf24" }}>✦</span> = iki arşiv aynı seçimde uyuştu (güçlü sinyal).
+        <span style={{ color: "#fbbf24" }}>✦</span> = iki arşivde aynı seçim en sık görüldü. Yüzdeler doğrulanmış maç olasılığı değildir.
       </p>
     </div>
   );

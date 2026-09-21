@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import AnalyzeClient from "@/app/analyze/[match_id]/AnalyzeClient";
 import { makePatternResult } from "./fixtures";
 import type { AnalyzeResponse, PatternResult } from "@/lib/types";
@@ -26,10 +26,16 @@ describe("AnalyzeClient", () => {
       trends: null, skipped: false, skip_reason: null,
     };
 
-    render(<AnalyzeClient match_id="3003889" initialData={data} initialError="" urlHome="" urlAway="" />);
+    render(<AnalyzeClient match_id="3003889" initialData={data}
+      evidence={{ eligible_matches: 48, archive_1_evaluated: 5, archive_2_evaluated: 0, minimum_for_rate: 100 }}
+      initialError="" urlHome="" urlAway="" />);
 
     expect(screen.getByText("Bu periyotta 3.5+ oranı olan skor bulunamadı")).toBeDefined();
     expect(screen.getByTestId("archive-analysis").textContent).toBe("none/12");
+    const panel = within(screen.getByLabelText("Analiz doğrulama kapsamı"));
+    expect(panel.getByText("48")).toBeDefined();
+    expect(panel.getByText("5")).toBeDefined();
+    expect(panel.getByText("0")).toBeDefined();
   });
 
   it("shows Archive 1 matches for an empty score shortlist", () => {

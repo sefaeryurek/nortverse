@@ -2,7 +2,7 @@
 // Aynı maça ait seçimlerde ortak gözlem olmadan birleşik olasılık hesaplanmaz.
 
 import type { Pick } from "./confidence";
-import { resolveConflicts } from "./confidence";
+import { resolveConflicts, effectivePickSample, MIN_RECOMMENDATION_SAMPLE } from "./confidence";
 import { canCombineFields } from "./selection-compatibility";
 import { computeJointProb } from "./correlations";
 
@@ -122,7 +122,9 @@ function buildLegs(picks: Pick[], minPct: number, targetCount: number): Pick[] {
   const sorted = [...picks].sort((a, b) => b.confidence - a.confidence);
   const legs: Pick[] = [];
   for (const p of sorted) {
-    if (!Number.isFinite(p.pct) || p.pct < minPct || p.pct > 100 || !Number.isFinite(p.confidence)) continue;
+    if (!Number.isFinite(p.pct) || p.pct < minPct || p.pct > 100
+      || !Number.isFinite(p.confidence) || p.confidence < 0.55
+      || effectivePickSample(p) < MIN_RECOMMENDATION_SAMPLE) continue;
     if (pickConflict(p, legs) || !canCombineFields([...legs, p].map((leg) => leg.field))) continue;
     legs.push(p);
     if (legs.length >= targetCount) break;

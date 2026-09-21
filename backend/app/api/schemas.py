@@ -20,6 +20,14 @@ class DataQuality(BaseModel):
     quality_score: float = 100.0
 
 
+class AnalysisEvidence(BaseModel):
+    """Coverage of saved, pre-kickoff full-time analysis snapshots."""
+    eligible_matches: int
+    archive_1_evaluated: int
+    archive_2_evaluated: int
+    minimum_for_rate: int = 100
+
+
 class HealthResponse(BaseModel):
     """Hafif sağlık göstergesi — UptimeRobot her 5dk ping atıyor.
 

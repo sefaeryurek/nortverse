@@ -11,7 +11,7 @@ from sqlalchemy import func, or_, select
 
 from app.analysis.correlation import compute_poisson_correlations
 from app.analysis.league_filter import is_supported_league
-from app.api.schemas import DataQuality, HealthResponse
+from app.api.schemas import AnalysisEvidence, DataQuality, HealthResponse
 from app.api.services import analysis_cache, bg_queue
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
@@ -49,6 +49,40 @@ async def health() -> HealthResponse:
         last_fixture_cached_at=last_fixture_cached.isoformat() if last_fixture_cached else None,
         bg_queue_size=bg_queue.qsize() if bg_queue else 0,
         cached_analyses=len(analysis_cache),
+    )
+
+
+@router.get("/api/analysis-evidence", response_model=AnalysisEvidence)
+async def analysis_evidence() -> AnalysisEvidence:
+    """Count only analyses saved before kickoff and matches with a final score.
+
+    JSONB null is distinct from SQL NULL, so count actual pattern objects.
+    This reports coverage; it does not claim a calibrated hit rate.
+    """
+    eligible = (
+        Match.deleted_at.is_(None),
+        Match.actual_ft_home.is_not(None),
+        Match.actual_ft_away.is_not(None),
+        Match.result_fetched_at.is_not(None),
+        Match.kickoff_time.is_not(None),
+        Match.analyzed_at.is_not(None),
+        Match.pattern_computed_at.is_not(None),
+        Match.analyzed_at < Match.kickoff_time,
+        Match.pattern_computed_at < Match.kickoff_time,
+        Match.result_fetched_at > Match.kickoff_time,
+    )
+    async with get_session() as session:
+        row = (await session.execute(
+            select(
+                func.count(Match.id),
+                func.count(Match.id).filter(func.jsonb_typeof(Match.pattern_ft_b) == "object"),
+                func.count(Match.id).filter(func.jsonb_typeof(Match.pattern_ft_c) == "object"),
+            ).where(*eligible)
+        )).one()
+    return AnalysisEvidence(
+        eligible_matches=row[0],
+        archive_1_evaluated=row[1],
+        archive_2_evaluated=row[2],
     )
 
 

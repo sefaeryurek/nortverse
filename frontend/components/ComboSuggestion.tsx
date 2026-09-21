@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { PatternResult } from "@/lib/types";
 import type { Period } from "@/lib/labels";
-import { buildPicks } from "@/lib/confidence";
+import { buildPicks, getTopPicks } from "@/lib/confidence";
 import { generateCombos, comboTierLabel, comboTierAccent, type Combo } from "@/lib/combos";
 import { useMatchInfo } from "@/lib/match-context";
 import { useCart } from "@/lib/cart";
@@ -16,8 +16,6 @@ interface Props {
 
 function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
   const accent = comboTierAccent(combo.tier);
-
-
   const tierLabel = comboTierLabel(combo.tier);
   const match = useMatchInfo();
   const { addItem } = useCart();
@@ -76,44 +74,23 @@ function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
         ))}
       </div>
 
-      {/* Birleşik olasılık + oran */}
-      {combo.jointProb !== null && (
-        <div
-          className="flex items-center justify-between px-2 py-1.5 rounded text-xs font-mono"
-          style={{ backgroundColor: "#0a0f17" }}
-        >
-          <span style={{ color: "#94a3b8" }}>
-            ≈%{(combo.jointProb * 100).toFixed(1)}
-          </span>
-          {combo.estDecimalOdds !== null && (
-            <span style={{ color: accent.color }}>
-              ≈{combo.estDecimalOdds.toFixed(2)} oran
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Sepete ekle (tüm leg'ler) */}
       {match && (
         <button
           onClick={addAllLegs}
           className="w-full text-xs py-1.5 rounded-lg font-semibold transition-colors hover:opacity-80"
-          style={{
-            backgroundColor: "#0a0f17",
-            color: accent.color,
-            border: `1px solid ${accent.border}`,
-          }}
+          style={{ backgroundColor: "#0a0f17", color: accent.color, border: `1px solid ${accent.border}` }}
         >
           + Sepete Ekle ({combo.legs.length} seçim)
         </button>
       )}
+
     </div>
   );
 }
 
 export default function ComboSuggestion({ patternB, patternC, period }: Props) {
   const combos = useMemo(() => {
-    const picks = buildPicks(patternB, patternC, period);
+    const picks = getTopPicks(buildPicks(patternB, patternC, period)).picks;
     return generateCombos(picks);
   }, [patternB, patternC, period]);
 
@@ -151,8 +128,7 @@ export default function ComboSuggestion({ patternB, patternC, period }: Props) {
       </div>
 
       <p className="text-[10px] leading-snug" style={{ color: "#475569" }}>
-        Olasılıklar Poisson korelasyon düzeltmesiyle hesaplanır. Gösterilen oran
-        bir bahis şirketi teklifi değildir.
+        Aynı maçın seçimleri bağımsız değildir; birlikte gerçekleşme oranı için doğrulanmış bir tahmin sunulmuyor.
       </p>
     </div>
   );

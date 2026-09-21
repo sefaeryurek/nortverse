@@ -45,7 +45,7 @@ describe("MarketSummary", () => {
     });
     renderWithContext(<MarketSummary patternB={b} patternC={null} period="ft" />);
     expect(screen.getByText("Ana Pazar Özeti")).toBeDefined();
-    expect(screen.getByText("Arşiv 1")).toBeDefined();
+    expect(screen.getByText("Arşiv 1 · 30 maç")).toBeDefined();
     expect(screen.getByText("Arşiv 2")).toBeDefined();
   });
 
@@ -66,15 +66,16 @@ describe("MarketSummary", () => {
     expect(screen.getAllByText("✦").length).toBeGreaterThan(0);
   });
 
-  it("shows cart buttons for high percentage picks", () => {
+  it("keeps raw market frequencies informational even at high percentages", () => {
     const b = makePatternResult({
-      match_count: 30,
-      result_1_pct: 75,
-      result_x_pct: 15,
-      result_2_pct: 10,
+      match_count: 1,
+      result_1_pct: 100,
+      result_x_pct: 0,
+      result_2_pct: 0,
     });
     renderWithContext(<MarketSummary patternB={b} patternC={null} period="ft" />);
-    expect(screen.getAllByLabelText("Sepete ekle").length).toBeGreaterThan(0);
+    expect(screen.getByText("Arşiv 1 · 1 maç")).toBeDefined();
+    expect(screen.queryAllByLabelText("Sepete ekle")).toHaveLength(0);
   });
 
   it("renders without MatchProvider (no cart buttons)", () => {

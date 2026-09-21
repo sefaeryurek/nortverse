@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import type { AnalyzeResponse } from "@/lib/types";
+import type { AnalysisEvidence, AnalyzeResponse } from "@/lib/types";
 import { analyzeMatch } from "@/lib/api";
 import ScoreList from "@/components/ScoreList";
 import { MatchProvider } from "@/lib/match-context";
@@ -42,12 +42,13 @@ function scoresFor(data: AnalyzeResponse, period: Period) {
 interface Props {
   match_id: string;
   initialData: AnalyzeResponse | null;
+  evidence?: AnalysisEvidence | null;
   initialError: string;
   urlHome: string;
   urlAway: string;
 }
 
-export default function AnalyzeClient({ match_id, initialData, initialError, urlHome, urlAway }: Props) {
+export default function AnalyzeClient({ match_id, initialData, evidence, initialError, urlHome, urlAway }: Props) {
   const router = useRouter();
   const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<AnalyzeResponse | null>(initialData);
@@ -175,6 +176,30 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
 
             {!data.skipped && (
               <>
+                {evidence && (
+                  <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-4 text-xs text-slate-300" aria-label="Analiz doğrulama kapsamı">
+                    <h2 className="text-sm font-semibold text-slate-100">Analiz doğrulama kapsamı</h2>
+                    <p className="mt-1 leading-relaxed text-slate-400">
+                      Yalnızca analiz ve arşiv desenleri maçtan önce kaydedilmiş, sonucu bilinen maçlar sayılır.
+                    </p>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {[
+                        ["Maç öncesi", evidence.eligible_matches],
+                        ["Arşiv 1", evidence.archive_1_evaluated],
+                        ["Arşiv 2", evidence.archive_2_evaluated],
+                      ].map(([label, count]) => (
+                        <div key={label} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-center">
+                          <div className="font-mono text-lg font-bold text-slate-100">{count}</div>
+                          <div className="text-[10px] text-slate-400">{label}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 leading-relaxed text-slate-400">
+                      Her arşiv için {evidence.minimum_for_rate} sonuçlu maç tamamlanmadan isabet oranı sunulmuyor.
+                      Ekrandaki yüzdeler geçmiş eşleşme sıklığıdır.
+                    </p>
+                  </section>
+                )}
                 {/* Periyot sekmeleri */}
                 <div className="flex gap-2">
                   {PERIODS.map(({ key, label, short }) => (

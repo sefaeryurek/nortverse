@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { analyzeMatch, getFixture, getResults } from "@/lib/api";
+import { analyzeMatch, getAnalysisEvidence, getFixture, getResults } from "@/lib/api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -75,4 +75,16 @@ it("preserves cancellation while reading the response body", async () => {
     throw controller.signal.reason;
   } }));
   await expect(analyzeMatch("123", controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+});
+
+it("accepts measured pre-match coverage and rejects impossible evidence counts", async () => {
+  const evidence = { eligible_matches: 48, archive_1_evaluated: 5,
+    archive_2_evaluated: 0, minimum_for_rate: 100 };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(evidence))));
+  await expect(getAnalysisEvidence()).resolves.toEqual(evidence);
+
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    ...evidence, archive_1_evaluated: 49,
+  }))));
+  await expect(getAnalysisEvidence()).rejects.toThrow("doğrulama verisi geçersiz");
 });

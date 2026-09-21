@@ -1,4 +1,4 @@
-import type { AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
+import type { AnalysisEvidence, AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
 import { getApiBase } from "./env";
 import { validMatchList } from "./list-validation";
 import { validAnalysis, validSummaries } from "./analysis-validation";
@@ -64,6 +64,23 @@ export async function analyzeMatch(matchId: string, signal?: AbortSignal): Promi
     throw new ApiError("Sunucudan geçersiz analiz verisi alındı. Lütfen yeniden deneyin.", 200);
   }
   return data;
+}
+
+export async function getAnalysisEvidence(): Promise<AnalysisEvidence> {
+  const data = await request<unknown>("/api/analysis-evidence", {
+    next: { revalidate: 300 },
+    signal: AbortSignal.timeout(5_000),
+  });
+  const value = data as Record<string, unknown>;
+  const validCount = (count: unknown) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || !validCount(value.eligible_matches) || !validCount(value.archive_1_evaluated)
+    || !validCount(value.archive_2_evaluated) || !validCount(value.minimum_for_rate)
+    || (value.archive_1_evaluated as number) > (value.eligible_matches as number)
+    || (value.archive_2_evaluated as number) > (value.eligible_matches as number)) {
+    throw new ApiError("Analiz doğrulama verisi geçersiz.", 200);
+  }
+  return value as unknown as AnalysisEvidence;
 }
 
 export async function getResults(date: string): Promise<ResultMatch[]> {

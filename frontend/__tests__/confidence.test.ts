@@ -165,20 +165,41 @@ describe("buildPicks", () => {
 
   it("iki arşivde de eşleşme + her ikisi ≥%65 → archive='AB' ve dual bonus uygulanır", () => {
     const a = makePatternResult({ match_count: 20, result_1_pct: 70 });
-    const b = makePatternResult({ match_count: 15, result_1_pct: 75 });
+    const b = makePatternResult({ match_count: 25, result_1_pct: 75 });
     const picks = buildPicks(a, b, "ft");
     const result1 = picks.find((p) => p.marketKey === "result" && p.selectionLabel === "1");
     expect(result1).toBeDefined();
     expect(result1!.archive).toBe("AB");
-    expect(result1!.pct).toBeCloseTo(72.5, 1);
+    expect(result1!.pct).toBe(70);
     expect(result1!.pctA).toBe(70);
     expect(result1!.pctB).toBe(75);
 
     // Dual bonus ile karşılaştır
-    const singleConf = computeConfidence(72.5, 20, 1.0, false);
-    const dualConf = computeConfidence(72.5, 20, 1.0, true);
+    const singleConf = computeConfidence(70, 20, 1.0, false);
+    const dualConf = computeConfidence(70, 20, 1.0, true);
     expect(result1!.confidence).toBeCloseTo(dualConf, 2);
     expect(result1!.confidence).toBeGreaterThan(singleConf);
+  });
+
+  it("does not label conflicting archives as agreement", () => {
+    const a = makePatternResult({ match_count: 30, result_1_pct: 90 });
+    const b = makePatternResult({ match_count: 30, result_1_pct: 20 });
+    expect(buildPicks(a, b, "ft").find((p) => p.marketKey === "result" && p.selectionLabel === "1"))
+      .toBeUndefined();
+  });
+
+  it("does not let a one-match archive veto a well-sampled selection", () => {
+    const a = makePatternResult({ match_count: 100, result_1_pct: 90 });
+    const b = makePatternResult({ match_count: 1, result_1_pct: 20 });
+    const pick = buildPicks(a, b, "ft").find((p) => p.marketKey === "result" && p.selectionLabel === "1");
+    expect(pick?.archive).toBe("A");
+    expect(pick?.pct).toBe(90);
+    expect(pick?.pctB).toBeNull();
+  });
+
+  it("does not create actionable picks from a one-match archive", () => {
+    const a = makePatternResult({ match_count: 1, result_1_pct: 100 });
+    expect(buildPicks(a, null, "ft")).toEqual([]);
   });
 
   it("ftOnly pazarlar (iy_ms) ht periyodunda yok", () => {
@@ -223,6 +244,28 @@ describe("getTopPicks", () => {
     const res = getTopPicks(picks);
     expect(res.picks).toHaveLength(1);
     expect(res.picks[0].marketKey).toBe("kg");
+  });
+
+  it("rejects a one-match percentage even when its reported confidence is high", () => {
+    const pick = makePick({ pct: 100, confidence: 0.99, matchCountA: 1 });
+    expect(getTopPicks([pick]).picks).toHaveLength(0);
+  });
+
+  it("uses each selection's own sample size for the percentage threshold", () => {
+    const small = makePick({ marketKey: "result", pct: 68, confidence: 0.7, matchCountA: 20 });
+    const large = makePick({ marketKey: "kg", pct: 68, confidence: 0.7, matchCountA: 100 });
+    expect(getTopPicks([small, large]).picks.map((pick) => pick.marketKey)).toEqual(["kg"]);
+  });
+
+  it("requires both archives to have enough matches for a combined pick", () => {
+    const pick = makePick({ archive: "AB", pct: 90, confidence: 0.9, matchCountA: 100, matchCountB: 3 });
+    expect(getTopPicks([pick]).picks).toHaveLength(0);
+  });
+
+  it("keeps a valid market selection when a higher ranked one lacks evidence", () => {
+    const unsupported = makePick({ marketKey: "result", selectionLabel: "1", pct: 100, confidence: 0.99, matchCountA: 1 });
+    const supported = makePick({ marketKey: "result", selectionLabel: "X", pct: 75, confidence: 0.7, matchCountA: 40 });
+    expect(getTopPicks([unsupported, supported]).picks).toEqual([supported]);
   });
 
   it("limit parametresi (default 8) uygulanır", () => {

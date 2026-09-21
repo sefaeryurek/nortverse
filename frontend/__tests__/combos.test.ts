@@ -12,6 +12,14 @@ describe("generateCombos — temel davranış", () => {
     expect(generateCombos(picks)).toEqual([]);
   });
 
+  it("does not combine selections from tiny archive samples", () => {
+    const picks = [
+      makePick({ marketKey: "result", pct: 100, confidence: 0.95, matchCountA: 1 }),
+      makePick({ marketKey: "kg", field: "kg_var_pct", pct: 100, confidence: 0.95, matchCountA: 1 }),
+    ];
+    expect(generateCombos(picks)).toEqual([]);
+  });
+
   it("2 leg ≥%75 ve farklı domain → çift kombo üretilir", () => {
     const picks = [
       makePick({

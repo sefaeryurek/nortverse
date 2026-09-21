@@ -30,13 +30,11 @@ describe("useCart — initial state", () => {
     window.localStorage.clear();
   });
 
-  it("boş localStorage → boş items, hydrated=true, count=0, jointProb=null, estOdds=0", () => {
+  it("boş localStorage → boş items, hydrated=true, count=0", () => {
     const { result } = renderHook(() => useCart());
     expect(result.current.items).toEqual([]);
     expect(result.current.hydrated).toBe(true);
     expect(result.current.count).toBe(0);
-    expect(result.current.jointProb).toBeNull();
-    expect(result.current.estOdds).toBe(0);
   });
 
   it("önceden dolu localStorage → mount sonrası items yüklenir", () => {
@@ -57,7 +55,7 @@ describe("useCart — addItem", () => {
     });
     expect(result.current.items.map((x) => x.selectionLabel)).toEqual(["X"]);
   });
-  it("same-match selections use correlation correction instead of null", () => {
+  it("keeps selections from different periods of the same match", () => {
     window.localStorage.clear();
     const { result } = renderHook(() => useCart());
     act(() => {
@@ -65,16 +63,13 @@ describe("useCart — addItem", () => {
       result.current.addItem(makeCartItem({ period: "ht" }));
     });
     expect(result.current.count).toBe(2);
-    expect(result.current.jointProb).toBeTypeOf("number");
-    expect(result.current.jointProb).toBeGreaterThan(0);
-    expect(result.current.estOdds).toBeTypeOf("number");
+    expect(result.current.items.map((item) => item.period)).toEqual(["ft", "ht"]);
   });
-  it("does not turn a zero frequency into an invented finite odds value", () => {
+  it("keeps a zero archive frequency as recorded", () => {
     window.localStorage.clear();
     const { result } = renderHook(() => useCart());
     act(() => result.current.addItem(makeCartItem({ pct: 0 })));
-    expect(result.current.jointProb).toBe(0);
-    expect(result.current.estOdds).toBeNull();
+    expect(result.current.items[0].pct).toBe(0);
   });
   beforeEach(() => {
     window.localStorage.clear();
@@ -181,25 +176,6 @@ describe("useCart — clear / has / hesaplar", () => {
     expect(result.current.has(target)).toBe(true);
   });
 
-  it("jointProb ∏ (pct/100) — 3 leg %50/%60/%70 → 0.21", () => {
-    const { result } = renderHook(() => useCart());
-    act(() => {
-      result.current.addItem(stripAddedAt(makeCartItem({ pct: 50, selectionLabel: "1" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "2", pct: 60, selectionLabel: "X", marketKey: "kg" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "3", pct: 70, selectionLabel: "Üst 2.5", marketKey: "ou_25" })));
-    });
-    expect(result.current.jointProb).toBeCloseTo(0.21, 3);
-  });
-
-  it("estOdds = 1/jointProb — 0.21 → ~4.76", () => {
-    const { result } = renderHook(() => useCart());
-    act(() => {
-      result.current.addItem(stripAddedAt(makeCartItem({ pct: 50, selectionLabel: "1" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "2", pct: 60, selectionLabel: "X", marketKey: "kg" })));
-      result.current.addItem(stripAddedAt(makeCartItem({ matchId: "3", pct: 70, selectionLabel: "Üst 2.5", marketKey: "ou_25" })));
-    });
-    expect(result.current.estOdds).toBeCloseTo(1 / 0.21, 2);
-  });
 });
 
 describe("useCart — storage event re-sync", () => {

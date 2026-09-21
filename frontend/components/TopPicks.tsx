@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { PatternResult, TrendsData } from "@/lib/types";
 import type { Period } from "@/lib/labels";
-import { buildPicks, getTopPicks, confidenceTier, type Pick, type ConfidenceTier } from "@/lib/confidence";
+import { buildPicks, getTopPicks, effectivePickSample, MIN_RECOMMENDATION_SAMPLE, confidenceTier, type Pick, type ConfidenceTier } from "@/lib/confidence";
 import { useMatchInfo } from "@/lib/match-context";
 import AddToCartButton from "./AddToCartButton";
 
@@ -36,6 +36,9 @@ function PickRowWithCart({ pick, period }: { pick: Pick; period: Period }) {
       <div className="flex flex-col items-end flex-shrink-0">
         <div className="text-base font-extrabold font-mono leading-none" style={{ color: s.pctText }}>
           %{pct}
+        </div>
+        <div className="text-[9px] font-mono mt-0.5" style={{ color: "#94a3b8" }}>
+          {effectivePickSample(pick)} maç
         </div>
         {pick.archive === "AB" && pick.pctA !== null && pick.pctB !== null && (
           <div className="text-[9px] font-mono mt-0.5" style={{ color: "#475569" }}>
@@ -108,7 +111,7 @@ function ArchiveBadge({ archive }: { archive: "A" | "B" | "AB" }) {
       }}
       title={
         both
-          ? "Her iki arşivde de yüksek (≥%65) — güçlü tutarlılık"
+          ? "Her iki arşivde de bu seçim en az %65 sıklıkta görüldü"
           : archive === "A"
             ? "Sadece Arşiv 1 (Skor Seti) doğruluyor"
             : "Sadece Arşiv 2 (Oran Benzerliği) doğruluyor"
@@ -120,7 +123,7 @@ function ArchiveBadge({ archive }: { archive: "A" | "B" | "AB" }) {
 }
 
 export default function TopPicks({ patternB, patternC, period, trends }: Props) {
-  const { picks, effectiveMinPct, matchCount: totalMatches } = useMemo(
+  const { picks } = useMemo(
     () => getTopPicks(buildPicks(patternB, patternC, period, trends ?? null), { limit: 8 }),
     [patternB, patternC, period, trends],
   );
@@ -134,11 +137,11 @@ export default function TopPicks({ patternB, patternC, period, trends }: Props) 
         <div className="flex items-center gap-2 mb-1">
           <span style={{ color: "#475569" }}>⭐</span>
           <h3 className="text-sm font-bold tracking-wide" style={{ color: "#94a3b8" }}>
-            Önerilen Bahisler
+            Arşivde Öne Çıkanlar
           </h3>
         </div>
         <p className="text-xs" style={{ color: "#475569" }}>
-          Bu periyot için yeterince güvenli tahmin bulunmuyor. Aşağıdaki ana pazar özetini ve detaylı analizi inceleyebilirsiniz.
+          Bu periyotta yeterli örneklem ve sıklık eşiğini geçen seçim yok. Aşağıdaki arşiv özetini inceleyebilirsiniz.
         </p>
       </div>
     );
@@ -158,7 +161,7 @@ export default function TopPicks({ patternB, patternC, period, trends }: Props) 
         <div className="flex items-center gap-2">
           <span className="text-base">⭐</span>
           <h3 className="text-sm font-bold tracking-wide" style={{ color: "#86efac" }}>
-            Önerilen Bahisler
+            Arşivde Öne Çıkanlar
           </h3>
           <span
             className="text-[10px] px-1.5 py-0.5 rounded font-mono"
@@ -170,9 +173,9 @@ export default function TopPicks({ patternB, patternC, period, trends }: Props) 
         <span
           className="text-[10px] font-mono"
           style={{ color: "#475569" }}
-          title="Eşleşme sayısı arttıkça istatistiksel güven artar; düşük örneklemde daha yüksek yüzde eşiği uygulanır."
+          title="Her seçim kendi arşiv örneklemine göre değerlendirilir."
         >
-          ⛁ {totalMatches} maç · Eşik: ≥%{Math.round(effectiveMinPct)}
+          En az {MIN_RECOMMENDATION_SAMPLE} maç · eşik seçime göre
         </span>
       </div>
 
@@ -184,7 +187,8 @@ export default function TopPicks({ patternB, patternC, period, trends }: Props) 
       </div>
 
       <p className="text-[10px] leading-snug" style={{ color: "#475569" }}>
-        <span style={{ color: "#fbbf24" }}>1+2</span> rozeti = her iki arşivde de yüksek tutarlılık.{" "}
+        Yüzdeler arşiv eşleşmelerindeki görülme sıklığıdır; doğrulanmış maç olasılığı değildir.{" "}
+        <span style={{ color: "#fbbf24" }}>1+2</span> = iki arşivde de aynı seçim eşiği geçti.{" "}
         <span style={{ color: "#4ade80" }}>Arş.1</span>/<span style={{ color: "#c084fc" }}>Arş.2</span> = tek arşivde geçerli.
       </p>
     </div>
