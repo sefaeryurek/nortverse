@@ -17,6 +17,7 @@ on:
         options:
           - run-pipeline
           - update-scores
+          - refresh-fixture-cache
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -57,7 +58,18 @@ jobs:
           if [ "$SCHEDULE" = "0 5 * * *" ] || [ "$SCHEDULE" = "0 6 * * *" ] || [ "$CMD" = "run-pipeline" ] || ([ -z "$CMD" ] && [ -z "$SCHEDULE" ]); then
             echo "Pipeline çalışıyor (run-pipeline)... [schedule=$SCHEDULE]"
             python -m app.cli.main run-pipeline
+          elif [ "$CMD" = "refresh-fixture-cache" ]; then
+            echo "Yarınki bülten hazırlanıyor (refresh-fixture-cache)..."
+            python -m app.cli.main refresh-fixture-cache
           else
             echo "Sonuç güncellemesi çalışıyor (update-scores)... [schedule=$SCHEDULE]"
             python -m app.cli.main update-scores
           fi
+
+      - name: Yarınki bülteni hazırla
+        if: ${{ always() && github.event.schedule == '0 19 * * *' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cd backend
+          python -m app.cli.main refresh-fixture-cache

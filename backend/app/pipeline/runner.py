@@ -19,7 +19,7 @@ from app.analysis.skip_cache import save_skip
 from app.analysis.trends import compute_trends
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
-from app.models import MatchAnalysisResult, MatchRawData
+from app.models import FixtureMatch, MatchAnalysisResult, MatchRawData
 from app.scraper.browser import browser_context
 from app.scraper.fixture import fetch_istanbul_fixture
 from app.scraper.fixture_scores import FixtureScore, fetch_fixture_scores
@@ -182,6 +182,58 @@ async def _upsert(
     await _with_retry(_do, label=f"_upsert[{result.match_id}]")
 
 
+async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> int:
+    """Save a small fixture list while retaining already observed scores."""
+    cache_date = cache_day.isoformat()
+    istanbul_tz = timezone(timedelta(hours=3))
+    league_fixtures = [f for f in fixtures if is_supported_league(f.league_name, f.league_code)]
+    cache_json = [
+        {
+            "match_id": f.match_id,
+            "home_team": f.home_team,
+            "away_team": f.away_team,
+            "league_code": f.league_code,
+            "league_name": f.league_name,
+            "kickoff_time": f.kickoff_time.isoformat() if f.kickoff_time else None,
+        }
+        for f in league_fixtures
+    ]
+    async with get_session() as session:
+        previous = await session.get(FixtureCache, cache_date)
+        if previous is not None and isinstance(previous.matches_json, list):
+            old_by_id = {item.get("match_id"): item for item in previous.matches_json
+                         if isinstance(item, dict)}
+            score_keys = ("score_status", "score_home", "score_away",
+                          "score_checked_at", "actual_ht_home", "actual_ht_away")
+            for item in cache_json:
+                old = old_by_id.get(item["match_id"], {})
+                item.update({key: old[key] for key in score_keys if key in old})
+            new_ids = {item["match_id"] for item in cache_json}
+            for old in old_by_id.values():
+                if old.get("match_id") in new_ids or not old.get("kickoff_time"):
+                    continue
+                try:
+                    old_day = datetime.fromisoformat(old["kickoff_time"]).astimezone(istanbul_tz).date()
+                except (ValueError, TypeError):
+                    continue
+                if old_day == cache_day:
+                    cache_json.append(old)
+        await session.merge(FixtureCache(
+            date=cache_date,
+            matches_json=cache_json,
+            cached_at=datetime.now(timezone.utc),
+        ))
+    log.info("fixture_cache yazıldı: %s (%d lig maçı)", cache_date, len(cache_json))
+    return len(cache_json)
+
+
+async def refresh_fixture_cache(target_date: date, only_hot: bool = True) -> int:
+    """Prepare a future bulletin without running analysis or storing match details."""
+    async with browser_context() as ctx:
+        fixtures = await fetch_istanbul_fixture(target_date, only_hot=only_hot, ctx=ctx)
+    return await save_fixture_cache(target_date, fixtures)
+
+
 async def run_pipeline(
     target_date: Optional[date] = None,
     only_hot: bool = True,
@@ -199,48 +251,9 @@ async def run_pipeline(
         fixtures = await fetch_istanbul_fixture(cache_day, only_hot=only_hot, ctx=ctx)
         log.info("Pipeline başladı: %d maç işlenecek", len(fixtures))
 
-        # fixture_cache tablosunu doldur — Render Playwright çalıştıramıyor,
-        # bu yüzden GitHub Actions'ta pipeline çalışınca cache'i biz yazıyoruz.
-        cache_date = cache_day.isoformat()
-        league_fixtures = [f for f in fixtures if is_supported_league(f.league_name, f.league_code)]
-        cache_json = [
-            {
-                "match_id": f.match_id,
-                "home_team": f.home_team,
-                "away_team": f.away_team,
-                "league_code": f.league_code,
-                "league_name": f.league_name,
-                "kickoff_time": f.kickoff_time.isoformat() if f.kickoff_time else None,
-            }
-            for f in league_fixtures
-        ]
+        # GitHub Actions'taki scraper bülteni API isteğinden önce hazırlar.
         try:
-            async with get_session() as session:
-                previous = await session.get(FixtureCache, cache_date)
-                if previous is not None and isinstance(previous.matches_json, list):
-                    old_by_id = {item.get("match_id"): item for item in previous.matches_json
-                                 if isinstance(item, dict)}
-                    score_keys = ("score_status", "score_home", "score_away",
-                                  "score_checked_at", "actual_ht_home", "actual_ht_away")
-                    for item in cache_json:
-                        old = old_by_id.get(item["match_id"], {})
-                        item.update({key: old[key] for key in score_keys if key in old})
-                    new_ids = {item["match_id"] for item in cache_json}
-                    for old in old_by_id.values():
-                        if old.get("match_id") in new_ids or not old.get("kickoff_time"):
-                            continue
-                        try:
-                            old_day = datetime.fromisoformat(old["kickoff_time"]).astimezone(IST).date()
-                        except (ValueError, TypeError):
-                            continue
-                        if old_day == cache_day:
-                            cache_json.append(old)
-                await session.merge(FixtureCache(
-                    date=cache_date,
-                    matches_json=cache_json,
-                    cached_at=datetime.now(timezone.utc),
-                ))
-            log.info("fixture_cache yazıldı: %s (%d lig maçı)", cache_date, len(cache_json))
+            await save_fixture_cache(cache_day, fixtures)
         except Exception as exc:
             log.warning("fixture_cache yazılamadı: %s", exc)
 

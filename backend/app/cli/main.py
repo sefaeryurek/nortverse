@@ -34,6 +34,7 @@ from app.cli.pipeline_cmds import (
     analyze_debug,
     fetch_and_analyze_cmd,
     fetch_fixture_cmd,
+    refresh_fixture_cache_cmd,
     run_pipeline_cmd,
     serve,
     update_scores_cmd,
@@ -47,6 +48,7 @@ app.command("analyze-debug")(analyze_debug)
 app.command("fetch-fixture")(fetch_fixture_cmd)
 app.command("fetch-and-analyze")(fetch_and_analyze_cmd)
 app.command("run-pipeline")(run_pipeline_cmd)
+app.command("refresh-fixture-cache")(refresh_fixture_cache_cmd)
 app.command("update-scores")(update_scores_cmd)
 app.command()(serve)
 

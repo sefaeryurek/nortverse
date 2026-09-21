@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.analysis.persist import PatternComputationError
+from app.api.live_snapshot import shutdown_live_snapshot
 from app.api.routes_admin import router as admin_router
 from app.api.routes_analysis import router as analysis_router
 from app.api.routes_fixture import router as fixture_router
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await shutdown_live_snapshot()
         worker.cancel()
         try:
             await worker

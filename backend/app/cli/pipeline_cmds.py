@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 import typer
@@ -380,6 +380,20 @@ def run_pipeline_cmd(
         )
 
     asyncio.run(_run())
+
+
+def refresh_fixture_cache_cmd(
+    target_date: Optional[str] = typer.Option(None, "--date", help="YYYY-MM-DD. Boşsa yarın (İstanbul)."),
+) -> None:
+    """Ertesi günün maç listesini analiz yapmadan önbelleğe alır."""
+    _setup_logging("INFO")
+    day = (datetime.strptime(target_date, "%Y-%m-%d").date() if target_date
+           else datetime.now(timezone(timedelta(hours=3))).date() + timedelta(days=1))
+
+    from app.pipeline.runner import refresh_fixture_cache
+
+    count = asyncio.run(refresh_fixture_cache(day))
+    console.print(f"[green]{day}: {count} lig maçı bülten önbelleğine kaydedildi[/green]")
 
 
 def update_scores_cmd(
