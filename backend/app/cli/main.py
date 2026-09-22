@@ -32,6 +32,7 @@ from app.cli.audit_cmds import (
 from app.cli.pipeline_cmds import (
     analyze,
     analyze_debug,
+    capture_recommendations_cmd,
     capture_score_snapshots_cmd,
     fetch_and_analyze_cmd,
     fetch_fixture_cmd,
@@ -50,6 +51,7 @@ app.command("fetch-fixture")(fetch_fixture_cmd)
 app.command("fetch-and-analyze")(fetch_and_analyze_cmd)
 app.command("run-pipeline")(run_pipeline_cmd)
 app.command("capture-score-snapshots")(capture_score_snapshots_cmd)
+app.command("capture-recommendations")(capture_recommendations_cmd)
 app.command("refresh-fixture-cache")(refresh_fixture_cache_cmd)
 app.command("update-scores")(update_scores_cmd)
 app.command()(serve)

@@ -21,6 +21,7 @@ from app.api.schemas import AnalyzeResponse, PeriodOut
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
+from app.analysis.snapshots import RULE_VERSION
 from app.analysis.persist import (
     StalePatternWrite,
     compute_all_patterns,
@@ -29,7 +30,7 @@ from app.analysis.persist import (
 from app.analysis.skip_cache import get_recent_skip, save_skip
 from app.analysis.trends import TrendsData, compute_trends
 from app.db.connection import get_session
-from app.db.models import FixtureCache, Match
+from app.db.models import AnalysisSnapshot, FixtureCache, Match
 from app.scraper import fetch_match_detail
 
 log = logging.getLogger(__name__)
@@ -134,6 +135,12 @@ def _trends_parse(blob: dict | None) -> Optional[TrendsData]:
         return None
 
 
+async def _frozen_recommendations(match_id: str) -> list[dict]:
+    async with get_session() as session:
+        snapshot = await session.get(AnalysisSnapshot, (match_id, RULE_VERSION))
+    return snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []
+
+
 async def build_from_db(row: Match) -> AnalyzeResponse | None:
     """DB satırından AnalyzeResponse üret.
 
@@ -168,6 +175,7 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
             h2_scores=(h2_s1, h2_sx, h2_s2),
             ft_scores=(ft_s1, ft_sx, ft_s2),
             ft_ratios=ft_ratios,
+            as_of=row.analyzed_at,
         )
         try:
             await update_match_patterns(mid, patterns, expected_analyzed_at=row.analyzed_at)
@@ -180,6 +188,7 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         h2_b, h2_c = _pat(patterns["pattern_h2_b"]), _pat(patterns["pattern_h2_c"])
         ft_b, ft_c = _pat(patterns["pattern_ft_b"]), _pat(patterns["pattern_ft_c"])
 
+    recommendations = await _frozen_recommendations(mid)
     return AnalyzeResponse(
         match_id=row.match_id,
         home_team=row.home_team,
@@ -193,6 +202,8 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         h2_b=h2_b, h2_c=h2_c,
         ft_b=ft_b, ft_c=ft_c,
         trends=_trends_parse(row.trends),
+        recommendation_rule_version=RULE_VERSION,
+        ft_recommendations=recommendations,
     )
 
 
@@ -343,11 +354,13 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
         h2_scores=(result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
         ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
         ft_ratios=result.ft.all_ratios,
+        as_of=result.analyzed_at,
     )
 
+    frozen_recommendations: list[dict] = []
     try:
         from app.pipeline.runner import StaleAnalysisWrite, _upsert as _persist_full
-        await _persist_full(result, raw, patterns)
+        frozen_recommendations = await _persist_full(result, raw, patterns)
     except StaleAnalysisWrite:
         raise HTTPException(409, "Daha güncel bir analiz var. Lütfen yeniden deneyin.")
     except Exception as exc:
@@ -375,6 +388,8 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
         h2_b=_pat(patterns["pattern_h2_b"]), h2_c=_pat(patterns["pattern_h2_c"]),
         ft_b=_pat(patterns["pattern_ft_b"]), ft_c=_pat(patterns["pattern_ft_c"]),
         trends=trends_data,
+        recommendation_rule_version=RULE_VERSION,
+        ft_recommendations=frozen_recommendations,
     )
 
 

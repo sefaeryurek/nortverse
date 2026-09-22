@@ -97,7 +97,9 @@ it("accepts measured pre-match coverage and rejects impossible evidence counts",
 it("accepts paired score counts and rejects impossible comparison counts", async () => {
   const score = { rule_version: "score-list-v1", recorded: 8, resolved: 4,
     evaluated: 3, paired: 2, list_hits: 1, paired_model_hits: 1,
-    baseline_hits: 2, minimum_for_rate: 100 };
+    baseline_hits: 2, both_hit: 1, model_only: 0, baseline_only: 1, neither: 0,
+    coverage_difference_pp: -50, difference_ci_low_pp: -100, difference_ci_high_pp: 46.03,
+    minimum_for_rate: 100 };
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(score))));
   await expect(getScoreValidation()).resolves.toEqual(score);
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({

@@ -7,8 +7,9 @@ Tam aynı skor setine sahip maçların gerçek sonuçlarından istatistik çıka
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
-from sqlalchemy import and_, cast, select
+from sqlalchemy import and_, cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.analysis.pattern_stats import PatternResult, compute_stats
@@ -25,6 +26,7 @@ async def find_pattern_b_matches(
     scores_2: list[str],
     min_matches: int = 5,
     exclude_match_id: str | None = None,
+    as_of: datetime | None = None,
 ) -> PatternResult | None:
     """Aynı periyot skor setine sahip geçmiş maçları bul ve istatistik üret.
 
@@ -61,6 +63,15 @@ async def find_pattern_b_matches(
         ]
         if exclude_match_id:
             filters.append(Match.match_id != exclude_match_id)
+        if as_of is not None:
+            known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
+            filters.extend([
+                Match.kickoff_time < as_of,
+                known_at > Match.kickoff_time,
+                known_at <= as_of,
+                Match.analyzed_at.is_not(None),
+                Match.analyzed_at < Match.kickoff_time,
+            ])
         stmt = select(
             Match.actual_ft_home, Match.actual_ft_away,
             Match.actual_ht_home, Match.actual_ht_away,

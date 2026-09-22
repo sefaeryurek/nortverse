@@ -1,199 +1,82 @@
 "use client";
 
-import { useMemo } from "react";
-import type { PatternResult, TrendsData } from "@/lib/types";
+import type { FTRecommendation } from "@/lib/types";
 import type { Period } from "@/lib/labels";
-import { buildPicks, getTopPicks, effectivePickSample, MIN_RECOMMENDATION_SAMPLE, confidenceTier, type Pick, type ConfidenceTier } from "@/lib/confidence";
 import { useMatchInfo } from "@/lib/match-context";
 import AddToCartButton from "./AddToCartButton";
 
 interface Props {
-  patternB: PatternResult | null;
-  patternC: PatternResult | null;
+  recommendations: FTRecommendation[];
   period: Period;
-  trends?: TrendsData | null;
 }
 
-function PickRowWithCart({ pick, period }: { pick: Pick; period: Period }) {
+const MARKET_LABELS: Record<FTRecommendation["market"], string> = {
+  result: "Maç Sonucu",
+  over_25: "2.5 Alt/Üst",
+  btts: "Karşılıklı Gol",
+};
+
+const SELECTION_LABELS: Record<FTRecommendation["selection"], string> = {
+  "1": "Ev Sahibi", X: "Beraberlik", "2": "Deplasman",
+  under: "2.5 Alt", over: "2.5 Üst", yes: "Var", no: "Yok",
+};
+
+const ARCHIVE_LABELS: Record<FTRecommendation["archive"], string> = {
+  archive_1: "Arşiv 1", archive_2: "Arşiv 2", both: "1+2",
+};
+
+function RecommendationRow({ recommendation }: { recommendation: FTRecommendation }) {
   const match = useMatchInfo();
-  const tier = confidenceTier(pick.confidence);
-  const s = tierStyle(tier);
-  const pct = Math.round(pick.pct);
+  const archive = recommendation.archive === "archive_1" ? "A"
+    : recommendation.archive === "archive_2" ? "B" : "AB";
   return (
-    <div
-      className="flex items-center gap-2 px-2.5 py-2 rounded-lg border"
-      style={{ backgroundColor: s.bg, borderColor: s.border }}
-    >
-      <ArchiveBadge archive={pick.archive} />
-      <div className="flex-1 min-w-0">
-        <div className="text-[10px] uppercase tracking-wider truncate" style={{ color: "#475569" }}>
-          {pick.marketLabel}
-        </div>
-        <div className="text-sm font-semibold truncate" style={{ color: s.labelText }}>
-          {pick.selectionLabel}
-        </div>
+    <div className="flex items-center gap-2 rounded-lg border border-emerald-900 bg-emerald-950/40 px-3 py-2">
+      <span className="min-w-12 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-center font-mono text-[9px] font-bold text-slate-300">
+        {ARCHIVE_LABELS[recommendation.archive]}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[10px] uppercase tracking-wider text-slate-500">{MARKET_LABELS[recommendation.market]}</div>
+        <div className="truncate text-sm font-semibold text-emerald-100">{SELECTION_LABELS[recommendation.selection]}</div>
       </div>
-      <div className="flex flex-col items-end flex-shrink-0">
-        <div className="text-base font-extrabold font-mono leading-none" style={{ color: s.pctText }}>
-          %{pct}
-        </div>
-        <div className="text-[9px] font-mono mt-0.5" style={{ color: "#94a3b8" }}>
-          {effectivePickSample(pick)} maç
-        </div>
-        {pick.archive === "AB" && pick.pctA !== null && pick.pctB !== null && (
-          <div className="text-[9px] font-mono mt-0.5" style={{ color: "#475569" }}>
-            {Math.round(pick.pctA)} · {Math.round(pick.pctB)}
-          </div>
-        )}
+      <div className="shrink-0 text-right">
+        <div className="font-mono text-base font-extrabold leading-none text-emerald-100">%{Math.round(recommendation.frequency_pct)}</div>
+        <div className="mt-0.5 font-mono text-[9px] text-slate-500">{recommendation.match_count} maç</div>
       </div>
-      {match && (
-        <AddToCartButton
-          item={{
-            matchId: match.matchId,
-            homeTeam: match.homeTeam,
-            awayTeam: match.awayTeam,
-            marketKey: pick.marketKey,
-            marketLabel: pick.marketLabel,
-            selectionLabel: pick.selectionLabel,
-            pct: pick.pct,
-            archive: pick.archive,
-            period,
-          }}
-        />
-      )}
+      {match && <AddToCartButton item={{
+        matchId: match.matchId, homeTeam: match.homeTeam, awayTeam: match.awayTeam,
+        marketKey: recommendation.market, marketLabel: MARKET_LABELS[recommendation.market],
+        selectionLabel: SELECTION_LABELS[recommendation.selection], pct: recommendation.frequency_pct,
+        archive, period: "ft",
+      }} />}
     </div>
   );
 }
 
-function tierStyle(tier: ConfidenceTier) {
-  if (tier === "high") {
-    return {
-      bg: "#062618",
-      border: "#16a34a",
-      pillBg: "#16a34a",
-      pillText: "#ecfdf5",
-      labelText: "#bbf7d0",
-      pctText: "#dcfce7",
-    };
-  }
-  if (tier === "medium") {
-    return {
-      bg: "#0a1f17",
-      border: "#15803d",
-      pillBg: "#0f1f17",
-      pillText: "#86efac",
-      labelText: "#86efac",
-      pctText: "#bbf7d0",
-    };
-  }
-  return {
-    bg: "#0f1625",
-    border: "#1e293b",
-    pillBg: "#0f1625",
-    pillText: "#94a3b8",
-    labelText: "#94a3b8",
-    pctText: "#cbd5e1",
-  };
-}
-
-function ArchiveBadge({ archive }: { archive: "A" | "B" | "AB" }) {
-  const both = archive === "AB";
-  const text = archive === "AB" ? "1+2" : archive === "A" ? "Arş.1" : "Arş.2";
-  return (
-    <span
-      className="text-[9px] font-bold px-1.5 py-0.5 rounded font-mono tracking-tight"
-      style={{
-        backgroundColor: both ? "#1c1303" : "#0f172a",
-        color: both ? "#fbbf24" : archive === "A" ? "#4ade80" : "#c084fc",
-        border: `1px solid ${both ? "#92400e" : archive === "A" ? "#166534" : "#581c87"}`,
-        minWidth: 38,
-        textAlign: "center",
-      }}
-      title={
-        both
-          ? "Her iki arşivde de bu seçim en az %65 sıklıkta görüldü"
-          : archive === "A"
-            ? "Sadece Arşiv 1 (Skor Seti) doğruluyor"
-            : "Sadece Arşiv 2 (Oran Benzerliği) doğruluyor"
-      }
-    >
-      {text}
-    </span>
-  );
-}
-
-export default function TopPicks({ patternB, patternC, period, trends }: Props) {
-  const { picks } = useMemo(
-    () => getTopPicks(buildPicks(patternB, patternC, period, trends ?? null), { limit: 8 }),
-    [patternB, patternC, period, trends],
-  );
-  const largestSample = Math.max(patternB?.match_count ?? 0, patternC?.match_count ?? 0);
-
-  if (picks.length === 0) {
+export default function TopPicks({ recommendations, period }: Props) {
+  if (period !== "ft") return null;
+  if (recommendations.length === 0) {
     return (
-      <div
-        className="rounded-xl p-4 border"
-        style={{ backgroundColor: "#0a0d14", borderColor: "#1e293b" }}
-      >
-        <div className="flex items-center gap-2 mb-1">
-          <span style={{ color: "#475569" }}>⭐</span>
-          <h3 className="text-sm font-bold tracking-wide" style={{ color: "#94a3b8" }}>
-            Arşivde Öne Çıkanlar
-          </h3>
-        </div>
-        <p className="text-xs" style={{ color: "#475569" }}>
-          {largestSample < MIN_RECOMMENDATION_SAMPLE
-            ? `Öneri için bir arşivde en az ${MIN_RECOMMENDATION_SAMPLE} benzer maç gerekiyor. Bu maçta en büyük örneklem ${largestSample} maç.`
-            : "Bu periyotta örneklem yeterli, fakat sıklık eşiğini geçen seçim yok."}{" "}
-          Arşiv özeti aşağıda gösteriliyor.
+      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+        <h3 className="text-sm font-bold tracking-wide text-slate-300">İleri dönem deneysel seçimler</h3>
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+          Bu maç için ft-display-v2 kuralıyla maç öncesi kaydedilmiş seçim bulunmuyor.
+          Ayrıntılı arşiv istatistikleri aşağıda bilgi amacıyla gösteriliyor.
         </p>
       </div>
     );
   }
-
   return (
-    <div
-      className="rounded-xl p-4 border space-y-3"
-      style={{
-        backgroundColor: "#0a1410",
-        borderColor: "#15803d",
-        boxShadow: "0 0 20px rgba(22,163,74,0.08)",
-      }}
-    >
-      {/* Başlık */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-base">⭐</span>
-          <h3 className="text-sm font-bold tracking-wide" style={{ color: "#86efac" }}>
-            Arşivde Öne Çıkanlar
-          </h3>
-          <span
-            className="text-[10px] px-1.5 py-0.5 rounded font-mono"
-            style={{ backgroundColor: "#0a1f17", color: "#4ade80" }}
-          >
-            {picks.length}
-          </span>
-        </div>
-        <span
-          className="text-[10px] font-mono"
-          style={{ color: "#475569" }}
-          title="Her seçim kendi arşiv örneklemine göre değerlendirilir."
-        >
-          En az {MIN_RECOMMENDATION_SAMPLE} maç · eşik seçime göre
-        </span>
+    <div className="space-y-3 rounded-xl border border-emerald-800 bg-emerald-950/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold tracking-wide text-emerald-200">İleri dönem deneysel seçimler</h3>
+        <span className="font-mono text-[10px] text-slate-500">ft-display-v2 · {recommendations.length} seçim</span>
       </div>
-
-      {/* Pick listesi */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {picks.map((p) => (
-          <PickRowWithCart key={`${p.marketKey}-${p.selectionLabel}`} pick={p} period={period} />
-        ))}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {recommendations.map((recommendation) => <RecommendationRow key={recommendation.recommendation_id} recommendation={recommendation} />)}
       </div>
-
-      <p className="text-[10px] leading-snug" style={{ color: "#475569" }}>
-        Yüzdeler arşiv eşleşmelerindeki görülme sıklığıdır; doğrulanmış maç olasılığı değildir.{" "}
-        <span style={{ color: "#fbbf24" }}>1+2</span> = iki arşivde de aynı seçim eşiği geçti.{" "}
-        <span style={{ color: "#4ade80" }}>Arş.1</span>/<span style={{ color: "#c084fc" }}>Arş.2</span> = tek arşivde geçerli.
+      <p className="text-[10px] leading-relaxed text-slate-500">
+        Seçimler maç başlamadan sabitlenir ve aynı kayıt sonuçlandıktan sonra ölçülür.
+        Yüzde, benzer geçmiş maçlardaki görülme sıklığıdır; kalibre edilmiş olasılık veya getiri tahmini değildir.
       </p>
     </div>
   );

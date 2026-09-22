@@ -95,14 +95,14 @@ export async function getAnalysisValidation(): Promise<AnalysisValidation> {
   const value = data as Record<string, unknown>;
   const validCount = (count: unknown) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0;
   if (!value || typeof value !== "object" || Array.isArray(value)
-    || value.rule_version !== "ft-core-v1"
+    || value.rule_version !== "ft-display-v2"
     || !validCount(value.recorded) || !validCount(value.resolved)
     || !validCount(value.minimum_for_rate) || (value.resolved as number) > (value.recorded as number)
-    || !Array.isArray(value.markets) || value.markets.length > 6
+    || !Array.isArray(value.markets) || value.markets.length > 9
     || !value.markets.every((row: unknown) => {
       if (!row || typeof row !== "object" || Array.isArray(row)) return false;
       const item = row as Record<string, unknown>;
-      return ["archive_1", "archive_2"].includes(String(item.archive))
+      return ["archive_1", "archive_2", "both"].includes(String(item.archive))
         && ["result", "over_25", "btts"].includes(String(item.market))
         && validCount(item.evaluated) && validCount(item.hits)
         && (item.hits as number) <= (item.evaluated as number)
@@ -123,13 +123,27 @@ export async function getScoreValidation(): Promise<ScoreValidation> {
   if (!value || typeof value !== "object" || Array.isArray(value)
     || value.rule_version !== "score-list-v1"
     || !["recorded", "resolved", "evaluated", "paired", "list_hits", "paired_model_hits",
-      "baseline_hits", "minimum_for_rate"].every((key) => validCount(value[key]))
+      "baseline_hits", "both_hit", "model_only", "baseline_only", "neither", "minimum_for_rate"]
+      .every((key) => validCount(value[key]))
     || (value.resolved as number) > (value.recorded as number)
     || (value.evaluated as number) > (value.resolved as number)
     || (value.paired as number) > (value.evaluated as number)
     || (value.list_hits as number) > (value.evaluated as number)
     || (value.paired_model_hits as number) > (value.paired as number)
-    || (value.baseline_hits as number) > (value.paired as number)) {
+    || (value.baseline_hits as number) > (value.paired as number)
+    || (value.both_hit as number) + (value.model_only as number) !== value.paired_model_hits
+    || (value.both_hit as number) + (value.baseline_only as number) !== value.baseline_hits
+    || (value.both_hit as number) + (value.model_only as number)
+      + (value.baseline_only as number) + (value.neither as number) !== value.paired
+    || !["coverage_difference_pp", "difference_ci_low_pp", "difference_ci_high_pp"]
+      .every((key) => value[key] === null || typeof value[key] === "number" && Number.isFinite(value[key])
+        && (value[key] as number) >= -100 && (value[key] as number) <= 100)
+    || (value.paired === 0 && ["coverage_difference_pp", "difference_ci_low_pp", "difference_ci_high_pp"]
+      .some((key) => value[key] !== null))
+    || (value.paired > 0 && ["coverage_difference_pp", "difference_ci_low_pp", "difference_ci_high_pp"]
+      .some((key) => value[key] === null))
+    || (value.paired > 0 && ((value.difference_ci_low_pp as number) > (value.coverage_difference_pp as number)
+      || (value.coverage_difference_pp as number) > (value.difference_ci_high_pp as number)))) {
     throw new ApiError("Skor karşılaştırması verisi geçersiz.", 200);
   }
   return value as unknown as ScoreValidation;

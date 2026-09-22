@@ -99,6 +99,7 @@ async def test_computed_empty_patterns_are_not_recomputed_on_read(monkeypatch):
     )
     compute = AsyncMock()
     monkeypatch.setattr(svc, "compute_all_patterns", compute)
+    monkeypatch.setattr(svc, "_frozen_recommendations", AsyncMock(return_value=[]))
 
     response = await svc.build_from_db(row)
 

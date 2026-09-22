@@ -26,14 +26,17 @@ describe("AnalyzeClient", () => {
   it("shows paired score counts without rates before 100 resolved comparisons", async () => {
     vi.mocked(getScoreValidation).mockResolvedValue({
       rule_version: "score-list-v1", recorded: 12, resolved: 4, evaluated: 4,
-      paired: 3, list_hits: 2, paired_model_hits: 1, baseline_hits: 2, minimum_for_rate: 100,
+      paired: 3, list_hits: 2, paired_model_hits: 1, baseline_hits: 2, both_hit: 1, model_only: 0,
+      baseline_only: 1, neither: 1, coverage_difference_pp: -33.33, difference_ci_low_pp: -100,
+      difference_ci_high_pp: 45.08, minimum_for_rate: 100,
     });
     const data: AnalyzeResponse = {
       match_id: "3003889", home_team: "Home", away_team: "Away",
       league_code: "ENG PR", season: "2026/2027",
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
-      ft_b: null, ft_c: null, trends: null, skipped: false, skip_reason: null,
+      ft_b: null, ft_c: null, trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      skipped: false, skip_reason: null,
     };
     render(<AnalyzeClient match_id="3003889" initialData={data} initialError="" urlHome="" urlAway="" />);
     const panel = within(await screen.findByLabelText("İleri dönem skor karşılaştırması"));
@@ -44,7 +47,7 @@ describe("AnalyzeClient", () => {
 
   it("keeps forward-test percentages hidden below the market sample threshold", async () => {
     vi.mocked(getAnalysisValidation).mockResolvedValue({
-      rule_version: "ft-core-v1", recorded: 12, resolved: 4,
+      rule_version: "ft-display-v2", recorded: 12, resolved: 4,
       markets: [{ archive: "archive_1", market: "result", evaluated: 3, hits: 2 }],
       minimum_for_rate: 100,
     });
@@ -53,7 +56,8 @@ describe("AnalyzeClient", () => {
       league_code: "ENG PR", season: "2026/2027",
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
-      ft_b: null, ft_c: null, trends: null, skipped: false, skip_reason: null,
+      ft_b: null, ft_c: null, trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      skipped: false, skip_reason: null,
     };
     render(<AnalyzeClient match_id="3003889" initialData={data}
       evidence={{ eligible_matches: 48, archive_1_evaluated: 5, archive_2_evaluated: 0,
@@ -72,7 +76,8 @@ describe("AnalyzeClient", () => {
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
       ft_b: null, ft_c: makePatternResult({ match_count: 12, result_1_pct: 75 }),
-      trends: null, skipped: false, skip_reason: null,
+      trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      skipped: false, skip_reason: null,
     };
 
     render(<AnalyzeClient match_id="3003889" initialData={data}
@@ -96,7 +101,8 @@ describe("AnalyzeClient", () => {
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
       ft_b: makePatternResult({ match_count: 7 }), ft_c: null,
-      trends: null, skipped: false, skip_reason: null,
+      trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      skipped: false, skip_reason: null,
     };
 
     render(<AnalyzeClient match_id="3013703" initialData={data} initialError="" urlHome="" urlAway="" />);
@@ -112,7 +118,8 @@ describe("AnalyzeClient", () => {
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
       ft_b: makePatternResult({ match_count: 7 }), ft_c: null,
-      trends: null, skipped: false, skip_reason: null,
+      trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      skipped: false, skip_reason: null,
     };
     let resolveEvidence!: (value: AnalysisEvidence) => void;
     vi.mocked(getAnalysisEvidence).mockReturnValue(new Promise((resolve) => { resolveEvidence = resolve; }));

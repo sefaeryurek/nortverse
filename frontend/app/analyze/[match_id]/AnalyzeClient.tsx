@@ -287,6 +287,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                     patternC={patternC}
                     period={activePeriod}
                     trends={data.trends}
+                    recommendations={data.ft_recommendations}
                   />
                 </MatchProvider>
                 </div>
@@ -335,7 +336,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                           <ul className="mt-2 space-y-1">
                             {validationData.markets.map((row) => (
                               <li key={`${row.archive}-${row.market}`} className="flex justify-between gap-2">
-                                <span>{row.archive === "archive_1" ? "Arşiv 1" : "Arşiv 2"} · {{ result: "Maç sonucu", over_25: "2.5 Alt/Üst", btts: "Karşılıklı gol" }[row.market]}</span>
+                                <span>{{ archive_1: "Arşiv 1", archive_2: "Arşiv 2", both: "Arşiv 1+2" }[row.archive]} · {{ result: "Maç sonucu", over_25: "2.5 Alt/Üst", btts: "Karşılıklı gol" }[row.market]}</span>
                                 <span className="font-mono text-slate-100">
                                   {row.hits}/{row.evaluated}
                                   {row.evaluated >= validationData.minimum_for_rate
@@ -363,12 +364,16 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-slate-100">
                         <span>Analiz listesi: {scoreValidation.paired_model_hits}/{scoreValidation.paired}</span>
                         <span>Basit liste: {scoreValidation.baseline_hits}/{scoreValidation.paired}</span>
+                        <span>İkisi de: {scoreValidation.both_hit}</span>
+                        <span>Sadece analiz: {scoreValidation.model_only}</span>
+                        <span>Sadece basit: {scoreValidation.baseline_only}</span>
+                        <span>İkisi de değil: {scoreValidation.neither}</span>
                       </div>
                     )}
                     <p className="mt-2 text-slate-400">
                       {scoreValidation.paired < scoreValidation.minimum_for_rate
                         ? `${scoreValidation.minimum_for_rate} eşleşmiş sonuçtan önce oran gösterilmez.`
-                        : `Analiz listesi %${Math.round(100 * scoreValidation.paired_model_hits / scoreValidation.paired)}, basit liste %${Math.round(100 * scoreValidation.baseline_hits / scoreValidation.paired)} kapsam sağladı.`}
+                        : `Analiz listesi %${Math.round(100 * scoreValidation.paired_model_hits / scoreValidation.paired)}, basit liste %${Math.round(100 * scoreValidation.baseline_hits / scoreValidation.paired)} kapsam sağladı. Fark %95 aralığı: ${scoreValidation.difference_ci_low_pp} ile ${scoreValidation.difference_ci_high_pp} puan.`}
                       {" "}Skor kapsamı bahis getirisi veya olasılık kalibrasyonu değildir.
                     </p>
                   </section>

@@ -62,6 +62,7 @@ class Match(Base):
     actual_h2_away: Mapped[int | None] = mapped_column(Integer)
     actual_ft_home: Mapped[int | None] = mapped_column(Integer)
     actual_ft_away: Mapped[int | None] = mapped_column(Integer)
+    result_first_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     result_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Soft delete (Sprint 8.9) — kupa temizliği geri alınabilir
@@ -130,6 +131,7 @@ class AnalysisSnapshot(Base):
     match_id: Mapped[str] = mapped_column(String(20), primary_key=True)
     rule_version: Mapped[str] = mapped_column(String(32), primary_key=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    analyzed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     kickoff_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     league_name: Mapped[str] = mapped_column(String(100), nullable=False)
     picks: Mapped[list] = mapped_column(JSONB, nullable=False)

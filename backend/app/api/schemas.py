@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.analysis.pattern_stats import PatternResult
 from app.analysis.trends import TrendsData
@@ -46,6 +46,8 @@ class AnalysisValidation(BaseModel):
 
 
 class ScoreValidation(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     rule_version: str
     recorded: int
     resolved: int
@@ -54,6 +56,13 @@ class ScoreValidation(BaseModel):
     list_hits: int
     paired_model_hits: int
     baseline_hits: int
+    both_hit: int
+    model_only: int
+    baseline_only: int
+    neither: int
+    coverage_difference_pp: Optional[float] = None
+    difference_ci_low_pp: Optional[float] = None
+    difference_ci_high_pp: Optional[float] = None
     minimum_for_rate: int = 100
 
 
@@ -92,6 +101,19 @@ class PeriodOut(BaseModel):
     scores_2: list[str]
 
 
+class RecommendationOut(BaseModel):
+    recommendation_id: str
+    archive: str
+    market: str
+    selection: str
+    frequency_pct: float
+    match_count: int
+    archive_1_frequency_pct: Optional[float] = None
+    archive_1_match_count: Optional[int] = None
+    archive_2_frequency_pct: Optional[float] = None
+    archive_2_match_count: Optional[int] = None
+
+
 class AnalyzeResponse(BaseModel):
     match_id: str
     home_team: str
@@ -108,6 +130,8 @@ class AnalyzeResponse(BaseModel):
     ft_b: Optional[PatternResult] = None
     ft_c: Optional[PatternResult] = None
     trends: Optional[TrendsData] = None
+    recommendation_rule_version: str = "ft-display-v2"
+    ft_recommendations: list[RecommendationOut] = Field(default_factory=list)
     skipped: bool = False
     skip_reason: Optional[str] = None
 

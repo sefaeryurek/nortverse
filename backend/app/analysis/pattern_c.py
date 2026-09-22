@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import logging
 import math
+from datetime import datetime
 
-from sqlalchemy import cast, select
+from sqlalchemy import cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.analysis.pattern_stats import PatternResult, compute_stats
@@ -54,6 +55,7 @@ async def find_pattern_c_all_periods(
     min_matches: int = 1,
     tolerance: float = 0.0,
     exclude_match_id: str | None = None,
+    as_of: datetime | None = None,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """FT oranlarıyla eşleşen geçmiş maçlar için IY, 2Y ve FT istatistiklerini döndür.
 
@@ -95,6 +97,15 @@ async def find_pattern_c_all_periods(
             ]
             if exclude_match_id:
                 filters.append(Match.match_id != exclude_match_id)
+            if as_of is not None:
+                known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
+                filters.extend([
+                    Match.kickoff_time < as_of,
+                    known_at > Match.kickoff_time,
+                    known_at <= as_of,
+                    Match.analyzed_at.is_not(None),
+                    Match.analyzed_at < Match.kickoff_time,
+                ])
             stmt = select(
                 Match.actual_ft_home, Match.actual_ft_away,
                 Match.actual_ht_home, Match.actual_ht_away,
@@ -112,6 +123,15 @@ async def find_pattern_c_all_periods(
             ]
             if exclude_match_id:
                 filters.append(Match.match_id != exclude_match_id)
+            if as_of is not None:
+                known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
+                filters.extend([
+                    Match.kickoff_time < as_of,
+                    known_at > Match.kickoff_time,
+                    known_at <= as_of,
+                    Match.analyzed_at.is_not(None),
+                    Match.analyzed_at < Match.kickoff_time,
+                ])
             stmt = select(
                 Match.ft_all_ratios,
                 Match.actual_ft_home, Match.actual_ft_away,

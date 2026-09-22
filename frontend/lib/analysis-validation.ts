@@ -37,10 +37,35 @@ function trend(value: unknown): boolean {
     && Array.isArray(value.last_n_results) && value.last_n_results.every((v) => ["G", "B", "M"].includes(v));
 }
 
+function recommendation(value: unknown): boolean {
+  if (!record(value)
+    || !text(value.recommendation_id)
+    || !["archive_1", "archive_2", "both"].includes(String(value.archive))
+    || !["result", "over_25", "btts"].includes(String(value.market))
+    || !percentage(value.frequency_pct)
+    || !count(value.match_count) || (value.match_count as number) < 20) return false;
+  const allowed: Record<string, string[]> = {
+    result: ["1", "X", "2"], over_25: ["under", "over"], btts: ["yes", "no"],
+  };
+  if (!allowed[String(value.market)]?.includes(String(value.selection))) return false;
+  for (const archive of ["archive_1", "archive_2"] as const) {
+    const frequency = value[`${archive}_frequency_pct`];
+    const sample = value[`${archive}_match_count`];
+    if ((frequency === null) !== (sample === null)) return false;
+    if (frequency !== null && (!percentage(frequency) || !count(sample) || (sample as number) < 20)) return false;
+  }
+  return true;
+}
+
 export function validAnalysis(value: unknown, requestedId: string): value is AnalyzeResponse {
   return identity(value) && value.match_id === requestedId
     && typeof value.league_code === "string" && typeof value.season === "string"
     && typeof value.skipped === "boolean" && nullableText(value.skip_reason)
+    && value.recommendation_rule_version === "ft-display-v2"
+    && Array.isArray(value.ft_recommendations) && value.ft_recommendations.length <= 3
+    && value.ft_recommendations.every(recommendation)
+    && new Set(value.ft_recommendations.map((item) => record(item) ? item.recommendation_id : "")).size
+      === value.ft_recommendations.length
     && ["ht", "half2", "ft"].every((key) => period(value[key]))
     && ["ht_b", "ht_c", "h2_b", "h2_c", "ft_b", "ft_c"].every((key) => pattern(value[key]))
     && (value.trends === null || record(value.trends)

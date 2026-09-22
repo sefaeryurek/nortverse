@@ -160,6 +160,19 @@ export interface TrendsData {
   h2h: TrendBlock | null;
 }
 
+export interface FTRecommendation {
+  recommendation_id: string;
+  archive: "archive_1" | "archive_2" | "both";
+  market: "result" | "over_25" | "btts";
+  selection: "1" | "X" | "2" | "under" | "over" | "yes" | "no";
+  frequency_pct: number;
+  match_count: number;
+  archive_1_frequency_pct: number | null;
+  archive_1_match_count: number | null;
+  archive_2_frequency_pct: number | null;
+  archive_2_match_count: number | null;
+}
+
 export interface AnalyzeResponse {
   match_id: string;
   home_team: string;
@@ -176,6 +189,8 @@ export interface AnalyzeResponse {
   ft_b: PatternResult | null;
   ft_c: PatternResult | null;
   trends: TrendsData | null;
+  recommendation_rule_version: "ft-display-v2";
+  ft_recommendations: FTRecommendation[];
   skipped: boolean;
   skip_reason: string | null;
 }
@@ -194,7 +209,7 @@ export interface AnalysisValidation {
   recorded: number;
   resolved: number;
   markets: {
-    archive: "archive_1" | "archive_2";
+    archive: "archive_1" | "archive_2" | "both";
     market: "result" | "over_25" | "btts";
     evaluated: number;
     hits: number;
@@ -211,6 +226,13 @@ export interface ScoreValidation {
   list_hits: number;
   paired_model_hits: number;
   baseline_hits: number;
+  both_hit: number;
+  model_only: number;
+  baseline_only: number;
+  neither: number;
+  coverage_difference_pp: number | null;
+  difference_ci_low_pp: number | null;
+  difference_ci_high_pp: number | null;
   minimum_for_rate: number;
 }
 

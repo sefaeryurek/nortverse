@@ -394,6 +394,17 @@ def capture_score_snapshots_cmd(
     console.print(f"[green]{day}: {count} yeni skor karşılaştırması sabitlendi[/green]")
 
 
+def capture_recommendations_cmd(
+    target_date: str = typer.Option(..., "--date", help="YYYY-MM-DD (İstanbul günü)"),
+) -> None:
+    """Hazır analizlerin ölçülecek FT seçimlerini maç başlamadan sabitle."""
+    from app.analysis.snapshots import capture_prepared_recommendations
+
+    day = datetime.strptime(target_date, "%Y-%m-%d").date()
+    count = asyncio.run(capture_prepared_recommendations(day))
+    console.print(f"[green]{day}: {count} yeni FT seçim kaydı sabitlendi[/green]")
+
+
 def refresh_fixture_cache_cmd(
     target_date: Optional[str] = typer.Option(None, "--date", help="YYYY-MM-DD. Boşsa yarın (İstanbul)."),
 ) -> None:

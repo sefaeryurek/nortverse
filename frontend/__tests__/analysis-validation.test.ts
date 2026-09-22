@@ -13,7 +13,8 @@ function analysis() {
     ft: { scores_1: ["1-0"], scores_x: [], scores_2: [] },
     ht_b: null, ht_c: null, h2_b: null, h2_c: null,
     ft_b: makePatternResult({ match_count: 5 }), ft_c: null,
-    trends: null, skipped: false, skip_reason: null,
+    trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+    skipped: false, skip_reason: null,
   };
 }
 

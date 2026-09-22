@@ -1,7 +1,6 @@
-import type { PatternResult, TrendsData } from "@/lib/types";
+import type { FTRecommendation, PatternResult, TrendsData } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import TopPicks from "./TopPicks";
-import ComboSuggestion from "./ComboSuggestion";
 import MarketSummary from "./MarketSummary";
 import DetailedStats from "./DetailedStats";
 
@@ -10,9 +9,10 @@ interface Props {
   patternC: PatternResult | null;
   period: Period;
   trends?: TrendsData | null;
+  recommendations: FTRecommendation[];
 }
 
-export default function IddaaCoupon({ patternB, patternC, period, trends }: Props) {
+export default function IddaaCoupon({ patternB, patternC, period, recommendations }: Props) {
   // Sprint 8.9: Pattern B (skor seti) için 5+ eşleşme şart, Pattern C (oran benzerliği)
   // tolerance=0.0 ile sıkı arandığından 1+ yeterli — düşük güven UI'da rozetle belirtilir.
   const hasB = patternB !== null && patternB.match_count >= 5;
@@ -41,11 +41,9 @@ export default function IddaaCoupon({ patternB, patternC, period, trends }: Prop
   return (
     <div className="space-y-4">
       {/* Katman 1: Önerilen Bahisler (her zaman üstte, varsayılan görünür) */}
-      <TopPicks patternB={safeB} patternC={safeC} period={period} trends={trends} />
+      <TopPicks recommendations={recommendations} period={period} />
 
       {/* Katman 1b: Akıllı Kombinasyon Kuponları (Top Picks'ten otomatik üretilir) */}
-      <ComboSuggestion patternB={safeB} patternC={safeC} period={period} />
-
       {/* Katman 2: Ana Pazar Özeti (varsayılan görünür) */}
       <MarketSummary patternB={safeB} patternC={safeC} period={period} />
 

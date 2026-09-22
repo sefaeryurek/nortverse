@@ -26,12 +26,12 @@ def _pattern(count=30, result_1=70, over=68, btts=66):
 
 def test_fixed_rule_captures_only_qualifying_market_choices():
     picks = prekickoff_picks(
-        analyzed_at=NOW, kickoff_time=NOW + timedelta(hours=2),
+        analyzed_at=NOW, captured_at=NOW + timedelta(minutes=1), kickoff_time=NOW + timedelta(hours=2),
         league_name="Dutch Eredivisie",
         patterns={"pattern_ft_b": _pattern(), "pattern_ft_c": _pattern(count=1)},
     )
 
-    assert RULE_VERSION == "ft-core-v1"
+    assert RULE_VERSION == "ft-display-v2"
     assert [(p["archive"], p["market"], p["selection"]) for p in picks] == [
         ("archive_1", "result", "1"),
         ("archive_1", "over_25", "over"),
@@ -41,7 +41,7 @@ def test_fixed_rule_captures_only_qualifying_market_choices():
 
 
 def test_ineligible_analysis_never_creates_a_snapshot():
-    args = dict(analyzed_at=NOW, kickoff_time=NOW + timedelta(hours=2),
+    args = dict(analyzed_at=NOW, captured_at=NOW + timedelta(minutes=1), kickoff_time=NOW + timedelta(hours=2),
                 league_name="Dutch Eredivisie", patterns={"pattern_ft_b": _pattern()})
     assert prekickoff_picks(**{**args, "kickoff_time": NOW}) is None
     assert prekickoff_picks(**{**args, "kickoff_time": None}) is None
@@ -52,7 +52,7 @@ def test_ineligible_analysis_never_creates_a_snapshot():
 
 def test_eligible_analysis_without_a_pick_is_still_recorded():
     assert prekickoff_picks(
-        analyzed_at=NOW, kickoff_time=NOW + timedelta(hours=2),
+        analyzed_at=NOW, captured_at=NOW + timedelta(minutes=1), kickoff_time=NOW + timedelta(hours=2),
         league_name="Dutch Eredivisie",
         patterns={"pattern_ft_b": _pattern(result_1=40, over=52, btts=50)},
     ) == []
@@ -72,7 +72,7 @@ async def test_upsert_freezes_first_prekickoff_record_and_never_updates_it(monke
                        league_code="ENG PR", kickoff_time=NOW + timedelta(hours=2))
     result = analyze_match(raw)
     result.analyzed_at = NOW
-    await runner._upsert(result, raw, {"pattern_ft_b": _pattern()})
+    await runner._upsert(result, raw, {"pattern_ft_b": _pattern()}, captured_at=NOW + timedelta(minutes=1))
 
     assert session.execute.await_count == 2
     statement = session.execute.await_args_list[1].args[0]
@@ -124,4 +124,4 @@ async def test_validation_reports_only_aggregate_outcomes(monkeypatch):
     assert session.execute.await_args_list[0].args[1] == {"rule_version": RULE_VERSION}
     query = str(session.execute.await_args_list[1].args[0])
     assert "jsonb_array_elements" in query
-    assert "m.result_fetched_at > s.kickoff_time" in query
+    assert "COALESCE(m.result_first_fetched_at, m.result_fetched_at) > s.kickoff_time" in query

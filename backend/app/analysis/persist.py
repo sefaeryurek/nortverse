@@ -36,6 +36,7 @@ async def compute_all_patterns(
     h2_scores: tuple[list, list, list],
     ft_scores: tuple[list, list, list],
     ft_ratios: dict | None,
+    as_of: datetime | None = None,
 ) -> dict[str, dict | None]:
     """6 pattern alanını tek seferde hesapla.
 
@@ -57,7 +58,7 @@ async def compute_all_patterns(
     async def _b(period: str, s1, sx, s2) -> Optional[dict]:
         try:
             res = await find_pattern_b_matches(
-                period, s1, sx, s2, exclude_match_id=match_id
+                period, s1, sx, s2, exclude_match_id=match_id, as_of=as_of,
             )
             return res.model_dump() if res else None
         except Exception as exc:
@@ -69,7 +70,7 @@ async def compute_all_patterns(
             return None, None, None
         try:
             ht_c, h2_c, ft_c = await find_pattern_c_all_periods(
-                ft_ratios, exclude_match_id=match_id
+                ft_ratios, exclude_match_id=match_id, as_of=as_of,
             )
             return (
                 ht_c.model_dump() if ht_c else None,

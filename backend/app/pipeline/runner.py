@@ -151,7 +151,8 @@ async def _upsert(
     result: MatchAnalysisResult,
     raw: MatchRawData | None = None,
     patterns: dict[str, dict | None] | None = None,
-) -> None:
+    captured_at: datetime | None = None,
+) -> list[dict]:
     """Analiz sonucunu (varsa pattern'lerle) DB'ye yaz; zaten varsa güncelle.
 
     Geçici DB hatalarına karşı 3 denemeli retry (Supabase PgBouncer drop).
@@ -164,8 +165,10 @@ async def _upsert(
         log.error("DB write reddedildi [%s]: %s", result.match_id, reason)
         raise ValueError(f"DB write reddedildi [{result.match_id}]: {reason}")
 
+    captured_at = captured_at or datetime.now(timezone.utc)
     picks = prekickoff_picks(
         analyzed_at=result.analyzed_at,
+        captured_at=captured_at,
         kickoff_time=raw.kickoff_time if raw else None,
         league_name=raw.league_name if raw else None,
         league_code=raw.league_code if raw else None,
@@ -193,7 +196,8 @@ async def _upsert(
                     insert(AnalysisSnapshot).values(
                         match_id=result.match_id,
                         rule_version=RULE_VERSION,
-                        captured_at=result.analyzed_at,
+                        captured_at=captured_at,
+                        analyzed_at=result.analyzed_at,
                         kickoff_time=raw.kickoff_time,
                         league_name=raw.league_name or canonical_league_name(raw.league_code),
                         picks=picks,
@@ -206,14 +210,16 @@ async def _upsert(
                     session,
                     match_id=result.match_id,
                     analyzed_at=result.analyzed_at,
-                    captured_at=datetime.now(timezone.utc),
+                    captured_at=captured_at,
                     kickoff_time=raw.kickoff_time,
                     league_name=raw.league_name,
                     league_code=raw.league_code,
                     model_scores=result.ft.scores_1 + result.ft.scores_x + result.ft.scores_2,
                 )
+            snapshot = await session.get(AnalysisSnapshot, (result.match_id, RULE_VERSION))
+        return snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []
 
-    await _with_retry(_do, label=f"_upsert[{result.match_id}]")
+    return await _with_retry(_do, label=f"_upsert[{result.match_id}]")
 
 
 async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> int:
@@ -357,6 +363,7 @@ async def run_pipeline(
                     h2_scores=(result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
                     ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
                     ft_ratios=result.ft.all_ratios,
+                    as_of=result.analyzed_at,
                 )
                 await _upsert(result, raw, patterns)
                 stats["analyzed"] += 1
@@ -503,7 +510,11 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                 scores = _merge_result_scores(raw, existing)
                 await session.execute(
                     sa_update(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
-                    .values(**scores, result_fetched_at=checked_at)
+                    .values(
+                        **scores,
+                        result_first_fetched_at=func.coalesce(Match.result_first_fetched_at, checked_at),
+                        result_fetched_at=checked_at,
+                    )
                 )
 
     await _with_retry(_save, label=f"update_results[{d}]")

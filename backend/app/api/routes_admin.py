@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -26,7 +27,8 @@ _corr_cache: dict[str, float] | None = None
 _RESOLVED_SNAPSHOT = """
     m.deleted_at IS NULL
     AND m.actual_ft_home IS NOT NULL AND m.actual_ft_away IS NOT NULL
-    AND m.result_fetched_at > s.kickoff_time
+    AND COALESCE(m.result_first_fetched_at, m.result_fetched_at) > s.kickoff_time
+    AND s.analyzed_at <= s.captured_at
     AND s.captured_at < s.kickoff_time
 """
 
@@ -73,7 +75,7 @@ _SCORE_VALIDATION = text("""
         WHERE s.rule_version = :rule_version
           AND m.deleted_at IS NULL
           AND m.actual_ft_home IS NOT NULL AND m.actual_ft_away IS NOT NULL
-          AND m.result_fetched_at > s.kickoff_time
+          AND COALESCE(m.result_first_fetched_at, m.result_fetched_at) > s.kickoff_time
           AND s.analyzed_at <= s.captured_at
           AND s.captured_at < s.kickoff_time
     )
@@ -84,9 +86,23 @@ _SCORE_VALIDATION = text("""
         count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL),
         count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND model_hit),
         count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND model_hit),
-        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND baseline_hit)
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND baseline_hit),
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND model_hit AND baseline_hit),
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND model_hit AND NOT baseline_hit),
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND NOT model_hit AND baseline_hit),
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND NOT model_hit AND NOT baseline_hit)
     FROM eligible
 """)
+
+
+def paired_coverage_interval(model_only: int, baseline_only: int, paired: int) -> tuple[float, float, float] | None:
+    """Distribution-free 95% interval for paired coverage difference."""
+    if paired <= 0:
+        return None
+    difference = 100.0 * (model_only - baseline_only) / paired
+    # Paired difference is bounded in [-1, 1] (range width 2).
+    half_width = 100.0 * math.sqrt(2.0 * math.log(40.0) / paired)
+    return difference, max(-100.0, difference - half_width), min(100.0, difference + half_width)
 
 
 @router.api_route("/api/health", methods=["GET", "HEAD"], response_model=HealthResponse)
@@ -130,13 +146,13 @@ async def analysis_evidence() -> AnalysisEvidence:
         Match.deleted_at.is_(None),
         Match.actual_ft_home.is_not(None),
         Match.actual_ft_away.is_not(None),
-        Match.result_fetched_at.is_not(None),
+        func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at).is_not(None),
         Match.kickoff_time.is_not(None),
         Match.analyzed_at.is_not(None),
         Match.pattern_computed_at.is_not(None),
         Match.analyzed_at < Match.kickoff_time,
         Match.pattern_computed_at < Match.kickoff_time,
-        Match.result_fetched_at > Match.kickoff_time,
+        func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at) > Match.kickoff_time,
     )
     league_fields = (Match.league_name, Match.league_code)
     league_filter = tuple(
@@ -194,10 +210,15 @@ async def score_validation() -> ScoreValidation:
         row = (await session.execute(
             _SCORE_VALIDATION, {"rule_version": SCORE_RULE_VERSION},
         )).one()
+    interval = paired_coverage_interval(row[8], row[9], row[3])
     return ScoreValidation(
         rule_version=SCORE_RULE_VERSION,
         recorded=row[0], resolved=row[1], evaluated=row[2], paired=row[3],
         list_hits=row[4], paired_model_hits=row[5], baseline_hits=row[6],
+        both_hit=row[7], model_only=row[8], baseline_only=row[9], neither=row[10],
+        coverage_difference_pp=round(interval[0], 2) if interval else None,
+        difference_ci_low_pp=round(interval[1], 2) if interval else None,
+        difference_ci_high_pp=round(interval[2], 2) if interval else None,
     )
 
 
