@@ -77,11 +77,6 @@ export default function BultenRow({ match, timeStr }: Props) {
             initialStale={isLiveScoreStale(match.score_checked_at)}
           />
         )}
-        {match.status === "pending" && (
-          <span className="flex-shrink-0 rounded bg-amber-950 px-2 py-1 text-xs text-amber-300">
-            Durum doğrulanıyor
-          </span>
-        )}
 
         {/* Ok */}
         <div

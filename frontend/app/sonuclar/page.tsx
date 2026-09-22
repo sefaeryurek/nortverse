@@ -5,6 +5,7 @@ import DayTabs from "@/components/DayTabs";
 import AutoRefresh from "@/components/AutoRefresh";
 import RetryButton from "@/components/RetryButton";
 import { getResults } from "@/lib/api";
+import { showResultMatch } from "@/lib/match-visibility";
 import { leagueDisplay } from "@/lib/leagues";
 import type { ResultMatch } from "@/lib/types";
 import Link from "next/link";
@@ -134,7 +135,8 @@ async function ResultList({ date, q }: { date: string; q: string }) {
   let matches: ResultMatch[] = [];
   let error = "";
   try {
-    matches = await getResults(date);
+    const now = new Date();
+    matches = (await getResults(date)).filter((match) => showResultMatch(match, now.getTime()));
   } catch (e) {
     error = e instanceof Error ? e.message : "Bağlantı hatası";
   }

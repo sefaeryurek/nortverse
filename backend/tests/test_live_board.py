@@ -67,3 +67,29 @@ async def test_bulletin_keeps_live_and_scheduled_but_removes_finished(monkeypatc
     visible = await rf._bulletin_items(items, today)
     assert [(row.match_id, row.status) for row in visible] == [("102", "live"), ("103", "scheduled")]
     assert (visible[0].live_home, visible[0].live_away, visible[0].live_minute) == (1, 0, "67")
+
+
+@pytest.mark.asyncio
+async def test_bulletin_hides_unverified_matches_after_kickoff(monkeypatch):
+    now = datetime.now(timezone.utc)
+    today = now.astimezone(timezone(timedelta(hours=3))).date()
+    snapshot = LiveSnapshot({
+        "scheduled_old": FixtureScore("scheduled_old", "scheduled"),
+        "live": FixtureScore("live", "live", 1, 0, minute="67"),
+    }, now)
+    monkeypatch.setattr(rf, "get_live_snapshot", AsyncMock(return_value=snapshot))
+    items = [
+        {"match_id": match_id, "home_team": "A", "away_team": "B",
+         "league_code": "ENG PR", "league_name": "English Premier League",
+         "kickoff_time": kickoff.isoformat()}
+        for match_id, kickoff in (
+            ("scheduled_old", now - timedelta(hours=10)),
+            ("pending", now - timedelta(minutes=10)),
+            ("live", now - timedelta(hours=1)),
+            ("scheduled_future", now + timedelta(hours=1)),
+        )
+    ]
+    visible = await rf._bulletin_items(items, today)
+    assert [(row.match_id, row.status) for row in visible] == [
+        ("live", "live"), ("scheduled_future", "scheduled"),
+    ]

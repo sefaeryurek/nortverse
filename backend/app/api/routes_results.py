@@ -118,6 +118,8 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
             continue
 
         kickoff = _utc_datetime(item.get("kickoff_time") or (row.kickoff_time if row else None))
+        if kickoff is not None and kickoff > now_utc:
+            continue
         observed = live_snapshot.scores.get(item["match_id"]) if live_snapshot else None
         state = resolve_match_state(
             item, kickoff, row.actual_ft_home if row else None, row.actual_ft_away if row else None,

@@ -64,6 +64,40 @@ async def test_results_exclude_unfinished_live_fixture(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_results_exclude_unverified_and_future_finished_fixture(monkeypatch):
+    now = datetime(2026, 9, 14, 12, tzinfo=timezone.utc)
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+    monkeypatch.setattr(rr, "datetime", FixedDateTime)
+    monkeypatch.setattr(rr, "get_live_snapshot", AsyncMock(return_value=None))
+    session = AsyncMock()
+    session.get.return_value = FixtureCache(
+        date="2026-09-14", cached_at=now,
+        matches_json=[
+            {"match_id": "unverified", "home_team": "A", "away_team": "B",
+             "league_code": "ENG PR", "kickoff_time": (now - timedelta(hours=4)).isoformat(),
+             "score_status": "pending"},
+            {"match_id": "future", "home_team": "C", "away_team": "D",
+             "league_code": "ENG PR", "kickoff_time": (now + timedelta(hours=6)).isoformat(),
+             "score_status": "finished", "score_home": 2, "score_away": 1},
+        ],
+    )
+    selected = MagicMock()
+    selected.all.return_value = []
+    session.execute.return_value = selected
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(rr, "get_session", fake_session)
+    assert await rr.get_results("2026-09-14") == []
+
+
+@pytest.mark.asyncio
 async def test_results_exclude_fixture_from_neighboring_istanbul_day(monkeypatch):
     session = AsyncMock()
     session.get.return_value = FixtureCache(

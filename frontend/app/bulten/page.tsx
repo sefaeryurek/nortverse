@@ -6,6 +6,7 @@ import RetryButton from "@/components/RetryButton";
 import BultenRow from "@/components/BultenRow";
 import AutoRefresh from "@/components/AutoRefresh";
 import { getFixture } from "@/lib/api";
+import { showBulletinMatch } from "@/lib/match-visibility";
 import type { FixtureMatch } from "@/lib/types";
 import Link from "next/link";
 
@@ -78,7 +79,9 @@ async function MatchList({ date }: { date: string }) {
   let matches: FixtureMatch[] = [];
   let error = "";
   try {
-    matches = await getFixture(date);
+    const now = new Date();
+    const today = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+    matches = (await getFixture(date)).filter((match) => showBulletinMatch(match, now.getTime(), today, date));
   } catch (e) {
     error = e instanceof Error ? e.message : "Bağlantı hatası";
   }
@@ -129,9 +132,6 @@ async function MatchList({ date }: { date: string }) {
         <span>{matches.length} maç</span>
         <span className="text-green-400">Canlı: {matches.filter((m) => m.status === "live").length}</span>
         <span>Başlayacak: {matches.filter((m) => m.status === "scheduled").length}</span>
-        {matches.some((m) => m.status === "pending") && (
-          <span className="text-amber-300">Durum bekleniyor: {matches.filter((m) => m.status === "pending").length}</span>
-        )}
       </div>
       {sorted.map(({ match, timeStr }) => (
         <BultenRow key={match.match_id} match={match} timeStr={timeStr} />

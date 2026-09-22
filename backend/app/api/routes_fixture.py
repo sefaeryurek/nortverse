@@ -39,9 +39,14 @@ async def _bulletin_items(items: list[dict], req_date: date) -> list[FixtureMatc
             item, kickoff, None, None,
             observed, live_snapshot.checked_at if live_snapshot else None, now,
         )
-        if state.status in ("finished", "postponed"):
+        if state.status not in ("scheduled", "live"):
             continue
-        if state.status == "pending" and kickoff and now - kickoff > timedelta(hours=3):
+        # A source can still say "scheduled" hours after kickoff. Without a
+        # verified live score, it no longer belongs to the bulletin.
+        if state.status == "scheduled" and (
+            (kickoff is not None and kickoff <= now)
+            or (kickoff is None and req_date < today)
+        ):
             continue
         visible.append(match.model_copy(update={
             "status": state.status,
