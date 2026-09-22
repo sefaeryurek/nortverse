@@ -309,6 +309,9 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                         ? " Örneklem henüz sonuç çıkarmak için küçük."
                         : ` Skor kapsama oranı: %${Math.round(100 * evidenceData.score_list_hits / evidenceData.score_list_evaluated)}. Bu oran bahis getirisi veya olasılık kalibrasyonu değildir.`}
                     </p>
+                    <p className="mt-2 leading-relaxed text-amber-300/80">
+                      Skor listesinin basit bir yaygın skor seçimini geçtiği henüz gösterilmedi. Bu liste doğrulanmış bahis önerisi değildir.
+                    </p>
                     {validationData && (
                       <div className="mt-4 border-t border-slate-700 pt-3">
                         <h3 className="font-semibold text-slate-100">İleri dönem seçim takibi</h3>

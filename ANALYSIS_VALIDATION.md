@@ -13,6 +13,19 @@ Arşiv 2 için 0 değerlendirilebilir maç var. Maç sonu skor listesi 43 maçı
 14'ünde gerçek skoru kapsıyor. Bunlar geçmiş verilerdeki kapsam sayılarıdır;
 ileri dönem seçim isabeti olarak yorumlanmaz.
 
+### İlk kronolojik karşılaştırma
+
+43 değerlendirilebilir maçın skor listesinde ortalama 4,3 farklı skor vardı.
+Basit karşılaştırma için, her analiz anında sonucu **zaten doğrulanmış** önceki
+lig maçlarının en sık görülen skorlarından aynı sayıda seçim yapıldı. Önceki
+sonuç sayısı liste boyundan az olan maç çıkarılınca 42 eşleşmiş maç kaldı:
+mevcut skor listesi 13, basit geçmiş skor listesi 17 gerçek skoru kapsadı.
+Karşılaştırma ligler birlikte ele alınarak ve eşit sıklıkta skorlar sabit
+alfabetik sırayla seçilerek yapıldı. Bu küçük, geçmişe dönük grupta mevcut
+skor listesinin basit yönteme üstünlüğü gösterilemedi. Fark istatistiksel
+kanıt veya bahis getirisi olarak yorumlanmamalı; seçim kuralları ileri dönem
+testi görülmeden bu 42 maça göre ayarlanmamalı.
+
 Yeni ölçüm, maç öncesi 3,5+ skor listesinin kesin skoru kapsadığı maç sayısını
 gösterir. Bu **skor listesi kapsamıdır**; tahmin olasılığı veya bahis getirisi
 değildir. 100 uygun maçtan önce yüzde yayımlanmaz.
