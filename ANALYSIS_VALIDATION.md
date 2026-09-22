@@ -8,9 +8,23 @@ maç sonu eşleşmesi vardı. Bu sayılar isabet veya kârlılık iddiası için
 değil. Önceki lig filtresinin kaçırdığı kupa/turnuva kayıtları bulunabileceğinden
 eski kohort ayrıca temizlenmeli. Yeni sürüm bu turnuvaları dışarıda bırakır.
 
+Kupa filtresinden sonra canlı uygun grup 47 maça düştü: Arşiv 1 için 5,
+Arşiv 2 için 0 değerlendirilebilir maç var. Maç sonu skor listesi 43 maçın
+14'ünde gerçek skoru kapsıyor. Bunlar geçmiş verilerdeki kapsam sayılarıdır;
+ileri dönem seçim isabeti olarak yorumlanmaz.
+
 Yeni ölçüm, maç öncesi 3,5+ skor listesinin kesin skoru kapsadığı maç sayısını
 gösterir. Bu **skor listesi kapsamıdır**; tahmin olasılığı veya bahis getirisi
 değildir. 100 uygun maçtan önce yüzde yayımlanmaz.
+
+`ft-core-v1` ile yeni maçlar için ilk maç öncesi analizden en fazla altı küçük
+pazar seçimi saklanır: iki arşivde ayrı ayrı maç sonucu, 2.5 alt/üst ve
+karşılıklı gol. Arşivde en az 20 benzer maç ve seçimde en az %65 geçmiş
+sıklık gerekir. Hiçbir seçim çıkmasa da boş kayıt tutulur. Aynı maç ve kural
+sürümü tekrar analiz edildiğinde ilk kayıt değişmez. `/api/analysis-validation`
+yalnızca daha sonra doğrulanmış kesin skorları bu sabit seçimlerle karşılaştırır;
+pazar başına 100 sonuçtan önce yüzde göstermez. Bu eşikler ileri dönem takibi
+başlatmak içindir; kanıtlanmış değer veya kalibre olasılık anlamına gelmez.
 
 ## Sonraki uygulama adımları
 

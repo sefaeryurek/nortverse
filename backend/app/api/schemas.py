@@ -30,6 +30,21 @@ class AnalysisEvidence(BaseModel):
     minimum_for_rate: int = 100
 
 
+class MarketValidation(BaseModel):
+    archive: str
+    market: str
+    evaluated: int
+    hits: int
+
+
+class AnalysisValidation(BaseModel):
+    rule_version: str
+    recorded: int
+    resolved: int
+    markets: list[MarketValidation]
+    minimum_for_rate: int = 100
+
+
 class HealthResponse(BaseModel):
     """Hafif sağlık göstergesi — UptimeRobot her 5dk ping atıyor.
 

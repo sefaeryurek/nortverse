@@ -120,3 +120,16 @@ class SkippedAnalysis(Base):
     league_code: Mapped[str | None] = mapped_column(String(50))
     reason: Mapped[str] = mapped_column(String(50), nullable=False)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AnalysisSnapshot(Base):
+    """First pre-kickoff FT picks for one fixed rule version; never updated."""
+
+    __tablename__ = "analysis_snapshots"
+
+    match_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    rule_version: Mapped[str] = mapped_column(String(32), primary_key=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    kickoff_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    league_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    picks: Mapped[list] = mapped_column(JSONB, nullable=False)

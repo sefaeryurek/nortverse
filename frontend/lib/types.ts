@@ -189,6 +189,19 @@ export interface AnalysisEvidence {
   minimum_for_rate: number;
 }
 
+export interface AnalysisValidation {
+  rule_version: string;
+  recorded: number;
+  resolved: number;
+  markets: {
+    archive: "archive_1" | "archive_2";
+    market: "result" | "over_25" | "btts";
+    evaluated: number;
+    hits: number;
+  }[];
+  minimum_for_rate: number;
+}
+
 export interface ResultMatch {
   match_id: string;
   home_team: string;

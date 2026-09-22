@@ -1,24 +1,50 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import AnalyzeClient from "@/app/analyze/[match_id]/AnalyzeClient";
-import { getAnalysisEvidence } from "@/lib/api";
+import { getAnalysisEvidence, getAnalysisValidation } from "@/lib/api";
 import { makePatternResult } from "./fixtures";
 import type { AnalysisEvidence, AnalyzeResponse, PatternResult } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn() }) }));
-vi.mock("@/lib/api", () => ({ analyzeMatch: vi.fn(), getAnalysisEvidence: vi.fn() }));
+vi.mock("@/lib/api", () => ({ analyzeMatch: vi.fn(), getAnalysisEvidence: vi.fn(), getAnalysisValidation: vi.fn() }));
 vi.mock("next/dynamic", () => ({
   default: () => ({ patternB, patternC }: { patternB?: PatternResult | null; patternC?: PatternResult | null }) => (
     <div data-testid="archive-analysis">{patternB?.match_count ?? "none"}/{patternC?.match_count ?? "none"}</div>
   ),
 }));
 
-beforeEach(() => { vi.mocked(getAnalysisEvidence).mockRejectedValue(new Error("offline")); });
+beforeEach(() => {
+  vi.mocked(getAnalysisEvidence).mockRejectedValue(new Error("offline"));
+  vi.mocked(getAnalysisValidation).mockRejectedValue(new Error("offline"));
+});
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 const emptyPeriod = { scores_1: [], scores_x: [], scores_2: [] };
 
 describe("AnalyzeClient", () => {
+  it("keeps forward-test percentages hidden below the market sample threshold", async () => {
+    vi.mocked(getAnalysisValidation).mockResolvedValue({
+      rule_version: "ft-core-v1", recorded: 12, resolved: 4,
+      markets: [{ archive: "archive_1", market: "result", evaluated: 3, hits: 2 }],
+      minimum_for_rate: 100,
+    });
+    const data: AnalyzeResponse = {
+      match_id: "3003889", home_team: "Home", away_team: "Away",
+      league_code: "ENG PR", season: "2026/2027",
+      ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
+      ht_b: null, ht_c: null, h2_b: null, h2_c: null,
+      ft_b: null, ft_c: null, trends: null, skipped: false, skip_reason: null,
+    };
+    render(<AnalyzeClient match_id="3003889" initialData={data}
+      evidence={{ eligible_matches: 48, archive_1_evaluated: 5, archive_2_evaluated: 0,
+        score_list_evaluated: 24, score_list_hits: 3, minimum_for_rate: 100 }}
+      initialError="" urlHome="" urlAway="" />);
+
+    const panel = within(screen.getByLabelText("Analiz doğrulama kapsamı"));
+    expect(await panel.findByText("2/3")).toBeDefined();
+    expect(panel.queryByText("%67")).toBeNull();
+  });
+
   it("shows independent archive analysis when the 3.5+ score list is empty", () => {
     const data: AnalyzeResponse = {
       match_id: "3003889", home_team: "Home", away_team: "Away",

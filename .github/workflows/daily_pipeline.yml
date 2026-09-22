@@ -47,6 +47,13 @@ jobs:
           python -m playwright install chromium
           python -m playwright install-deps chromium
 
+      - name: Veritabanı şemasını güncelle
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cd backend
+          alembic upgrade head
+
       - name: Komut çalıştır
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

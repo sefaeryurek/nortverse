@@ -7,11 +7,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, or_, select, text
 
 from app.analysis.correlation import compute_poisson_correlations
 from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
-from app.api.schemas import AnalysisEvidence, DataQuality, HealthResponse
+from app.analysis.snapshots import RULE_VERSION
+from app.api.schemas import AnalysisEvidence, AnalysisValidation, DataQuality, HealthResponse, MarketValidation
 from app.api.services import analysis_cache, bg_queue
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
@@ -20,6 +21,46 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 _corr_cache: dict[str, float] | None = None
+
+_RESOLVED_SNAPSHOT = """
+    m.deleted_at IS NULL
+    AND m.actual_ft_home IS NOT NULL AND m.actual_ft_away IS NOT NULL
+    AND m.result_fetched_at > s.kickoff_time
+    AND s.captured_at < s.kickoff_time
+"""
+
+_VALIDATION_COUNTS = text(f"""
+    SELECT count(*), count(*) FILTER (WHERE {_RESOLVED_SNAPSHOT})
+    FROM analysis_snapshots s
+    LEFT JOIN matches m ON m.match_id = s.match_id
+    WHERE s.rule_version = :rule_version
+""")
+
+_VALIDATION_MARKETS = text(f"""
+    SELECT p.value->>'archive' AS archive, p.value->>'market' AS market,
+           count(*) AS evaluated,
+           count(*) FILTER (WHERE
+               CASE
+                   WHEN p.value->>'market' = 'result' THEN
+                       (p.value->>'selection' = '1' AND m.actual_ft_home > m.actual_ft_away)
+                       OR (p.value->>'selection' = 'X' AND m.actual_ft_home = m.actual_ft_away)
+                       OR (p.value->>'selection' = '2' AND m.actual_ft_home < m.actual_ft_away)
+                   WHEN p.value->>'market' = 'over_25' THEN
+                       (p.value->>'selection' = 'over') =
+                       (m.actual_ft_home + m.actual_ft_away > 2)
+                   WHEN p.value->>'market' = 'btts' THEN
+                       (p.value->>'selection' = 'yes') =
+                       (m.actual_ft_home > 0 AND m.actual_ft_away > 0)
+                   ELSE false
+               END
+           ) AS hits
+    FROM analysis_snapshots s
+    JOIN matches m ON m.match_id = s.match_id
+    CROSS JOIN LATERAL jsonb_array_elements(s.picks) AS p(value)
+    WHERE s.rule_version = :rule_version AND {_RESOLVED_SNAPSHOT}
+    GROUP BY p.value->>'archive', p.value->>'market'
+    ORDER BY archive, market
+""")
 
 
 @router.api_route("/api/health", methods=["GET", "HEAD"], response_model=HealthResponse)
@@ -98,6 +139,25 @@ async def analysis_evidence() -> AnalysisEvidence:
         archive_2_evaluated=row[2],
         score_list_evaluated=row[3],
         score_list_hits=row[4],
+    )
+
+
+@router.get("/api/analysis-validation", response_model=AnalysisValidation)
+async def analysis_validation() -> AnalysisValidation:
+    """Evaluate frozen pre-kickoff selections only after a confirmed FT result."""
+    async with get_session() as session:
+        recorded, resolved = (await session.execute(
+            _VALIDATION_COUNTS, {"rule_version": RULE_VERSION},
+        )).one()
+        rows = (await session.execute(
+            _VALIDATION_MARKETS, {"rule_version": RULE_VERSION},
+        )).all()
+    return AnalysisValidation(
+        rule_version=RULE_VERSION,
+        recorded=recorded,
+        resolved=resolved,
+        markets=[MarketValidation(archive=row[0], market=row[1], evaluated=row[2], hits=row[3])
+                 for row in rows],
     )
 
 

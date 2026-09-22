@@ -3,8 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import type { AnalysisEvidence, AnalyzeResponse } from "@/lib/types";
-import { analyzeMatch, getAnalysisEvidence } from "@/lib/api";
+import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse } from "@/lib/types";
+import { analyzeMatch, getAnalysisEvidence, getAnalysisValidation } from "@/lib/api";
 import ScoreList from "@/components/ScoreList";
 import { MatchProvider } from "@/lib/match-context";
 
@@ -53,6 +53,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
   const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<AnalyzeResponse | null>(initialData);
   const [evidenceData, setEvidenceData] = useState<AnalysisEvidence | null>(evidence ?? null);
+  const [validationData, setValidationData] = useState<AnalysisValidation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(initialError);
   const [activePeriod, setActivePeriod] = useState<Period>("ft");
@@ -82,6 +83,15 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
       .catch(() => { /* Optional coverage data must not delay the analysis. */ });
     return () => { cancelled = true; };
   }, [data, evidence]);
+
+  useEffect(() => {
+    if (!data || data.skipped) return;
+    let cancelled = false;
+    getAnalysisValidation()
+      .then((value) => { if (!cancelled) setValidationData(value); })
+      .catch(() => { /* Optional outcome data must not delay the analysis. */ });
+    return () => { cancelled = true; };
+  }, [data]);
 
   const retry = () => {
     setError("");
@@ -299,6 +309,34 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                         ? " Örneklem henüz sonuç çıkarmak için küçük."
                         : ` Skor kapsama oranı: %${Math.round(100 * evidenceData.score_list_hits / evidenceData.score_list_evaluated)}. Bu oran bahis getirisi veya olasılık kalibrasyonu değildir.`}
                     </p>
+                    {validationData && (
+                      <div className="mt-4 border-t border-slate-700 pt-3">
+                        <h3 className="font-semibold text-slate-100">İleri dönem seçim takibi</h3>
+                        <p className="mt-1 leading-relaxed text-slate-400">
+                          Maç başlamadan sabitlenen {validationData.recorded} analizden {validationData.resolved} tanesinin
+                          kesin sonucu doğrulandı. Kurallar: {validationData.rule_version}.
+                        </p>
+                        {validationData.markets.length === 0 ? (
+                          <p className="mt-2 text-slate-400">Henüz sonuçlanmış, örneklem eşiğini geçen pazar seçimi yok.</p>
+                        ) : (
+                          <ul className="mt-2 space-y-1">
+                            {validationData.markets.map((row) => (
+                              <li key={`${row.archive}-${row.market}`} className="flex justify-between gap-2">
+                                <span>{row.archive === "archive_1" ? "Arşiv 1" : "Arşiv 2"} · {{ result: "Maç sonucu", over_25: "2.5 Alt/Üst", btts: "Karşılıklı gol" }[row.market]}</span>
+                                <span className="font-mono text-slate-100">
+                                  {row.hits}/{row.evaluated}
+                                  {row.evaluated >= validationData.minimum_for_rate
+                                    ? ` · %${Math.round(100 * row.hits / row.evaluated)}` : ""}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <p className="mt-2 text-slate-400">
+                          Pazar başına {validationData.minimum_for_rate} sonuçtan önce oran gösterilmez. Bu sayılar bahis getirisi değildir.
+                        </p>
+                      </div>
+                    )}
                   </section>
                 )}
               </>

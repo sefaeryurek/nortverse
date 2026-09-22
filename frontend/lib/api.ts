@@ -1,4 +1,4 @@
-import type { AnalysisEvidence, AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
+import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
 import { getApiBase } from "./env";
 import { isRecentScoreDate } from "./dates";
 import { validMatchList } from "./list-validation";
@@ -85,6 +85,32 @@ export async function getAnalysisEvidence(): Promise<AnalysisEvidence> {
     throw new ApiError("Analiz doğrulama verisi geçersiz.", 200);
   }
   return value as unknown as AnalysisEvidence;
+}
+
+export async function getAnalysisValidation(): Promise<AnalysisValidation> {
+  const data = await request<unknown>("/api/analysis-validation", {
+    next: { revalidate: 300 },
+    signal: AbortSignal.timeout(5_000),
+  });
+  const value = data as Record<string, unknown>;
+  const validCount = (count: unknown) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || value.rule_version !== "ft-core-v1"
+    || !validCount(value.recorded) || !validCount(value.resolved)
+    || !validCount(value.minimum_for_rate) || (value.resolved as number) > (value.recorded as number)
+    || !Array.isArray(value.markets) || value.markets.length > 6
+    || !value.markets.every((row: unknown) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) return false;
+      const item = row as Record<string, unknown>;
+      return ["archive_1", "archive_2"].includes(String(item.archive))
+        && ["result", "over_25", "btts"].includes(String(item.market))
+        && validCount(item.evaluated) && validCount(item.hits)
+        && (item.hits as number) <= (item.evaluated as number)
+        && (item.evaluated as number) <= (value.resolved as number);
+    })) {
+    throw new ApiError("İleri dönem analiz verisi geçersiz.", 200);
+  }
+  return value as unknown as AnalysisValidation;
 }
 
 export async function getResults(date: string): Promise<ResultMatch[]> {

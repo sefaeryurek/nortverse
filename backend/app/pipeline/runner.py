@@ -14,11 +14,12 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import canonical_league_name, is_supported_league
+from app.analysis.snapshots import RULE_VERSION, prekickoff_picks
 from app.analysis.persist import compute_all_patterns
 from app.analysis.skip_cache import save_skip
 from app.analysis.trends import compute_trends
 from app.db.connection import get_session
-from app.db.models import FixtureCache, Match, SkippedAnalysis
+from app.db.models import AnalysisSnapshot, FixtureCache, Match, SkippedAnalysis
 from app.models import FixtureMatch, MatchAnalysisResult, MatchRawData
 from app.scraper.browser import browser_context
 from app.scraper.fixture import fetch_istanbul_fixture
@@ -162,6 +163,14 @@ async def _upsert(
         log.error("DB write reddedildi [%s]: %s", result.match_id, reason)
         raise ValueError(f"DB write reddedildi [{result.match_id}]: {reason}")
 
+    picks = prekickoff_picks(
+        analyzed_at=result.analyzed_at,
+        kickoff_time=raw.kickoff_time if raw else None,
+        league_name=raw.league_name if raw else None,
+        league_code=raw.league_code if raw else None,
+        patterns=patterns,
+    )
+
     async def _do():
         updates = dict(row)
         for key in ("kickoff_time", "actual_ft_home", "actual_ft_away", "actual_ht_home",
@@ -178,6 +187,19 @@ async def _upsert(
             written = await session.execute(stmt)
             if written.rowcount == 0:
                 raise StaleAnalysisWrite(f"Newer or deleted analysis exists: {result.match_id}")
+            if picks is not None:
+                await session.execute(
+                    insert(AnalysisSnapshot).values(
+                        match_id=result.match_id,
+                        rule_version=RULE_VERSION,
+                        captured_at=result.analyzed_at,
+                        kickoff_time=raw.kickoff_time,
+                        league_name=raw.league_name or canonical_league_name(raw.league_code),
+                        picks=picks,
+                    ).on_conflict_do_nothing(
+                        index_elements=["match_id", "rule_version"],
+                    )
+                )
 
     await _with_retry(_do, label=f"_upsert[{result.match_id}]")
 
