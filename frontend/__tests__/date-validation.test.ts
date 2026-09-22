@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { isCalendarDate, resolvePageDate } from "@/lib/dates";
+import { isCalendarDate, isRecentScoreDate, resolvePageDate } from "@/lib/dates";
 import { getRollingDates } from "@/components/DayTabs";
 
 it.each(["2026-02-29", "2026-04-31", "2026-1-01", "0000-01-01", "", ["2026-01-01", "2026-01-02"]])(
@@ -16,4 +16,10 @@ it("applies fixture date bounds without restricting result archives", () => {
 });
 it("keeps the server calendar during hydration across midnight", () => {
   expect(getRollingDates(new Date("2026-09-14T22:00:00Z"), "2026-09-14")[1].date).toBe("2026-09-14");
+});
+it("keeps yesterday's late matches in the live refresh window", () => {
+  expect(isRecentScoreDate("2026-12-31", "2027-01-01")).toBe(true);
+  expect(isRecentScoreDate("2027-01-01", "2027-01-01")).toBe(true);
+  expect(isRecentScoreDate("2026-12-30", "2027-01-01")).toBe(false);
+  expect(isRecentScoreDate("2027-01-02", "2027-01-01")).toBe(false);
 });

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { resolvePageDate } from "@/lib/dates";
+import { isRecentScoreDate, resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import AutoRefresh from "@/components/AutoRefresh";
@@ -160,8 +160,8 @@ async function ResultList({ date, q }: { date: string; q: string }) {
           <div className="text-5xl">📭</div>
           <p className="text-sm font-medium" style={{ color: "#64748b" }}>
             {isToday
-              ? "Bugün henüz kesinleşmiş maç sonucu yok."
-              : "Bu tarihte kesinleşmiş maç sonucu bulunamadı."}
+              ? "Bugün için henüz doğrulanmış maç sonucu kaydı yok."
+              : "Bu tarihte doğrulanmış maç sonucu kaydı bulunamadı."}
           </p>
           {isToday && (
             <p className="text-xs" style={{ color: "#475569" }}>
@@ -258,7 +258,7 @@ export default async function SonuclarPage({ searchParams }: Props) {
 
       {/* Gün sekmeleri */}
       <DayTabs referenceDate={today} activeDate={date} basePath="/sonuclar" range="past" />
-      {date === today && <AutoRefresh />}
+      {isRecentScoreDate(date, today) && <AutoRefresh />}
 
       {/* Sonuç listesi */}
       <div className="flex-1 overflow-y-auto">

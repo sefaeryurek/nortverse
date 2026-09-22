@@ -1,5 +1,6 @@
 import type { AnalysisEvidence, AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
 import { getApiBase } from "./env";
+import { isRecentScoreDate } from "./dates";
 import { validMatchList } from "./list-validation";
 import { validAnalysis, validSummaries } from "./analysis-validation";
 
@@ -51,7 +52,7 @@ function checkedList<T>(value: T, results = false): T {
 export async function getFixture(date: string): Promise<FixtureMatch[]> {
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   return checkedList(await request<FixtureMatch[]>(`/api/fixture?${new URLSearchParams({ date })}`, {
-    next: { revalidate: date === today ? 15 : 300 },
+    next: { revalidate: isRecentScoreDate(date, today) ? 15 : 300 },
   }));
 }
 
@@ -86,7 +87,7 @@ export async function getAnalysisEvidence(): Promise<AnalysisEvidence> {
 export async function getResults(date: string): Promise<ResultMatch[]> {
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   return checkedList(await request<ResultMatch[]>(`/api/results?${new URLSearchParams({ date })}`, {
-    next: { revalidate: date === today ? 15 : 300 },
+    next: { revalidate: isRecentScoreDate(date, today) ? 15 : 300 },
   }), true);
 }
 

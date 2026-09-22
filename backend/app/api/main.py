@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta, timezone
 
 # Windows'ta Playwright subprocess için ProactorEventLoop gerekiyor
 if sys.platform == "win32":
@@ -79,6 +80,16 @@ _CACHE_RULES: dict[str, str] = {
     "/api/health": "public, s-maxage=30",
     "/api/analysis-evidence": "public, s-maxage=300, stale-while-revalidate=60",
 }
+_RECENT_SCORE_CACHE = "public, s-maxage=15, stale-while-revalidate=15"
+
+
+def _recent_score_date(raw_date: str | None) -> bool:
+    today = datetime.now(timezone(timedelta(hours=3))).date()
+    try:
+        target = date.fromisoformat(raw_date) if raw_date else today
+    except ValueError:
+        return False
+    return today - timedelta(days=1) <= target <= today
 
 
 @app.middleware("http")
@@ -87,7 +98,11 @@ async def add_cache_headers(request, call_next):
     if request.method in ("GET", "HEAD") and response.status_code == 200:
         for prefix, rule in _CACHE_RULES.items():
             if request.url.path == prefix:
-                response.headers["Cache-Control"] = rule
+                response.headers["Cache-Control"] = (
+                    _RECENT_SCORE_CACHE
+                    if prefix in ("/api/fixture", "/api/results")
+                    and _recent_score_date(request.query_params.get("date")) else rule
+                )
                 break
     if response.status_code >= 400:
         response.headers["Cache-Control"] = "no-store"

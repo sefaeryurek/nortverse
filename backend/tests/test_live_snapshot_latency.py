@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -37,7 +38,7 @@ async def test_cold_request_returns_quickly_and_single_refresh_finishes_later(mo
         assert await snapshots.get_live_snapshot() is None
         assert time.monotonic() - start < 0.2
         assert await snapshots.get_live_snapshot() is None
-        assert calls == {"board": 2, "live": 1}
+        assert calls == {"board": 3, "live": 1}
 
         gate.set()
         await snapshots._refresh_task
@@ -52,8 +53,13 @@ async def test_cold_request_returns_quickly_and_single_refresh_finishes_later(mo
 @pytest.mark.asyncio
 async def test_quick_board_scores_are_available_before_slow_minute_source(monkeypatch):
     gate = asyncio.Event()
+    days = []
 
-    async def board(_day):
+    async def board(day):
+        days.append(day)
+        today = datetime.now(timezone(timedelta(hours=3))).date()
+        if day == today - timedelta(days=1):
+            await gate.wait()
         return {"102": FixtureScore("102", "live", 1, 0)}
 
     async def live():
@@ -73,6 +79,8 @@ async def test_quick_board_scores_are_available_before_slow_minute_source(monkey
         assert partial is not None
         assert partial.scores["102"].status == "live"
         assert partial.scores["102"].minute is None
+        today = datetime.now(timezone(timedelta(hours=3))).date()
+        assert set(days) == {today - timedelta(days=1), today, today + timedelta(days=1)}
 
         gate.set()
         await snapshots._refresh_task
@@ -105,8 +113,8 @@ async def test_failed_source_uses_retry_backoff(monkeypatch):
 
     try:
         assert await snapshots.get_live_snapshot() is None
-        assert calls == 2
+        assert calls == 3
         assert await snapshots.get_live_snapshot() is None
-        assert calls == 2
+        assert calls == 3
     finally:
         await snapshots.shutdown_live_snapshot()

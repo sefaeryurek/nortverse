@@ -42,9 +42,17 @@ describe("BultenRow", () => {
 
   it("shows a live minute and score in the bulletin", () => {
     render(<BultenRow match={makeMatch({ status: "live", live_home: 1, live_away: 2,
-      live_minute: "67" })} timeStr="21:00" />);
+      live_minute: "67", score_checked_at: new Date().toISOString() })} timeStr="21:00" />);
     expect(screen.getByText("67′")).toBeDefined();
     expect(screen.getByText("1 - 2")).toBeDefined();
+    expect(screen.getByLabelText("Canlı skor")).toBeDefined();
+  });
+
+  it("labels a stale live score as the last known score", () => {
+    render(<BultenRow match={makeMatch({ status: "live", live_home: 1, live_away: 2,
+      live_minute: "67", score_checked_at: "2026-09-15T18:00:00Z" })} timeStr="21:00" />);
+    expect(screen.getByText("Son skor")).toBeDefined();
+    expect(screen.getByLabelText("Son görülen skor; güncel veri bekleniyor")).toBeDefined();
   });
 
   it("renders placeholder time with muted style", () => {

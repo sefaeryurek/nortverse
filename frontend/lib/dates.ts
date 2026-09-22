@@ -13,3 +13,9 @@ export function resolvePageDate(value: string | string[] | undefined, today: str
   }
   return value;
 }
+
+export function isRecentScoreDate(value: string, today: string): boolean {
+  if (!isCalendarDate(value) || !isCalendarDate(today)) return false;
+  const daysAgo = (Date.parse(`${today}T12:00:00Z`) - Date.parse(`${value}T12:00:00Z`)) / 86400000;
+  return daysAgo === 0 || daysAgo === 1;
+}

@@ -39,23 +39,34 @@ async def _refresh() -> LiveSnapshot | None:
     started_at = time.monotonic()
     today = datetime.now(timezone(timedelta(hours=3))).date()
     live_task = asyncio.create_task(fetch_live_scores())
+    board_days = (today - timedelta(days=1), today, today + timedelta(days=1))
+
+    async def fetch_day(day):
+        return day, await fetch_source_board(day)
+
+    board_tasks = [asyncio.create_task(fetch_day(day)) for day in board_days]
     try:
         scores = {}
+        board_results = {}
         try:
-            current, next_day = await asyncio.wait_for(asyncio.gather(
-                fetch_source_board(today),
-                fetch_source_board(today + timedelta(days=1)),
-                return_exceptions=True,
-            ), timeout=20)
+            for completed in asyncio.as_completed(board_tasks, timeout=20):
+                try:
+                    day, source = await completed
+                except Exception as exc:
+                    log.debug("Günlük skor panosu okunamadı: %s", exc)
+                    continue
+                if not isinstance(source, dict):
+                    continue
+                board_results[day] = source
+                scores = {}
+                for ordered_day in board_days:
+                    scores.update(board_results.get(ordered_day, {}))
+                if scores:
+                    # Publish each completed day without waiting for a slower source.
+                    _cached = LiveSnapshot(dict(scores), datetime.now(timezone.utc))
+                    _cached_at = time.monotonic()
         except asyncio.TimeoutError:
-            current = next_day = None
-        for source in (current, next_day):
-            if isinstance(source, dict):
-                scores.update(source)
-        if scores:
-            # The lightweight board can finish long before the browser source.
-            _cached = LiveSnapshot(dict(scores), datetime.now(timezone.utc))
-            _cached_at = time.monotonic()
+            log.debug("Skor panolarından biri 20 saniyede tamamlanmadı")
         try:
             remaining = max(0.001, 30 - (time.monotonic() - started_at))
             live = await asyncio.wait_for(live_task, timeout=remaining)
@@ -80,6 +91,10 @@ async def _refresh() -> LiveSnapshot | None:
         _retry_after = time.monotonic() + _RETRY_DELAY_SECONDS
         return None
     finally:
+        for task in board_tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*board_tasks, return_exceptions=True)
         if not live_task.done():
             live_task.cancel()
             try:

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { resolvePageDate } from "@/lib/dates";
+import { isRecentScoreDate, resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import RetryButton from "@/components/RetryButton";
@@ -119,7 +119,7 @@ async function MatchList({ date }: { date: string }) {
   return (
     <>
       <div
-        className="flex items-center gap-2 px-4 py-2 text-xs border-b"
+        className="flex flex-wrap items-center gap-2 px-4 py-2 text-xs border-b"
         style={{ borderColor: "#1e293b", color: "#475569" }}
       >
         <span
@@ -168,7 +168,7 @@ export default async function BultenPage({ searchParams }: Props) {
 
       {/* Gün sekmeleri */}
       <DayTabs referenceDate={today} activeDate={date} />
-      {date === today && <AutoRefresh />}
+      {isRecentScoreDate(date, today) && <AutoRefresh />}
 
       {/* Maç listesi */}
       <div className="flex-1 overflow-y-auto">

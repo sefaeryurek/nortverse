@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { FixtureMatch } from "@/lib/types";
 import { leagueDisplay } from "@/lib/leagues";
+import { isLiveScoreStale } from "@/lib/score-freshness";
+import LiveMatchBadge from "./LiveMatchBadge";
 
 interface Props {
   match: FixtureMatch;
@@ -10,7 +12,10 @@ interface Props {
 export default function BultenRow({ match, timeStr }: Props) {
   const { flag } = leagueDisplay(match.league_code, match.league_name);
   const leagueName = match.league_name || match.league_code;
-  const liveLabel = match.live_minute === "HT" ? "İY" : match.live_minute ? `${match.live_minute}′` : "CANLI";
+  const checkedLabel = match.score_checked_at
+    ? new Date(match.score_checked_at).toLocaleString("tr-TR", {
+      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul",
+    }) : null;
 
   return (
     <Link
@@ -22,13 +27,13 @@ export default function BultenRow({ match, timeStr }: Props) {
       {/* Saat */}
       <div
         className="flex-shrink-0 w-16 flex items-center justify-center py-4 self-stretch"
-        style={{ backgroundColor: match.status === "live" ? "#052e20" : "#0f172a" }}
+        style={{ backgroundColor: "#0f172a" }}
       >
         <span
           className="text-sm font-mono font-bold"
-          style={{ color: match.status === "live" ? "#4ade80" : timeStr === "--:--" ? "#475569" : "#60a5fa" }}
+          style={{ color: timeStr === "--:--" ? "#475569" : "#60a5fa" }}
         >
-          {match.status === "live" ? liveLabel : timeStr}
+          {timeStr}
         </span>
       </div>
 
@@ -63,9 +68,14 @@ export default function BultenRow({ match, timeStr }: Props) {
         </div>
 
         {match.status === "live" && match.live_home !== null && match.live_away !== null && (
-          <span className="flex-shrink-0 rounded bg-green-950 px-2 py-1 text-sm font-bold font-mono text-green-300">
-            {match.live_home} - {match.live_away}
-          </span>
+          <LiveMatchBadge
+            home={match.live_home}
+            away={match.live_away}
+            minute={match.live_minute}
+            checkedAt={match.score_checked_at}
+            checkedLabel={checkedLabel}
+            initialStale={isLiveScoreStale(match.score_checked_at)}
+          />
         )}
         {match.status === "pending" && (
           <span className="flex-shrink-0 rounded bg-amber-950 px-2 py-1 text-xs text-amber-300">
