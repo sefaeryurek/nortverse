@@ -96,6 +96,7 @@ class TestCanonicalLeagueName:
         assert canonical_league_name("Serie A") == "Italy Serie A"
         assert canonical_league_name("la liga") == "Spanish La Liga"
         assert canonical_league_name("tur d1") == "Turkish Super Lig"
+        assert canonical_league_name("NGA PR") == "Nigerian Premier League"
 
     def test_unknown_passes_through(self) -> None:
         # Tanınmayan ad olduğu gibi (trim) döner

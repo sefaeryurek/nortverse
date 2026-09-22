@@ -431,6 +431,13 @@ class TestParseMatchRow:
         assert m is not None
         assert m.is_league_match is True
 
+    def test_nigerian_source_code_matches_fixture_league(self):
+        html = _match_row(league="NGA PR", title="Nigerian Premier League")
+        tr = _soup(html).find("tr")
+        m = _parse_match_row(tr, "Nigerian Premier League")
+        assert m is not None
+        assert m.is_league_match is True
+
     def test_too_few_tds(self):
         html = '<tr id="tr1_1" index="1"><td>Only one</td><td>Two</td></tr>'
         tr = _soup(html).find("tr")

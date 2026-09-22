@@ -166,6 +166,9 @@ LEAGUE_ALIASES: dict[str, str] = {
     "egyptian premier league": "Egyptian Premier League",
     "egypt premier league": "Egyptian Premier League",
     "egy d1": "Egyptian Premier League",
+    # Nijerya
+    "nigerian premier league": "Nigerian Premier League",
+    "nga pr": "Nigerian Premier League",
     # İrlanda
     "ireland premier division": "Ireland Premier Division",
     "ire pr": "Ireland Premier Division",
