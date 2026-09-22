@@ -19,7 +19,11 @@ it("hides started fixtures without a verified live score", () => {
 });
 
 it("only shows confirmed results for matches that have started", () => {
-  const result = { ...fixture, status: "finished", actual_ft_home: 2, actual_ft_away: 1 } as ResultMatch;
+  const result = {
+    ...fixture, status: "finished", actual_ft_home: 2, actual_ft_away: 1,
+    actual_ht_home: null, actual_ht_away: null, result: "1",
+    kg_var: false, over_25: true, katman_a_covered: null,
+  } satisfies ResultMatch;
   expect(showResultMatch(result, now)).toBe(true);
   expect(showResultMatch({ ...result, status: "pending" }, now)).toBe(false);
   expect(showResultMatch({ ...result, actual_ft_away: null }, now)).toBe(false);
