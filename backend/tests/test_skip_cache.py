@@ -132,6 +132,36 @@ async def test_saved_cup_analysis_is_not_presented_as_league_evidence(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_fixture_competition_overrides_wrong_saved_league(monkeypatch):
+    session = AsyncMock()
+    saved = MagicMock()
+    saved.scalar_one_or_none.return_value = Match(
+        match_id="3086432", home_team="Home", away_team="Away",
+        league_name="Dutch Eredivisie", league_code="NED D1", ft_scores_1=["1-0"],
+    )
+    bulletin = MagicMock()
+    bulletin.scalar_one_or_none.return_value = [{
+        "match_id": "3086432", "home_team": "Home", "away_team": "Away",
+        "league_name": "Netherlands KNVB Beker", "league_code": "Netherlands KNVB Beker",
+    }]
+    session.execute.side_effect = [saved, bulletin]
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(services, "get_session", fake_session)
+    monkeypatch.setattr(services, "analysis_cache", OrderedDict())
+    monkeypatch.setattr(services, "_analysis_cached_at", {})
+    scrape = AsyncMock()
+    monkeypatch.setattr(services, "do_analyze", scrape)
+
+    response = await services.analyze_and_cache("3086432")
+    assert response.skipped and response.skip_reason == "not_league_match"
+    scrape.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_new_filter_skip_is_saved(monkeypatch):
     raw = MatchRawData(match_id="123", home_team="Home", away_team="Away", league_code="ENG PR")
     monkeypatch.setattr(services, "fetch_match_detail", AsyncMock(return_value=raw))

@@ -53,7 +53,7 @@ async def test_refresh_saves_only_fixture_data_and_retains_observed_scores(monke
 
 
 @pytest.mark.asyncio
-async def test_refresh_drops_old_cup_rows_from_cache(monkeypatch):
+async def test_refresh_retains_source_competition_for_analyze_guard(monkeypatch):
     day = date(2026, 9, 23)
     kickoff = datetime(2026, 9, 23, 18, tzinfo=timezone.utc)
     session = AsyncMock()
@@ -67,5 +67,5 @@ async def test_refresh_drops_old_cup_rows_from_cache(monkeypatch):
         yield session
 
     monkeypatch.setattr(runner, "get_session", fake_session)
-    assert await runner.save_fixture_cache(day, []) == 0
-    assert session.merge.await_args.args[0].matches_json == []
+    assert await runner.save_fixture_cache(day, []) == 1
+    assert session.merge.await_args.args[0].matches_json[0]["league_code"] == "Netherlands KNVB Beker"

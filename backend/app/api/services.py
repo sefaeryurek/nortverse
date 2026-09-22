@@ -27,7 +27,7 @@ from app.analysis.persist import (
 from app.analysis.skip_cache import get_recent_skip, save_skip
 from app.analysis.trends import TrendsData, compute_trends
 from app.db.connection import get_session
-from app.db.models import Match
+from app.db.models import FixtureCache, Match
 from app.scraper import fetch_match_detail
 
 log = logging.getLogger(__name__)
@@ -80,6 +80,24 @@ def get_or_make_lock(match_id: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         _analysis_locks[match_id] = lock
     return lock
+
+
+async def _fixture_metadata(match_id: str) -> dict | None:
+    """Use the source bulletin competition when detail HTML inferred the wrong league."""
+    try:
+        async with get_session() as session:
+            payload = (await session.execute(
+                select(FixtureCache.matches_json).where(
+                    FixtureCache.matches_json.contains([{"match_id": match_id}]),
+                ).order_by(FixtureCache.date.desc()).limit(1)
+            )).scalar_one_or_none()
+    except Exception as exc:
+        log.warning("Bülten lig bilgisi okunamadı [%s]: %s", match_id, exc)
+        return None
+    if not isinstance(payload, list):
+        return None
+    return next((item for item in payload if isinstance(item, dict)
+                 and item.get("match_id") == match_id), None)
 
 
 # ─── DB-first yardımcıları ───────────────────────────────────────────────────
@@ -217,6 +235,23 @@ async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
                 ).scalar_one_or_none()
         except Exception as exc:
             log.warning("Analiz DB okunamadı [%s]: %s", match_id, exc)
+
+        fixture = await _fixture_metadata(match_id)
+        if fixture is not None and not is_supported_league(fixture.get("league_name"), fixture.get("league_code")):
+            response = AnalyzeResponse(
+                match_id=match_id,
+                home_team=fixture.get("home_team") or (db_row.home_team if db_row else ""),
+                away_team=fixture.get("away_team") or (db_row.away_team if db_row else ""),
+                league_code=fixture.get("league_code") or "",
+                season="",
+                ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+                half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+                ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+                skipped=True,
+                skip_reason="not_league_match",
+            )
+            cache_put(match_id, response)
+            return response
 
         if db_row is not None:
             if not is_supported_league(db_row.league_name, db_row.league_code):

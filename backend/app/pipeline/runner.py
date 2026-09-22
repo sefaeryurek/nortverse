@@ -210,8 +210,7 @@ async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> i
                 item.update({key: old[key] for key in score_keys if key in old})
             new_ids = {item["match_id"] for item in cache_json}
             for old in old_by_id.values():
-                if (old.get("match_id") in new_ids or not old.get("kickoff_time")
-                        or not is_supported_league(old.get("league_name"), old.get("league_code"))):
+                if old.get("match_id") in new_ids or not old.get("kickoff_time"):
                     continue
                 try:
                     old_day = datetime.fromisoformat(old["kickoff_time"]).astimezone(istanbul_tz).date()
