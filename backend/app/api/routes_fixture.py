@@ -20,6 +20,7 @@ from app.api.services import (
 )
 from app.db.connection import get_session
 from app.db.models import FixtureCache
+from app.pipeline.runner import save_fixture_cache
 from app.scraper import fetch_istanbul_fixture
 
 log = logging.getLogger(__name__)
@@ -141,7 +142,8 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
             status_code=503,
             detail="Maç verisi şu anda alınamıyor. Lütfen biraz sonra tekrar deneyin.",
         ) from exc
-    matches = [m for m in matches if is_supported_league(m.league_name, m.league_code)]
+    source_matches = matches
+    matches = [m for m in source_matches if is_supported_league(m.league_name, m.league_code)]
 
     result = [
         FixtureMatchOut(
@@ -157,14 +159,8 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
 
     # DB'ye kaydet
     try:
-        async with get_session() as session:
-            row = FixtureCache(
-                date=cache_key,
-                matches_json=[m.model_dump() for m in result],
-                cached_at=datetime.now(timezone.utc),
-            )
-            await session.merge(row)
-        log.info("Fixture DB'ye kaydedildi: %s (%d maç)", cache_key, len(result))
+        await save_fixture_cache(req_date, source_matches)
+        log.info("Fixture DB'ye kaydedildi: %s (%d kaynak maçı)", cache_key, len(source_matches))
     except Exception as exc:
         log.warning("Fixture DB'ye kaydedilemedi: %s", exc)
 

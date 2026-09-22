@@ -69,3 +69,23 @@ async def test_refresh_retains_source_competition_for_analyze_guard(monkeypatch)
     monkeypatch.setattr(runner, "get_session", fake_session)
     assert await runner.save_fixture_cache(day, []) == 1
     assert session.merge.await_args.args[0].matches_json[0]["league_code"] == "Netherlands KNVB Beker"
+
+
+@pytest.mark.asyncio
+async def test_new_cup_fixture_is_saved_as_metadata_without_analysis(monkeypatch):
+    day = date(2026, 9, 22)
+    kickoff = datetime(2026, 9, 22, 18, tzinfo=timezone.utc)
+    session = AsyncMock()
+    session.get.return_value = None
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(runner, "get_session", fake_session)
+    cup = FixtureMatch(match_id="456", home_team="Cup Home", away_team="Cup Away",
+                       league_name="Netherlands KNVB Beker", league_code="HOL D3",
+                       kickoff_time=kickoff)
+    assert await runner.save_fixture_cache(day, [cup]) == 1
+    saved = session.merge.await_args.args[0].matches_json
+    assert saved[0]["league_name"] == "Netherlands KNVB Beker"

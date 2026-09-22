@@ -140,10 +140,10 @@ async def test_fixture_competition_overrides_wrong_saved_league(monkeypatch):
         league_name="Dutch Eredivisie", league_code="NED D1", ft_scores_1=["1-0"],
     )
     bulletin = MagicMock()
-    bulletin.scalar_one_or_none.return_value = [{
+    bulletin.scalar_one_or_none.return_value = {
         "match_id": "3086432", "home_team": "Home", "away_team": "Away",
         "league_name": "Netherlands KNVB Beker", "league_code": "Netherlands KNVB Beker",
-    }]
+    }
     session.execute.side_effect = [saved, bulletin]
 
     @asynccontextmanager
@@ -159,6 +159,32 @@ async def test_fixture_competition_overrides_wrong_saved_league(monkeypatch):
     response = await services.analyze_and_cache("3086432")
     assert response.skipped and response.skip_reason == "not_league_match"
     scrape.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fixture_lookup_returns_only_one_json_item_and_bounds_known_date(monkeypatch):
+    from datetime import datetime, timezone
+    from sqlalchemy.dialects import postgresql
+
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = {
+        "match_id": "3086432", "league_name": "Netherlands KNVB Beker",
+    }
+    session.execute.return_value = result
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(services, "get_session", fake_session)
+    metadata = await services._fixture_metadata(
+        "3086432", datetime(2026, 9, 22, 18, tzinfo=timezone.utc),
+    )
+    sql = str(session.execute.await_args.args[0].compile(dialect=postgresql.dialect()))
+    assert metadata["league_name"] == "Netherlands KNVB Beker"
+    assert "jsonb_path_query_first" in sql
+    assert "fixture_cache.date IN" in sql
 
 
 @pytest.mark.asyncio
@@ -232,6 +258,6 @@ async def test_incremental_pipeline_avoids_prepared_and_cup_scrapes(monkeypatch)
 
     stats = await runner.run_pipeline(incremental=True)
     assert stats == {"analyzed": 0, "skipped": 1, "errors": 0}
-    assert [fixture.match_id for fixture in save.await_args.args[1]] == ["123"]
+    assert [fixture.match_id for fixture in save.await_args.args[1]] == ["123", "456"]
     prepared.assert_awaited_once_with(["123"])
     scrape.assert_not_awaited()

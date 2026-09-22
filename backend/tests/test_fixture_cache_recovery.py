@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from app.api import routes_fixture as rf
 from app.api import services as svc
+from app.models import FixtureMatch
 
 
 @pytest.fixture(autouse=True)
@@ -30,9 +31,36 @@ async def test_invalid_cache_recovers_by_fetching_fixture(monkeypatch, payload):
     monkeypatch.setattr(svc, "bg_queue", None)
     fetch = AsyncMock(return_value=[])
     monkeypatch.setattr(rf, "fetch_istanbul_fixture", fetch)
+    save = AsyncMock()
+    monkeypatch.setattr(rf, "save_fixture_cache", save)
     assert await rf.fixture(None) == []
     fetch.assert_awaited_once()
-    session.merge.assert_awaited_once()
+    save.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_scraped_bulletin_hides_cup_but_keeps_competition_for_direct_link(monkeypatch):
+    session = AsyncMock()
+    session.get.return_value = None
+
+    @asynccontextmanager
+    async def get_session():
+        yield session
+
+    cup = FixtureMatch(match_id="456", home_team="Cup Home", away_team="Cup Away",
+                       league_code="HOL D3", league_name="Netherlands KNVB Beker")
+    league = FixtureMatch(match_id="123", home_team="Home", away_team="Away",
+                          league_code="ENG PR", league_name="English Premier League")
+    monkeypatch.setattr(rf, "get_session", get_session)
+    monkeypatch.setattr(rf, "fixture_cache", {})
+    monkeypatch.setattr(rf, "fetch_istanbul_fixture", AsyncMock(return_value=[cup, league]))
+    save = AsyncMock()
+    monkeypatch.setattr(rf, "save_fixture_cache", save)
+
+    result = await rf.fixture(None)
+
+    assert [match.match_id for match in result] == ["123"]
+    assert [match.match_id for match in save.await_args.args[1]] == ["456", "123"]
 
 
 @pytest.mark.asyncio

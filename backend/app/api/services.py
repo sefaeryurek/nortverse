@@ -9,11 +9,13 @@ import asyncio
 import logging
 import time
 from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from weakref import WeakValueDictionary
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import cast, func, select
+from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 
 from app.api.schemas import AnalyzeResponse, PeriodOut
 from app.analysis import analyze_match, check_match_filters
@@ -82,22 +84,30 @@ def get_or_make_lock(match_id: str) -> asyncio.Lock:
     return lock
 
 
-async def _fixture_metadata(match_id: str) -> dict | None:
+async def _fixture_metadata(match_id: str, kickoff_time: datetime | None = None) -> dict | None:
     """Use the source bulletin competition when detail HTML inferred the wrong league."""
     try:
+        value = cast(func.jsonb_path_query_first(
+            FixtureCache.matches_json,
+            cast('$[*] ? (@.match_id == $id)', JSONPATH),
+            func.jsonb_build_object("id", match_id),
+        ), JSONB)
+        query = select(value).where(
+            FixtureCache.matches_json.contains([{"match_id": match_id}]),
+        )
+        if kickoff_time is not None and kickoff_time.tzinfo is not None:
+            day = kickoff_time.astimezone(timezone(timedelta(hours=3))).date()
+            query = query.where(FixtureCache.date.in_([
+                (day + timedelta(days=offset)).isoformat() for offset in (-1, 0, 1)
+            ]))
         async with get_session() as session:
             payload = (await session.execute(
-                select(FixtureCache.matches_json).where(
-                    FixtureCache.matches_json.contains([{"match_id": match_id}]),
-                ).order_by(FixtureCache.date.desc()).limit(1)
+                query.order_by(FixtureCache.date.desc()).limit(1)
             )).scalar_one_or_none()
     except Exception as exc:
         log.warning("Bülten lig bilgisi okunamadı [%s]: %s", match_id, exc)
         return None
-    if not isinstance(payload, list):
-        return None
-    return next((item for item in payload if isinstance(item, dict)
-                 and item.get("match_id") == match_id), None)
+    return payload if isinstance(payload, dict) and payload.get("match_id") == match_id else None
 
 
 # ─── DB-first yardımcıları ───────────────────────────────────────────────────
@@ -236,7 +246,7 @@ async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
         except Exception as exc:
             log.warning("Analiz DB okunamadı [%s]: %s", match_id, exc)
 
-        fixture = await _fixture_metadata(match_id)
+        fixture = await _fixture_metadata(match_id, db_row.kickoff_time if db_row else None)
         if fixture is not None and not is_supported_league(fixture.get("league_name"), fixture.get("league_code")):
             response = AnalyzeResponse(
                 match_id=match_id,

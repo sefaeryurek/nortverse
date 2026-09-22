@@ -205,10 +205,9 @@ async def _upsert(
 
 
 async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> int:
-    """Save a small fixture list while retaining already observed scores."""
+    """Keep compact source competition labels and already observed scores."""
     cache_date = cache_day.isoformat()
     istanbul_tz = timezone(timedelta(hours=3))
-    league_fixtures = [f for f in fixtures if is_supported_league(f.league_name, f.league_code)]
     cache_json = [
         {
             "match_id": f.match_id,
@@ -218,7 +217,7 @@ async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> i
             "league_name": f.league_name,
             "kickoff_time": f.kickoff_time.isoformat() if f.kickoff_time else None,
         }
-        for f in league_fixtures
+        for f in fixtures
     ]
     async with get_session() as session:
         previous = await session.get(FixtureCache, cache_date)
@@ -245,7 +244,7 @@ async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> i
             matches_json=cache_json,
             cached_at=datetime.now(timezone.utc),
         ))
-    log.info("fixture_cache yazıldı: %s (%d lig maçı)", cache_date, len(cache_json))
+    log.info("fixture_cache yazıldı: %s (%d kaynak maçı)", cache_date, len(cache_json))
     return len(cache_json)
 
 
@@ -294,13 +293,14 @@ async def run_pipeline(
 
     async with browser_context() as ctx:
         cache_day = target_date or datetime.now(IST).date()
-        fixtures = [fixture for fixture in await fetch_istanbul_fixture(cache_day, only_hot=only_hot, ctx=ctx)
+        source_fixtures = await fetch_istanbul_fixture(cache_day, only_hot=only_hot, ctx=ctx)
+        fixtures = [fixture for fixture in source_fixtures
                     if is_supported_league(fixture.league_name, fixture.league_code)]
         log.info("Pipeline başladı: %d maç işlenecek", len(fixtures))
 
         # GitHub Actions'taki scraper bülteni API isteğinden önce hazırlar.
         try:
-            await save_fixture_cache(cache_day, fixtures)
+            await save_fixture_cache(cache_day, source_fixtures)
         except Exception as exc:
             log.warning("fixture_cache yazılamadı: %s", exc)
 
