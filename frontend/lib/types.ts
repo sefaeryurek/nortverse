@@ -184,6 +184,8 @@ export interface AnalysisEvidence {
   eligible_matches: number;
   archive_1_evaluated: number;
   archive_2_evaluated: number;
+  score_list_evaluated: number;
+  score_list_hits: number;
   minimum_for_rate: number;
 }
 

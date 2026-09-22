@@ -50,3 +50,22 @@ async def test_refresh_saves_only_fixture_data_and_retains_observed_scores(monke
     assert saved.matches_json[0]["home_team"] == "New"
     assert saved.matches_json[0]["score_status"] == "live"
     assert saved.matches_json[0]["score_home"] == 1
+
+
+@pytest.mark.asyncio
+async def test_refresh_drops_old_cup_rows_from_cache(monkeypatch):
+    day = date(2026, 9, 23)
+    kickoff = datetime(2026, 9, 23, 18, tzinfo=timezone.utc)
+    session = AsyncMock()
+    session.get.return_value = SimpleNamespace(matches_json=[{
+        "match_id": "456", "home_team": "Cup Home", "away_team": "Cup Away",
+        "league_code": "Netherlands KNVB Beker", "kickoff_time": kickoff.isoformat(),
+    }])
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(runner, "get_session", fake_session)
+    assert await runner.save_fixture_cache(day, []) == 0
+    assert session.merge.await_args.args[0].matches_json == []

@@ -49,6 +49,8 @@ async def close_ad_overlay(page: Page) -> bool:
     overlay maç tablosunu da gizlediği için bunu mutlaka kapatmak gerekir.
     """
     try:
+        if await page.locator(".closebtn").count() == 0:
+            return False
         await page.click(".closebtn", timeout=3000)
         await page.wait_for_timeout(500)
         log.debug("Reklam kapatıldı (.closebtn)")

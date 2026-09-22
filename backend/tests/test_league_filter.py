@@ -47,6 +47,9 @@ class TestIsSupportedLeague:
         "Super Cup",
         "Spain Supercopa",
         "U21 Championship",
+        "Netherlands KNVB Beker",
+        "Asian Games",
+        "Olympic Games Women",
     ])
     def test_cup_competitions_rejected(self, name: str) -> None:
         assert is_supported_league(name) is False, f"Kupa olarak reddedilmeli: {name}"
@@ -59,8 +62,8 @@ class TestIsSupportedLeague:
 
     def test_multi_arg_any_match(self) -> None:
         """Birden fazla parametre verilirse, en az biri lig ise True."""
-        # league_name kupa ama league_code (kanonik) bilinen lig
-        assert is_supported_league("UEFA Cup", "English Premier League") is True
+        # A stale code cannot turn an explicit cup into a league match.
+        assert is_supported_league("UEFA Cup", "English Premier League") is False
         # Her ikisi de kupa → False
         assert is_supported_league("UEFA Cup", "FA Cup") is False
         # Birinden biri None

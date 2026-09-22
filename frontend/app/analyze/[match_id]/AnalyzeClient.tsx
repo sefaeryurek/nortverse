@@ -292,6 +292,13 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                       Her arşiv için {evidenceData.minimum_for_rate} sonuçlu maç tamamlanmadan isabet oranı sunulmuyor.
                       Ekrandaki yüzdeler geçmiş eşleşme sıklığıdır.
                     </p>
+                    <p className="mt-2 leading-relaxed text-slate-300">
+                      Maç sonu skor listesi: {evidenceData.score_list_hits}/{evidenceData.score_list_evaluated} maçta
+                      gerçek skor seçilen listede bulundu.
+                      {evidenceData.score_list_evaluated < evidenceData.minimum_for_rate
+                        ? " Örneklem henüz sonuç çıkarmak için küçük."
+                        : ` Skor kapsama oranı: %${Math.round(100 * evidenceData.score_list_hits / evidenceData.score_list_evaluated)}. Bu oran bahis getirisi veya olasılık kalibrasyonu değildir.`}
+                    </p>
                   </section>
                 )}
               </>

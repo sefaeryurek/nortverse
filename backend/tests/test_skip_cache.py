@@ -11,6 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 from app.analysis import skip_cache
 from app.api import services
+from app.db.models import Match
 from app.models import FixtureMatch, MatchRawData, SkipReason
 from app.pipeline import runner
 
@@ -105,6 +106,32 @@ async def test_cached_skip_returns_without_scraping(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_saved_cup_analysis_is_not_presented_as_league_evidence(monkeypatch):
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = Match(
+        match_id="3086432", home_team="Home", away_team="Away",
+        league_name="Netherlands KNVB Beker", league_code="Netherlands KNVB Beker",
+        ft_scores_1=["1-0"],
+    )
+    session.execute.return_value = result
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(services, "get_session", fake_session)
+    monkeypatch.setattr(services, "analysis_cache", OrderedDict())
+    monkeypatch.setattr(services, "_analysis_cached_at", {})
+    scrape = AsyncMock()
+    monkeypatch.setattr(services, "do_analyze", scrape)
+
+    response = await services.analyze_and_cache("3086432")
+    assert response.skipped and response.skip_reason == "not_league_match"
+    scrape.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_new_filter_skip_is_saved(monkeypatch):
     raw = MatchRawData(match_id="123", home_team="Home", away_team="Away", league_code="ENG PR")
     monkeypatch.setattr(services, "fetch_match_detail", AsyncMock(return_value=raw))
@@ -148,3 +175,33 @@ async def test_pipeline_saves_skipped_fixture_for_later_visits(monkeypatch):
 
     assert result == {"analyzed": 0, "skipped": 1, "errors": 0}
     save.assert_awaited_once_with(raw, SkipReason.H2H_INSUFFICIENT)
+
+
+@pytest.mark.asyncio
+async def test_incremental_pipeline_avoids_prepared_and_cup_scrapes(monkeypatch):
+    from datetime import timedelta
+
+    kickoff = datetime.now(timezone.utc) + timedelta(days=1)
+    league = FixtureMatch(match_id="123", home_team="Home", away_team="Away",
+                          league_code="ENG PR", kickoff_time=kickoff)
+    cup = FixtureMatch(match_id="456", home_team="Cup Home", away_team="Cup Away",
+                       league_code="Netherlands KNVB Beker", kickoff_time=kickoff)
+
+    @asynccontextmanager
+    async def fake_browser():
+        yield object()
+
+    monkeypatch.setattr(runner, "browser_context", fake_browser)
+    monkeypatch.setattr(runner, "fetch_istanbul_fixture", AsyncMock(return_value=[league, cup]))
+    save = AsyncMock(return_value=1)
+    monkeypatch.setattr(runner, "save_fixture_cache", save)
+    prepared = AsyncMock(return_value={"123"})
+    monkeypatch.setattr(runner, "_prepared_match_ids", prepared)
+    scrape = AsyncMock()
+    monkeypatch.setattr(runner, "fetch_match_detail", scrape)
+
+    stats = await runner.run_pipeline(incremental=True)
+    assert stats == {"analyzed": 0, "skipped": 1, "errors": 0}
+    assert [fixture.match_id for fixture in save.await_args.args[1]] == ["123"]
+    prepared.assert_awaited_once_with(["123"])
+    scrape.assert_not_awaited()

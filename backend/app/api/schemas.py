@@ -25,6 +25,8 @@ class AnalysisEvidence(BaseModel):
     eligible_matches: int
     archive_1_evaluated: int
     archive_2_evaluated: int
+    score_list_evaluated: int
+    score_list_hits: int
     minimum_for_rate: int = 100
 
 

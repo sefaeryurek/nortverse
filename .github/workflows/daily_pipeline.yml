@@ -57,7 +57,7 @@ jobs:
 
           if [ "$SCHEDULE" = "0 5 * * *" ] || [ "$SCHEDULE" = "0 6 * * *" ] || [ "$CMD" = "run-pipeline" ] || ([ -z "$CMD" ] && [ -z "$SCHEDULE" ]); then
             echo "Pipeline çalışıyor (run-pipeline)... [schedule=$SCHEDULE]"
-            python -m app.cli.main run-pipeline
+            python -m app.cli.main run-pipeline --incremental
           elif [ "$CMD" = "refresh-fixture-cache" ]; then
             echo "Yarınki bülten hazırlanıyor (refresh-fixture-cache)..."
             python -m app.cli.main refresh-fixture-cache
@@ -66,10 +66,17 @@ jobs:
             python -m app.cli.main update-scores
           fi
 
-      - name: Yarınki bülteni hazırla
+      - name: Yarınki bülteni ve analizleri hazırla
         if: ${{ always() && github.event.schedule == '0 19 * * *' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
-          python -m app.cli.main refresh-fixture-cache
+          PREPARE_DATE=$(python - <<'PY'
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+          now = datetime.now(ZoneInfo("Europe/Istanbul"))
+          print((now.date() if now.hour < 8 else now.date() + timedelta(days=1)).isoformat())
+          PY
+          )
+          python -m app.cli.main run-pipeline --date "$PREPARE_DATE" --incremental

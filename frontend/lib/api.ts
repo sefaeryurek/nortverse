@@ -77,8 +77,11 @@ export async function getAnalysisEvidence(): Promise<AnalysisEvidence> {
   if (!value || typeof value !== "object" || Array.isArray(value)
     || !validCount(value.eligible_matches) || !validCount(value.archive_1_evaluated)
     || !validCount(value.archive_2_evaluated) || !validCount(value.minimum_for_rate)
+    || !validCount(value.score_list_evaluated) || !validCount(value.score_list_hits)
     || (value.archive_1_evaluated as number) > (value.eligible_matches as number)
-    || (value.archive_2_evaluated as number) > (value.eligible_matches as number)) {
+    || (value.archive_2_evaluated as number) > (value.eligible_matches as number)
+    || (value.score_list_evaluated as number) > (value.eligible_matches as number)
+    || (value.score_list_hits as number) > (value.score_list_evaluated as number)) {
     throw new ApiError("Analiz doğrulama verisi geçersiz.", 200);
   }
   return value as unknown as AnalysisEvidence;

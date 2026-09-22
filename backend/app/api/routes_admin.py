@@ -7,10 +7,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 
 from app.analysis.correlation import compute_poisson_correlations
-from app.analysis.league_filter import is_supported_league
+from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
 from app.api.schemas import AnalysisEvidence, DataQuality, HealthResponse
 from app.api.services import analysis_cache, bg_queue
 from app.db.connection import get_session
@@ -71,18 +71,33 @@ async def analysis_evidence() -> AnalysisEvidence:
         Match.pattern_computed_at < Match.kickoff_time,
         Match.result_fetched_at > Match.kickoff_time,
     )
+    league_fields = (Match.league_name, Match.league_code)
+    league_filter = tuple(
+        ~func.lower(func.coalesce(field, "")).contains(keyword)
+        for field in league_fields for keyword in CUP_KEYWORDS
+    )
+    score_columns = (Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2)
+    shortlist = or_(*(case(
+        (func.jsonb_typeof(column) == "array", func.jsonb_array_length(column)), else_=0,
+    ) > 0 for column in score_columns))
+    final_score = func.concat(Match.actual_ft_home, "-", Match.actual_ft_away)
+    exact_hit = or_(*(func.jsonb_exists(column, final_score) for column in score_columns))
     async with get_session() as session:
         row = (await session.execute(
             select(
                 func.count(Match.id),
                 func.count(Match.id).filter(func.jsonb_typeof(Match.pattern_ft_b) == "object"),
                 func.count(Match.id).filter(func.jsonb_typeof(Match.pattern_ft_c) == "object"),
-            ).where(*eligible)
+                func.count(Match.id).filter(shortlist),
+                func.count(Match.id).filter(exact_hit),
+            ).where(*eligible, *league_filter)
         )).one()
     return AnalysisEvidence(
         eligible_matches=row[0],
         archive_1_evaluated=row[1],
         archive_2_evaluated=row[2],
+        score_list_evaluated=row[3],
+        score_list_hits=row[4],
     )
 
 

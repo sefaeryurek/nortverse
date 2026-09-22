@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from app.api.schemas import AnalyzeResponse, PeriodOut
 from app.analysis import analyze_match, check_match_filters
+from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
 from app.analysis.persist import (
     StalePatternWrite,
@@ -218,6 +219,21 @@ async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
             log.warning("Analiz DB okunamadı [%s]: %s", match_id, exc)
 
         if db_row is not None:
+            if not is_supported_league(db_row.league_name, db_row.league_code):
+                response = AnalyzeResponse(
+                    match_id=match_id,
+                    home_team=db_row.home_team,
+                    away_team=db_row.away_team,
+                    league_code=db_row.league_code or "",
+                    season="",
+                    ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+                    half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+                    ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+                    skipped=True,
+                    skip_reason="not_league_match",
+                )
+                cache_put(match_id, response)
+                return response
             response = await build_from_db(db_row)
             if response is not None:
                 log.info("DB hit — anlık: %s", match_id)

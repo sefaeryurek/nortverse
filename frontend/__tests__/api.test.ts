@@ -79,12 +79,17 @@ it("preserves cancellation while reading the response body", async () => {
 
 it("accepts measured pre-match coverage and rejects impossible evidence counts", async () => {
   const evidence = { eligible_matches: 48, archive_1_evaluated: 5,
-    archive_2_evaluated: 0, minimum_for_rate: 100 };
+    archive_2_evaluated: 0, score_list_evaluated: 24, score_list_hits: 3, minimum_for_rate: 100 };
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(evidence))));
   await expect(getAnalysisEvidence()).resolves.toEqual(evidence);
 
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
     ...evidence, archive_1_evaluated: 49,
+  }))));
+  await expect(getAnalysisEvidence()).rejects.toThrow("doğrulama verisi geçersiz");
+
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    ...evidence, score_list_hits: 25,
   }))));
   await expect(getAnalysisEvidence()).rejects.toThrow("doğrulama verisi geçersiz");
 });

@@ -18,7 +18,7 @@ from app.analysis.persist import compute_all_patterns
 from app.analysis.skip_cache import save_skip
 from app.analysis.trends import compute_trends
 from app.db.connection import get_session
-from app.db.models import FixtureCache, Match
+from app.db.models import FixtureCache, Match, SkippedAnalysis
 from app.models import FixtureMatch, MatchAnalysisResult, MatchRawData
 from app.scraper.browser import browser_context
 from app.scraper.fixture import fetch_istanbul_fixture
@@ -210,7 +210,8 @@ async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> i
                 item.update({key: old[key] for key in score_keys if key in old})
             new_ids = {item["match_id"] for item in cache_json}
             for old in old_by_id.values():
-                if old.get("match_id") in new_ids or not old.get("kickoff_time"):
+                if (old.get("match_id") in new_ids or not old.get("kickoff_time")
+                        or not is_supported_league(old.get("league_name"), old.get("league_code"))):
                     continue
                 try:
                     old_day = datetime.fromisoformat(old["kickoff_time"]).astimezone(istanbul_tz).date()
@@ -234,9 +235,33 @@ async def refresh_fixture_cache(target_date: date, only_hot: bool = True) -> int
     return await save_fixture_cache(target_date, fixtures)
 
 
+async def _prepared_match_ids(match_ids: list[str]) -> set[str]:
+    """Read only IDs already analyzed before kickoff or recently rejected."""
+    if not match_ids:
+        return set()
+    now = datetime.now(timezone.utc)
+    try:
+        async with get_session() as session:
+            analyzed = (await session.execute(select(Match.match_id).where(
+                Match.match_id.in_(match_ids), Match.deleted_at.is_(None),
+                Match.ft_scores_1.is_not(None), Match.pattern_computed_at.is_not(None),
+                Match.analyzed_at < Match.kickoff_time,
+                Match.pattern_computed_at < Match.kickoff_time,
+            ))).scalars().all()
+            rejected = (await session.execute(select(SkippedAnalysis.match_id).where(
+                SkippedAnalysis.match_id.in_(match_ids),
+                SkippedAnalysis.checked_at >= now - timedelta(hours=24),
+            ))).scalars().all()
+        return set(analyzed) | set(rejected)
+    except Exception as exc:
+        log.warning("Hazır analiz ID'leri okunamadı, pipeline devam edecek: %s", exc)
+        return set()
+
+
 async def run_pipeline(
     target_date: Optional[date] = None,
     only_hot: bool = True,
+    incremental: bool = False,
 ) -> dict:
     """Hot maçları çek, analiz et, Supabase'e yaz.
 
@@ -248,7 +273,8 @@ async def run_pipeline(
 
     async with browser_context() as ctx:
         cache_day = target_date or datetime.now(IST).date()
-        fixtures = await fetch_istanbul_fixture(cache_day, only_hot=only_hot, ctx=ctx)
+        fixtures = [fixture for fixture in await fetch_istanbul_fixture(cache_day, only_hot=only_hot, ctx=ctx)
+                    if is_supported_league(fixture.league_name, fixture.league_code)]
         log.info("Pipeline başladı: %d maç işlenecek", len(fixtures))
 
         # GitHub Actions'taki scraper bülteni API isteğinden önce hazırlar.
@@ -257,8 +283,18 @@ async def run_pipeline(
         except Exception as exc:
             log.warning("fixture_cache yazılamadı: %s", exc)
 
+        prepared = await _prepared_match_ids([f.match_id for f in fixtures]) if incremental else set()
+        if prepared:
+            log.info("Önceden hazırlanmış %d maç yeniden analiz edilmeyecek", len(prepared))
+
         for fixture in fixtures:
             mid = fixture.match_id
+            if mid in prepared:
+                stats["skipped"] += 1
+                continue
+            if fixture.kickoff_time and fixture.kickoff_time.astimezone(timezone.utc) <= datetime.now(timezone.utc):
+                stats["skipped"] += 1
+                continue
             try:
                 # Bültenden gelen lig adını match_detail'e geçir (Sprint 8.9):
                 # H2H tabanlı tespit yerine bu kullanılır → UEL/UCL gibi maçlarda

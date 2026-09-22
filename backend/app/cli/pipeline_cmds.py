@@ -359,6 +359,7 @@ def fetch_and_analyze_cmd(
 def run_pipeline_cmd(
     target_date: Optional[str] = typer.Option(None, "--date", help="YYYY-MM-DD. Boşsa bugün."),
     all_matches: bool = typer.Option(False, "--all", help="Hot değil, tüm maçlar"),
+    incremental: bool = typer.Option(False, "--incremental", help="Hazır maçları tekrar analiz etme"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Hot maçları çek → analiz et → DB'ye kaydet."""
@@ -371,7 +372,7 @@ def run_pipeline_cmd(
     from app.pipeline import run_pipeline
 
     async def _run() -> None:
-        stats = await run_pipeline(target_date=dt, only_hot=not all_matches)
+        stats = await run_pipeline(target_date=dt, only_hot=not all_matches, incremental=incremental)
         console.print(
             f"\n[bold green]Pipeline tamamlandı:[/bold green] "
             f"[green]{stats['analyzed']} kaydedildi[/green] · "

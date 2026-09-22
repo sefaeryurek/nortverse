@@ -40,6 +40,10 @@ CUP_KEYWORDS = (
     "shield",
     "trophy",
     "supercopa",
+    "beker",
+    "asian games",
+    "olympic games",
+    "pan american games",
     # Hazırlık / dostluk
     "friendly",
     "friendlies",
@@ -199,10 +203,10 @@ def canonical_league_name(name: str | None) -> str:
 
 
 def is_supported_league(*names: str | None) -> bool:
-    """Verilen lig adı/kodlarından **herhangi biri** lig maçı işareti veriyorsa True.
+    """Kupa işareti yoksa geçerli lig adı veya kodunu kabul et.
 
-    Birden fazla parametre kabul eder (örn. league_name + league_code) — biri kanonik
-    bilinen lig ise filtrelemeyi geçer; tümü kupa keyword'üne uyarsa False.
+    Birden fazla parametre kabul eder (örn. league_name + league_code).
+    Açık kupa/turnuva adı, diğer alandaki eski lig koduna üstün gelir.
 
     Boş/None değerler atlanır. Hiç geçerli değer yoksa False (güvenli taraf).
     """
@@ -210,19 +214,9 @@ def is_supported_league(*names: str | None) -> bool:
     if not candidates:
         return False
 
-    # 1. Bilinen lig listesinde varsa → kesin lig (kara liste override)
-    for c in candidates:
-        if c.lower().strip() in LEAGUE_ALIASES:
-            return True
+    # An explicit competition name must not be overridden by a stale league code.
+    if any(any(keyword in candidate.lower() for keyword in CUP_KEYWORDS)
+           and candidate.lower().strip() not in LEAGUE_ALIASES for candidate in candidates):
+        return False
 
-    # 2. Hiçbiri bilinen değil → kara liste keyword kontrolü
-    # Eğer adlardan en az biri "temiz" görünürse (kara liste eşleşmiyor) → lig kabul
-    # Tümü kara liste keyword'üne uyuyorsa → kupa
-    has_clean = False
-    for c in candidates:
-        lower = c.lower()
-        if not any(kw in lower for kw in CUP_KEYWORDS):
-            has_clean = True
-            break
-
-    return has_clean
+    return True
