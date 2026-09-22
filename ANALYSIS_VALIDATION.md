@@ -39,6 +39,20 @@ yalnızca daha sonra doğrulanmış kesin skorları bu sabit seçimlerle karşı
 pazar başına 100 sonuçtan önce yüzde göstermez. Bu eşikler ileri dönem takibi
 başlatmak içindir; kanıtlanmış değer veya kalibre olasılık anlamına gelmez.
 
+`score-list-v1` maç sonu skor listesini ve aynı uzunlukta basit bir karşılaştırma
+listesini maç başlamadan ayrı kayda sabitler. Basit liste yalnızca kayıt anında
+sonucu doğrulanmış lig maçlarının en sık görülen skorlarından oluşur. Yeterli
+farklı geçmiş skor yoksa karşılaştırma listesi boş bırakılır; bu maç eşleşmiş
+karşılaştırmanın paydasına girmez. Boş analiz listesi de kaydedilir fakat isabet
+paydasına girmez. `/api/score-validation` yalnızca sonradan kesin skoru doğrulanan
+maçları sayar; eşleşmiş iki listenin kapsama sayısını aynı paydada verir. İlk
+100 eşleşmiş sonuçtan önce yüzde gösterilmez. Bu kayıtlar sonraki analizlerle
+değiştirilmez ve geçmişe dönük 42 maçlık kıyasın yerine geçmez.
+
+Önceden hazırlanmış ve henüz başlamamış bir günün analizleri için migration
+sonrasında `python -m app.cli.main capture-score-snapshots --date YYYY-MM-DD`
+çalıştırılır. Komut maç başladıktan sonra geçmiş tahmin üretmez.
+
 ## Sonraki uygulama adımları
 
 1. Her maç başlamadan önce analiz sürümünü, üretim zamanını, seçilen pazarları,

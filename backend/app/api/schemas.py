@@ -45,6 +45,18 @@ class AnalysisValidation(BaseModel):
     minimum_for_rate: int = 100
 
 
+class ScoreValidation(BaseModel):
+    rule_version: str
+    recorded: int
+    resolved: int
+    evaluated: int
+    paired: int
+    list_hits: int
+    paired_model_hits: int
+    baseline_hits: int
+    minimum_for_rate: int = 100
+
+
 class HealthResponse(BaseModel):
     """Hafif sağlık göstergesi — UptimeRobot her 5dk ping atıyor.
 

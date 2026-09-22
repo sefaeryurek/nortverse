@@ -3,8 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse } from "@/lib/types";
-import { analyzeMatch, getAnalysisEvidence, getAnalysisValidation } from "@/lib/api";
+import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse, ScoreValidation } from "@/lib/types";
+import { analyzeMatch, getAnalysisEvidence, getAnalysisValidation, getScoreValidation } from "@/lib/api";
 import ScoreList from "@/components/ScoreList";
 import { MatchProvider } from "@/lib/match-context";
 
@@ -54,6 +54,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
   const [data, setData] = useState<AnalyzeResponse | null>(initialData);
   const [evidenceData, setEvidenceData] = useState<AnalysisEvidence | null>(evidence ?? null);
   const [validationData, setValidationData] = useState<AnalysisValidation | null>(null);
+  const [scoreValidation, setScoreValidation] = useState<ScoreValidation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(initialError);
   const [activePeriod, setActivePeriod] = useState<Period>("ft");
@@ -90,6 +91,15 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
     getAnalysisValidation()
       .then((value) => { if (!cancelled) setValidationData(value); })
       .catch(() => { /* Optional outcome data must not delay the analysis. */ });
+    return () => { cancelled = true; };
+  }, [data]);
+
+  useEffect(() => {
+    if (!data || data.skipped) return;
+    let cancelled = false;
+    getScoreValidation()
+      .then((value) => { if (!cancelled) setScoreValidation(value); })
+      .catch(() => { /* Optional comparison must not delay the analysis. */ });
     return () => { cancelled = true; };
   }, [data]);
 
@@ -340,6 +350,27 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                         </p>
                       </div>
                     )}
+                  </section>
+                )}
+                {scoreValidation && (
+                  <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-4 text-xs text-slate-300" aria-label="İleri dönem skor karşılaştırması">
+                    <h2 className="text-sm font-semibold text-slate-100">İleri dönem skor karşılaştırması</h2>
+                    <p className="mt-1 leading-relaxed text-slate-400">
+                      Maç öncesi {scoreValidation.recorded} skor listesi sabitlendi; {scoreValidation.resolved} maçın kesin sonucu doğrulandı.
+                      {" "}{scoreValidation.paired} maçta aynı uzunlukta geçmişte en sık görülen skor listesiyle karşılaştırma yapılabildi.
+                    </p>
+                    {scoreValidation.paired > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-slate-100">
+                        <span>Analiz listesi: {scoreValidation.paired_model_hits}/{scoreValidation.paired}</span>
+                        <span>Basit liste: {scoreValidation.baseline_hits}/{scoreValidation.paired}</span>
+                      </div>
+                    )}
+                    <p className="mt-2 text-slate-400">
+                      {scoreValidation.paired < scoreValidation.minimum_for_rate
+                        ? `${scoreValidation.minimum_for_rate} eşleşmiş sonuçtan önce oran gösterilmez.`
+                        : `Analiz listesi %${Math.round(100 * scoreValidation.paired_model_hits / scoreValidation.paired)}, basit liste %${Math.round(100 * scoreValidation.baseline_hits / scoreValidation.paired)} kapsam sağladı.`}
+                      {" "}Skor kapsamı bahis getirisi veya olasılık kalibrasyonu değildir.
+                    </p>
                   </section>
                 )}
               </>

@@ -1,4 +1,4 @@
-import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch } from "./types";
+import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch, ScoreValidation } from "./types";
 import { getApiBase } from "./env";
 import { isRecentScoreDate } from "./dates";
 import { validMatchList } from "./list-validation";
@@ -111,6 +111,28 @@ export async function getAnalysisValidation(): Promise<AnalysisValidation> {
     throw new ApiError("İleri dönem analiz verisi geçersiz.", 200);
   }
   return value as unknown as AnalysisValidation;
+}
+
+export async function getScoreValidation(): Promise<ScoreValidation> {
+  const data = await request<unknown>("/api/score-validation", {
+    next: { revalidate: 300 },
+    signal: AbortSignal.timeout(5_000),
+  });
+  const value = data as Record<string, unknown>;
+  const validCount = (count: unknown) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || value.rule_version !== "score-list-v1"
+    || !["recorded", "resolved", "evaluated", "paired", "list_hits", "paired_model_hits",
+      "baseline_hits", "minimum_for_rate"].every((key) => validCount(value[key]))
+    || (value.resolved as number) > (value.recorded as number)
+    || (value.evaluated as number) > (value.resolved as number)
+    || (value.paired as number) > (value.evaluated as number)
+    || (value.list_hits as number) > (value.evaluated as number)
+    || (value.paired_model_hits as number) > (value.paired as number)
+    || (value.baseline_hits as number) > (value.paired as number)) {
+    throw new ApiError("Skor karşılaştırması verisi geçersiz.", 200);
+  }
+  return value as unknown as ScoreValidation;
 }
 
 export async function getResults(date: string): Promise<ResultMatch[]> {

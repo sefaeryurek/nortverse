@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import canonical_league_name, is_supported_league
+from app.analysis.score_snapshots import capture_score_snapshot
 from app.analysis.snapshots import RULE_VERSION, prekickoff_picks
 from app.analysis.persist import compute_all_patterns
 from app.analysis.skip_cache import save_skip
@@ -199,6 +200,17 @@ async def _upsert(
                     ).on_conflict_do_nothing(
                         index_elements=["match_id", "rule_version"],
                     )
+                )
+            if raw is not None:
+                await capture_score_snapshot(
+                    session,
+                    match_id=result.match_id,
+                    analyzed_at=result.analyzed_at,
+                    captured_at=datetime.now(timezone.utc),
+                    kickoff_time=raw.kickoff_time,
+                    league_name=raw.league_name,
+                    league_code=raw.league_code,
+                    model_scores=result.ft.scores_1 + result.ft.scores_x + result.ft.scores_2,
                 )
 
     await _with_retry(_do, label=f"_upsert[{result.match_id}]")

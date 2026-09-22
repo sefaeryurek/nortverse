@@ -383,6 +383,17 @@ def run_pipeline_cmd(
     asyncio.run(_run())
 
 
+def capture_score_snapshots_cmd(
+    target_date: str = typer.Option(..., "--date", help="YYYY-MM-DD (İstanbul günü)"),
+) -> None:
+    """Maç başlamadan hazırlanmış skor listelerini ileri dönem takibine sabitle."""
+    from app.analysis.score_snapshots import capture_prepared_score_snapshots
+
+    day = datetime.strptime(target_date, "%Y-%m-%d").date()
+    count = asyncio.run(capture_prepared_score_snapshots(day))
+    console.print(f"[green]{day}: {count} yeni skor karşılaştırması sabitlendi[/green]")
+
+
 def refresh_fixture_cache_cmd(
     target_date: Optional[str] = typer.Option(None, "--date", help="YYYY-MM-DD. Boşsa yarın (İstanbul)."),
 ) -> None:

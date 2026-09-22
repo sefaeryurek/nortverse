@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import AnalyzeClient from "@/app/analyze/[match_id]/AnalyzeClient";
-import { getAnalysisEvidence, getAnalysisValidation } from "@/lib/api";
+import { getAnalysisEvidence, getAnalysisValidation, getScoreValidation } from "@/lib/api";
 import { makePatternResult } from "./fixtures";
 import type { AnalysisEvidence, AnalyzeResponse, PatternResult } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn() }) }));
-vi.mock("@/lib/api", () => ({ analyzeMatch: vi.fn(), getAnalysisEvidence: vi.fn(), getAnalysisValidation: vi.fn() }));
+vi.mock("@/lib/api", () => ({ analyzeMatch: vi.fn(), getAnalysisEvidence: vi.fn(), getAnalysisValidation: vi.fn(), getScoreValidation: vi.fn() }));
 vi.mock("next/dynamic", () => ({
   default: () => ({ patternB, patternC }: { patternB?: PatternResult | null; patternC?: PatternResult | null }) => (
     <div data-testid="archive-analysis">{patternB?.match_count ?? "none"}/{patternC?.match_count ?? "none"}</div>
@@ -16,12 +16,32 @@ vi.mock("next/dynamic", () => ({
 beforeEach(() => {
   vi.mocked(getAnalysisEvidence).mockRejectedValue(new Error("offline"));
   vi.mocked(getAnalysisValidation).mockRejectedValue(new Error("offline"));
+  vi.mocked(getScoreValidation).mockRejectedValue(new Error("offline"));
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 const emptyPeriod = { scores_1: [], scores_x: [], scores_2: [] };
 
 describe("AnalyzeClient", () => {
+  it("shows paired score counts without rates before 100 resolved comparisons", async () => {
+    vi.mocked(getScoreValidation).mockResolvedValue({
+      rule_version: "score-list-v1", recorded: 12, resolved: 4, evaluated: 4,
+      paired: 3, list_hits: 2, paired_model_hits: 1, baseline_hits: 2, minimum_for_rate: 100,
+    });
+    const data: AnalyzeResponse = {
+      match_id: "3003889", home_team: "Home", away_team: "Away",
+      league_code: "ENG PR", season: "2026/2027",
+      ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
+      ht_b: null, ht_c: null, h2_b: null, h2_c: null,
+      ft_b: null, ft_c: null, trends: null, skipped: false, skip_reason: null,
+    };
+    render(<AnalyzeClient match_id="3003889" initialData={data} initialError="" urlHome="" urlAway="" />);
+    const panel = within(await screen.findByLabelText("İleri dönem skor karşılaştırması"));
+    expect(panel.getByText("Analiz listesi: 1/3")).toBeDefined();
+    expect(panel.getByText("Basit liste: 2/3")).toBeDefined();
+    expect(panel.queryByText(/%33|%67/)).toBeNull();
+  });
+
   it("keeps forward-test percentages hidden below the market sample threshold", async () => {
     vi.mocked(getAnalysisValidation).mockResolvedValue({
       rule_version: "ft-core-v1", recorded: 12, resolved: 4,

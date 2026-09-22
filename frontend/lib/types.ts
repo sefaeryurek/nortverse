@@ -202,6 +202,18 @@ export interface AnalysisValidation {
   minimum_for_rate: number;
 }
 
+export interface ScoreValidation {
+  rule_version: string;
+  recorded: number;
+  resolved: number;
+  evaluated: number;
+  paired: number;
+  list_hits: number;
+  paired_model_hits: number;
+  baseline_hits: number;
+  minimum_for_rate: number;
+}
+
 export interface ResultMatch {
   match_id: string;
   home_team: string;

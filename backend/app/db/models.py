@@ -133,3 +133,18 @@ class AnalysisSnapshot(Base):
     kickoff_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     league_name: Mapped[str] = mapped_column(String(100), nullable=False)
     picks: Mapped[list] = mapped_column(JSONB, nullable=False)
+
+
+class ScoreSnapshot(Base):
+    """Frozen pre-kickoff score shortlist and its equally sized baseline."""
+
+    __tablename__ = "score_snapshots"
+
+    match_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    rule_version: Mapped[str] = mapped_column(String(32), primary_key=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    analyzed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    kickoff_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    league_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_scores: Mapped[list] = mapped_column(JSONB, nullable=False)
+    baseline_scores: Mapped[list | None] = mapped_column(JSONB)

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { analyzeMatch, getAnalysisEvidence, getFixture, getResults } from "@/lib/api";
+import { analyzeMatch, getAnalysisEvidence, getFixture, getResults, getScoreValidation } from "@/lib/api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -92,4 +92,16 @@ it("accepts measured pre-match coverage and rejects impossible evidence counts",
     ...evidence, score_list_hits: 25,
   }))));
   await expect(getAnalysisEvidence()).rejects.toThrow("doğrulama verisi geçersiz");
+});
+
+it("accepts paired score counts and rejects impossible comparison counts", async () => {
+  const score = { rule_version: "score-list-v1", recorded: 8, resolved: 4,
+    evaluated: 3, paired: 2, list_hits: 1, paired_model_hits: 1,
+    baseline_hits: 2, minimum_for_rate: 100 };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(score))));
+  await expect(getScoreValidation()).resolves.toEqual(score);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    ...score, baseline_hits: 3,
+  }))));
+  await expect(getScoreValidation()).rejects.toThrow("Skor karşılaştırması verisi geçersiz");
 });

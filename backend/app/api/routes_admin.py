@@ -12,7 +12,8 @@ from sqlalchemy import case, func, or_, select, text
 from app.analysis.correlation import compute_poisson_correlations
 from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
 from app.analysis.snapshots import RULE_VERSION
-from app.api.schemas import AnalysisEvidence, AnalysisValidation, DataQuality, HealthResponse, MarketValidation
+from app.analysis.score_snapshots import SCORE_RULE_VERSION
+from app.api.schemas import AnalysisEvidence, AnalysisValidation, DataQuality, HealthResponse, MarketValidation, ScoreValidation
 from app.api.services import analysis_cache, bg_queue
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
@@ -60,6 +61,31 @@ _VALIDATION_MARKETS = text(f"""
     WHERE s.rule_version = :rule_version AND {_RESOLVED_SNAPSHOT}
     GROUP BY p.value->>'archive', p.value->>'market'
     ORDER BY archive, market
+""")
+
+_SCORE_VALIDATION = text("""
+    WITH eligible AS (
+        SELECT s.model_scores, s.baseline_scores,
+               jsonb_exists(s.model_scores, m.actual_ft_home::text || '-' || m.actual_ft_away::text) AS model_hit,
+               jsonb_exists(s.baseline_scores, m.actual_ft_home::text || '-' || m.actual_ft_away::text) AS baseline_hit
+        FROM score_snapshots s
+        JOIN matches m ON m.match_id = s.match_id
+        WHERE s.rule_version = :rule_version
+          AND m.deleted_at IS NULL
+          AND m.actual_ft_home IS NOT NULL AND m.actual_ft_away IS NOT NULL
+          AND m.result_fetched_at > s.kickoff_time
+          AND s.analyzed_at <= s.captured_at
+          AND s.captured_at < s.kickoff_time
+    )
+    SELECT
+        (SELECT count(*) FROM score_snapshots WHERE rule_version = :rule_version),
+        count(*),
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0),
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL),
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND model_hit),
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND model_hit),
+        count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND baseline_hit)
+    FROM eligible
 """)
 
 
@@ -158,6 +184,20 @@ async def analysis_validation() -> AnalysisValidation:
         resolved=resolved,
         markets=[MarketValidation(archive=row[0], market=row[1], evaluated=row[2], hits=row[3])
                  for row in rows],
+    )
+
+
+@router.get("/api/score-validation", response_model=ScoreValidation)
+async def score_validation() -> ScoreValidation:
+    """Compare frozen score lists with equal-length prior-score baselines."""
+    async with get_session() as session:
+        row = (await session.execute(
+            _SCORE_VALIDATION, {"rule_version": SCORE_RULE_VERSION},
+        )).one()
+    return ScoreValidation(
+        rule_version=SCORE_RULE_VERSION,
+        recorded=row[0], resolved=row[1], evaluated=row[2], paired=row[3],
+        list_hits=row[4], paired_model_hits=row[5], baseline_hits=row[6],
     )
 
 

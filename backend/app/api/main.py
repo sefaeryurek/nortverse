@@ -80,6 +80,7 @@ _CACHE_RULES: dict[str, str] = {
     "/api/health": "public, s-maxage=30",
     "/api/analysis-evidence": "public, s-maxage=300, stale-while-revalidate=60",
     "/api/analysis-validation": "public, s-maxage=300, stale-while-revalidate=60",
+    "/api/score-validation": "public, s-maxage=300, stale-while-revalidate=60",
 }
 _RECENT_SCORE_CACHE = "public, s-maxage=15, stale-while-revalidate=15"
 
