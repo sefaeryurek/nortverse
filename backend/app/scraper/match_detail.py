@@ -268,12 +268,14 @@ def _parse_match_row(
     # H2H tablolarında "ENG PR" gibi kısa kod olabilir; ana maç için "English Premier League"
     # tam adı gelmiş olabilir → kanonik forma çevirip karşılaştır.
     # Ek olarak: H2H satırının kendisi kupa ise lig maçı sayma (UEL/Cup karışıklığı).
+    league_title = tds[0].get("title") or ""
     canon_row = canonical_league_name(league_code)
+    canon_title = canonical_league_name(league_title)
     canon_main = canonical_league_name(main_league_code)
     is_league = (
         bool(canon_main)
-        and canon_row == canon_main
-        and is_supported_league(league_code)
+        and (canon_row == canon_main or canon_title == canon_main)
+        and is_supported_league(league_title, league_code)
     )
 
     return HistoricalMatch(

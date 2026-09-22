@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
 from bs4 import BeautifulSoup, Tag
 
 from app.scraper.match_detail import (
@@ -437,6 +438,24 @@ class TestParseMatchRow:
         m = _parse_match_row(tr, "Nigerian Premier League")
         assert m is not None
         assert m.is_league_match is True
+
+    @pytest.mark.parametrize("code,title", [
+        ("PER L1", "Peru Liga 1"),
+        ("GHA D1", "Ghana Premier League"),
+    ])
+    def test_full_competition_title_matches_fixture_league(self, code, title):
+        html = _match_row(league=code, title=title)
+        tr = _soup(html).find("tr")
+        m = _parse_match_row(tr, title)
+        assert m is not None
+        assert m.is_league_match is True
+
+    def test_cup_title_overrides_stale_league_code(self):
+        html = _match_row(league="ENG PR", title="England FA Cup")
+        tr = _soup(html).find("tr")
+        m = _parse_match_row(tr, "English Premier League")
+        assert m is not None
+        assert m.is_league_match is False
 
     def test_too_few_tds(self):
         html = '<tr id="tr1_1" index="1"><td>Only one</td><td>Two</td></tr>'
