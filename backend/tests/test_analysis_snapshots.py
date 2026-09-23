@@ -496,6 +496,7 @@ async def test_validation_uses_normalized_tables(monkeypatch):
     assert m.baseline_only == 1
     assert m.neither == 1
     assert m.display_tier == "cok_erken"
+    assert m.coverage == round(6 / 8, 4)
 
     assert session.execute.await_args_list[0].args[1] == {"rule_version": RULE_VERSION}
 

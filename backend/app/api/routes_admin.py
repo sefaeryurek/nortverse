@@ -25,15 +25,21 @@ router = APIRouter()
 _corr_cache: dict[str, float] | None = None
 
 _V3_MARKET_AGGREGATE = text("""
-    WITH latest_result AS (
+    WITH relevant_matches AS (
+        SELECT DISTINCT mk.match_id
+        FROM analysis_snapshot_markets mk
+        WHERE mk.rule_version = :rule_version
+    ),
+    latest_result AS (
         SELECT match_id, ft_home, ft_away
         FROM (
-            SELECT match_id, ft_home, ft_away,
+            SELECT o.match_id, o.ft_home, o.ft_away,
                    ROW_NUMBER() OVER (
-                       PARTITION BY match_id
-                       ORDER BY ingested_at DESC, id DESC
+                       PARTITION BY o.match_id
+                       ORDER BY o.ingested_at DESC, o.id DESC
                    ) AS rn
-            FROM match_final_result_observations
+            FROM match_final_result_observations o
+            JOIN relevant_matches rm ON rm.match_id = o.match_id
         ) sub
         WHERE rn = 1
     ),
@@ -276,7 +282,7 @@ async def analysis_validation() -> AnalysisValidationV3:
         else:
             tier = "tam"
 
-        cov_ci = wilson_ci(resolved_issued, opportunities)
+        cov_ci = wilson_ci(resolved_issued, issued)
         model_hits_paired = both_hit + model_only
         baseline_hits_paired = both_hit + baseline_only
         model_ci = wilson_ci(model_hits_paired, paired)
@@ -294,7 +300,7 @@ async def analysis_validation() -> AnalysisValidationV3:
             issued=issued,
             abstained=abstained,
             resolved_issued=resolved_issued,
-            coverage=round(resolved_issued / opportunities, 4) if opportunities > 0 else None,
+            coverage=round(resolved_issued / issued, 4) if issued > 0 else None,
             coverage_ci_low=round(cov_ci[0], 4) if cov_ci else None,
             coverage_ci_high=round(cov_ci[1], 4) if cov_ci else None,
             paired=paired,
