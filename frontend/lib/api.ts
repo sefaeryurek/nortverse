@@ -93,20 +93,31 @@ export async function getAnalysisValidation(): Promise<AnalysisValidation> {
     signal: AbortSignal.timeout(5_000),
   });
   const value = data as Record<string, unknown>;
-  const validCount = (count: unknown) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0;
+  const vc = (n: unknown) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
+  const vf = (n: unknown) => n === null || (typeof n === "number" && Number.isFinite(n));
+  const validTier = (t: unknown) => ["cok_erken", "on_bulgu", "tam"].includes(String(t));
   if (!value || typeof value !== "object" || Array.isArray(value)
-    || !["ft-display-v2", "ft-display-v3"].includes(String(value.rule_version))
-    || !validCount(value.recorded) || !validCount(value.resolved)
-    || !validCount(value.minimum_for_rate) || (value.resolved as number) > (value.recorded as number)
-    || !Array.isArray(value.markets) || value.markets.length > 9
+    || value.rule_version !== "ft-display-v3"
+    || typeof value.baseline_version !== "string" || !(value.baseline_version as string).length
+    || !vc(value.total_snapshots)
+    || typeof value.brier_note !== "string" || !(value.brier_note as string).length
+    || !Array.isArray(value.markets) || value.markets.length > 3
     || !value.markets.every((row: unknown) => {
       if (!row || typeof row !== "object" || Array.isArray(row)) return false;
-      const item = row as Record<string, unknown>;
-      return ["archive_1", "archive_2", "both"].includes(String(item.archive))
-        && ["result", "over_25", "btts"].includes(String(item.market))
-        && validCount(item.evaluated) && validCount(item.hits)
-        && (item.hits as number) <= (item.evaluated as number)
-        && (item.evaluated as number) <= (value.resolved as number);
+      const m = row as Record<string, unknown>;
+      return ["result", "over_25", "btts"].includes(String(m.market))
+        && vc(m.opportunities) && vc(m.issued) && vc(m.abstained) && vc(m.resolved_issued)
+        && vc(m.paired) && vc(m.both_hit) && vc(m.model_only) && vc(m.baseline_only) && vc(m.neither)
+        && (m.issued as number) + (m.abstained as number) === (m.opportunities as number)
+        && (m.both_hit as number) + (m.model_only as number)
+           + (m.baseline_only as number) + (m.neither as number) === (m.paired as number)
+        && (m.resolved_issued as number) <= (m.issued as number)
+        && vf(m.coverage) && vf(m.coverage_ci_low) && vf(m.coverage_ci_high)
+        && vf(m.model_hit_rate) && vf(m.model_hit_rate_ci_low) && vf(m.model_hit_rate_ci_high)
+        && vf(m.baseline_hit_rate) && vf(m.baseline_hit_rate_ci_low) && vf(m.baseline_hit_rate_ci_high)
+        && vf(m.paired_difference) && vf(m.avg_published_frequency)
+        && vf(m.observed_hit_rate) && vf(m.calibration_gap) && vf(m.selected_event_brier)
+        && validTier(m.display_tier);
     })) {
     throw new ApiError("İleri dönem analiz verisi geçersiz.", 200);
   }

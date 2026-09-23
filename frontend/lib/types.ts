@@ -204,17 +204,40 @@ export interface AnalysisEvidence {
   minimum_for_rate: number;
 }
 
+export interface MarketValidationV3 {
+  market: "result" | "over_25" | "btts";
+  opportunities: number;
+  issued: number;
+  abstained: number;
+  resolved_issued: number;
+  coverage: number | null;
+  coverage_ci_low: number | null;
+  coverage_ci_high: number | null;
+  paired: number;
+  both_hit: number;
+  model_only: number;
+  baseline_only: number;
+  neither: number;
+  model_hit_rate: number | null;
+  model_hit_rate_ci_low: number | null;
+  model_hit_rate_ci_high: number | null;
+  baseline_hit_rate: number | null;
+  baseline_hit_rate_ci_low: number | null;
+  baseline_hit_rate_ci_high: number | null;
+  paired_difference: number | null;
+  avg_published_frequency: number | null;
+  observed_hit_rate: number | null;
+  calibration_gap: number | null;
+  selected_event_brier: number | null;
+  display_tier: "cok_erken" | "on_bulgu" | "tam";
+}
+
 export interface AnalysisValidation {
   rule_version: string;
-  recorded: number;
-  resolved: number;
-  markets: {
-    archive: "archive_1" | "archive_2" | "both";
-    market: "result" | "over_25" | "btts";
-    evaluated: number;
-    hits: number;
-  }[];
-  minimum_for_rate: number;
+  baseline_version: string;
+  total_snapshots: number;
+  markets: MarketValidationV3[];
+  brier_note: string;
 }
 
 export interface ScoreValidation {

@@ -1,4 +1,4 @@
-import type { PatternResult } from "@/lib/types";
+import type { MarketValidationV3, PatternResult } from "@/lib/types";
 import type { Pick } from "@/lib/confidence";
 import type { CartItem } from "@/lib/cart";
 
@@ -142,6 +142,22 @@ export function makePick(overrides: Partial<Pick> = {}): Pick {
     marketWeight: 1.0,
     archive: "A",
     confidence: 0.65,
+    ...overrides,
+  };
+}
+
+export function makeMarketV3(overrides: Partial<MarketValidationV3> = {}): MarketValidationV3 {
+  return {
+    market: "result",
+    opportunities: 10, issued: 8, abstained: 2, resolved_issued: 6,
+    coverage: 0.6, coverage_ci_low: 0.3, coverage_ci_high: 0.85,
+    paired: 5, both_hit: 2, model_only: 1, baseline_only: 1, neither: 1,
+    model_hit_rate: 0.6, model_hit_rate_ci_low: 0.2, model_hit_rate_ci_high: 0.9,
+    baseline_hit_rate: 0.6, baseline_hit_rate_ci_low: 0.2, baseline_hit_rate_ci_high: 0.9,
+    paired_difference: 0.0,
+    avg_published_frequency: 70.0, observed_hit_rate: 60.0,
+    calibration_gap: 10.0, selected_event_brier: 0.22,
+    display_tier: "cok_erken",
     ...overrides,
   };
 }

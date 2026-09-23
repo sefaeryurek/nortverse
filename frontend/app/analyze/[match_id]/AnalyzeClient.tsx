@@ -329,28 +329,79 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                       <div className="mt-4 border-t border-slate-700 pt-3">
                         <h3 className="font-semibold text-slate-100">İleri dönem seçim takibi</h3>
                         <p className="mt-1 leading-relaxed text-slate-400">
-                          Maç başlamadan sabitlenen {validationData.recorded} analizden {validationData.resolved} tanesinin
-                          kesin sonucu doğrulandı. Kurallar: {validationData.rule_version}.
+                          Toplam {validationData.total_snapshots} snapshot sabitlendi.
+                          Kurallar: {validationData.rule_version} · Temel: {validationData.baseline_version}.
                         </p>
                         {validationData.markets.length === 0 ? (
-                          <p className="mt-2 text-slate-400">Henüz sonucu doğrulanan seçim yok.</p>
+                          <p className="mt-2 text-slate-400">Henüz pazar verisi yok.</p>
                         ) : (
-                          <ul className="mt-2 space-y-1">
-                            {validationData.markets.map((row) => (
-                              <li key={`${row.archive}-${row.market}`} className="flex justify-between gap-2">
-                                <span>{{ archive_1: "Arşiv 1", archive_2: "Arşiv 2", both: "Arşiv 1+2" }[row.archive]} · {{ result: "Maç sonucu", over_25: "2.5 Alt/Üst", btts: "Karşılıklı gol" }[row.market]}</span>
-                                <span className="font-mono text-slate-100">
-                                  {row.hits}/{row.evaluated}
-                                  {row.evaluated >= validationData.minimum_for_rate
-                                    ? ` · %${Math.round(100 * row.hits / row.evaluated)}` : ""}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
+                          <div className="mt-3 space-y-4">
+                            {validationData.markets.map((m) => {
+                              const mLabel = { result: "Maç sonucu", over_25: "2.5 Alt/Üst", btts: "Karşılıklı gol" }[m.market];
+                              const tierBadge = m.display_tier === "cok_erken"
+                                ? <span className="ml-2 rounded bg-amber-700/60 px-1.5 py-0.5 text-[10px] text-amber-200">Çok Erken</span>
+                                : m.display_tier === "on_bulgu"
+                                ? <span className="ml-2 rounded bg-yellow-700/60 px-1.5 py-0.5 text-[10px] text-yellow-200">Ön Bulgu</span>
+                                : <span className="ml-2 rounded bg-emerald-700/60 px-1.5 py-0.5 text-[10px] text-emerald-200">Tam</span>;
+                              const pct = (v: number | null) => v !== null ? `%${(v * 100).toFixed(1)}` : "—";
+                              const ci = (lo: number | null, hi: number | null) =>
+                                lo !== null && hi !== null ? `(${pct(lo)} – ${pct(hi)})` : "";
+                              return (
+                                <div key={m.market} className="rounded-lg border border-slate-700 bg-slate-950 p-3">
+                                  <div className="flex items-center">
+                                    <span className="font-semibold text-slate-100">{mLabel}</span>
+                                    {tierBadge}
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
+                                    <span>Fırsat: {m.opportunities}</span>
+                                    <span>Seçim: {m.issued}</span>
+                                    <span>Kaçınma: {m.abstained}</span>
+                                    <span>Çözülen: {m.resolved_issued}</span>
+                                  </div>
+                                  {m.display_tier !== "cok_erken" && (
+                                    <>
+                                      <div className="mt-2 space-y-1 text-slate-300">
+                                        <div>Kapsam: {pct(m.coverage)} {ci(m.coverage_ci_low, m.coverage_ci_high)}</div>
+                                        <div>Model isabet: {pct(m.model_hit_rate)} {ci(m.model_hit_rate_ci_low, m.model_hit_rate_ci_high)}</div>
+                                        <div>Temel isabet: {pct(m.baseline_hit_rate)} {ci(m.baseline_hit_rate_ci_low, m.baseline_hit_rate_ci_high)}</div>
+                                        {m.paired_difference !== null && (
+                                          <div>Fark: {(m.paired_difference * 100).toFixed(1)} puan</div>
+                                        )}
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-slate-400">
+                                        <span>İkisi de ✓: {m.both_hit}</span>
+                                        <span>Sadece model: {m.model_only}</span>
+                                        <span>Sadece temel: {m.baseline_only}</span>
+                                        <span>İkisi de ✗: {m.neither}</span>
+                                      </div>
+                                    </>
+                                  )}
+                                  {m.display_tier === "tam" && (
+                                    <div className="mt-2 space-y-1 text-slate-400">
+                                      <div>Yayımlanan sıklık ort.: %{m.avg_published_frequency?.toFixed(1) ?? "—"}</div>
+                                      <div>Gözlenen isabet: %{m.observed_hit_rate?.toFixed(1) ?? "—"}</div>
+                                      <div>Kalibrasyon farkı: {m.calibration_gap?.toFixed(1) ?? "—"} puan</div>
+                                      <div>Brier (seçilen olay): {m.selected_event_brier?.toFixed(4) ?? "—"}</div>
+                                    </div>
+                                  )}
+                                  {m.display_tier === "cok_erken" && (
+                                    <p className="mt-2 text-amber-300/70">Sonuç çıkarmak için çok erken.</p>
+                                  )}
+                                  {m.display_tier === "on_bulgu" && (
+                                    <p className="mt-2 text-yellow-300/70">Ön bulgu — sonuçlar değişebilir.</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
-                        <p className="mt-2 text-slate-400">
-                          Pazar başına {validationData.minimum_for_rate} sonuçtan önce oran gösterilmez. Bu sayılar bahis getirisi değildir.
-                        </p>
+                        <div className="mt-3 space-y-1 text-slate-500">
+                          <p>Arşiv yüzdesi kalibre olasılık değildir.</p>
+                          <p>Oran verisi olmadan ROI veya kârlılık ölçülemez.</p>
+                          {validationData.markets.some((m) => m.display_tier === "tam" && m.market === "result") && (
+                            <p>{validationData.brier_note}</p>
+                          )}
+                        </div>
                       </div>
                     )}
                   </section>

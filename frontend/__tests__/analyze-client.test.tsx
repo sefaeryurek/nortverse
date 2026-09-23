@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import AnalyzeClient from "@/app/analyze/[match_id]/AnalyzeClient";
 import { getAnalysisEvidence, getAnalysisValidation, getScoreValidation } from "@/lib/api";
-import { makePatternResult } from "./fixtures";
-import type { AnalysisEvidence, AnalyzeResponse, PatternResult } from "@/lib/types";
+import { makeMarketV3, makePatternResult } from "./fixtures";
+import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse, PatternResult } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn() }) }));
 vi.mock("@/lib/api", () => ({ analyzeMatch: vi.fn(), getAnalysisEvidence: vi.fn(), getAnalysisValidation: vi.fn(), getScoreValidation: vi.fn() }));
@@ -45,12 +45,14 @@ describe("AnalyzeClient", () => {
     expect(panel.queryByText(/%33|%67/)).toBeNull();
   });
 
-  it("keeps forward-test percentages hidden below the market sample threshold", async () => {
-    vi.mocked(getAnalysisValidation).mockResolvedValue({
-      rule_version: "ft-display-v3", recorded: 12, resolved: 4,
-      markets: [{ archive: "archive_1", market: "result", evaluated: 3, hits: 2 }],
-      minimum_for_rate: 100,
-    });
+  it("shows cok_erken tier with only counts and no rates", async () => {
+    const validation: AnalysisValidation = {
+      rule_version: "ft-display-v3", baseline_version: "global-modal-v1",
+      total_snapshots: 12,
+      markets: [makeMarketV3({ market: "result", resolved_issued: 5, display_tier: "cok_erken" })],
+      brier_note: "selected_event_brier sadece modelin seçtiği event için hesaplanır.",
+    };
+    vi.mocked(getAnalysisValidation).mockResolvedValue(validation);
     const data: AnalyzeResponse = {
       match_id: "3003889", home_team: "Home", away_team: "Away",
       league_code: "ENG PR", season: "2026/2027",
@@ -64,17 +66,20 @@ describe("AnalyzeClient", () => {
         score_list_evaluated: 24, score_list_hits: 3, minimum_for_rate: 100 }}
       initialError="" urlHome="" urlAway="" />);
 
-    const panel = within(screen.getByLabelText("Analiz doğrulama kapsamı"));
-    expect(await panel.findByText("2/3")).toBeDefined();
-    expect(panel.queryByText("%67")).toBeNull();
+    const panel = within(await screen.findByLabelText("Analiz doğrulama kapsamı"));
+    expect(panel.getByText("Çok Erken")).toBeDefined();
+    expect(panel.getByText(/Sonuç çıkarmak için çok erken/)).toBeDefined();
+    expect(panel.queryByText(/Model isabet/)).toBeNull();
   });
 
-  it("shows forward validation when legacy evidence is unavailable", async () => {
-    vi.mocked(getAnalysisValidation).mockResolvedValue({
-      rule_version: "ft-display-v3", recorded: 5, resolved: 1,
-      markets: [{ archive: "both", market: "result", evaluated: 1, hits: 1 }],
-      minimum_for_rate: 100,
-    });
+  it("shows forward validation with on_bulgu tier when evidence is unavailable", async () => {
+    const validation: AnalysisValidation = {
+      rule_version: "ft-display-v3", baseline_version: "global-modal-v1",
+      total_snapshots: 50,
+      markets: [makeMarketV3({ market: "result", resolved_issued: 40, display_tier: "on_bulgu" })],
+      brier_note: "selected_event_brier sadece modelin seçtiği event için hesaplanır.",
+    };
+    vi.mocked(getAnalysisValidation).mockResolvedValue(validation);
     const data: AnalyzeResponse = {
       match_id: "3003889", home_team: "Home", away_team: "Away",
       league_code: "ENG PR", season: "2026/2027",
@@ -85,8 +90,9 @@ describe("AnalyzeClient", () => {
     };
     render(<AnalyzeClient match_id="3003889" initialData={data} initialError="" urlHome="" urlAway="" />);
     const panel = within(await screen.findByLabelText("Analiz doğrulama kapsamı"));
-    expect(panel.getByText(/Maç başlamadan sabitlenen 5 analizden 1/)).toBeDefined();
-    expect(panel.getByText("1/1")).toBeDefined();
+    expect(panel.getByText("Ön Bulgu")).toBeDefined();
+    expect(panel.getByText(/Model isabet/)).toBeDefined();
+    expect(panel.getByText(/Ön bulgu — sonuçlar değişebilir/)).toBeDefined();
   });
 
   it("shows independent archive analysis when the 3.5+ score list is empty", () => {

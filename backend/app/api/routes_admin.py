@@ -12,9 +12,9 @@ from sqlalchemy import case, func, or_, select, text
 
 from app.analysis.correlation import compute_poisson_correlations
 from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
-from app.analysis.snapshots import RULE_VERSION
+from app.analysis.snapshots import BASELINE_VERSION, RULE_VERSION
 from app.analysis.score_snapshots import SCORE_RULE_VERSION
-from app.api.schemas import AnalysisEvidence, AnalysisValidation, DataQuality, HealthResponse, MarketValidation, ScoreValidation
+from app.api.schemas import AnalysisEvidence, AnalysisValidationV3, DataQuality, HealthResponse, MarketValidationV3, ScoreValidation
 from app.api.services import analysis_cache, bg_queue
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
@@ -24,46 +24,117 @@ router = APIRouter()
 
 _corr_cache: dict[str, float] | None = None
 
-_RESOLVED_SNAPSHOT = """
-    m.deleted_at IS NULL
-    AND m.actual_ft_home IS NOT NULL AND m.actual_ft_away IS NOT NULL
-    AND COALESCE(m.result_first_fetched_at, m.result_fetched_at) > s.kickoff_time
-    AND s.analyzed_at <= s.captured_at
-    AND s.captured_at < s.kickoff_time
-"""
-
-_VALIDATION_COUNTS = text(f"""
-    SELECT count(*), count(*) FILTER (WHERE {_RESOLVED_SNAPSHOT})
-    FROM analysis_snapshots s
-    LEFT JOIN matches m ON m.match_id = s.match_id
-    WHERE s.rule_version = :rule_version
+_V3_MARKET_AGGREGATE = text("""
+    WITH latest_result AS (
+        SELECT match_id, ft_home, ft_away
+        FROM (
+            SELECT match_id, ft_home, ft_away,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY match_id
+                       ORDER BY ingested_at DESC, id DESC
+                   ) AS rn
+            FROM match_final_result_observations
+        ) sub
+        WHERE rn = 1
+    ),
+    market_with_outcome AS (
+        SELECT
+            mk.market,
+            mk.model_selection,
+            mk.model_score_bp,
+            mk.baseline_selection,
+            mk.abstain_reason,
+            r.ft_home,
+            r.ft_away,
+            CASE
+                WHEN mk.model_selection IS NULL THEN NULL
+                WHEN r.ft_home IS NULL THEN NULL
+                WHEN mk.market = 'result' THEN
+                    (mk.model_selection = '1' AND r.ft_home > r.ft_away)
+                    OR (mk.model_selection = 'X' AND r.ft_home = r.ft_away)
+                    OR (mk.model_selection = '2' AND r.ft_home < r.ft_away)
+                WHEN mk.market = 'over_25' THEN
+                    (mk.model_selection = 'over') =
+                    (r.ft_home + r.ft_away > 2)
+                WHEN mk.market = 'btts' THEN
+                    (mk.model_selection = 'yes') =
+                    (r.ft_home > 0 AND r.ft_away > 0)
+            END AS model_hit,
+            CASE
+                WHEN mk.baseline_selection IS NULL THEN NULL
+                WHEN r.ft_home IS NULL THEN NULL
+                WHEN mk.market = 'result' THEN
+                    (mk.baseline_selection = '1' AND r.ft_home > r.ft_away)
+                    OR (mk.baseline_selection = 'X' AND r.ft_home = r.ft_away)
+                    OR (mk.baseline_selection = '2' AND r.ft_home < r.ft_away)
+                WHEN mk.market = 'over_25' THEN
+                    (mk.baseline_selection = 'over') =
+                    (r.ft_home + r.ft_away > 2)
+                WHEN mk.market = 'btts' THEN
+                    (mk.baseline_selection = 'yes') =
+                    (r.ft_home > 0 AND r.ft_away > 0)
+            END AS baseline_hit
+        FROM analysis_snapshot_markets mk
+        JOIN analysis_snapshots s
+            ON s.match_id = mk.match_id AND s.rule_version = mk.rule_version
+        LEFT JOIN latest_result r
+            ON r.match_id = mk.match_id
+        WHERE mk.rule_version = :rule_version
+          AND s.analyzed_at <= s.captured_at
+          AND s.captured_at < s.kickoff_time
+    )
+    SELECT
+        market,
+        COUNT(*) AS opportunities,
+        COUNT(*) FILTER (WHERE model_selection IS NOT NULL) AS issued,
+        COUNT(*) FILTER (WHERE abstain_reason IS NOT NULL) AS abstained,
+        COUNT(*) FILTER (WHERE model_selection IS NOT NULL
+                         AND ft_home IS NOT NULL) AS resolved_issued,
+        COUNT(*) FILTER (WHERE model_hit IS NOT NULL
+                         AND baseline_hit IS NOT NULL) AS paired,
+        COUNT(*) FILTER (WHERE model_hit AND baseline_hit) AS both_hit,
+        COUNT(*) FILTER (WHERE model_hit AND NOT baseline_hit) AS model_only,
+        COUNT(*) FILTER (WHERE NOT model_hit AND baseline_hit) AS baseline_only,
+        COUNT(*) FILTER (WHERE NOT model_hit AND NOT baseline_hit) AS neither,
+        COUNT(*) FILTER (WHERE model_hit) AS model_hits,
+        AVG(model_score_bp / 100.0)
+            FILTER (WHERE model_selection IS NOT NULL
+                    AND ft_home IS NOT NULL) AS avg_freq,
+        AVG(POWER(model_score_bp / 10000.0
+                  - CASE WHEN model_hit THEN 1.0 ELSE 0.0 END, 2))
+            FILTER (WHERE model_selection IS NOT NULL
+                    AND ft_home IS NOT NULL) AS brier
+    FROM market_with_outcome
+    GROUP BY market
+    ORDER BY market
 """)
 
-_VALIDATION_MARKETS = text(f"""
-    SELECT p.value->>'archive' AS archive, p.value->>'market' AS market,
-           count(*) AS evaluated,
-           count(*) FILTER (WHERE
-               CASE
-                   WHEN p.value->>'market' = 'result' THEN
-                       (p.value->>'selection' = '1' AND m.actual_ft_home > m.actual_ft_away)
-                       OR (p.value->>'selection' = 'X' AND m.actual_ft_home = m.actual_ft_away)
-                       OR (p.value->>'selection' = '2' AND m.actual_ft_home < m.actual_ft_away)
-                   WHEN p.value->>'market' = 'over_25' THEN
-                       (p.value->>'selection' = 'over') =
-                       (m.actual_ft_home + m.actual_ft_away > 2)
-                   WHEN p.value->>'market' = 'btts' THEN
-                       (p.value->>'selection' = 'yes') =
-                       (m.actual_ft_home > 0 AND m.actual_ft_away > 0)
-                   ELSE false
-               END
-           ) AS hits
-    FROM analysis_snapshots s
-    JOIN matches m ON m.match_id = s.match_id
-    CROSS JOIN LATERAL jsonb_array_elements(s.picks) AS p(value)
-    WHERE s.rule_version = :rule_version AND {_RESOLVED_SNAPSHOT}
-    GROUP BY p.value->>'archive', p.value->>'market'
-    ORDER BY archive, market
+_V3_SNAPSHOT_COUNT = text("""
+    SELECT count(*)
+    FROM analysis_snapshots
+    WHERE rule_version = :rule_version
 """)
+
+_BRIER_NOTE = (
+    "selected_event_brier sadece modelin seçtiği event için hesaplanır; "
+    "result pazarı için bu tam multiclass Brier değildir."
+)
+
+
+def wilson_ci(
+    successes: int, trials: int, z: float = 1.96,
+) -> tuple[float, float] | None:
+    if trials <= 0:
+        return None
+    p = successes / trials
+    z2 = z * z
+    denom = 1 + z2 / trials
+    center = p + z2 / (2 * trials)
+    spread = z * math.sqrt(p * (1 - p) / trials + z2 / (4 * trials * trials))
+    return (
+        max(0.0, (center - spread) / denom),
+        min(1.0, (center + spread) / denom),
+    )
 
 _SCORE_VALIDATION = text("""
     WITH eligible AS (
@@ -184,22 +255,75 @@ async def analysis_evidence() -> AnalysisEvidence:
     )
 
 
-@router.get("/api/analysis-validation", response_model=AnalysisValidation)
-async def analysis_validation() -> AnalysisValidation:
-    """Evaluate frozen pre-kickoff selections only after a confirmed FT result."""
+@router.get("/api/analysis-validation", response_model=AnalysisValidationV3)
+async def analysis_validation() -> AnalysisValidationV3:
+    """Evaluate frozen pre-kickoff selections using immutable observation ledger."""
+    params = {"rule_version": RULE_VERSION}
     async with get_session() as session:
-        recorded, resolved = (await session.execute(
-            _VALIDATION_COUNTS, {"rule_version": RULE_VERSION},
-        )).one()
-        rows = (await session.execute(
-            _VALIDATION_MARKETS, {"rule_version": RULE_VERSION},
-        )).all()
-    return AnalysisValidation(
+        total_snapshots = (await session.execute(_V3_SNAPSHOT_COUNT, params)).scalar() or 0
+        rows = (await session.execute(_V3_MARKET_AGGREGATE, params)).all()
+
+    markets: list[MarketValidationV3] = []
+    for row in rows:
+        (market, opportunities, issued, abstained, resolved_issued,
+         paired, both_hit, model_only, baseline_only, neither,
+         model_hits, avg_freq, brier) = row
+
+        if resolved_issued < 30:
+            tier = "cok_erken"
+        elif resolved_issued < 100:
+            tier = "on_bulgu"
+        else:
+            tier = "tam"
+
+        cov_ci = wilson_ci(resolved_issued, opportunities)
+        model_hits_paired = both_hit + model_only
+        baseline_hits_paired = both_hit + baseline_only
+        model_ci = wilson_ci(model_hits_paired, paired)
+        base_ci = wilson_ci(baseline_hits_paired, paired)
+
+        m_rate = model_hits_paired / paired if paired > 0 else None
+        b_rate = baseline_hits_paired / paired if paired > 0 else None
+        obs_rate = model_hits / resolved_issued if resolved_issued > 0 else None
+        avg_f = float(avg_freq) if avg_freq is not None else None
+        cal_gap = (avg_f - obs_rate * 100) if avg_f is not None and obs_rate is not None else None
+
+        markets.append(MarketValidationV3(
+            market=market,
+            opportunities=opportunities,
+            issued=issued,
+            abstained=abstained,
+            resolved_issued=resolved_issued,
+            coverage=round(resolved_issued / opportunities, 4) if opportunities > 0 else None,
+            coverage_ci_low=round(cov_ci[0], 4) if cov_ci else None,
+            coverage_ci_high=round(cov_ci[1], 4) if cov_ci else None,
+            paired=paired,
+            both_hit=both_hit,
+            model_only=model_only,
+            baseline_only=baseline_only,
+            neither=neither,
+            model_hit_rate=round(m_rate, 4) if m_rate is not None else None,
+            model_hit_rate_ci_low=round(model_ci[0], 4) if model_ci else None,
+            model_hit_rate_ci_high=round(model_ci[1], 4) if model_ci else None,
+            baseline_hit_rate=round(b_rate, 4) if b_rate is not None else None,
+            baseline_hit_rate_ci_low=round(base_ci[0], 4) if base_ci else None,
+            baseline_hit_rate_ci_high=round(base_ci[1], 4) if base_ci else None,
+            paired_difference=round(
+                (model_only - baseline_only) / paired, 4,
+            ) if paired > 0 else None,
+            avg_published_frequency=round(avg_f, 2) if avg_f is not None else None,
+            observed_hit_rate=round(obs_rate * 100, 2) if obs_rate is not None else None,
+            calibration_gap=round(cal_gap, 2) if cal_gap is not None else None,
+            selected_event_brier=round(float(brier), 4) if brier is not None else None,
+            display_tier=tier,
+        ))
+
+    return AnalysisValidationV3(
         rule_version=RULE_VERSION,
-        recorded=recorded,
-        resolved=resolved,
-        markets=[MarketValidation(archive=row[0], market=row[1], evaluated=row[2], hits=row[3])
-                 for row in rows],
+        baseline_version=BASELINE_VERSION,
+        total_snapshots=total_snapshots,
+        markets=markets,
+        brier_note=_BRIER_NOTE,
     )
 
 

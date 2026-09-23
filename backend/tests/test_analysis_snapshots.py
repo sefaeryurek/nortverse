@@ -463,11 +463,13 @@ async def test_upsert_after_kickoff_does_not_make_a_snapshot(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_validation_reports_only_aggregate_outcomes(monkeypatch):
+async def test_validation_uses_normalized_tables(monkeypatch):
     session = AsyncMock()
     session.execute.side_effect = [
-        MagicMock(one=lambda: (12, 4)),
-        MagicMock(all=lambda: [("archive_1", "result", 3, 2)]),
+        MagicMock(scalar=lambda: 20),
+        MagicMock(all=lambda: [
+            ("result", 10, 8, 2, 6, 5, 2, 1, 1, 1, 3, 72.5, 0.18),
+        ]),
     ]
 
     @asynccontextmanager
@@ -477,12 +479,98 @@ async def test_validation_reports_only_aggregate_outcomes(monkeypatch):
     monkeypatch.setattr(routes_admin, "get_session", fake_session)
     response = await routes_admin.analysis_validation()
 
-    assert response.recorded == 12
-    assert response.resolved == 4
-    assert response.markets[0].model_dump() == {
-        "archive": "archive_1", "market": "result", "evaluated": 3, "hits": 2,
-    }
+    assert response.total_snapshots == 20
+    assert response.rule_version == RULE_VERSION
+    assert response.baseline_version == BASELINE_VERSION
+    assert len(response.markets) == 1
+
+    m = response.markets[0]
+    assert m.market == "result"
+    assert m.opportunities == 10
+    assert m.issued == 8
+    assert m.abstained == 2
+    assert m.resolved_issued == 6
+    assert m.paired == 5
+    assert m.both_hit == 2
+    assert m.model_only == 1
+    assert m.baseline_only == 1
+    assert m.neither == 1
+    assert m.display_tier == "cok_erken"
+
     assert session.execute.await_args_list[0].args[1] == {"rule_version": RULE_VERSION}
+
     query = str(session.execute.await_args_list[1].args[0])
-    assert "jsonb_array_elements" in query
-    assert "COALESCE(m.result_first_fetched_at, m.result_fetched_at) > s.kickoff_time" in query
+    assert "analysis_snapshot_markets" in query
+    assert "match_final_result_observations" in query
+    assert "jsonb_array_elements" not in query
+    assert "actual_ft" not in query
+
+
+def test_wilson_ci_basic():
+    ci = routes_admin.wilson_ci(50, 100)
+    assert ci is not None
+    assert 0.39 < ci[0] < 0.42
+    assert 0.58 < ci[1] < 0.61
+
+
+def test_wilson_ci_zero_trials():
+    assert routes_admin.wilson_ci(0, 0) is None
+
+
+def test_wilson_ci_perfect():
+    ci = routes_admin.wilson_ci(100, 100)
+    assert ci is not None
+    assert ci[0] > 0.95
+    assert ci[1] > 0.99
+
+
+def test_wilson_ci_zero_successes():
+    ci = routes_admin.wilson_ci(0, 100)
+    assert ci is not None
+    assert ci[0] == 0.0
+    assert ci[1] < 0.05
+
+
+@pytest.mark.asyncio
+async def test_display_tier_thresholds(monkeypatch):
+    for n, expected_tier in [(29, "cok_erken"), (30, "on_bulgu"), (99, "on_bulgu"), (100, "tam")]:
+        session = AsyncMock()
+        session.execute.side_effect = [
+            MagicMock(scalar=lambda: 1),
+            MagicMock(all=lambda n=n: [
+                ("result", 200, n, 200 - n,
+                 n, n, n // 2,
+                 0, 0, n - n // 2,
+                 n // 2, 70.0, 0.20),
+            ]),
+        ]
+
+        @asynccontextmanager
+        async def _fs(s=session):
+            yield s
+
+        monkeypatch.setattr(routes_admin, "get_session", _fs)
+        resp = await routes_admin.analysis_validation()
+        assert resp.markets[0].display_tier == expected_tier, f"n={n}"
+
+
+@pytest.mark.asyncio
+async def test_calibration_gap_sign(monkeypatch):
+    session = AsyncMock()
+    session.execute.side_effect = [
+        MagicMock(scalar=lambda: 1),
+        MagicMock(all=lambda: [
+            ("btts", 100, 100, 0, 100, 100, 65, 0, 0, 35, 65, 70.0, 0.21),
+        ]),
+    ]
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(routes_admin, "get_session", fake_session)
+    resp = await routes_admin.analysis_validation()
+    m = resp.markets[0]
+    assert m.avg_published_frequency == 70.0
+    assert m.observed_hit_rate == 65.0
+    assert m.calibration_gap == 5.0
