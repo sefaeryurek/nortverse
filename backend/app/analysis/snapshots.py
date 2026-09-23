@@ -5,13 +5,18 @@ from __future__ import annotations
 import math
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.analysis.league_filter import is_supported_league
+from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
+from app.db.models import Match, MatchFinalResultObservation
 
 
 RULE_VERSION = "ft-display-v2"
+V3_RULE_VERSION = "ft-display-v3"
+BASELINE_VERSION = "global-modal-v1"
+MIN_BASELINE_MATCHES = 100
 MIN_ARCHIVE_MATCHES = 20
 MIN_FREQUENCY_PCT = 65.0
 
@@ -20,6 +25,111 @@ _MARKETS = {
     "over_25": (("under", "alt_25_pct"), ("over", "ust_25_pct")),
     "btts": (("yes", "kg_var_pct"), ("no", "kg_yok_pct")),
 }
+
+_BASELINE_SCOPE = "global_supported_leagues"
+
+
+async def load_market_baselines(
+    session: AsyncSession, as_of: datetime,
+) -> dict[str, dict | None]:
+    """Load deterministic global modal baselines using one aggregate query.
+
+    Every included result must have been observed by ``as_of`` and strictly
+    after kickoff.  A baseline is withheld until the common cohort reaches
+    ``MIN_BASELINE_MATCHES``; a short archive must never manufacture a
+    comparator for the model.
+    """
+    if as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("as_of must be timezone-aware")
+
+    league_fields = (Match.league_name, Match.league_code)
+    league_filter = tuple(
+        ~func.lower(func.coalesce(field, "")).contains(keyword)
+        for field in league_fields
+        for keyword in CUP_KEYWORDS
+    )
+    has_league = or_(*(
+        (
+            func.length(func.trim(func.coalesce(field, ""))) > 0
+        ) & (
+            func.trim(func.coalesce(field, "")) != "?"
+        )
+        for field in league_fields
+    ))
+
+    observation = MatchFinalResultObservation
+    latest = select(
+        observation.match_id.label("match_id"),
+        observation.kickoff_time.label("kickoff_time"),
+        observation.ft_home.label("ft_home"),
+        observation.ft_away.label("ft_away"),
+        observation.observed_at.label("observed_at"),
+        observation.ingested_at.label("ingested_at"),
+        func.row_number().over(
+            partition_by=observation.match_id,
+            order_by=(observation.ingested_at.desc(), observation.id.desc()),
+        ).label("latest_rank"),
+    ).where(
+        observation.ingested_at <= as_of,
+        observation.observed_at > observation.kickoff_time,
+    ).subquery("latest_result_observation")
+
+    result_conditions = (
+        latest.c.ft_home > latest.c.ft_away,
+        latest.c.ft_home == latest.c.ft_away,
+        latest.c.ft_home < latest.c.ft_away,
+    )
+    over_conditions = (
+        latest.c.ft_home + latest.c.ft_away < 3,
+        latest.c.ft_home + latest.c.ft_away >= 3,
+    )
+    btts_conditions = (
+        (latest.c.ft_home > 0) & (latest.c.ft_away > 0),
+        (latest.c.ft_home == 0) | (latest.c.ft_away == 0),
+    )
+    counts = [func.count(Match.id)]
+    for conditions in (result_conditions, over_conditions, btts_conditions):
+        counts.extend(func.count(Match.id).filter(condition) for condition in conditions)
+
+    row = (await session.execute(
+        select(*counts).select_from(
+            Match,
+        ).join(
+            latest, latest.c.match_id == Match.match_id,
+        ).where(
+            Match.deleted_at.is_(None),
+            Match.kickoff_time.is_not(None),
+            latest.c.latest_rank == 1,
+            latest.c.kickoff_time == Match.kickoff_time,
+            latest.c.observed_at > Match.kickoff_time,
+            latest.c.ingested_at <= as_of,
+            Match.kickoff_time < as_of,
+            has_league,
+            *league_filter,
+        )
+    )).one()
+
+    sample_size = int(row[0] or 0)
+    baselines: dict[str, dict | None] = {market: None for market in _MARKETS}
+    if sample_size < MIN_BASELINE_MATCHES:
+        return baselines
+
+    offset = 1
+    for market, choices in _MARKETS.items():
+        market_counts = [int(value or 0) for value in row[offset:offset + len(choices)]]
+        offset += len(choices)
+        # max() keeps the first option on a tie, making the order in _MARKETS
+        # part of the versioned baseline definition.
+        winner_index = max(range(len(choices)), key=market_counts.__getitem__)
+        selection = choices[winner_index][0]
+        winner_count = market_counts[winner_index]
+        baselines[market] = {
+            "selection": selection,
+            "score_bp": round(10_000 * winner_count / sample_size),
+            "sample_size": sample_size,
+            "scope": _BASELINE_SCOPE,
+        }
+    return baselines
 
 
 def build_ft_recommendations(patterns: dict | None) -> list[dict]:
@@ -74,6 +184,77 @@ def build_ft_recommendations(patterns: dict | None) -> list[dict]:
             "archive_2_match_count": second["match_count"] if second else None,
         })
     return picks
+
+
+def _market_abstain_reason(patterns: dict | None, market: str) -> str:
+    if not isinstance(patterns, dict):
+        return "patterns_unavailable"
+
+    choices = _MARKETS[market]
+    qualified: list[str] = []
+    saw_small_sample = False
+    saw_below_threshold = False
+    for key in ("pattern_ft_b", "pattern_ft_c"):
+        pattern = patterns.get(key)
+        if not isinstance(pattern, dict):
+            continue
+        count = pattern.get("match_count")
+        if type(count) is not int or count < MIN_ARCHIVE_MATCHES:
+            saw_small_sample = True
+            continue
+        values = [(selection, pattern.get(field)) for selection, field in choices]
+        if any(
+            type(value) not in (int, float)
+            or not math.isfinite(value)
+            or value < 0
+            or value > 100
+            for _, value in values
+        ):
+            continue
+        selection, frequency = max(values, key=lambda item: item[1])
+        if frequency < MIN_FREQUENCY_PCT:
+            saw_below_threshold = True
+            continue
+        qualified.append(selection)
+
+    if len(qualified) == 2 and qualified[0] != qualified[1]:
+        return "archive_disagreement"
+    if saw_below_threshold:
+        return "frequency_below_threshold"
+    if saw_small_sample:
+        return "archive_sample_below_minimum"
+    return "patterns_unavailable"
+
+
+def build_market_evaluation_rows(
+    patterns: dict | None,
+    baselines: dict[str, dict | None] | None,
+) -> list[dict]:
+    """Normalize one frozen model decision and comparator for every FT market.
+
+    Baselines are attached after the model decision is built and therefore can
+    neither create nor change a model selection.
+    """
+    picks = {pick["market"]: pick for pick in build_ft_recommendations(patterns)}
+    baselines = baselines or {}
+    rows: list[dict] = []
+    for market in _MARKETS:
+        pick = picks.get(market)
+        baseline = baselines.get(market)
+        row = {
+            "market": market,
+            "model_selection": pick["selection"] if pick else None,
+            "model_score_bp": round(100 * pick["frequency_pct"]) if pick else None,
+            "model_sample_size": pick["match_count"] if pick else None,
+            "model_source": pick["archive"] if pick else None,
+            "baseline_selection": baseline["selection"] if baseline else None,
+            "baseline_score_bp": baseline["score_bp"] if baseline else None,
+            "baseline_sample_size": baseline["sample_size"] if baseline else None,
+            "baseline_scope": baseline["scope"] if baseline else None,
+            "abstain_reason": None if pick else _market_abstain_reason(patterns, market),
+        }
+        rows.append(row)
+    return rows
 
 
 def prekickoff_picks(

@@ -5,12 +5,14 @@ Idempotent: aynı match_id için tekrar çalıştırılırsa günceller (upsert)
 """
 
 import asyncio
+import hashlib
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Awaitable, Callable, Optional, TypeVar
 
 from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import load_only
 
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import canonical_league_name, is_supported_league
@@ -20,7 +22,13 @@ from app.analysis.persist import compute_all_patterns
 from app.analysis.skip_cache import save_skip
 from app.analysis.trends import compute_trends
 from app.db.connection import get_session
-from app.db.models import AnalysisSnapshot, FixtureCache, Match, SkippedAnalysis
+from app.db.models import (
+    AnalysisSnapshot,
+    FixtureCache,
+    Match,
+    MatchFinalResultObservation,
+    SkippedAnalysis,
+)
 from app.models import FixtureMatch, MatchAnalysisResult, MatchRawData
 from app.scraper.browser import browser_context
 from app.scraper.fixture import fetch_istanbul_fixture
@@ -64,6 +72,8 @@ async def _with_retry(
     raise last_exc if last_exc else RuntimeError("retry tükendi")
 
 log = logging.getLogger(__name__)
+
+FINAL_RESULT_SOURCE = "fixture-score-v1"
 
 
 def _result_to_row(
@@ -446,6 +456,25 @@ def _merge_fixture_scores(
     return merged
 
 
+def _fixture_score_revision(
+    match_id: str,
+    snapshot: FixtureScore,
+    previous_revision: str | None,
+) -> str:
+    """Return a unique, retry-stable revision for one final-score observation."""
+    fields = (
+        match_id,
+        snapshot.status,
+        snapshot.home,
+        snapshot.away,
+        snapshot.ht_home,
+        snapshot.ht_away,
+        previous_revision,
+    )
+    payload = "\x1f".join("<null>" if value is None else str(value) for value in fields)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 async def update_results(target_date: Optional[date] = None) -> dict:
     """Refresh scores from the source calendar pages and update analyzed matches."""
     istanbul_tz = timezone(timedelta(hours=3))
@@ -468,7 +497,20 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                 Match.kickoff_time >= day_start,
                 Match.kickoff_time < day_end,
                 Match.deleted_at.is_(None),
-            )
+            ).options(load_only(
+                Match.match_id,
+                Match.home_team,
+                Match.away_team,
+                Match.league_code,
+                Match.league_name,
+                Match.kickoff_time,
+                Match.actual_ft_home,
+                Match.actual_ft_away,
+                Match.actual_ht_home,
+                Match.actual_ht_away,
+                Match.actual_h2_home,
+                Match.actual_h2_away,
+            ))
         )).scalars().all()
 
     fixtures = fixture_row.matches_json if fixture_row and isinstance(fixture_row.matches_json, list) else []
@@ -492,6 +534,20 @@ async def update_results(target_date: Optional[date] = None) -> dict:
 
     async def _save():
         async with get_session() as session:
+            new_observations: list[dict] = []
+            latest_observations: dict[str, MatchFinalResultObservation] = {}
+            if match_by_id:
+                rows = (await session.execute(
+                    select(MatchFinalResultObservation)
+                    .where(MatchFinalResultObservation.match_id.in_(match_by_id))
+                    .distinct(MatchFinalResultObservation.match_id)
+                    .order_by(
+                        MatchFinalResultObservation.match_id,
+                        MatchFinalResultObservation.ingested_at.desc(),
+                        MatchFinalResultObservation.id.desc(),
+                    )
+                )).scalars().all()
+                latest_observations = {row.match_id: row for row in rows}
             if fixture_row is not None:
                 await session.execute(
                     sa_update(FixtureCache).where(FixtureCache.date == d.isoformat())
@@ -514,6 +570,38 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                         **scores,
                         result_first_fetched_at=func.coalesce(Match.result_first_fetched_at, checked_at),
                         result_fetched_at=checked_at,
+                    )
+                )
+                latest = latest_observations.get(match_id)
+                final_changed = latest is None or (
+                    latest.ft_home,
+                    latest.ft_away,
+                ) != (snapshot.home, snapshot.away)
+                if (
+                    final_changed
+                    and existing.kickoff_time is not None
+                    and checked_at > existing.kickoff_time
+                ):
+                    new_observations.append(
+                        {
+                            "match_id": match_id,
+                            "kickoff_time": existing.kickoff_time,
+                            "ft_home": snapshot.home,
+                            "ft_away": snapshot.away,
+                            "observed_at": checked_at,
+                            "source": FINAL_RESULT_SOURCE,
+                            "source_revision": _fixture_score_revision(
+                                match_id,
+                                snapshot,
+                                latest.source_revision if latest is not None else None,
+                            ),
+                        }
+                    )
+            if new_observations:
+                await session.execute(
+                    insert(MatchFinalResultObservation).values(new_observations)
+                    .on_conflict_do_nothing(
+                        index_elements=["match_id", "source", "source_revision"],
                     )
                 )
 

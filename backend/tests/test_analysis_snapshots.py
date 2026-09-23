@@ -6,7 +6,16 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from app.analysis import analyze_match
-from app.analysis.snapshots import RULE_VERSION, build_ft_recommendations, prekickoff_picks
+from app.analysis.snapshots import (
+    BASELINE_VERSION,
+    MIN_BASELINE_MATCHES,
+    RULE_VERSION,
+    V3_RULE_VERSION,
+    build_ft_recommendations,
+    build_market_evaluation_rows,
+    load_market_baselines,
+    prekickoff_picks,
+)
 from app.api import routes_admin
 from app.api import services
 from app.db.models import Match
@@ -58,6 +67,139 @@ def test_eligible_analysis_without_a_pick_is_still_recorded():
         league_name="Dutch Eredivisie",
         patterns={"pattern_ft_b": _pattern(result_1=40, over=52, btts=50)},
     ) == []
+
+
+@pytest.mark.asyncio
+async def test_global_modal_baselines_are_deterministic_on_ties():
+    session = AsyncMock()
+    # total; result 1/X/2; under/over; btts yes/no
+    session.execute.return_value = MagicMock(
+        one=lambda: (100, 40, 40, 20, 50, 50, 50, 50),
+    )
+
+    baselines = await load_market_baselines(session, NOW)
+
+    assert V3_RULE_VERSION == "ft-display-v3"
+    assert BASELINE_VERSION == "global-modal-v1"
+    assert MIN_BASELINE_MATCHES == 100
+    assert baselines == {
+        "result": {
+            "selection": "1", "score_bp": 4000, "sample_size": 100,
+            "scope": "global_supported_leagues",
+        },
+        "over_25": {
+            "selection": "under", "score_bp": 5000, "sample_size": 100,
+            "scope": "global_supported_leagues",
+        },
+        "btts": {
+            "selection": "yes", "score_bp": 5000, "sample_size": 100,
+            "scope": "global_supported_leagues",
+        },
+    }
+    assert session.execute.await_count == 1
+    query = str(session.execute.await_args.args[0].compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
+    ))
+    assert "match_final_result_observations" in query
+    assert "row_number() OVER (PARTITION BY" in query
+    assert "ingested_at <= '2026-09-22 10:00:00+00:00'" in query
+    # DB ingestion time is the authoritative knowledge cutoff; source clocks may skew.
+    assert "actual_ft_home" not in query
+    assert "actual_ft_away" not in query
+    assert "matches.deleted_at IS NULL" in query
+    assert "matches.kickoff_time" in query
+    assert query.count("!= '?'") == 2
+
+
+@pytest.mark.asyncio
+async def test_global_modal_baselines_are_withheld_for_short_archive():
+    session = AsyncMock()
+    session.execute.return_value = MagicMock(
+        one=lambda: (99, 40, 30, 29, 48, 51, 50, 49),
+    )
+
+    assert await load_market_baselines(session, NOW) == {
+        "result": None, "over_25": None, "btts": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_global_modal_baselines_require_timezone_aware_cutoff():
+    session = AsyncMock()
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        await load_market_baselines(session, NOW.replace(tzinfo=None))
+
+    session.execute.assert_not_awaited()
+
+
+def test_market_evaluation_rows_record_abstention_for_every_market():
+    rows = build_market_evaluation_rows(
+        {"pattern_ft_b": _pattern(count=10)}, baselines=None,
+    )
+
+    assert [row["market"] for row in rows] == ["result", "over_25", "btts"]
+    assert all(row["model_selection"] is None for row in rows)
+    assert all(row["abstain_reason"] == "archive_sample_below_minimum" for row in rows)
+    assert all(row["baseline_selection"] is None for row in rows)
+
+
+@pytest.mark.parametrize(
+    ("patterns", "reason"),
+    [
+        (None, "patterns_unavailable"),
+        (
+            {"pattern_ft_b": _pattern(result_1=40, over=52, btts=50)},
+            "frequency_below_threshold",
+        ),
+    ],
+)
+def test_market_evaluation_rows_explain_other_abstentions(patterns, reason):
+    rows = build_market_evaluation_rows(patterns, baselines=None)
+
+    assert len(rows) == 3
+    assert {row["abstain_reason"] for row in rows} == {reason}
+
+
+def test_market_baseline_does_not_change_model_selection():
+    baselines = {
+        "result": {
+            "selection": "2", "score_bp": 4200, "sample_size": 500,
+            "scope": "global_supported_leagues",
+        },
+    }
+
+    rows = build_market_evaluation_rows(
+        {"pattern_ft_b": _pattern()}, baselines,
+    )
+
+    result = rows[0]
+    assert result == {
+        "market": "result",
+        "model_selection": "1",
+        "model_score_bp": 7000,
+        "model_sample_size": 30,
+        "model_source": "archive_1",
+        "baseline_selection": "2",
+        "baseline_score_bp": 4200,
+        "baseline_sample_size": 500,
+        "baseline_scope": "global_supported_leagues",
+        "abstain_reason": None,
+    }
+
+
+def test_market_evaluation_rows_explain_archive_disagreement():
+    first = _pattern()
+    second = {
+        **_pattern(), "result_1_pct": 10, "result_x_pct": 20, "result_2_pct": 70,
+    }
+
+    rows = build_market_evaluation_rows(
+        {"pattern_ft_b": first, "pattern_ft_c": second}, baselines=None,
+    )
+
+    assert rows[0]["model_selection"] is None
+    assert rows[0]["abstain_reason"] == "archive_disagreement"
 
 
 @pytest.mark.asyncio
