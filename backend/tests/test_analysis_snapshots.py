@@ -6,8 +6,10 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from app.analysis import analyze_match
-from app.analysis.snapshots import RULE_VERSION, prekickoff_picks
+from app.analysis.snapshots import RULE_VERSION, build_ft_recommendations, prekickoff_picks
 from app.api import routes_admin
+from app.api import services
+from app.db.models import Match
 from app.models import MatchRawData
 from app.pipeline import runner
 
@@ -56,6 +58,98 @@ def test_eligible_analysis_without_a_pick_is_still_recorded():
         league_name="Dutch Eredivisie",
         patterns={"pattern_ft_b": _pattern(result_1=40, over=52, btts=50)},
     ) == []
+
+
+@pytest.mark.asyncio
+async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeypatch):
+    session = AsyncMock()
+    session.get.return_value = None
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(services, "get_session", fake_session)
+    row = Match(
+        match_id="123", home_team="Home", away_team="Away", league_code="ENG PR",
+        league_name="English Premier League", analyzed_at=NOW,
+        kickoff_time=datetime(2099, 1, 1, tzinfo=timezone.utc),
+    )
+    session.execute.side_effect = [
+        MagicMock(scalar_one_or_none=lambda: row),
+        MagicMock(rowcount=1),
+    ]
+    picks = await services._frozen_recommendations(row, {"pattern_ft_b": _pattern()})
+
+    assert [pick["market"] for pick in picks] == ["result", "over_25", "btts"]
+    statement = session.execute.await_args_list[1].args[0]
+    assert "INSERT INTO analysis_snapshots" in str(statement.compile(dialect=postgresql.dialect()))
+    assert statement.compile(dialect=postgresql.dialect()).params["analyzed_at"] == NOW
+
+
+@pytest.mark.asyncio
+async def test_cached_analysis_refreshes_snapshot_written_by_another_process(monkeypatch):
+    picks = build_ft_recommendations({"pattern_ft_b": _pattern()})
+    session = AsyncMock()
+    session.get.return_value = MagicMock(picks=picks)
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(services, "get_session", fake_session)
+    monkeypatch.setattr(services, "_snapshot_checked_at", {})
+    monkeypatch.setattr(services, "_snapshot_finalized", set())
+    cache_put = MagicMock()
+    monkeypatch.setattr(services, "cache_put", cache_put)
+    response = services.AnalyzeResponse(
+        match_id="123", home_team="Home", away_team="Away", league_code="ENG PR", season="2026/2027",
+        ht={"scores_1": [], "scores_x": [], "scores_2": []},
+        half2={"scores_1": [], "scores_x": [], "scores_2": []},
+        ft={"scores_1": [], "scores_x": [], "scores_2": []},
+    )
+
+    refreshed = await services._refresh_cached_recommendations(response)
+
+    assert [item.model_dump() for item in refreshed.ft_recommendations] == picks
+    cache_put.assert_called_once_with("123", refreshed)
+
+
+@pytest.mark.asyncio
+async def test_db_first_snapshot_rejects_stale_or_deleted_match(monkeypatch):
+    session = AsyncMock()
+    session.get.return_value = None
+    session.execute.return_value = MagicMock(scalar_one_or_none=lambda: None)
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(services, "get_session", fake_session)
+    row = Match(
+        match_id="stale", home_team="Home", away_team="Away", league_code="ENG PR",
+        league_name="English Premier League", analyzed_at=NOW,
+        kickoff_time=datetime(2099, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert await services._frozen_recommendations(row, {"pattern_ft_b": _pattern()}) == []
+    assert session.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_cached_analysis_does_not_query_after_snapshot_is_final(monkeypatch):
+    monkeypatch.setattr(services, "_snapshot_finalized", {"123"})
+    session_factory = MagicMock()
+    monkeypatch.setattr(services, "get_session", session_factory)
+    response = services.AnalyzeResponse(
+        match_id="123", home_team="Home", away_team="Away", league_code="ENG PR", season="2026/2027",
+        ht={"scores_1": [], "scores_x": [], "scores_2": []},
+        half2={"scores_1": [], "scores_x": [], "scores_2": []},
+        ft={"scores_1": [], "scores_x": [], "scores_2": []},
+    )
+
+    assert await services._refresh_cached_recommendations(response) is response
+    session_factory.assert_not_called()
 
 
 @pytest.mark.asyncio

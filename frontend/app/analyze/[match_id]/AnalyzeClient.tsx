@@ -291,9 +291,10 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                   />
                 </MatchProvider>
                 </div>
-                {evidenceData && (
+                {(evidenceData || validationData) && (
                   <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-4 text-xs text-slate-300" aria-label="Analiz doğrulama kapsamı">
                     <h2 className="text-sm font-semibold text-slate-100">Analiz doğrulama kapsamı</h2>
+                    {evidenceData && (<>
                     <p className="mt-1 leading-relaxed text-slate-400">
                       Yalnızca analiz ve arşiv desenleri maçtan önce kaydedilmiş, sonucu bilinen maçlar sayılır.
                     </p>
@@ -323,6 +324,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                     <p className="mt-2 leading-relaxed text-amber-300/80">
                       Skor listesinin basit bir yaygın skor seçimini geçtiği henüz gösterilmedi. Bu liste doğrulanmış bahis önerisi değildir.
                     </p>
+                    </>)}
                     {validationData && (
                       <div className="mt-4 border-t border-slate-700 pt-3">
                         <h3 className="font-semibold text-slate-100">İleri dönem seçim takibi</h3>
@@ -331,7 +333,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                           kesin sonucu doğrulandı. Kurallar: {validationData.rule_version}.
                         </p>
                         {validationData.markets.length === 0 ? (
-                          <p className="mt-2 text-slate-400">Henüz sonuçlanmış, örneklem eşiğini geçen pazar seçimi yok.</p>
+                          <p className="mt-2 text-slate-400">Henüz sonucu doğrulanan seçim yok.</p>
                         ) : (
                           <ul className="mt-2 space-y-1">
                             {validationData.markets.map((row) => (

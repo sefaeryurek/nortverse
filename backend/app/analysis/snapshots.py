@@ -129,7 +129,7 @@ async def capture_prepared_recommendations(target_date: date) -> int:
             ht_scores=(match.ht_scores_1 or [], match.ht_scores_x or [], match.ht_scores_2 or []),
             h2_scores=(match.h2_scores_1 or [], match.h2_scores_x or [], match.h2_scores_2 or []),
             ft_scores=(match.ft_scores_1 or [], match.ft_scores_x or [], match.ft_scores_2 or []),
-            ft_ratios=match.ft_all_ratios or {}, as_of=started_at,
+            ft_ratios=match.ft_all_ratios or {}, as_of=match.analyzed_at,
         )
         captured_at = datetime.now(timezone.utc)
         picks = prekickoff_picks(
@@ -140,12 +140,23 @@ async def capture_prepared_recommendations(target_date: date) -> int:
         if picks is None:
             continue
         async with get_session() as session:
+            current = (await session.execute(
+                select(Match).where(
+                    Match.match_id == match.match_id,
+                    Match.deleted_at.is_(None),
+                    Match.analyzed_at == match.analyzed_at,
+                    Match.kickoff_time == match.kickoff_time,
+                    Match.kickoff_time > captured_at,
+                ).with_for_update()
+            )).scalar_one_or_none()
+            if current is None:
+                continue
             written = await session.execute(
                 insert(AnalysisSnapshot).values(
                     match_id=match.match_id, rule_version=RULE_VERSION,
                     captured_at=captured_at, analyzed_at=match.analyzed_at,
-                    kickoff_time=match.kickoff_time,
-                    league_name=match.league_name or match.league_code or "unknown",
+                    kickoff_time=current.kickoff_time,
+                    league_name=current.league_name or current.league_code or "unknown",
                     picks=picks,
                 ).on_conflict_do_nothing(index_elements=["match_id", "rule_version"])
             )

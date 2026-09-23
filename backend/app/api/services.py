@@ -15,13 +15,14 @@ from weakref import WeakValueDictionary
 
 from fastapi import HTTPException
 from sqlalchemy import cast, func, select
-from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
+from sqlalchemy.dialects.postgresql import JSONB, JSONPATH, insert
 
 from app.api.schemas import AnalyzeResponse, PeriodOut
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
-from app.analysis.snapshots import RULE_VERSION
+from app.analysis.league_filter import canonical_league_name
+from app.analysis.snapshots import RULE_VERSION, prekickoff_picks
 from app.analysis.persist import (
     StalePatternWrite,
     compute_all_patterns,
@@ -39,6 +40,7 @@ log = logging.getLogger(__name__)
 
 _CACHE_MAX = 500
 ANALYSIS_CACHE_TTL = 600.0
+SNAPSHOT_POLL_TTL = 15.0
 ANALYSIS_TIMEOUT = 90.0
 FIXTURE_CACHE_TTL = 600.0
 
@@ -47,6 +49,8 @@ FIXTURE_CACHE_TTL = 600.0
 _analysis_cached_at: dict[str, float] = {}
 analysis_cache: OrderedDict[str, AnalyzeResponse] = OrderedDict()
 _analysis_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+_snapshot_checked_at: dict[str, float] = {}
+_snapshot_finalized: set[str] = set()
 
 fixture_cache: dict[str, tuple[float, list]] = {}
 
@@ -62,6 +66,8 @@ def cache_put(match_id: str, value: AnalyzeResponse) -> None:
     while len(analysis_cache) > _CACHE_MAX:
         evicted, _ = analysis_cache.popitem(last=False)
         _analysis_cached_at.pop(evicted, None)
+        _snapshot_checked_at.pop(evicted, None)
+        _snapshot_finalized.discard(evicted)
 
 
 def cache_get(match_id: str) -> AnalyzeResponse | None:
@@ -135,10 +141,86 @@ def _trends_parse(blob: dict | None) -> Optional[TrendsData]:
         return None
 
 
-async def _frozen_recommendations(match_id: str) -> list[dict]:
+async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) -> list[dict]:
+    """Read the immutable snapshot, creating it only while the match is upcoming."""
     async with get_session() as session:
-        snapshot = await session.get(AnalysisSnapshot, (match_id, RULE_VERSION))
+        snapshot = await session.get(AnalysisSnapshot, (row.match_id, RULE_VERSION))
+        if snapshot is not None:
+            _snapshot_finalized.add(row.match_id)
+            return snapshot.picks if isinstance(snapshot.picks, list) else []
+        if row.analyzed_at is None:
+            return []
+        captured_at = datetime.now(timezone.utc)
+        current = (await session.execute(
+            select(Match).where(
+                Match.match_id == row.match_id,
+                Match.deleted_at.is_(None),
+                Match.analyzed_at == row.analyzed_at,
+                Match.kickoff_time == row.kickoff_time,
+                Match.kickoff_time > captured_at,
+            ).with_for_update()
+        )).scalar_one_or_none()
+        if current is None:
+            return []
+        picks = prekickoff_picks(
+            analyzed_at=current.analyzed_at, captured_at=captured_at,
+            kickoff_time=current.kickoff_time, league_name=current.league_name,
+            league_code=current.league_code, patterns=patterns,
+        )
+        if picks is None:
+            return []
+        written = await session.execute(
+            insert(AnalysisSnapshot).values(
+                match_id=row.match_id, rule_version=RULE_VERSION,
+                captured_at=captured_at, analyzed_at=current.analyzed_at,
+                kickoff_time=current.kickoff_time,
+                league_name=(current.league_name
+                             or canonical_league_name(current.league_code)
+                             or current.league_code
+                             or "unknown"),
+                picks=picks,
+            ).on_conflict_do_nothing(index_elements=["match_id", "rule_version"])
+        )
+        if written.rowcount == 1:
+            _snapshot_finalized.add(row.match_id)
+            return picks
+        snapshot = await session.get(AnalysisSnapshot, (row.match_id, RULE_VERSION))
+        if snapshot is not None:
+            _snapshot_finalized.add(row.match_id)
     return snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []
+
+
+async def _refresh_cached_recommendations(response: AnalyzeResponse) -> AnalyzeResponse:
+    """Keep the fast analysis cache while reading externally written snapshots fresh."""
+    if not isinstance(response, AnalyzeResponse):
+        return response
+    if response.skipped:
+        return response
+    match_id = response.match_id
+    if match_id in _snapshot_finalized or response.ft_recommendations:
+        return response
+    now = time.monotonic()
+    if now - _snapshot_checked_at.get(match_id, 0.0) < SNAPSHOT_POLL_TTL:
+        return response
+    _snapshot_checked_at[match_id] = now
+    try:
+        async with get_session() as session:
+            snapshot = await session.get(
+                AnalysisSnapshot, (match_id, RULE_VERSION),
+            )
+    except Exception as exc:
+        log.warning("Snapshot cache yenilemesi başarısız [%s]: %s", response.match_id, exc)
+        return response
+    if snapshot is not None:
+        _snapshot_finalized.add(match_id)
+    picks = snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []
+    if [item.model_dump() for item in response.ft_recommendations] == picks:
+        return response
+    refreshed = AnalyzeResponse.model_validate({
+        **response.model_dump(), "ft_recommendations": picks,
+    })
+    cache_put(match_id, refreshed)
+    return refreshed
 
 
 async def build_from_db(row: Match) -> AnalyzeResponse | None:
@@ -167,6 +249,11 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         ht_b, ht_c = _pat(row.pattern_ht_b), _pat(row.pattern_ht_c)
         h2_b, h2_c = _pat(row.pattern_h2_b), _pat(row.pattern_h2_c)
         ft_b, ft_c = _pat(row.pattern_ft_b), _pat(row.pattern_ft_c)
+        patterns = {
+            "pattern_ht_b": row.pattern_ht_b, "pattern_ht_c": row.pattern_ht_c,
+            "pattern_h2_b": row.pattern_h2_b, "pattern_h2_c": row.pattern_h2_c,
+            "pattern_ft_b": row.pattern_ft_b, "pattern_ft_c": row.pattern_ft_c,
+        }
     else:
         log.info("Yavaş yol — pattern durumu bilinmiyor, hesaplanıyor: %s", mid)
         patterns = await compute_all_patterns(
@@ -188,7 +275,7 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         h2_b, h2_c = _pat(patterns["pattern_h2_b"]), _pat(patterns["pattern_h2_c"])
         ft_b, ft_c = _pat(patterns["pattern_ft_b"]), _pat(patterns["pattern_ft_c"])
 
-    recommendations = await _frozen_recommendations(mid)
+    recommendations = await _frozen_recommendations(row, patterns)
     return AnalyzeResponse(
         match_id=row.match_id,
         home_team=row.home_team,
@@ -239,12 +326,12 @@ async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
     """DB kontrol et → bulursa B/C hesapla (hızlı). Yoksa Playwright scrape (yavaş)."""
     cached = cache_get(match_id)
     if cached is not None:
-        return cached
+        return await _refresh_cached_recommendations(cached)
     lock = get_or_make_lock(match_id)
     async with lock:
         cached = cache_get(match_id)
         if cached is not None:
-            return cached
+            return await _refresh_cached_recommendations(cached)
 
         db_row = None
         try:

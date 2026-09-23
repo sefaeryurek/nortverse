@@ -17,20 +17,24 @@ export default function IddaaCoupon({ patternB, patternC, period, recommendation
   // tolerance=0.0 ile sıkı arandığından 1+ yeterli — düşük güven UI'da rozetle belirtilir.
   const hasB = patternB !== null && patternB.match_count >= 5;
   const hasC = patternC !== null && patternC.match_count >= 1;
+  const recommendationPanel = <TopPicks recommendations={recommendations} period={period} />;
 
   if (!hasB && !hasC) {
     return (
-      <div
-        className="rounded-xl p-8 border text-center"
-        style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}
-      >
-        <div className="text-3xl mb-3">📊</div>
-        <p className="text-sm font-medium" style={{ color: "#64748b" }}>
-          Bu periyot için yeterli arşiv verisi bulunamadı.
-        </p>
-        <p className="text-xs mt-1" style={{ color: "#374151" }}>
-          Arşiv 1 için en az 5, Arşiv 2 için en az 1 eşleşme gerekiyor
-        </p>
+      <div className="space-y-4">
+        {recommendationPanel}
+        <div
+          className="rounded-xl p-8 border text-center"
+          style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}
+        >
+          <div className="text-3xl mb-3">📊</div>
+          <p className="text-sm font-medium" style={{ color: "#64748b" }}>
+            Bu periyot için yeterli arşiv verisi bulunamadı.
+          </p>
+          <p className="text-xs mt-1" style={{ color: "#374151" }}>
+            Arşiv 1 için en az 5, Arşiv 2 için en az 1 eşleşme gerekiyor
+          </p>
+        </div>
       </div>
     );
   }
@@ -41,7 +45,7 @@ export default function IddaaCoupon({ patternB, patternC, period, recommendation
   return (
     <div className="space-y-4">
       {/* Katman 1: Önerilen Bahisler (her zaman üstte, varsayılan görünür) */}
-      <TopPicks recommendations={recommendations} period={period} />
+      {recommendationPanel}
 
       {/* Katman 1b: Akıllı Kombinasyon Kuponları (Top Picks'ten otomatik üretilir) */}
       {/* Katman 2: Ana Pazar Özeti (varsayılan görünür) */}

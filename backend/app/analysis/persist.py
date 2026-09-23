@@ -36,7 +36,7 @@ async def compute_all_patterns(
     h2_scores: tuple[list, list, list],
     ft_scores: tuple[list, list, list],
     ft_ratios: dict | None,
-    as_of: datetime | None = None,
+    as_of: datetime,
 ) -> dict[str, dict | None]:
     """6 pattern alanını tek seferde hesapla.
 
@@ -54,6 +54,9 @@ async def compute_all_patterns(
         {"pattern_ht_b": dict|None, "pattern_ht_c": ..., ...} 6 anahtarlı dict.
         None yalnızca başarılı hesaplamada eşleşme yoksa döner; hatada yazma yapılmaz.
     """
+
+    if as_of is None or as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("as_of must be timezone-aware")
 
     async def _b(period: str, s1, sx, s2) -> Optional[dict]:
         try:

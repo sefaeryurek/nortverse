@@ -46,6 +46,25 @@ it("accepts a skipped match without pattern data", () => {
   expect(validAnalysis({ ...analysis(), skipped: true, skip_reason: "h2h_insufficient", ft_b: null }, "123")).toBe(true);
 });
 
+it("enforces the frozen recommendation rule across fields", () => {
+  const valid = {
+    recommendation_id: "ft-display-v2:result:1", archive: "both", market: "result", selection: "1",
+    frequency_pct: 70, match_count: 20,
+    archive_1_frequency_pct: 75, archive_1_match_count: 30,
+    archive_2_frequency_pct: 70, archive_2_match_count: 20,
+  };
+  expect(validAnalysis({ ...analysis(), ft_recommendations: [valid] }, "123")).toBe(true);
+  for (const invalid of [
+    { ...valid, recommendation_id: "wrong" },
+    { ...valid, frequency_pct: 64 },
+    { ...valid, archive_2_frequency_pct: null, archive_2_match_count: null },
+    { ...valid, frequency_pct: 75 },
+  ]) {
+    expect(validAnalysis({ ...analysis(), ft_recommendations: [invalid] }, "123")).toBe(false);
+  }
+  expect(validAnalysis({ ...analysis(), ft_recommendations: [valid, { ...valid, recommendation_id: "ft-display-v2:result:2", selection: "2" }] }, "123")).toBe(false);
+});
+
 it("rejects malformed summaries at the API boundary", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([{ match_id: "123" }]))));
   await expect(getMatches()).rejects.toThrow("geçersiz maç özeti");

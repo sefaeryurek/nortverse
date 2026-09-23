@@ -76,6 +76,7 @@ def analyze(
                 scores_1=result.ft.scores_1,
                 scores_x=result.ft.scores_x,
                 scores_2=result.ft.scores_2,
+                as_of=result.analyzed_at,
             )
             if b_result:
                 _render_pattern(b_result, "[magenta]Katman B — Pattern Matching[/magenta]", "magenta", con=con)
@@ -85,7 +86,9 @@ def analyze(
             con.print(f"[dim]Katman B sorgusu yapılamadı: {e}[/dim]")
 
         try:
-            _ht_c, _h2_c, ft_c = await find_pattern_c_all_periods(result.ft.all_ratios)
+            _ht_c, _h2_c, ft_c = await find_pattern_c_all_periods(
+                result.ft.all_ratios, as_of=result.analyzed_at,
+            )
             if ft_c:
                 _render_pattern(ft_c, "[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]", "blue", con=con)
             else:
@@ -156,6 +159,7 @@ def analyze_debug(
                 scores_1=result.ft.scores_1,
                 scores_x=result.ft.scores_x,
                 scores_2=result.ft.scores_2,
+                as_of=result.analyzed_at,
             )
             if b_result:
                 _render_pattern(b_result, "[magenta]Katman B — Pattern Matching[/magenta]", "magenta", con=con)
@@ -165,7 +169,9 @@ def analyze_debug(
             con.print(f"[dim]Katman B sorgusu yapılamadı: {e}[/dim]")
 
         try:
-            _ht_c, _h2_c, ft_c = await find_pattern_c_all_periods(result.ft.all_ratios)
+            _ht_c, _h2_c, ft_c = await find_pattern_c_all_periods(
+                result.ft.all_ratios, as_of=result.analyzed_at,
+            )
             if ft_c:
                 _render_pattern(ft_c, "[blue]Katman C — Oran Eşleşmesi (±0.5)[/blue]", "blue", con=con)
             else:

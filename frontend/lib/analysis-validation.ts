@@ -42,19 +42,34 @@ function recommendation(value: unknown): boolean {
     || !text(value.recommendation_id)
     || !["archive_1", "archive_2", "both"].includes(String(value.archive))
     || !["result", "over_25", "btts"].includes(String(value.market))
-    || !percentage(value.frequency_pct)
+    || !percentage(value.frequency_pct) || (value.frequency_pct as number) < 65
     || !count(value.match_count) || (value.match_count as number) < 20) return false;
   const allowed: Record<string, string[]> = {
     result: ["1", "X", "2"], over_25: ["under", "over"], btts: ["yes", "no"],
   };
   if (!allowed[String(value.market)]?.includes(String(value.selection))) return false;
+  if (value.recommendation_id !== `ft-display-v2:${value.market}:${value.selection}`) return false;
   for (const archive of ["archive_1", "archive_2"] as const) {
     const frequency = value[`${archive}_frequency_pct`];
     const sample = value[`${archive}_match_count`];
     if ((frequency === null) !== (sample === null)) return false;
     if (frequency !== null && (!percentage(frequency) || !count(sample) || (sample as number) < 20)) return false;
   }
-  return true;
+  const aFrequency = value.archive_1_frequency_pct as number | null;
+  const aSample = value.archive_1_match_count as number | null;
+  const bFrequency = value.archive_2_frequency_pct as number | null;
+  const bSample = value.archive_2_match_count as number | null;
+  if (value.archive === "archive_1") {
+    return aFrequency !== null && aSample !== null && bFrequency === null && bSample === null
+      && value.frequency_pct === aFrequency && value.match_count === aSample;
+  }
+  if (value.archive === "archive_2") {
+    return bFrequency !== null && bSample !== null && aFrequency === null && aSample === null
+      && value.frequency_pct === bFrequency && value.match_count === bSample;
+  }
+  return aFrequency !== null && aSample !== null && bFrequency !== null && bSample !== null
+    && value.frequency_pct === Math.min(aFrequency, bFrequency)
+    && value.match_count === Math.min(aSample, bSample);
 }
 
 export function validAnalysis(value: unknown, requestedId: string): value is AnalyzeResponse {
@@ -65,6 +80,8 @@ export function validAnalysis(value: unknown, requestedId: string): value is Ana
     && Array.isArray(value.ft_recommendations) && value.ft_recommendations.length <= 3
     && value.ft_recommendations.every(recommendation)
     && new Set(value.ft_recommendations.map((item) => record(item) ? item.recommendation_id : "")).size
+      === value.ft_recommendations.length
+    && new Set(value.ft_recommendations.map((item) => record(item) ? item.market : "")).size
       === value.ft_recommendations.length
     && ["ht", "half2", "ft"].every((key) => period(value[key]))
     && ["ht_b", "ht_c", "h2_b", "h2_c", "ft_b", "ft_c"].every((key) => pattern(value[key]))

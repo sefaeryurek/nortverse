@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import httpx
@@ -13,7 +14,8 @@ from app.api import services as svc
 
 async def compute():
     return await persist.compute_all_patterns("123", ([], [], []), ([], [], []),
-                                              ([], [], []), {"1-0": 3.5})
+                                              ([], [], []), {"1-0": 3.5},
+                                              as_of=datetime(2026, 9, 22, tzinfo=timezone.utc))
 
 
 @pytest.mark.asyncio

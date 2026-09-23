@@ -352,12 +352,12 @@ def audit_patterns_cmd(
             ("ft", (result.ft.scores_1, result.ft.scores_x, result.ft.scores_2)),
         ]:
             b = await find_pattern_b_matches(
-                period_key, *scores, exclude_match_id=match_id
+                period_key, *scores, exclude_match_id=match_id, as_of=result.analyzed_at,
             )
             b_results[period_key] = b
 
         c_ht, c_h2, c_ft = await find_pattern_c_all_periods(
-            result.ft.all_ratios, exclude_match_id=match_id
+            result.ft.all_ratios, exclude_match_id=match_id, as_of=result.analyzed_at,
         )
 
         t = Table(title=f"{raw.home_team} vs {raw.away_team} [{raw.league_code}]")

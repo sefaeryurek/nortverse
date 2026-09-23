@@ -69,6 +69,26 @@ describe("AnalyzeClient", () => {
     expect(panel.queryByText("%67")).toBeNull();
   });
 
+  it("shows forward validation when legacy evidence is unavailable", async () => {
+    vi.mocked(getAnalysisValidation).mockResolvedValue({
+      rule_version: "ft-display-v2", recorded: 5, resolved: 1,
+      markets: [{ archive: "both", market: "result", evaluated: 1, hits: 1 }],
+      minimum_for_rate: 100,
+    });
+    const data: AnalyzeResponse = {
+      match_id: "3003889", home_team: "Home", away_team: "Away",
+      league_code: "ENG PR", season: "2026/2027",
+      ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
+      ht_b: null, ht_c: null, h2_b: null, h2_c: null, ft_b: null, ft_c: null,
+      trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      skipped: false, skip_reason: null,
+    };
+    render(<AnalyzeClient match_id="3003889" initialData={data} initialError="" urlHome="" urlAway="" />);
+    const panel = within(await screen.findByLabelText("Analiz doğrulama kapsamı"));
+    expect(panel.getByText(/Maç başlamadan sabitlenen 5 analizden 1/)).toBeDefined();
+    expect(panel.getByText("1/1")).toBeDefined();
+  });
+
   it("shows independent archive analysis when the 3.5+ score list is empty", () => {
     const data: AnalyzeResponse = {
       match_id: "3003889", home_team: "Home", away_team: "Away",

@@ -41,6 +41,8 @@ async def find_pattern_b_matches(
     """
     if type(min_matches) is not int or min_matches < 1:
         raise ValueError("min_matches must be a positive integer")
+    if as_of is None or as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("as_of must be timezone-aware")
     if period == "ht":
         col_1, col_x, col_2 = Match.ht_scores_1, Match.ht_scores_x, Match.ht_scores_2
         actual_check = and_(Match.actual_ht_home.isnot(None), Match.actual_ht_away.isnot(None))
@@ -63,15 +65,14 @@ async def find_pattern_b_matches(
         ]
         if exclude_match_id:
             filters.append(Match.match_id != exclude_match_id)
-        if as_of is not None:
-            known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
-            filters.extend([
-                Match.kickoff_time < as_of,
-                known_at > Match.kickoff_time,
-                known_at <= as_of,
-                Match.analyzed_at.is_not(None),
-                Match.analyzed_at < Match.kickoff_time,
-            ])
+        known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
+        filters.extend([
+            Match.kickoff_time < as_of,
+            known_at > Match.kickoff_time,
+            known_at <= as_of,
+            Match.analyzed_at.is_not(None),
+            Match.analyzed_at < Match.kickoff_time,
+        ])
         stmt = select(
             Match.actual_ft_home, Match.actual_ft_away,
             Match.actual_ht_home, Match.actual_ht_away,
