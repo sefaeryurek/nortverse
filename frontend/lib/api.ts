@@ -95,7 +95,7 @@ export async function getAnalysisValidation(): Promise<AnalysisValidation> {
   const value = data as Record<string, unknown>;
   const validCount = (count: unknown) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0;
   if (!value || typeof value !== "object" || Array.isArray(value)
-    || value.rule_version !== "ft-display-v2"
+    || !["ft-display-v2", "ft-display-v3"].includes(String(value.rule_version))
     || !validCount(value.recorded) || !validCount(value.resolved)
     || !validCount(value.minimum_for_rate) || (value.resolved as number) > (value.recorded as number)
     || !Array.isArray(value.markets) || value.markets.length > 9

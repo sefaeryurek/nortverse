@@ -15,14 +15,13 @@ from weakref import WeakValueDictionary
 
 from fastapi import HTTPException
 from sqlalchemy import cast, func, select
-from sqlalchemy.dialects.postgresql import JSONB, JSONPATH, insert
+from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 
 from app.api.schemas import AnalyzeResponse, PeriodOut
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
-from app.analysis.league_filter import canonical_league_name
-from app.analysis.snapshots import RULE_VERSION, prekickoff_picks
+from app.analysis.snapshots import RULE_VERSION, capture_v3_recommendations
 from app.analysis.persist import (
     StalePatternWrite,
     compute_all_patterns,
@@ -58,6 +57,10 @@ bg_queue: asyncio.Queue[str] | None = None
 _bg_queued: set[str] = set()
 
 
+def _snapshot_cache_key(match_id: str) -> str:
+    return f"{RULE_VERSION}:{match_id}"
+
+
 def cache_put(match_id: str, value: AnalyzeResponse) -> None:
     """LRU semantiği: ekle, en sona taşı, sınırı aşarsa en eskiyi at."""
     analysis_cache[match_id] = value
@@ -66,8 +69,9 @@ def cache_put(match_id: str, value: AnalyzeResponse) -> None:
     while len(analysis_cache) > _CACHE_MAX:
         evicted, _ = analysis_cache.popitem(last=False)
         _analysis_cached_at.pop(evicted, None)
-        _snapshot_checked_at.pop(evicted, None)
-        _snapshot_finalized.discard(evicted)
+        snapshot_key = _snapshot_cache_key(evicted)
+        _snapshot_checked_at.pop(snapshot_key, None)
+        _snapshot_finalized.discard(snapshot_key)
 
 
 def cache_get(match_id: str) -> AnalyzeResponse | None:
@@ -146,7 +150,7 @@ async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) 
     async with get_session() as session:
         snapshot = await session.get(AnalysisSnapshot, (row.match_id, RULE_VERSION))
         if snapshot is not None:
-            _snapshot_finalized.add(row.match_id)
+            _snapshot_finalized.add(_snapshot_cache_key(row.match_id))
             return snapshot.picks if isinstance(snapshot.picks, list) else []
         if row.analyzed_at is None:
             return []
@@ -162,32 +166,20 @@ async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) 
         )).scalar_one_or_none()
         if current is None:
             return []
-        picks = prekickoff_picks(
-            analyzed_at=current.analyzed_at, captured_at=captured_at,
-            kickoff_time=current.kickoff_time, league_name=current.league_name,
-            league_code=current.league_code, patterns=patterns,
+        picks, _ = await capture_v3_recommendations(
+            session,
+            match_id=row.match_id,
+            analyzed_at=current.analyzed_at,
+            captured_at=captured_at,
+            kickoff_time=current.kickoff_time,
+            league_name=current.league_name,
+            league_code=current.league_code,
+            patterns=patterns,
         )
-        if picks is None:
-            return []
-        written = await session.execute(
-            insert(AnalysisSnapshot).values(
-                match_id=row.match_id, rule_version=RULE_VERSION,
-                captured_at=captured_at, analyzed_at=current.analyzed_at,
-                kickoff_time=current.kickoff_time,
-                league_name=(current.league_name
-                             or canonical_league_name(current.league_code)
-                             or current.league_code
-                             or "unknown"),
-                picks=picks,
-            ).on_conflict_do_nothing(index_elements=["match_id", "rule_version"])
-        )
-        if written.rowcount == 1:
-            _snapshot_finalized.add(row.match_id)
+        if picks is not None:
+            _snapshot_finalized.add(_snapshot_cache_key(row.match_id))
             return picks
-        snapshot = await session.get(AnalysisSnapshot, (row.match_id, RULE_VERSION))
-        if snapshot is not None:
-            _snapshot_finalized.add(row.match_id)
-    return snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []
+    return []
 
 
 async def _refresh_cached_recommendations(response: AnalyzeResponse) -> AnalyzeResponse:
@@ -197,12 +189,13 @@ async def _refresh_cached_recommendations(response: AnalyzeResponse) -> AnalyzeR
     if response.skipped:
         return response
     match_id = response.match_id
-    if match_id in _snapshot_finalized or response.ft_recommendations:
+    snapshot_key = _snapshot_cache_key(match_id)
+    if snapshot_key in _snapshot_finalized or response.ft_recommendations:
         return response
     now = time.monotonic()
-    if now - _snapshot_checked_at.get(match_id, 0.0) < SNAPSHOT_POLL_TTL:
+    if now - _snapshot_checked_at.get(snapshot_key, 0.0) < SNAPSHOT_POLL_TTL:
         return response
-    _snapshot_checked_at[match_id] = now
+    _snapshot_checked_at[snapshot_key] = now
     try:
         async with get_session() as session:
             snapshot = await session.get(
@@ -212,7 +205,7 @@ async def _refresh_cached_recommendations(response: AnalyzeResponse) -> AnalyzeR
         log.warning("Snapshot cache yenilemesi başarısız [%s]: %s", response.match_id, exc)
         return response
     if snapshot is not None:
-        _snapshot_finalized.add(match_id)
+        _snapshot_finalized.add(snapshot_key)
     picks = snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []
     if [item.model_dump() for item in response.ft_recommendations] == picks:
         return response

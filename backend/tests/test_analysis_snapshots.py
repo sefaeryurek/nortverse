@@ -1,18 +1,23 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.dialects import postgresql
 
 from app.analysis import analyze_match
+from app.analysis import persist
+from app.analysis import snapshots
 from app.analysis.snapshots import (
     BASELINE_VERSION,
     MIN_BASELINE_MATCHES,
     RULE_VERSION,
+    V3_ACTIVATION_CUTOFF,
     V3_RULE_VERSION,
     build_ft_recommendations,
     build_market_evaluation_rows,
+    capture_v3_recommendations,
     load_market_baselines,
     prekickoff_picks,
 )
@@ -23,7 +28,7 @@ from app.models import MatchRawData
 from app.pipeline import runner
 
 
-NOW = datetime(2026, 9, 22, 10, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 24, 10, tzinfo=timezone.utc)
 
 
 def _pattern(count=30, result_1=70, over=68, btts=66):
@@ -42,7 +47,7 @@ def test_fixed_rule_captures_only_qualifying_market_choices():
         patterns={"pattern_ft_b": _pattern(), "pattern_ft_c": _pattern(count=1)},
     )
 
-    assert RULE_VERSION == "ft-display-v2"
+    assert RULE_VERSION == "ft-display-v3"
     assert [(p["archive"], p["market"], p["selection"]) for p in picks] == [
         ("archive_1", "result", "1"),
         ("archive_1", "over_25", "over"),
@@ -102,7 +107,7 @@ async def test_global_modal_baselines_are_deterministic_on_ties():
     ))
     assert "match_final_result_observations" in query
     assert "row_number() OVER (PARTITION BY" in query
-    assert "ingested_at <= '2026-09-22 10:00:00+00:00'" in query
+    assert "ingested_at <= '2026-09-24 10:00:00+00:00'" in query
     # DB ingestion time is the authoritative knowledge cutoff; source clocks may skew.
     assert "actual_ft_home" not in query
     assert "actual_ft_away" not in query
@@ -202,6 +207,116 @@ def test_market_evaluation_rows_explain_archive_disagreement():
     assert rows[0]["abstain_reason"] == "archive_disagreement"
 
 
+def test_v3_capture_rejects_analysis_before_activation_cutoff():
+    assert prekickoff_picks(
+        analyzed_at=V3_ACTIVATION_CUTOFF - timedelta(microseconds=1),
+        captured_at=V3_ACTIVATION_CUTOFF + timedelta(minutes=1),
+        kickoff_time=V3_ACTIVATION_CUTOFF + timedelta(hours=1),
+        league_name="English Premier League",
+        patterns={"pattern_ft_b": _pattern()},
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_v3_capture_winner_writes_header_and_all_markets_once(monkeypatch):
+    session = AsyncMock()
+    session.execute.side_effect = [MagicMock(rowcount=1), MagicMock(rowcount=3)]
+    baselines = {"result": None, "over_25": None, "btts": None}
+    load_baselines = AsyncMock(return_value=baselines)
+    monkeypatch.setattr("app.analysis.snapshots.load_market_baselines", load_baselines)
+
+    picks, created = await capture_v3_recommendations(
+        session,
+        match_id="123",
+        analyzed_at=NOW,
+        captured_at=NOW + timedelta(minutes=1),
+        kickoff_time=NOW + timedelta(hours=2),
+        league_name="English Premier League",
+        league_code="ENG PR",
+        patterns={"pattern_ft_b": _pattern(count=10)},
+    )
+
+    assert created is True
+    assert picks == []
+    assert load_baselines.await_count == 1
+    header = session.execute.await_args_list[0].args[0]
+    header_params = header.compile(dialect=postgresql.dialect()).params
+    assert header_params["rule_version"] == V3_RULE_VERSION
+    assert header_params["baseline_version"] == BASELINE_VERSION
+    market_params = session.execute.await_args_list[1].args[1]
+    assert [row["market"] for row in market_params] == ["result", "over_25", "btts"]
+    assert all(row["model_selection"] is None for row in market_params)
+
+
+@pytest.mark.asyncio
+async def test_v3_capture_conflict_returns_frozen_picks_without_loading_baseline(monkeypatch):
+    frozen = build_ft_recommendations({"pattern_ft_b": _pattern()})
+    session = AsyncMock()
+    session.execute.return_value = MagicMock(rowcount=0)
+    session.get.return_value = MagicMock(picks=frozen)
+    load_baselines = AsyncMock()
+    monkeypatch.setattr("app.analysis.snapshots.load_market_baselines", load_baselines)
+
+    picks, created = await capture_v3_recommendations(
+        session,
+        match_id="123",
+        analyzed_at=NOW,
+        captured_at=NOW + timedelta(minutes=1),
+        kickoff_time=NOW + timedelta(hours=2),
+        league_name="English Premier League",
+        league_code="ENG PR",
+        patterns={"pattern_ft_b": _pattern()},
+    )
+
+    assert created is False
+    assert picks == frozen
+    assert session.execute.await_count == 1
+    load_baselines.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_prepared_capture_uses_frozen_analysis_time_and_v3_bundle(monkeypatch):
+    prepared = SimpleNamespace(
+        match_id="prepared-1",
+        analyzed_at=V3_ACTIVATION_CUTOFF,
+        kickoff_time=datetime(2026, 9, 24, 18, tzinfo=timezone.utc),
+        league_name="English Premier League",
+        league_code="ENG PR",
+        ht_scores_1=[], ht_scores_x=[], ht_scores_2=[],
+        h2_scores_1=[], h2_scores_x=[], h2_scores_2=[],
+        ft_scores_1=[], ft_scores_x=[], ft_scores_2=[], ft_all_ratios={},
+    )
+    listing_session = AsyncMock()
+    listing_session.execute.return_value = MagicMock(all=lambda: [prepared])
+    capture_session = AsyncMock()
+    capture_session.execute.side_effect = [
+        MagicMock(scalar_one_or_none=lambda: prepared),
+        MagicMock(rowcount=1),
+        MagicMock(rowcount=3),
+    ]
+    sessions = iter((listing_session, capture_session))
+
+    @asynccontextmanager
+    async def fake_session():
+        yield next(sessions)
+
+    patterns = {"pattern_ft_b": _pattern()}
+    compute = AsyncMock(return_value=patterns)
+    monkeypatch.setattr(snapshots, "get_session", fake_session, raising=False)
+    monkeypatch.setattr("app.db.connection.get_session", fake_session)
+    monkeypatch.setattr(persist, "compute_all_patterns", compute)
+    load_baselines = AsyncMock(return_value={"result": None, "over_25": None, "btts": None})
+    monkeypatch.setattr(snapshots, "load_market_baselines", load_baselines)
+
+    count = await snapshots.capture_prepared_recommendations(date(2026, 9, 24))
+
+    assert count == 1
+    assert compute.await_args.kwargs["as_of"] == V3_ACTIVATION_CUTOFF
+    assert load_baselines.await_count == 1
+    market_params = capture_session.execute.await_args_list[2].args[1]
+    assert [row["market"] for row in market_params] == ["result", "over_25", "btts"]
+
+
 @pytest.mark.asyncio
 async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeypatch):
     session = AsyncMock()
@@ -214,19 +329,22 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
     monkeypatch.setattr(services, "get_session", fake_session)
     row = Match(
         match_id="123", home_team="Home", away_team="Away", league_code="ENG PR",
-        league_name="English Premier League", analyzed_at=NOW,
+        league_name="English Premier League", analyzed_at=V3_ACTIVATION_CUTOFF,
         kickoff_time=datetime(2099, 1, 1, tzinfo=timezone.utc),
     )
     session.execute.side_effect = [
         MagicMock(scalar_one_or_none=lambda: row),
         MagicMock(rowcount=1),
+        MagicMock(rowcount=3),
     ]
+    load_baselines = AsyncMock(return_value={"result": None, "over_25": None, "btts": None})
+    monkeypatch.setattr("app.analysis.snapshots.load_market_baselines", load_baselines)
     picks = await services._frozen_recommendations(row, {"pattern_ft_b": _pattern()})
 
     assert [pick["market"] for pick in picks] == ["result", "over_25", "btts"]
     statement = session.execute.await_args_list[1].args[0]
     assert "INSERT INTO analysis_snapshots" in str(statement.compile(dialect=postgresql.dialect()))
-    assert statement.compile(dialect=postgresql.dialect()).params["analyzed_at"] == NOW
+    assert statement.compile(dialect=postgresql.dialect()).params["analyzed_at"] == V3_ACTIVATION_CUTOFF
 
 
 @pytest.mark.asyncio
@@ -280,7 +398,7 @@ async def test_db_first_snapshot_rejects_stale_or_deleted_match(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cached_analysis_does_not_query_after_snapshot_is_final(monkeypatch):
-    monkeypatch.setattr(services, "_snapshot_finalized", {"123"})
+    monkeypatch.setattr(services, "_snapshot_finalized", {f"{RULE_VERSION}:123"})
     session_factory = MagicMock()
     monkeypatch.setattr(services, "get_session", session_factory)
     response = services.AnalyzeResponse(
@@ -297,20 +415,27 @@ async def test_cached_analysis_does_not_query_after_snapshot_is_final(monkeypatc
 @pytest.mark.asyncio
 async def test_upsert_freezes_first_prekickoff_record_and_never_updates_it(monkeypatch):
     session = AsyncMock()
-    session.execute.return_value = MagicMock(rowcount=1)
+    session.execute.side_effect = [
+        MagicMock(rowcount=1),  # match upsert
+        MagicMock(rowcount=1),  # v3 header CAS
+        MagicMock(rowcount=3),  # v3 market rows
+        MagicMock(rowcount=1),  # score snapshot
+    ]
 
     @asynccontextmanager
     async def fake_session():
         yield session
 
     monkeypatch.setattr(runner, "get_session", fake_session)
+    load_baselines = AsyncMock(return_value={"result": None, "over_25": None, "btts": None})
+    monkeypatch.setattr("app.analysis.snapshots.load_market_baselines", load_baselines)
     raw = MatchRawData(match_id="123", home_team="Home", away_team="Away",
                        league_code="ENG PR", kickoff_time=NOW + timedelta(hours=2))
     result = analyze_match(raw)
     result.analyzed_at = NOW
     await runner._upsert(result, raw, {"pattern_ft_b": _pattern()}, captured_at=NOW + timedelta(minutes=1))
 
-    assert session.execute.await_count == 2
+    assert session.execute.await_count == 3
     statement = session.execute.await_args_list[1].args[0]
     sql = str(statement.compile(dialect=postgresql.dialect()))
     assert "INSERT INTO analysis_snapshots" in sql

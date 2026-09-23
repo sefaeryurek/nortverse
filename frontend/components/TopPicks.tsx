@@ -59,7 +59,7 @@ export default function TopPicks({ recommendations, period }: Props) {
       <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
         <h3 className="text-sm font-bold tracking-wide text-slate-300">İleri dönem deneysel seçimler</h3>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          Bu maç için ft-display-v2 kuralıyla maç öncesi kaydedilmiş seçim bulunmuyor.
+          Bu maç için ft-display-v3 kuralıyla maç öncesi kaydedilmiş seçim bulunmuyor.
           Ayrıntılı arşiv istatistikleri aşağıda bilgi amacıyla gösteriliyor.
         </p>
       </div>
@@ -69,7 +69,7 @@ export default function TopPicks({ recommendations, period }: Props) {
     <div className="space-y-3 rounded-xl border border-emerald-800 bg-emerald-950/20 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold tracking-wide text-emerald-200">İleri dönem deneysel seçimler</h3>
-        <span className="font-mono text-[10px] text-slate-500">ft-display-v2 · {recommendations.length} seçim</span>
+        <span className="font-mono text-[10px] text-slate-500">ft-display-v3 · {recommendations.length} seçim</span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {recommendations.map((recommendation) => <RecommendationRow key={recommendation.recommendation_id} recommendation={recommendation} />)}

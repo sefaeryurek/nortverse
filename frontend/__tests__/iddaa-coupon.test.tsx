@@ -6,7 +6,7 @@ import type { FTRecommendation } from "@/lib/types";
 afterEach(cleanup);
 
 const recommendation: FTRecommendation = {
-  recommendation_id: "ft-display-v2:result:1", archive: "archive_1",
+  recommendation_id: "ft-display-v3:result:1", archive: "archive_1",
   market: "result", selection: "1", frequency_pct: 70, match_count: 30,
   archive_1_frequency_pct: 70, archive_1_match_count: 30,
   archive_2_frequency_pct: null, archive_2_match_count: null,

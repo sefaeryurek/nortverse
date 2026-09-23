@@ -130,7 +130,7 @@ class AnalyzeResponse(BaseModel):
     ft_b: Optional[PatternResult] = None
     ft_c: Optional[PatternResult] = None
     trends: Optional[TrendsData] = None
-    recommendation_rule_version: str = "ft-display-v2"
+    recommendation_rule_version: str = "ft-display-v3"
     ft_recommendations: list[RecommendationOut] = Field(default_factory=list)
     skipped: bool = False
     skip_reason: Optional[str] = None

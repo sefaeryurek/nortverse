@@ -9,7 +9,7 @@ beforeEach(() => { window.localStorage.clear(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 const recommendation: FTRecommendation = {
-  recommendation_id: "ft-display-v2:result:1", archive: "both", market: "result", selection: "1",
+  recommendation_id: "ft-display-v3:result:1", archive: "both", market: "result", selection: "1",
   frequency_pct: 72, match_count: 30, archive_1_frequency_pct: 75, archive_1_match_count: 35,
   archive_2_frequency_pct: 72, archive_2_match_count: 30,
 };

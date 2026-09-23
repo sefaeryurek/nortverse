@@ -35,7 +35,7 @@ describe("AnalyzeClient", () => {
       league_code: "ENG PR", season: "2026/2027",
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
-      ft_b: null, ft_c: null, trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      ft_b: null, ft_c: null, trends: null, recommendation_rule_version: "ft-display-v3", ft_recommendations: [],
       skipped: false, skip_reason: null,
     };
     render(<AnalyzeClient match_id="3003889" initialData={data} initialError="" urlHome="" urlAway="" />);
@@ -47,7 +47,7 @@ describe("AnalyzeClient", () => {
 
   it("keeps forward-test percentages hidden below the market sample threshold", async () => {
     vi.mocked(getAnalysisValidation).mockResolvedValue({
-      rule_version: "ft-display-v2", recorded: 12, resolved: 4,
+      rule_version: "ft-display-v3", recorded: 12, resolved: 4,
       markets: [{ archive: "archive_1", market: "result", evaluated: 3, hits: 2 }],
       minimum_for_rate: 100,
     });
@@ -56,7 +56,7 @@ describe("AnalyzeClient", () => {
       league_code: "ENG PR", season: "2026/2027",
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
-      ft_b: null, ft_c: null, trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      ft_b: null, ft_c: null, trends: null, recommendation_rule_version: "ft-display-v3", ft_recommendations: [],
       skipped: false, skip_reason: null,
     };
     render(<AnalyzeClient match_id="3003889" initialData={data}
@@ -71,7 +71,7 @@ describe("AnalyzeClient", () => {
 
   it("shows forward validation when legacy evidence is unavailable", async () => {
     vi.mocked(getAnalysisValidation).mockResolvedValue({
-      rule_version: "ft-display-v2", recorded: 5, resolved: 1,
+      rule_version: "ft-display-v3", recorded: 5, resolved: 1,
       markets: [{ archive: "both", market: "result", evaluated: 1, hits: 1 }],
       minimum_for_rate: 100,
     });
@@ -80,7 +80,7 @@ describe("AnalyzeClient", () => {
       league_code: "ENG PR", season: "2026/2027",
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null, ft_b: null, ft_c: null,
-      trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      trends: null, recommendation_rule_version: "ft-display-v3", ft_recommendations: [],
       skipped: false, skip_reason: null,
     };
     render(<AnalyzeClient match_id="3003889" initialData={data} initialError="" urlHome="" urlAway="" />);
@@ -96,7 +96,7 @@ describe("AnalyzeClient", () => {
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
       ft_b: null, ft_c: makePatternResult({ match_count: 12, result_1_pct: 75 }),
-      trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      trends: null, recommendation_rule_version: "ft-display-v3", ft_recommendations: [],
       skipped: false, skip_reason: null,
     };
 
@@ -121,7 +121,7 @@ describe("AnalyzeClient", () => {
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
       ft_b: makePatternResult({ match_count: 7 }), ft_c: null,
-      trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      trends: null, recommendation_rule_version: "ft-display-v3", ft_recommendations: [],
       skipped: false, skip_reason: null,
     };
 
@@ -138,7 +138,7 @@ describe("AnalyzeClient", () => {
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
       ht_b: null, ht_c: null, h2_b: null, h2_c: null,
       ft_b: makePatternResult({ match_count: 7 }), ft_c: null,
-      trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+      trends: null, recommendation_rule_version: "ft-display-v3", ft_recommendations: [],
       skipped: false, skip_reason: null,
     };
     let resolveEvidence!: (value: AnalysisEvidence) => void;

@@ -189,7 +189,7 @@ export interface AnalyzeResponse {
   ft_b: PatternResult | null;
   ft_c: PatternResult | null;
   trends: TrendsData | null;
-  recommendation_rule_version: "ft-display-v2";
+  recommendation_rule_version: "ft-display-v2" | "ft-display-v3";
   ft_recommendations: FTRecommendation[];
   skipped: boolean;
   skip_reason: string | null;

@@ -13,7 +13,7 @@ function analysis() {
     ft: { scores_1: ["1-0"], scores_x: [], scores_2: [] },
     ht_b: null, ht_c: null, h2_b: null, h2_c: null,
     ft_b: makePatternResult({ match_count: 5 }), ft_c: null,
-    trends: null, recommendation_rule_version: "ft-display-v2", ft_recommendations: [],
+    trends: null, recommendation_rule_version: "ft-display-v3", ft_recommendations: [],
     skipped: false, skip_reason: null,
   };
 }
@@ -48,7 +48,7 @@ it("accepts a skipped match without pattern data", () => {
 
 it("enforces the frozen recommendation rule across fields", () => {
   const valid = {
-    recommendation_id: "ft-display-v2:result:1", archive: "both", market: "result", selection: "1",
+    recommendation_id: "ft-display-v3:result:1", archive: "both", market: "result", selection: "1",
     frequency_pct: 70, match_count: 20,
     archive_1_frequency_pct: 75, archive_1_match_count: 30,
     archive_2_frequency_pct: 70, archive_2_match_count: 20,
@@ -62,7 +62,7 @@ it("enforces the frozen recommendation rule across fields", () => {
   ]) {
     expect(validAnalysis({ ...analysis(), ft_recommendations: [invalid] }, "123")).toBe(false);
   }
-  expect(validAnalysis({ ...analysis(), ft_recommendations: [valid, { ...valid, recommendation_id: "ft-display-v2:result:2", selection: "2" }] }, "123")).toBe(false);
+  expect(validAnalysis({ ...analysis(), ft_recommendations: [valid, { ...valid, recommendation_id: "ft-display-v3:result:2", selection: "2" }] }, "123")).toBe(false);
 });
 
 it("rejects malformed summaries at the API boundary", async () => {

@@ -10,12 +10,18 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
-from app.db.models import Match, MatchFinalResultObservation
+from app.db.models import (
+    AnalysisSnapshot,
+    AnalysisSnapshotMarket,
+    Match,
+    MatchFinalResultObservation,
+)
 
 
-RULE_VERSION = "ft-display-v2"
 V3_RULE_VERSION = "ft-display-v3"
+RULE_VERSION = V3_RULE_VERSION
 BASELINE_VERSION = "global-modal-v1"
+V3_ACTIVATION_CUTOFF = datetime(2026, 9, 23, 14, 55, 46, tzinfo=timezone.utc)
 MIN_BASELINE_MATCHES = 100
 MIN_ARCHIVE_MATCHES = 20
 MIN_FREQUENCY_PCT = 65.0
@@ -269,6 +275,7 @@ def prekickoff_picks(
     if (
         kickoff_time is None or analyzed_at.tzinfo is None or captured_at.tzinfo is None
         or kickoff_time.tzinfo is None or analyzed_at > captured_at or captured_at >= kickoff_time
+        or analyzed_at < V3_ACTIVATION_CUTOFF
         or not is_supported_league(league_name, league_code) or patterns is None
     ):
         return None
@@ -276,11 +283,72 @@ def prekickoff_picks(
     return build_ft_recommendations(patterns)
 
 
+async def capture_v3_recommendations(
+    session: AsyncSession,
+    *,
+    match_id: str,
+    analyzed_at: datetime,
+    captured_at: datetime,
+    kickoff_time: datetime | None,
+    league_name: str | None,
+    league_code: str | None,
+    patterns: dict | None,
+) -> tuple[list[dict] | None, bool]:
+    """Atomically freeze one prospective v3 decision bundle.
+
+    The header insert is the compare-and-set operation.  Only its winner loads
+    the historical baseline and writes the three normalized market rows in the
+    same transaction.  A conflict loser returns the already frozen UI picks.
+    """
+    picks = prekickoff_picks(
+        analyzed_at=analyzed_at,
+        captured_at=captured_at,
+        kickoff_time=kickoff_time,
+        league_name=league_name,
+        league_code=league_code,
+        patterns=patterns,
+    )
+    if picks is None:
+        return None, False
+
+    written = await session.execute(
+        insert(AnalysisSnapshot).values(
+            match_id=match_id,
+            rule_version=RULE_VERSION,
+            captured_at=captured_at,
+            analyzed_at=analyzed_at,
+            kickoff_time=kickoff_time,
+            league_name=league_name or league_code or "unknown",
+            picks=picks,
+            baseline_version=BASELINE_VERSION,
+        ).on_conflict_do_nothing(
+            index_elements=["match_id", "rule_version"],
+        )
+    )
+    if written.rowcount == 1:
+        baselines = await load_market_baselines(session, analyzed_at)
+        market_rows = build_market_evaluation_rows(patterns, baselines)
+        if len(market_rows) != len(_MARKETS):
+            raise RuntimeError("v3 snapshot must contain every tracked market")
+        await session.execute(
+            insert(AnalysisSnapshotMarket),
+            [
+                {"match_id": match_id, "rule_version": RULE_VERSION, **row}
+                for row in market_rows
+            ],
+        )
+        return picks, True
+
+    snapshot = await session.get(AnalysisSnapshot, (match_id, RULE_VERSION))
+    frozen = snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []
+    return frozen, False
+
+
 async def capture_prepared_recommendations(target_date: date) -> int:
     """Recompute prepared matches with an as-of cutoff, then freeze display picks."""
     from app.analysis.persist import compute_all_patterns
     from app.db.connection import get_session
-    from app.db.models import AnalysisSnapshot, Match
+    from app.db.models import Match
 
     istanbul = timezone(timedelta(hours=3))
     day_start = datetime.combine(target_date, datetime.min.time(), istanbul)
@@ -299,6 +367,7 @@ async def capture_prepared_recommendations(target_date: date) -> int:
                 Match.deleted_at.is_(None), Match.kickoff_time >= day_start,
                 Match.kickoff_time < day_end, Match.kickoff_time > started_at,
                 Match.analyzed_at.is_not(None), Match.analyzed_at <= started_at,
+                Match.analyzed_at >= V3_ACTIVATION_CUTOFF,
                 Match.analyzed_at < Match.kickoff_time, Match.ft_scores_1.is_not(None),
             )
         )).all()
@@ -313,13 +382,6 @@ async def capture_prepared_recommendations(target_date: date) -> int:
             ft_ratios=match.ft_all_ratios or {}, as_of=match.analyzed_at,
         )
         captured_at = datetime.now(timezone.utc)
-        picks = prekickoff_picks(
-            analyzed_at=match.analyzed_at, captured_at=captured_at,
-            kickoff_time=match.kickoff_time, league_name=match.league_name,
-            league_code=match.league_code, patterns=patterns,
-        )
-        if picks is None:
-            continue
         async with get_session() as session:
             current = (await session.execute(
                 select(Match).where(
@@ -332,15 +394,16 @@ async def capture_prepared_recommendations(target_date: date) -> int:
             )).scalar_one_or_none()
             if current is None:
                 continue
-            written = await session.execute(
-                insert(AnalysisSnapshot).values(
-                    match_id=match.match_id, rule_version=RULE_VERSION,
-                    captured_at=captured_at, analyzed_at=match.analyzed_at,
-                    kickoff_time=current.kickoff_time,
-                    league_name=current.league_name or current.league_code or "unknown",
-                    picks=picks,
-                ).on_conflict_do_nothing(index_elements=["match_id", "rule_version"])
+            picks, created = await capture_v3_recommendations(
+                session,
+                match_id=match.match_id,
+                analyzed_at=match.analyzed_at,
+                captured_at=captured_at,
+                kickoff_time=current.kickoff_time,
+                league_name=current.league_name,
+                league_code=current.league_code,
+                patterns=patterns,
             )
-            if written.rowcount == 1:
+            if created and picks is not None:
                 count += 1
     return count
