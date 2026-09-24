@@ -17,6 +17,7 @@ ENV/
 .env
 .env.local
 .env.*.local
+.env.neon
 
 # IDE
 .vscode/
