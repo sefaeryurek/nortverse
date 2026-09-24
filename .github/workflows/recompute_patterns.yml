@@ -6,8 +6,9 @@ name: Pattern Recompute (Haftalık)
 # Sprint 14.1 — Aylık recompute (Neon kota optimizasyonu: haftalık→aylık)
 
 on:
-  schedule:
-    - cron: "0 0 1 * *"   # Her ayın 1'i 03:00 İstanbul (UTC 00:00) — aylık recompute
+  # Sprint 27 — Cron devre disi: Local Task Scheduler tek kaynak
+  # schedule:
+  #   - cron: "0 0 1 * *"   # Her ayın 1'i 03:00 İstanbul (UTC 00:00) — aylık recompute
   workflow_dispatch:
     inputs:
       only_missing:

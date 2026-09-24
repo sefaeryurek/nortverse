@@ -3,10 +3,11 @@ name: Pipeline & Sonuç Güncelleme
 # Sprint 14.1 — Cron 7→3'e azaltıldı (Neon data transfer kota optimizasyonu)
 
 on:
-  schedule:
-    - cron: "0 5 * * *"    # 08:00 İstanbul — sabah analiz (run-pipeline)
-    - cron: "0 19 * * *"   # 22:00 İstanbul (update-scores)
-    - cron: "30 21 * * *"  # 00:30 İstanbul — gece geç maçlar (update-scores)
+  # Sprint 27 — Cron devre disi: Local Task Scheduler tek kaynak
+  # schedule:
+  #   - cron: "0 5 * * *"    # 08:00 İstanbul — sabah analiz (run-pipeline)
+  #   - cron: "0 19 * * *"   # 22:00 İstanbul (update-scores)
+  #   - cron: "30 21 * * *"  # 00:30 İstanbul — gece geç maçlar (update-scores)
   workflow_dispatch:
     inputs:
       command:
