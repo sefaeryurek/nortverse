@@ -967,6 +967,29 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - **ScoreList frekans göstergesi:** Opacity gradient (1.0→0.6) + genişlik azalan frekans çubuğu + en iyi skora accent dot
 - **Sonuç:** 638 backend + 266 frontend = **904 toplam test** (tümü yeşil)
 
+### Sprint 30 — TAMAMLANDI ✅ (Kod Kalitesi + UX İyileştirmeleri)
+- **AnalyzeClient.tsx component bölme:** ValidationSection + ScoreValidationSection ayrı dosyalara çıkarıldı (~175 satır azaldı)
+- **404 sayfası:** `app/not-found.tsx` — design system uyumlu, "Bültene dön" linki
+- **SEO + Meta:** `layout.tsx` Open Graph defaults, `bulten/page.tsx` + `sonuclar/page.tsx` metadata export, `analyze/[match_id]/page.tsx` generateMetadata (takım adları URL params'tan)
+- **Sonuçlar skor badge:** Daha vurgulu skor gösterimi
+
+### Sprint 31 — TAMAMLANDI ✅ (Teknik Borç Temizliği)
+- **Ölü CSS kaldırıldı:** Kullanılmayan globals.css kuralları temizlendi
+- **services.py DRY refactor:** Tekrarlanan pattern'ler ortak helper'lara çıkarıldı
+
+### Sprint 32 — TAMAMLANDI ✅ (V3 Snapshot Fix + CLI Unicode)
+- **V3 snapshot FT veri kontrolü (`fe6e1f5`):** `prekickoff_picks()` artık FT pattern verisi yoksa snapshot oluşturmuyor — stale (0 pick) snapshot'ların `ON CONFLICT DO NOTHING` ile kilitlenmesi engellendi
+- **result_fetched_at build-archive desteği (`0e3635b`):** Arşiv maçlarında timestamp eksikliği pattern matching'i kırıyordu
+- **Windows CLI Unicode düzeltmesi (`43825d3`):** Rich console cp1254 encoding'de Unicode karakterleri (✓/✗/⚠) gösteremiyordu — `sys.stdout` UTF-8'e reconfigure edildi (`cli/_helpers.py`)
+
+### Sprint 33 — TAMAMLANDI ✅ (Frontend Polish + Test)
+- **Route loading ekranları:** `bulten/loading.tsx` (8 kart skeleton), `sonuclar/loading.tsx` (6 kart skeleton) — Suspense fallback ile beyaz ekran yok
+- **PowerScoreGauge component çıkarma:** `AnalyzeClient.tsx`'ten `components/PowerScoreGauge.tsx`'e taşındı (~120 satır). `computePowerScore()` export + gauge JSX
+- **BultenRow memo:** `React.memo()` ile gereksiz re-render engellendi
+- **Erişilebilirlik:** `aria-hidden="true"` dekoratif SVG'lere, `aria-label` interaktif elemanlara eklendi
+- **PowerScoreGauge testleri (`0cd9f07`):** 11 yeni test — computePowerScore hesaplama (6 test) + component render davranışı (5 test)
+- **Sonuç:** 638 backend + 277 frontend + 28 E2E = **943 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1183,9 +1206,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-25 — Sprint 29 sonu, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-09-25 — Sprint 33 sonu, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 25-29 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 25-33 Tamamlandı
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1209,27 +1232,27 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | Quality score | 100 / 100 |
 | Arşiv | 7 lig × 5 sezon |
 
-### Test Durumu (Sprint 29 sonrası)
+### Test Durumu (Sprint 33 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
 | **Backend** | pytest | 638 | ✅ Yeşil |
-| **Frontend birim** | vitest | 266 | ✅ Yeşil |
+| **Frontend birim** | vitest | 277 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 932 | — |
+| **Toplam** | — | 943 | — |
 
 ### Sıradaki Adımlar
 
-Sprint 29 tamamlandı. Bekleyen konular kullanıcı kararı gerektirir:
+Sprint 33 tamamlandı. Bekleyen konular kullanıcı kararı gerektirir:
 
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
-- **Excel audit:** `Claude.xlsm` ile DB çapraz doğrulama (dosya kullanıcıda)
+- **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
 - **Canlı maç + WebSocket:** Real-time skor push (onay gerekir)
 
 ### Bilinen Açık Konular
 
-- **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
-- **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir
+- **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
+- **Windows console Türkçe karakter:** Sprint 32'de düzeltildi — `cli/_helpers.py` stdout'u UTF-8'e reconfigure ediyor
 - **CLAUDE_HANDOFF.md:** Önceki oturumdan kalan V3 doğrulama şeması devir notu — mevcut yol haritasıyla ilgisiz, temizlenebilir
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
