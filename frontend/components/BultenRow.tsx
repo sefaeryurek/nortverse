@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Link from "next/link";
 import type { FixtureMatch } from "@/lib/types";
 import { leagueDisplay } from "@/lib/leagues";
@@ -9,7 +10,7 @@ interface Props {
   timeStr: string;
 }
 
-export default function BultenRow({ match, timeStr }: Props) {
+export default memo(function BultenRow({ match, timeStr }: Props) {
   const { flag } = leagueDisplay(match.league_code, match.league_name);
   const leagueName = match.league_name || match.league_code;
   const checkedLabel = match.score_checked_at
@@ -23,6 +24,7 @@ export default function BultenRow({ match, timeStr }: Props) {
     <Link
       href={`/analyze/${match.match_id}?home=${encodeURIComponent(match.home_team)}&away=${encodeURIComponent(match.away_team)}`}
       prefetch={false}
+      aria-label={`${match.home_team} - ${match.away_team}, ${timeStr}`}
       className="nv-card-interactive group block"
       style={{
         padding: 0,
@@ -146,6 +148,7 @@ export default function BultenRow({ match, timeStr }: Props) {
             stroke="currentColor"
             strokeWidth={2.5}
             viewBox="0 0 24 24"
+            aria-hidden="true"
             style={{
               color: "var(--nv-text-tertiary)",
               transition: `color var(--nv-duration-normal) var(--nv-ease)`,
@@ -157,4 +160,4 @@ export default function BultenRow({ match, timeStr }: Props) {
       </div>
     </Link>
   );
-}
+});

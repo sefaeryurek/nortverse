@@ -8,6 +8,7 @@ import { analyzeMatch, getAnalysisEvidence, getAnalysisValidation, getScoreValid
 import ScoreList from "@/components/ScoreList";
 import ValidationSection from "@/components/ValidationSection";
 import ScoreValidationSection from "@/components/ScoreValidationSection";
+import PowerScoreGauge, { computePowerScore } from "@/components/PowerScoreGauge";
 import { MatchProvider } from "@/lib/match-context";
 
 const IddaaCoupon = dynamic(() => import("@/components/IddaaCoupon"));
@@ -39,53 +40,6 @@ function patternFor(data: AnalyzeResponse, period: Period) {
 function scoresFor(data: AnalyzeResponse, period: Period) {
   const p = period === "ht" ? data.ht : period === "h2" ? data.half2 : data.ft;
   return { scores_1: p.scores_1, scores_x: p.scores_x, scores_2: p.scores_2 };
-}
-
-function computePowerScore(data: AnalyzeResponse, patternB: PatternResult | null, patternC: PatternResult | null): number {
-  let score = 0;
-  let factors = 0;
-
-  // Factor 1: Pattern B match count (volume)
-  if (patternB && patternB.match_count > 0) {
-    score += Math.min(30, patternB.match_count); // max 30 points
-    factors++;
-  }
-
-  // Factor 2: Pattern C match count (volume)
-  if (patternC && patternC.match_count > 0) {
-    score += Math.min(20, patternC.match_count * 2); // max 20 points, C has fewer matches
-    factors++;
-  }
-
-  // Factor 3: Top selection confidence
-  const topPct = Math.max(
-    patternB?.result_1_pct ?? 0,
-    patternB?.result_x_pct ?? 0,
-    patternB?.result_2_pct ?? 0,
-    patternB?.ust_25_pct ?? 0,
-    patternB?.alt_25_pct ?? 0,
-    patternB?.kg_var_pct ?? 0,
-    patternB?.kg_yok_pct ?? 0,
-  );
-  if (topPct > 0) {
-    score += Math.round(topPct * 0.3); // max ~30 points
-    factors++;
-  }
-
-  // Factor 4: Trends available
-  if (data.trends) {
-    const trendBlocks = [data.trends.home_form, data.trends.away_form, data.trends.h2h].filter(Boolean).length;
-    score += trendBlocks * 5; // max 15 points (3 blocks x 5)
-    factors++;
-  }
-
-  // Factor 5: Both archives agree
-  if (patternB && patternC && patternB.match_count >= 5 && patternC.match_count >= 1) {
-    score += 5;
-    factors++;
-  }
-
-  return factors > 0 ? Math.min(100, score) : 0;
 }
 
 interface Props {
@@ -185,7 +139,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
               transitionTimingFunction: "var(--nv-ease)",
             }}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
@@ -295,7 +249,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                   backgroundColor: "var(--nv-accent-red-dim)",
                 }}
               >
-                <svg className="w-6 h-6" fill="none" stroke="var(--nv-accent-red)" strokeWidth={2} viewBox="0 0 24 24">
+                <svg className="w-6 h-6" fill="none" stroke="var(--nv-accent-red)" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
@@ -338,7 +292,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                     className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
                     style={{ backgroundColor: "var(--nv-accent-amber-dim)" }}
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="var(--nv-accent-amber)" strokeWidth={2} viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="var(--nv-accent-amber)" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                   </div>
@@ -390,125 +344,14 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                   }}
                 >
 
-                {/* Mac Guc Skoru -- sadece MS periyodunda ve skip edilmemis maclar */}
-                {activePeriod === "ft" && (() => {
-                  const ps = computePowerScore(data, patternB, patternC);
-                  if (ps <= 0) return null;
-                  const gaugeColor = ps >= 70 ? "var(--nv-accent-green)" : ps >= 40 ? "var(--nv-accent-blue)" : "var(--nv-accent-amber)";
-                  const trendCount = data.trends
-                    ? [data.trends.home_form, data.trends.away_form, data.trends.h2h].filter(Boolean).length
-                    : 0;
-                  return (
-                    <div
-                      className="nv-card nv-fade-in"
-                      style={{
-                        borderRadius: "var(--nv-radius-lg)",
-                        padding: "var(--nv-space-lg)",
-                      }}
-                    >
-                      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-                        {/* Radial gauge */}
-                        <div
-                          className="flex-shrink-0 relative flex items-center justify-center"
-                          style={{ width: 80, height: 80 }}
-                        >
-                          <div
-                            style={{
-                              position: "absolute",
-                              inset: 0,
-                              borderRadius: "50%",
-                              background: `conic-gradient(${gaugeColor} ${ps * 3.6}deg, var(--nv-bg-elevated) ${ps * 3.6}deg 360deg)`,
-                            }}
-                          />
-                          <div
-                            className="flex items-center justify-center"
-                            style={{
-                              position: "absolute",
-                              inset: 6,
-                              borderRadius: "50%",
-                              backgroundColor: "var(--nv-bg-card)",
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontFamily: "var(--nv-font-mono)",
-                                fontSize: "var(--nv-text-xl, 1.25rem)",
-                                fontWeight: 700,
-                                color: gaugeColor,
-                                lineHeight: 1,
-                              }}
-                            >
-                              {ps}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Info */}
-                        <div className="flex-1 min-w-0 text-center sm:text-left">
-                          <h3
-                            className="text-sm font-bold"
-                            style={{
-                              color: "var(--nv-text-primary)",
-                              letterSpacing: "var(--nv-tracking-wide)",
-                            }}
-                          >
-                            Maç Güç Skoru
-                          </h3>
-                          <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
-                            {patternB && patternB.match_count > 0 && (
-                              <span
-                                className="nv-badge"
-                                style={{
-                                  backgroundColor: "var(--nv-bg-elevated)",
-                                  color: "var(--nv-text-secondary)",
-                                  fontSize: "var(--nv-text-xs)",
-                                }}
-                              >
-                                Arşiv 1: {patternB.match_count} maç
-                              </span>
-                            )}
-                            {patternC && patternC.match_count > 0 && (
-                              <span
-                                className="nv-badge"
-                                style={{
-                                  backgroundColor: "var(--nv-bg-elevated)",
-                                  color: "var(--nv-text-secondary)",
-                                  fontSize: "var(--nv-text-xs)",
-                                }}
-                              >
-                                Arşiv 2: {patternC.match_count} maç
-                              </span>
-                            )}
-                            {trendCount > 0 && (
-                              <span
-                                className="nv-badge"
-                                style={{
-                                  backgroundColor: "var(--nv-bg-elevated)",
-                                  color: "var(--nv-text-secondary)",
-                                  fontSize: "var(--nv-text-xs)",
-                                }}
-                              >
-                                Trend: {trendCount}/3
-                              </span>
-                            )}
-                            {patternB && patternC && patternB.match_count >= 5 && patternC.match_count >= 1 && (
-                              <span
-                                className="nv-badge"
-                                style={{
-                                  backgroundColor: "var(--nv-accent-green-dim, rgba(34,197,94,0.1))",
-                                  color: "var(--nv-accent-green)",
-                                  fontSize: "var(--nv-text-xs)",
-                                }}
-                              >
-                                Çift arşiv onayı
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
+                {activePeriod === "ft" && (
+                  <PowerScoreGauge
+                    score={computePowerScore(data, patternB, patternC)}
+                    patternB={patternB}
+                    patternC={patternC}
+                    trendCount={data.trends ? [data.trends.home_form, data.trends.away_form, data.trends.h2h].filter(Boolean).length : 0}
+                  />
+                )}
 
                 {/* Form & H2H trendleri -- sadece MS periyodunda anlamli */}
                 {activePeriod === "ft" && data.trends && (
