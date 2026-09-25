@@ -65,6 +65,10 @@ function TrendCard({
   subtitle?: string;
   accent: string;
 }) {
+  const maxGoal = Math.max(block.avg_goals_for, block.avg_goals_against, 0.1);
+  const forPct = (block.avg_goals_for / maxGoal) * 100;
+  const againstPct = (block.avg_goals_against / maxGoal) * 100;
+
   return (
     <div
       className="nv-card flex flex-col"
@@ -115,6 +119,44 @@ function TrendCard({
         </div>
       )}
 
+      {/* Galibiyet / Beraberlik / Mağlubiyet Oranı Çubuğu */}
+      <div
+        className="flex overflow-hidden mb-2"
+        style={{
+          height: 6,
+          borderRadius: "var(--nv-radius-full)",
+          backgroundColor: "var(--nv-bg-elevated)",
+        }}
+      >
+        {block.win_pct > 0 && (
+          <div
+            style={{
+              width: `${block.win_pct}%`,
+              backgroundColor: "var(--nv-win)",
+              height: "100%",
+            }}
+          />
+        )}
+        {block.draw_pct > 0 && (
+          <div
+            style={{
+              width: `${block.draw_pct}%`,
+              backgroundColor: "var(--nv-draw)",
+              height: "100%",
+            }}
+          />
+        )}
+        {block.loss_pct > 0 && (
+          <div
+            style={{
+              width: `${block.loss_pct}%`,
+              backgroundColor: "var(--nv-loss)",
+              height: "100%",
+            }}
+          />
+        )}
+      </div>
+
       {/* Metrikler */}
       <div
         className="space-y-1 pt-2 mt-auto"
@@ -125,10 +167,63 @@ function TrendCard({
         <MetricRow label="Mağlubiyet" value={`%${Math.round(block.loss_pct)}`} />
         <MetricRow label="KG Var" value={`%${Math.round(block.kg_var_pct)}`} highlight={block.kg_var_pct >= 60} />
         <MetricRow label="Üst 2.5" value={`%${Math.round(block.over_25_pct)}`} highlight={block.over_25_pct >= 60} />
-        <MetricRow
-          label="Att / Yedi"
-          value={`${block.avg_goals_for.toFixed(1)} / ${block.avg_goals_against.toFixed(1)}`}
-        />
+        {/* Att / Yedi — mini bar ile */}
+        <div className="text-xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span style={{ color: "var(--nv-text-secondary)" }}>Att / Yedi</span>
+            <span
+              className="font-bold"
+              style={{
+                fontFamily: "var(--nv-font-mono)",
+                color: "var(--nv-text-primary)",
+              }}
+            >
+              {block.avg_goals_for.toFixed(1)} / {block.avg_goals_against.toFixed(1)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-1.5">
+              <div
+                style={{
+                  width: `${forPct}%`,
+                  height: 4,
+                  backgroundColor: "var(--nv-win)",
+                  borderRadius: "var(--nv-radius-full)",
+                  minWidth: 2,
+                }}
+              />
+              <span
+                className="text-[9px] shrink-0"
+                style={{
+                  color: "var(--nv-win)",
+                  fontFamily: "var(--nv-font-mono)",
+                }}
+              >
+                {block.avg_goals_for.toFixed(1)}
+              </span>
+            </div>
+            <div className="flex-1 flex items-center gap-1.5">
+              <div
+                style={{
+                  width: `${againstPct}%`,
+                  height: 4,
+                  backgroundColor: "var(--nv-loss)",
+                  borderRadius: "var(--nv-radius-full)",
+                  minWidth: 2,
+                }}
+              />
+              <span
+                className="text-[9px] shrink-0"
+                style={{
+                  color: "var(--nv-loss)",
+                  fontFamily: "var(--nv-font-mono)",
+                }}
+              >
+                {block.avg_goals_against.toFixed(1)}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
