@@ -12,14 +12,12 @@ interface Props {
 
 const STORAGE_KEY = "nortverse_detailed_open";
 
-// Yeni profesyonel renk skalası: yeşil = güçlü, gri/silik = zayıf.
-// Eski mavi/turuncu/kırmızı yerine sade tonlama.
 function pctStyle(pct: number) {
-  if (pct >= 75) return { color: "#86efac", bg: "#062618", border: "#15803d", opacity: 1 };
-  if (pct >= 60) return { color: "#cbd5e1", bg: "#0a1410", border: "#1e3a2c", opacity: 1 };
-  if (pct >= 50) return { color: "#94a3b8", bg: "#0f172a", border: "#1e293b", opacity: 0.95 };
-  if (pct >= 40) return { color: "#64748b", bg: "#0a0d14", border: "#1e293b", opacity: 0.7 };
-  return { color: "#475569", bg: "#0a0d14", border: "#1e293b", opacity: 0.45 };
+  if (pct >= 75) return { color: "var(--nv-accent-green)", barBg: "var(--nv-accent-green)", opacity: 1 };
+  if (pct >= 60) return { color: "var(--nv-text-primary)", barBg: "var(--nv-accent-blue)", opacity: 1 };
+  if (pct >= 50) return { color: "var(--nv-text-secondary)", barBg: "var(--nv-text-secondary)", opacity: 0.95 };
+  if (pct >= 40) return { color: "var(--nv-text-tertiary)", barBg: "var(--nv-text-tertiary)", opacity: 0.7 };
+  return { color: "var(--nv-text-tertiary)", barBg: "var(--nv-text-tertiary)", opacity: 0.45 };
 }
 
 interface OddCellProps {
@@ -32,20 +30,39 @@ function OddCell({ label, value, sub }: OddCellProps) {
   const s = pctStyle(pct);
   return (
     <div
-      className="flex flex-col items-center justify-center gap-px px-1 py-1.5 rounded border text-center"
-      style={{ backgroundColor: s.bg, borderColor: s.border, minWidth: 0, opacity: s.opacity }}
+      className="flex flex-col gap-1 px-1.5 py-2 text-center"
+      style={{
+        backgroundColor: "var(--nv-bg-surface)",
+        border: "1px solid var(--nv-border-subtle)",
+        borderRadius: "var(--nv-radius-md)",
+        minWidth: 0,
+        opacity: s.opacity,
+      }}
     >
-      <span className="text-[9px] font-medium leading-tight" style={{ color: "#64748b" }}>
+      <span
+        className="text-[9px] font-medium leading-tight"
+        style={{ color: "var(--nv-text-tertiary)" }}
+      >
         {label}
       </span>
       {sub && (
-        <span className="text-[8px] leading-tight" style={{ color: "#374151" }}>
+        <span className="text-[8px] leading-tight" style={{ color: "var(--nv-text-tertiary)", opacity: 0.6 }}>
           {sub}
         </span>
       )}
-      <span className="text-sm font-extrabold font-mono leading-none" style={{ color: s.color }}>
+      <span
+        className="text-sm font-extrabold leading-none"
+        style={{ fontFamily: "var(--nv-font-mono)", color: s.color }}
+      >
         %{pct}
       </span>
+      {/* Mini pct bar */}
+      <div className="nv-pct-bar mx-auto w-full" style={{ height: "3px" }}>
+        <div
+          className="nv-pct-bar-fill"
+          style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: s.barBg }}
+        />
+      </div>
     </div>
   );
 }
@@ -53,7 +70,14 @@ function OddCell({ label, value, sub }: OddCellProps) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <h4 className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>
+      <h4
+        className="nv-badge text-[10px] font-semibold uppercase"
+        style={{
+          backgroundColor: "var(--nv-bg-elevated)",
+          color: "var(--nv-text-secondary)",
+          letterSpacing: "var(--nv-tracking-wide)",
+        }}
+      >
         {title}
       </h4>
       {children}
@@ -72,7 +96,7 @@ function Row({ items }: { items: OddCellProps[] }) {
 }
 
 function SubLabel({ text }: { text: string }) {
-  return <p className="text-[9px] mt-1" style={{ color: "#374151" }}>{text}</p>;
+  return <p className="text-[9px] mt-1" style={{ color: "var(--nv-text-tertiary)" }}>{text}</p>;
 }
 
 function ScoreFreq({ freq }: { freq: Record<string, number> | null | undefined }) {
@@ -84,11 +108,16 @@ function ScoreFreq({ freq }: { freq: Record<string, number> | null | undefined }
       {entries.map(([score, count]) => (
         <span
           key={score}
-          className="text-xs px-2 py-0.5 rounded font-mono"
-          style={{ backgroundColor: "#1e293b", color: "#94a3b8" }}
+          className="text-xs px-2 py-0.5"
+          style={{
+            backgroundColor: "var(--nv-bg-elevated)",
+            color: "var(--nv-text-secondary)",
+            borderRadius: "var(--nv-radius-sm)",
+            fontFamily: "var(--nv-font-mono)",
+          }}
         >
-          <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{score}</span>
-          <span style={{ color: "#475569" }}> · {count}×</span>
+          <span style={{ color: "var(--nv-text-primary)", fontWeight: 600 }}>{score}</span>
+          <span style={{ color: "var(--nv-text-tertiary)" }}> -- {count}x</span>
         </span>
       ))}
     </div>
@@ -99,27 +128,32 @@ function ArchiveDetailCard({
   result,
   title,
   accentColor,
+  badgeClass,
   period,
 }: {
   result: PatternResult;
   title: string;
   accentColor: string;
+  badgeClass: string;
   period: Period;
 }) {
   const isFT = period === "ft";
   const lbl = periodLabels(period);
 
   return (
-    <div className="rounded-xl p-3 border space-y-3" style={{ backgroundColor: "#0a0d14", borderColor: "#1e293b" }}>
+    <div
+      className="nv-card space-y-3"
+      style={{
+        borderRadius: "var(--nv-radius-lg)",
+        borderTop: `2px solid ${accentColor}`,
+        padding: "var(--nv-space-md)",
+      }}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: accentColor }} />
-          <h3 className="text-sm font-bold tracking-wide" style={{ color: accentColor }}>{title}</h3>
+          <h3 className="text-sm font-bold" style={{ color: accentColor }}>{title}</h3>
         </div>
-        <span
-          className="text-xs px-2 py-0.5 rounded-full font-mono"
-          style={{ backgroundColor: "#1e293b", color: "#64748b" }}
-        >
+        <span className={badgeClass}>
           {result.match_count} maç
         </span>
       </div>
@@ -157,7 +191,7 @@ function ArchiveDetailCard({
         </Section>
       )}
 
-      {/* MS + 2.5 — sadece FT (IY/2Y'de iddaa 2.5 hattı açmaz) */}
+      {/* MS + 2.5 -- sadece FT (IY/2Y'de iddaa 2.5 hatti acmaz) */}
       {isFT && (
         <Section title={lbl.combo25}>
           <Row items={[
@@ -185,7 +219,7 @@ function ArchiveDetailCard({
         ]} />
       </Section>
 
-      {/* Handikap — sadece FT (IY/2Y'de iddaa handikap açmaz) */}
+      {/* Handikap -- sadece FT (IY/2Y'de iddaa handikap acmaz) */}
       {isFT && (
         <Section title={lbl.hnd}>
           <Row items={[
@@ -209,7 +243,7 @@ function ArchiveDetailCard({
 
       <Section title={lbl.taraf}>
         <SubLabel text="Ev Sahibi" />
-        {/* IY/2Y'de 2.5 hattı açılmaz (Alt %99+, Üst nadir) → sadece FT'de göster */}
+        {/* IY/2Y'de 2.5 hatti acilmaz (Alt %99+, Ust nadir) -- sadece FT'de goster */}
         <Row items={
           isFT
             ? [
@@ -297,7 +331,7 @@ function ArchiveDetailCard({
       )}
 
       <Section title="Gol Sayısı ve KG">
-        {/* IY/2Y'de 2.5 ve 3.5 hatları açılmaz → sadece FT'de göster */}
+        {/* IY/2Y'de 2.5 ve 3.5 hatlari acilmaz -- sadece FT'de goster */}
         <Row items={
           isFT
             ? [
@@ -442,46 +476,66 @@ export default function DetailedStats({ patternB, patternC, period }: Props) {
     <div className="space-y-3">
       <button
         onClick={toggle}
-        className="w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 transition-all"
         style={{
-          backgroundColor: open ? "#0f1625" : "#0a0d14",
-          borderColor: open ? "#1e293b" : "#1e293b",
-          color: "#94a3b8",
+          backgroundColor: open ? "var(--nv-bg-card)" : "var(--nv-bg-surface)",
+          border: "1px solid var(--nv-border)",
+          borderRadius: "var(--nv-radius-lg)",
+          color: "var(--nv-text-secondary)",
+          transitionDuration: "var(--nv-duration-normal)",
+          transitionTimingFunction: "var(--nv-ease)",
         }}
         aria-expanded={open}
       >
         <span className="flex items-center gap-2">
-          <span className="text-base">🔬</span>
           <span className="text-sm font-semibold">Detaylı Analiz</span>
-          <span className="text-[10px]" style={{ color: "#475569" }}>
+          <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
             tüm pazarlar (~130 oran)
           </span>
         </span>
-        <span className="text-xs font-mono" style={{ color: "#64748b" }}>
-          {open ? "Gizle ▲" : "Göster ▼"}
-        </span>
+        <svg
+          className="w-4 h-4 transition-transform"
+          style={{
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            color: "var(--nv-text-tertiary)",
+            transitionDuration: "var(--nv-duration-normal)",
+            transitionTimingFunction: "var(--nv-ease)",
+          }}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
       </button>
 
       {open && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 nv-fade-in">
           {patternB ? (
-            <ArchiveDetailCard result={patternB} title="Arşiv 1 — Skor Seti" accentColor="#4ade80" period={period} />
+            <ArchiveDetailCard result={patternB} title="Arşiv 1 — Skor Seti" accentColor="var(--nv-accent-blue)" badgeClass="nv-badge nv-badge-blue" period={period} />
           ) : (
             <div
-              className="rounded-xl p-6 border flex items-center justify-center"
-              style={{ backgroundColor: "#0a0d14", borderColor: "#1e293b" }}
+              className="nv-card flex items-center justify-center"
+              style={{
+                borderRadius: "var(--nv-radius-lg)",
+                padding: "var(--nv-space-2xl)",
+              }}
             >
-              <p className="text-sm" style={{ color: "#374151" }}>Arşiv 1: Yeterli veri yok</p>
+              <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>Arşiv 1: Yeterli veri yok</p>
             </div>
           )}
           {patternC ? (
-            <ArchiveDetailCard result={patternC} title="Arşiv 2 — Oran Benzerliği" accentColor="#c084fc" period={period} />
+            <ArchiveDetailCard result={patternC} title="Arşiv 2 — Oran Benzerliği" accentColor="var(--nv-accent-purple)" badgeClass="nv-badge nv-badge-purple" period={period} />
           ) : (
             <div
-              className="rounded-xl p-6 border flex items-center justify-center"
-              style={{ backgroundColor: "#0a0d14", borderColor: "#1e293b" }}
+              className="nv-card flex items-center justify-center"
+              style={{
+                borderRadius: "var(--nv-radius-lg)",
+                padding: "var(--nv-space-2xl)",
+              }}
             >
-              <p className="text-sm" style={{ color: "#374151" }}>Arşiv 2: Yeterli veri yok</p>
+              <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>Arşiv 2: Yeterli veri yok</p>
             </div>
           )}
         </div>

@@ -9,31 +9,87 @@ interface Props {
 
 export default function GlobalError({ error, reset }: Props) {
   useEffect(() => {
-    // Loglamak istersen Sentry/Logtail vs buraya
     console.error("[GlobalError]", error);
   }, [error]);
 
   return (
-    <div className="flex items-center justify-center min-h-[60vh] p-6">
+    <div
+      className="flex items-center justify-center p-6"
+      style={{ minHeight: "60vh" }}
+    >
       <div
-        className="max-w-md w-full rounded-xl p-6 border text-center space-y-4"
-        style={{ backgroundColor: "#1c0816", borderColor: "#7f1d1d" }}
+        className="nv-card nv-fade-in"
+        style={{
+          maxWidth: 420,
+          width: "100%",
+          padding: "var(--nv-space-2xl)",
+          textAlign: "center",
+          borderColor: "var(--nv-accent-red)",
+        }}
       >
-        <div className="text-4xl">💥</div>
-        <h2 className="text-base font-bold" style={{ color: "#f87171" }}>
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            margin: "0 auto var(--nv-space-lg)",
+            borderRadius: "var(--nv-radius-full)",
+            backgroundColor: "var(--nv-accent-red-dim)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "24px",
+          }}
+        >
+          !
+        </div>
+
+        <h2
+          style={{
+            fontSize: "var(--nv-text-lg)",
+            fontWeight: 700,
+            color: "var(--nv-accent-red)",
+            marginBottom: "var(--nv-space-sm)",
+          }}
+        >
           Bir şeyler ters gitti
         </h2>
-        <p className="text-xs" style={{ color: "#94a3b8" }}>
+
+        <p
+          style={{
+            fontSize: "var(--nv-text-xs)",
+            color: "var(--nv-text-secondary)",
+            marginBottom: "var(--nv-space-sm)",
+          }}
+        >
           {error.message || "Beklenmeyen bir hata oluştu."}
         </p>
+
         {error.digest && (
-          <p className="text-[10px] font-mono" style={{ color: "#475569" }}>
+          <p
+            style={{
+              fontSize: "10px",
+              fontFamily: "var(--nv-font-mono)",
+              color: "var(--nv-text-tertiary)",
+              marginBottom: "var(--nv-space-lg)",
+            }}
+          >
             ID: {error.digest}
           </p>
         )}
+
         <button
           onClick={reset}
-          className="text-xs px-4 py-2 rounded font-semibold transition-colors bg-red-900 hover:bg-red-800 text-red-100"
+          style={{
+            fontSize: "var(--nv-text-xs)",
+            fontWeight: 600,
+            padding: "8px 20px",
+            borderRadius: "var(--nv-radius-lg)",
+            border: "none",
+            cursor: "pointer",
+            backgroundColor: "var(--nv-accent-red)",
+            color: "#ffffff",
+            transition: `opacity var(--nv-duration-normal) var(--nv-ease)`,
+          }}
         >
           Tekrar dene
         </button>

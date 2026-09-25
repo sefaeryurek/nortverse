@@ -9,8 +9,8 @@ interface Props {
 }
 
 /**
- * Tek tahmin için "+" / "✓" toggle butonu.
- * Sepete ekle/çıkar — idempotent.
+ * Tek tahmin icin "+" / check toggle butonu.
+ * Sepete ekle/cikar -- idempotent.
  */
 export default function AddToCartButton({ item, size = "sm", className }: Props) {
   const { addItem, removeItem, has, hydrated } = useCart();
@@ -28,11 +28,13 @@ export default function AddToCartButton({ item, size = "sm", className }: Props)
           addItem(item);
         }
       }}
-      className={`${dim} rounded flex items-center justify-center font-bold transition-all ${className ?? ""}`}
+      className={`${dim} rounded-full flex items-center justify-center font-bold transition-all ${className ?? ""}`}
       style={{
-        backgroundColor: inCart ? "#16a34a" : "#1e293b",
-        color: inCart ? "#ecfdf5" : "#94a3b8",
-        border: `1px solid ${inCart ? "#15803d" : "#334155"}`,
+        backgroundColor: inCart ? "var(--nv-accent-green)" : "var(--nv-bg-elevated)",
+        color: inCart ? "var(--nv-text-inverse)" : "var(--nv-text-secondary)",
+        border: `1px solid ${inCart ? "var(--nv-accent-green)" : "var(--nv-border-accent)"}`,
+        transitionDuration: "var(--nv-duration-normal)",
+        transitionTimingFunction: "var(--nv-ease)",
       }}
       aria-label={inCart ? "Sepetten çıkar" : "Sepete ekle"}
       title={inCart ? "Sepetten çıkar" : "Sepete ekle"}

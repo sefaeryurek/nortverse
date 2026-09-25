@@ -11,11 +11,11 @@ interface Props {
   period: Period;
 }
 
-function pctTone(pct: number): { color: string; muted: boolean } {
-  if (pct >= 75) return { color: "#86efac", muted: false };
-  if (pct >= 60) return { color: "#cbd5e1", muted: false };
-  if (pct >= 50) return { color: "#94a3b8", muted: false };
-  return { color: "#475569", muted: true };
+function pctTone(pct: number): { color: string; opacity: number } {
+  if (pct >= 75) return { color: "var(--nv-accent-green)", opacity: 1 };
+  if (pct >= 60) return { color: "var(--nv-text-primary)", opacity: 1 };
+  if (pct >= 50) return { color: "var(--nv-text-secondary)", opacity: 1 };
+  return { color: "var(--nv-text-tertiary)", opacity: 0.6 };
 }
 
 function Cell({
@@ -27,24 +27,42 @@ function Cell({
 }) {
   if (!value) {
     return (
-      <div className="text-xs text-center font-mono" style={{ color: "#334155" }}>
+      <div
+        className="text-xs text-center"
+        style={{ color: "var(--nv-text-tertiary)", fontFamily: "var(--nv-font-mono)" }}
+      >
         —
       </div>
     );
   }
   const pct = Math.round(value.pct);
-  const { color, muted } = pctTone(pct);
+  const { color, opacity } = pctTone(pct);
   return (
-    <div className="flex items-center justify-end gap-2" style={{ opacity: muted ? 0.55 : 1 }}>
-      <span className="text-[11px] truncate" style={{ color }}>
-        {value.selectionLabel}
-      </span>
-      <span
-        className="text-xs font-extrabold font-mono px-1.5 py-0.5 rounded"
-        style={{ backgroundColor: "#0f172a", color, borderLeft: `2px solid ${accent}` }}
-      >
-        %{pct}
-      </span>
+    <div className="flex flex-col items-end gap-1" style={{ opacity }}>
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] truncate" style={{ color }}>
+          {value.selectionLabel}
+        </span>
+        <span
+          className="text-xs font-extrabold px-1.5 py-0.5"
+          style={{
+            fontFamily: "var(--nv-font-mono)",
+            backgroundColor: "var(--nv-bg-elevated)",
+            color,
+            borderLeft: `2px solid ${accent}`,
+            borderRadius: "var(--nv-radius-sm)",
+          }}
+        >
+          %{pct}
+        </span>
+      </div>
+      {/* Mini pct bar */}
+      <div className="nv-pct-bar w-full" style={{ height: "3px" }}>
+        <div
+          className="nv-pct-bar-fill"
+          style={{ width: `${pct}%`, backgroundColor: accent }}
+        />
+      </div>
     </div>
   );
 }
@@ -56,65 +74,100 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
 
   return (
     <div
-      className="rounded-xl p-4 border space-y-2"
-      style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}
+      className="nv-card nv-fade-in"
+      style={{
+        borderRadius: "var(--nv-radius-lg)",
+        padding: "var(--nv-space-lg)",
+      }}
     >
-      <div className="flex items-center gap-2 mb-1">
-        <span style={{ color: "#64748b" }}>📊</span>
-        <h3 className="text-sm font-bold tracking-wide" style={{ color: "#cbd5e1" }}>
+      <div className="flex items-center gap-2 mb-3">
+        <span style={{ color: "var(--nv-text-tertiary)" }}>📊</span>
+        <h3
+          className="text-sm font-bold"
+          style={{
+            color: "var(--nv-text-primary)",
+            letterSpacing: "var(--nv-tracking-wide)",
+          }}
+        >
           Ana Pazar Özeti
         </h3>
-        <span className="text-[10px]" style={{ color: "#475569" }}>arşivde en sık görülen seçim</span>
+        <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
+          arşivde en sık görülen seçim
+        </span>
       </div>
 
       {/* Sütun başlıkları */}
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-1 pb-1 border-b" style={{ borderColor: "#1e293b" }}>
-        <div className="text-[10px] uppercase tracking-wider" style={{ color: "#475569" }}>
+      <div
+        className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-1 pb-2 mb-2"
+        style={{ borderBottom: "1px solid var(--nv-border)" }}
+      >
+        <div
+          className="text-[10px] uppercase"
+          style={{ color: "var(--nv-text-tertiary)", letterSpacing: "var(--nv-tracking-wide)" }}
+        >
           Pazar
         </div>
-        <div className="text-[10px] uppercase tracking-wider text-right" style={{ color: "#4ade80" }}>
+        <div
+          className="text-[10px] uppercase text-right"
+          style={{ color: "var(--nv-accent-blue)" }}
+        >
           Arşiv 1{patternB ? ` · ${patternB.match_count} maç` : ""}
         </div>
-        <div className="text-[10px] uppercase tracking-wider text-right" style={{ color: "#c084fc" }}>
+        <div
+          className="text-[10px] uppercase text-right"
+          style={{ color: "var(--nv-accent-purple)" }}
+        >
           Arşiv 2{patternC ? ` · ${patternC.match_count} maç` : ""}
         </div>
       </div>
 
       {/* Satırlar */}
-      <div className="space-y-1.5 pt-1">
+      <div className="space-y-2">
         {rows.map((row) => (
           <div
             key={row.marketKey}
-            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 items-center"
+            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 items-center py-1 px-1 rounded-lg transition-colors"
+            style={{
+              backgroundColor: row.agreement ? "var(--nv-accent-amber-dim)" : "transparent",
+            }}
           >
             <div className="flex items-center gap-1.5 min-w-0">
               {row.agreement && (
                 <span
                   className="text-[8px] font-bold leading-none"
-                  style={{ color: "#fbbf24" }}
+                  style={{ color: "var(--nv-accent-amber)" }}
                   title="İki arşiv aynı seçimde uyuşuyor"
                 >
                   ✦
                 </span>
               )}
-              <span className="text-xs truncate" style={{ color: "#94a3b8" }}>
+              <span
+                className="text-xs truncate"
+                style={{ color: "var(--nv-text-secondary)" }}
+              >
                 {row.marketLabel}
               </span>
             </div>
             <Cell
               value={row.winnerA}
-              accent="#4ade80"
+              accent="var(--nv-accent-blue)"
             />
             <Cell
               value={row.winnerB}
-              accent="#c084fc"
+              accent="var(--nv-accent-purple)"
             />
           </div>
         ))}
       </div>
 
-      <p className="text-[10px] pt-1" style={{ color: "#475569" }}>
-        <span style={{ color: "#fbbf24" }}>✦</span> = iki arşivde aynı seçim en sık görüldü. Yüzdeler doğrulanmış maç olasılığı değildir.
+      <p
+        className="text-[10px] pt-2 mt-2"
+        style={{
+          color: "var(--nv-text-tertiary)",
+          borderTop: "1px solid var(--nv-border-subtle)",
+        }}
+      >
+        <span style={{ color: "var(--nv-accent-amber)" }}>✦</span> = iki arşivde aynı seçim en sık görüldü. Yüzdeler doğrulanmış maç olasılığı değildir.
       </p>
     </div>
   );

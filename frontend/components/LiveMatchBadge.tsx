@@ -23,16 +23,59 @@ export default function LiveMatchBadge({ home, away, minute, checkedAt, checkedL
   }, [checkedAt]);
 
   const minuteLabel = minute === "HT" ? "İY" : minute ? `${minute}′` : "CANLI";
+
   return (
     <span
       aria-label={stale ? "Son görülen skor; güncel veri bekleniyor" : "Canlı skor"}
       data-stale={stale}
-      className={`flex-shrink-0 rounded px-2 py-1 text-xs font-semibold ${stale
-        ? "bg-amber-950 text-amber-200" : "bg-green-950 text-green-300"}`}
+      className={stale ? "nv-badge nv-badge-amber" : "nv-badge nv-badge-red nv-live-pulse"}
+      style={{
+        flexShrink: 0,
+        padding: "4px 10px",
+        display: "inline-flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 2,
+      }}
     >
-      <span>{stale ? "Son skor" : minuteLabel}</span>{" "}
-      <span className="font-mono text-sm font-bold">{home} - {away}</span>
-      <span className="block text-[10px] font-normal opacity-75">
+      <span
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        {/* Canli nabiz noktasi */}
+        {!stale && (
+          <span
+            className="nv-live-pulse"
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "var(--nv-radius-full)",
+              backgroundColor: "var(--nv-live)",
+              boxShadow: `0 0 6px var(--nv-live-glow)`,
+            }}
+          />
+        )}
+        <span>{stale ? "Son skor" : minuteLabel}</span>
+      </span>
+      <span
+        style={{
+          fontFamily: "var(--nv-font-mono)",
+          fontSize: "var(--nv-text-sm)",
+          fontWeight: 700,
+        }}
+      >
+        {home} - {away}
+      </span>
+      <span
+        style={{
+          fontSize: "10px",
+          fontWeight: 400,
+          opacity: 0.75,
+        }}
+      >
         {checkedLabel ? `Son kontrol ${checkedLabel}` : "Kontrol zamanı bilinmiyor"}
       </span>
     </span>

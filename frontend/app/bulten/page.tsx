@@ -11,36 +11,64 @@ import type { FixtureMatch } from "@/lib/types";
 import Link from "next/link";
 
 function BultenSkeleton() {
-  // 8 satırlık iskelet — gerçek BultenRow düzenine yakın boyutlarda
   return (
-    <>
+    <div style={{ padding: "var(--nv-space-sm) var(--nv-page-gutter)" }}>
       {Array.from({ length: 8 }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-0 border-b animate-pulse"
-          style={{ borderColor: "#1e293b" }}
+          className="nv-card"
+          style={{
+            marginBottom: "var(--nv-space-sm)",
+            padding: "var(--nv-space-md) var(--nv-space-lg)",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--nv-space-md)",
+          }}
         >
+          {/* Saat iskeleti */}
           <div
-            className="flex-shrink-0 w-16 h-[60px] flex items-center justify-center"
-            style={{ backgroundColor: "#0f172a" }}
-          >
-            <div className="h-3 w-10 rounded" style={{ backgroundColor: "#1e293b" }} />
+            className="nv-skeleton"
+            style={{
+              width: 52,
+              height: 36,
+              flexShrink: 0,
+              borderRadius: "var(--nv-radius-sm)",
+            }}
+          />
+          {/* Lig iskeleti */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <div
+              className="nv-skeleton"
+              style={{ width: 20, height: 20, borderRadius: "var(--nv-radius-full)" }}
+            />
+            <div
+              className="nv-skeleton"
+              style={{ width: 72, height: 12, borderRadius: "var(--nv-radius-sm)" }}
+            />
           </div>
-          <div className="flex-1 flex items-center gap-3 px-4 py-3">
-            <div className="flex items-center gap-1.5 w-32">
-              <div className="h-4 w-4 rounded-full" style={{ backgroundColor: "#1e293b" }} />
-              <div className="h-3 w-20 rounded" style={{ backgroundColor: "#1e293b" }} />
-            </div>
-            <div className="flex-1 flex items-center gap-2">
-              <div className="h-3.5 flex-1 rounded" style={{ backgroundColor: "#1e293b" }} />
-              <div className="h-3 w-6 rounded" style={{ backgroundColor: "#1e293b" }} />
-              <div className="h-3.5 flex-1 rounded" style={{ backgroundColor: "#1e293b" }} />
-            </div>
-            <div className="w-7 h-7 rounded-full" style={{ backgroundColor: "#1e293b" }} />
+          {/* Takim iskeleti */}
+          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+              className="nv-skeleton"
+              style={{ height: 14, flex: 1, borderRadius: "var(--nv-radius-sm)" }}
+            />
+            <div
+              className="nv-skeleton"
+              style={{ width: 24, height: 12, borderRadius: "var(--nv-radius-sm)" }}
+            />
+            <div
+              className="nv-skeleton"
+              style={{ height: 14, flex: 1, borderRadius: "var(--nv-radius-sm)" }}
+            />
           </div>
+          {/* Chevron iskeleti */}
+          <div
+            className="nv-skeleton"
+            style={{ width: 28, height: 28, borderRadius: "var(--nv-radius-full)", flexShrink: 0 }}
+          />
         </div>
       ))}
-    </>
+    </div>
   );
 }
 
@@ -88,11 +116,54 @@ async function MatchList({ date }: { date: string }) {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="text-center space-y-3">
-          <div className="text-5xl">⚠️</div>
-          <p className="text-sm font-medium" style={{ color: "#ef4444" }}>{error}</p>
-          <p className="text-xs" style={{ color: "#475569" }}>
+      <div
+        className="flex items-center justify-center"
+        style={{ padding: "var(--nv-space-3xl) var(--nv-page-gutter)" }}
+      >
+        <div
+          className="nv-card nv-fade-in"
+          style={{
+            maxWidth: 400,
+            width: "100%",
+            padding: "var(--nv-space-2xl)",
+            textAlign: "center",
+            borderColor: "var(--nv-accent-red)",
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              margin: "0 auto var(--nv-space-md)",
+              borderRadius: "var(--nv-radius-full)",
+              backgroundColor: "var(--nv-accent-red-dim)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "20px",
+              color: "var(--nv-accent-red)",
+              fontWeight: 700,
+            }}
+          >
+            !
+          </div>
+          <p
+            style={{
+              fontSize: "var(--nv-text-sm)",
+              fontWeight: 500,
+              color: "var(--nv-accent-red)",
+              marginBottom: "var(--nv-space-sm)",
+            }}
+          >
+            {error}
+          </p>
+          <p
+            style={{
+              fontSize: "var(--nv-text-xs)",
+              color: "var(--nv-text-tertiary)",
+              marginBottom: "var(--nv-space-lg)",
+            }}
+          >
             Veriler şu anda yüklenemiyor. Biraz sonra tekrar deneyebilirsiniz.
           </p>
           <RetryButton />
@@ -103,13 +174,55 @@ async function MatchList({ date }: { date: string }) {
 
   if (matches.length === 0) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="text-center space-y-3">
-          <div className="text-5xl">📭</div>
-          <p className="text-sm font-medium" style={{ color: "#64748b" }}>
+      <div
+        className="flex items-center justify-center"
+        style={{ padding: "var(--nv-space-3xl) var(--nv-page-gutter)" }}
+      >
+        <div
+          className="nv-card nv-fade-in"
+          style={{
+            maxWidth: 400,
+            width: "100%",
+            padding: "var(--nv-space-2xl)",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              margin: "0 auto var(--nv-space-md)",
+              borderRadius: "var(--nv-radius-full)",
+              backgroundColor: "var(--nv-accent-blue-dim)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "20px",
+            }}
+          >
+            --
+          </div>
+          <p
+            style={{
+              fontSize: "var(--nv-text-sm)",
+              fontWeight: 500,
+              color: "var(--nv-text-secondary)",
+              marginBottom: "var(--nv-space-sm)",
+            }}
+          >
             Bu tarihte bültende bekleyen maç yok.
           </p>
-          <Link href={`/sonuclar?date=${date}`} className="mt-3 inline-block text-sm text-blue-400 hover:text-blue-300">
+          <Link
+            href={`/sonuclar?date=${date}`}
+            style={{
+              display: "inline-block",
+              marginTop: "var(--nv-space-md)",
+              fontSize: "var(--nv-text-sm)",
+              color: "var(--nv-accent-blue)",
+              textDecoration: "none",
+              fontWeight: 500,
+            }}
+          >
             Kesin sonuçlara bak
           </Link>
         </div>
@@ -118,24 +231,43 @@ async function MatchList({ date }: { date: string }) {
   }
 
   const sorted = sortMatches(matches);
+  const liveCount = matches.filter((m) => m.status === "live").length;
+  const scheduledCount = matches.filter((m) => m.status === "scheduled").length;
 
   return (
     <>
+      {/* Ozet bar */}
       <div
-        className="flex flex-wrap items-center gap-2 px-4 py-2 text-xs border-b"
-        style={{ borderColor: "#1e293b", color: "#475569" }}
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: "var(--nv-space-md)",
+          padding: "var(--nv-space-sm) var(--nv-page-gutter)",
+          borderBottom: "1px solid var(--nv-border)",
+          fontSize: "var(--nv-text-xs)",
+          color: "var(--nv-text-tertiary)",
+        }}
       >
-        <span
-          className="w-2 h-2 rounded-full flex-shrink-0"
-          style={{ backgroundColor: "#22c55e" }}
-        />
-        <span>{matches.length} maç</span>
-        <span className="text-green-400">Canlı: {matches.filter((m) => m.status === "live").length}</span>
-        <span>Başlayacak: {matches.filter((m) => m.status === "scheduled").length}</span>
+        <span className="nv-badge nv-badge-blue">{matches.length} maç</span>
+        {liveCount > 0 && (
+          <span className="nv-badge nv-badge-red nv-live-pulse">
+            Canlı: {liveCount}
+          </span>
+        )}
+        {scheduledCount > 0 && (
+          <span className="nv-badge nv-badge-green">
+            Başlayacak: {scheduledCount}
+          </span>
+        )}
       </div>
-      {sorted.map(({ match, timeStr }) => (
-        <BultenRow key={match.match_id} match={match} timeStr={timeStr} />
-      ))}
+
+      {/* Mac listesi */}
+      <div style={{ padding: "var(--nv-space-sm) var(--nv-page-gutter)" }}>
+        {sorted.map(({ match, timeStr }) => (
+          <BultenRow key={match.match_id} match={match} timeStr={timeStr} />
+        ))}
+      </div>
     </>
   );
 }
@@ -147,30 +279,36 @@ export default async function BultenPage({ searchParams }: Props) {
   if (date === null) redirect("/bulten");
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full pb-[60px] md:pb-0">
       {/* Header */}
       <div
-        className="px-6 py-4 border-b"
-        style={{ borderColor: "#2d3748" }}
+        style={{
+          padding: "var(--nv-space-lg) var(--nv-page-gutter)",
+          borderBottom: "1px solid var(--nv-border)",
+        }}
       >
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-bold" style={{ color: "#e2e8f0" }}>
+          <h1
+            style={{
+              fontSize: "var(--nv-text-xl)",
+              fontWeight: 700,
+              color: "var(--nv-text-primary)",
+              letterSpacing: "var(--nv-tracking-tight)",
+            }}
+          >
             Günlük Bülten
           </h1>
-          <span
-            className="text-xs font-mono px-2.5 py-1 rounded-full"
-            style={{ backgroundColor: "#1e293b", color: "#64748b" }}
-          >
+          <span className="nv-badge nv-badge-blue">
             {date}
           </span>
         </div>
       </div>
 
-      {/* Gün sekmeleri */}
+      {/* Gun sekmeleri */}
       <DayTabs referenceDate={today} activeDate={date} />
       {isRecentScoreDate(date, today) && <AutoRefresh />}
 
-      {/* Maç listesi */}
+      {/* Mac listesi */}
       <div className="flex-1 overflow-y-auto">
         <Suspense fallback={<BultenSkeleton />}>
           <MatchList date={date} />

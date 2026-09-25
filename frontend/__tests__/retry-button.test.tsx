@@ -29,6 +29,6 @@ describe("RetryButton", () => {
   it("has blue background style", () => {
     render(<RetryButton />);
     const btn = screen.getByRole("button");
-    expect(btn.className).toContain("bg-blue-600");
+    expect(btn.style.backgroundColor).toBe("var(--nv-accent-blue)");
   });
 });

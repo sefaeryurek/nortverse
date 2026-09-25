@@ -115,60 +115,116 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
   const scores = data ? scoresFor(data, activePeriod) : null;
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
+    <div className="flex flex-col h-full pb-[60px] md:pb-0">
+      {/* Hero header */}
       <div
-        className="px-5 py-4 border-b flex items-center gap-3 flex-shrink-0"
-        style={{ borderColor: "#1e293b" }}
+        className="px-5 py-5 flex-shrink-0"
+        style={{ borderBottom: "1px solid var(--nv-border)" }}
       >
-        <button
-          onClick={() => router.back()}
-          aria-label="Önceki sayfaya dön"
-          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors flex-shrink-0 bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
+        <div className="flex items-start gap-3">
+          {/* Back button */}
+          <button
+            onClick={() => router.back()}
+            aria-label="Önceki sayfaya dön"
+            className="flex items-center justify-center w-9 h-9 flex-shrink-0 transition-all"
+            style={{
+              backgroundColor: "var(--nv-bg-card)",
+              border: "1px solid var(--nv-border)",
+              borderRadius: "var(--nv-radius-full)",
+              color: "var(--nv-text-secondary)",
+              transitionDuration: "var(--nv-duration-normal)",
+              transitionTimingFunction: "var(--nv-ease)",
+            }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
 
-        <div className="flex-1 min-w-0">
-          {data ? (
-            <>
-              <h1 className="text-base font-bold break-words sm:truncate" style={{ color: "#e2e8f0" }}>
-                {data.home_team}
-                <span className="mx-2" style={{ color: "#475569" }}>vs</span>
-                {data.away_team}
+          <div className="flex-1 min-w-0">
+            {data ? (
+              <>
+                <h1
+                  className="font-bold break-words sm:truncate"
+                  style={{
+                    color: "var(--nv-text-primary)",
+                    fontSize: "var(--nv-text-2xl)",
+                    lineHeight: "var(--nv-leading-tight)",
+                    letterSpacing: "var(--nv-tracking-tight)",
+                  }}
+                >
+                  {data.home_team}
+                  <span className="mx-2" style={{ color: "var(--nv-text-tertiary)", fontSize: "var(--nv-text-lg)" }}>
+                    vs
+                  </span>
+                  {data.away_team}
+                </h1>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="nv-badge nv-badge-blue">
+                    {data.league_code}
+                  </span>
+                  <span
+                    className="text-xs"
+                    style={{ color: "var(--nv-text-tertiary)" }}
+                  >
+                    {data.season}
+                  </span>
+                </div>
+              </>
+            ) : urlHome && urlAway ? (
+              <h1
+                className="font-bold break-words sm:truncate"
+                style={{
+                  color: "var(--nv-text-primary)",
+                  fontSize: "var(--nv-text-2xl)",
+                  lineHeight: "var(--nv-leading-tight)",
+                }}
+              >
+                {urlHome}
+                <span className="mx-2" style={{ color: "var(--nv-text-tertiary)", fontSize: "var(--nv-text-lg)" }}>
+                  vs
+                </span>
+                {urlAway}
               </h1>
-              <p className="text-xs mt-0.5" style={{ color: "#475569" }}>
-                {data.league_code} · {data.season}
-              </p>
-            </>
-          ) : urlHome && urlAway ? (
-            <h1 className="text-base font-bold break-words sm:truncate" style={{ color: "#e2e8f0" }}>
-              {urlHome}
-              <span className="mx-2" style={{ color: "#475569" }}>vs</span>
-              {urlAway}
-            </h1>
-          ) : (
-            <h1 className="text-base font-bold" style={{ color: "#e2e8f0" }}>
-              Maç #{match_id}
-            </h1>
-          )}
+            ) : (
+              <h1
+                className="font-bold"
+                style={{
+                  color: "var(--nv-text-primary)",
+                  fontSize: "var(--nv-text-2xl)",
+                }}
+              >
+                Maç #{match_id}
+              </h1>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* İçerik */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {loading && (
-          <div className="flex flex-col items-center justify-center py-32">
-            <div
-              className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mb-5"
-              style={{ borderColor: "#3b82f6", borderTopColor: "transparent" }}
-            />
-            <p className="text-sm font-medium" style={{ color: "#e2e8f0" }}>
+          <div className="flex flex-col items-center justify-center py-32 px-4">
+            {/* Skeleton loading bars */}
+            <div className="w-full max-w-md space-y-4">
+              <div className="nv-skeleton h-8 w-3/4 mx-auto" style={{ borderRadius: "var(--nv-radius-sm)" }} />
+              <div className="nv-skeleton h-4 w-1/2 mx-auto" style={{ borderRadius: "var(--nv-radius-sm)" }} />
+              <div className="space-y-2 mt-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="nv-skeleton h-12" style={{ borderRadius: "var(--nv-radius-md)" }} />
+                ))}
+              </div>
+            </div>
+            <p
+              className="text-sm font-medium mt-6"
+              style={{ color: "var(--nv-text-primary)" }}
+            >
               Analiz yükleniyor...
             </p>
-            <p className="text-xs mt-1" style={{ color: "#64748b" }}>
+            <p
+              className="text-xs mt-1"
+              style={{ color: "var(--nv-text-tertiary)" }}
+            >
               İlk analiz veri kaynağına göre daha uzun sürebilir.
             </p>
           </div>
@@ -177,49 +233,97 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
         {error && !loading && (
           <div className="p-6">
             <div
-              className="rounded-xl p-6 border text-center"
-              style={{ backgroundColor: "#1c0816", borderColor: "#7f1d1d" }}
+              className="nv-card text-center"
+              style={{
+                borderRadius: "var(--nv-radius-lg)",
+                borderColor: "var(--nv-accent-red)",
+                padding: "var(--nv-space-2xl)",
+              }}
             >
-              <div className="text-3xl mb-3">⚠️</div>
-              <p className="text-sm font-medium" style={{ color: "#f87171" }}>{error}</p>
-              <button onClick={retry} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">Tekrar dene</button>
+              <div
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
+                style={{
+                  backgroundColor: "var(--nv-accent-red-dim)",
+                }}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="var(--nv-accent-red)" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <p
+                className="text-sm font-medium"
+                style={{ color: "var(--nv-accent-red)" }}
+              >
+                {error}
+              </p>
+              <button
+                onClick={retry}
+                className="mt-4 px-4 py-2 text-sm font-semibold transition-all"
+                style={{
+                  backgroundColor: "var(--nv-accent-blue)",
+                  color: "white",
+                  borderRadius: "var(--nv-radius-md)",
+                  transitionDuration: "var(--nv-duration-normal)",
+                }}
+              >
+                Tekrar dene
+              </button>
             </div>
           </div>
         )}
 
         {data && !loading && (
           <div className="p-4 space-y-4">
-            {/* Kural dışı */}
+            {/* Kural disi */}
             {data.skipped && (
               <div
-                className="rounded-xl p-5 border"
-                style={{ backgroundColor: "#1c1109", borderColor: "#92400e" }}
+                className="nv-card nv-fade-in"
+                style={{
+                  borderRadius: "var(--nv-radius-lg)",
+                  borderColor: "var(--nv-accent-amber)",
+                  padding: "var(--nv-space-lg)",
+                }}
               >
-                <p className="text-sm font-semibold" style={{ color: "#fcd34d" }}>
-                  Bu maç için tahmin üretilemedi
-                </p>
-                <p className="text-xs mt-1" style={{ color: "#78716c" }}>
-                  {(data.skip_reason && SKIP_REASON_LABELS[data.skip_reason]) ?? data.skip_reason}
-                </p>
+                <div className="flex items-center gap-2 mb-1">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: "var(--nv-accent-amber-dim)" }}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="var(--nv-accent-amber)" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--nv-accent-amber)" }}>
+                      Bu maç için tahmin üretilemedi
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--nv-text-tertiary)" }}>
+                      {(data.skip_reason && SKIP_REASON_LABELS[data.skip_reason]) ?? data.skip_reason}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
             {!data.skipped && (
               <>
-                {/* Periyot sekmeleri */}
+                {/* Period tabs */}
                 <div className="flex gap-2">
                   {PERIODS.map(({ key, label, short }) => (
                     <button
                       key={key}
                       onClick={() => changePeriod(key)}
-                      className="px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+                      className="px-4 py-2 text-sm font-semibold transition-all"
                       style={{
-                        backgroundColor: activePeriod === key ? "#1d4ed8" : "#1e293b",
-                        color: activePeriod === key ? "#fff" : "#94a3b8",
-                        border: `1px solid ${activePeriod === key ? "#2563eb" : "#2d3748"}`,
+                        backgroundColor: activePeriod === key ? "var(--nv-accent-blue)" : "var(--nv-bg-card)",
+                        color: activePeriod === key ? "white" : "var(--nv-text-secondary)",
+                        border: `1px solid ${activePeriod === key ? "var(--nv-accent-blue)" : "var(--nv-border)"}`,
+                        borderRadius: "var(--nv-radius-full)",
                         boxShadow: activePeriod === key
-                          ? "0 0 12px rgba(37,99,235,0.4)"
+                          ? "var(--nv-shadow-glow-blue)"
                           : "none",
+                        transitionDuration: "var(--nv-duration-normal)",
+                        transitionTimingFunction: "var(--nv-ease)",
                       }}
                     >
                       <span className="hidden sm:inline">{label}</span>
@@ -228,13 +332,16 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                   ))}
                 </div>
 
-                {/* Periyot içeriği — pending iken hafif soluk (kullanıcı geçiş hissini alır) */}
+                {/* Period content -- pending iken hafif soluk */}
                 <div
-                  className="space-y-4 transition-opacity duration-150"
-                  style={{ opacity: isPending ? 0.6 : 1 }}
+                  className="space-y-4 transition-opacity"
+                  style={{
+                    opacity: isPending ? 0.6 : 1,
+                    transitionDuration: "var(--nv-duration-fast)",
+                  }}
                 >
 
-                {/* Form & H2H trendleri — sadece MS periyodunda anlamlı */}
+                {/* Form & H2H trendleri -- sadece MS periyodunda anlamli */}
                 {activePeriod === "ft" && data.trends && (
                   <TrendsPanel
                     trends={data.trends}
@@ -243,20 +350,35 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                   />
                 )}
 
-                {/* Katman A — 3.5+ skor dağılımı */}
+                {/* Katman A -- 3.5+ skor dagilimi */}
                 {scores && (scores.scores_1.length > 0 || scores.scores_x.length > 0 || scores.scores_2.length > 0) && (
                   <div
-                    className="rounded-xl p-4 border space-y-3"
-                    style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}
+                    className="nv-card nv-fade-in space-y-3"
+                    style={{
+                      borderRadius: "var(--nv-radius-lg)",
+                      padding: "var(--nv-space-lg)",
+                    }}
                   >
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#38bdf8" }} />
-                      <h3 className="text-sm font-bold tracking-wide" style={{ color: "#38bdf8" }}>
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: "var(--nv-accent-blue)" }}
+                      />
+                      <h3
+                        className="text-sm font-bold"
+                        style={{
+                          color: "var(--nv-accent-blue)",
+                          letterSpacing: "var(--nv-tracking-wide)",
+                        }}
+                      >
                         Katman A — 3.5+ Oranı Olan Skorlar
                       </h3>
                       <span
-                        className="text-xs px-2 py-0.5 rounded-full font-mono ml-auto"
-                        style={{ backgroundColor: "#1e293b", color: "#64748b" }}
+                        className="nv-badge ml-auto"
+                        style={{
+                          backgroundColor: "var(--nv-bg-elevated)",
+                          color: "var(--nv-text-tertiary)",
+                        }}
                       >
                         {scores.scores_1.length + scores.scores_x.length + scores.scores_2.length} skor
                       </span>
@@ -271,16 +393,19 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
 
                 {scores && scores.scores_1.length === 0 && scores.scores_x.length === 0 && scores.scores_2.length === 0 && (
                   <div
-                    className="rounded-xl p-5 border text-center"
-                    style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}
+                    className="nv-card text-center"
+                    style={{
+                      borderRadius: "var(--nv-radius-lg)",
+                      padding: "var(--nv-space-lg)",
+                    }}
                   >
-                    <p className="text-sm font-medium" style={{ color: "#475569" }}>
+                    <p className="text-sm font-medium" style={{ color: "var(--nv-text-tertiary)" }}>
                       Bu periyotta 3.5+ oranı olan skor bulunamadı
                     </p>
                   </div>
                 )}
 
-                {/* Boş skor listesinde de arşiv eşleşmeleri bulunabilir. */}
+                {/* Bos skor listesinde de arsiv eslesmeleri bulunabilir. */}
                 <MatchProvider value={{ matchId: data.match_id, homeTeam: data.home_team, awayTeam: data.away_team }}>
                   <IddaaCoupon
                     patternB={patternB}
@@ -292,10 +417,18 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                 </MatchProvider>
                 </div>
                 {(evidenceData || validationData) && (
-                  <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-4 text-xs text-slate-300" aria-label="Analiz doğrulama kapsamı">
-                    <h2 className="text-sm font-semibold text-slate-100">Analiz doğrulama kapsamı</h2>
+                  <section
+                    className="nv-card nv-fade-in text-xs"
+                    style={{
+                      borderRadius: "var(--nv-radius-lg)",
+                      padding: "var(--nv-space-lg)",
+                      color: "var(--nv-text-secondary)",
+                    }}
+                    aria-label="Analiz doğrulama kapsamı"
+                  >
+                    <h2 className="text-sm font-semibold" style={{ color: "var(--nv-text-primary)" }}>Analiz doğrulama kapsamı</h2>
                     {evidenceData && (<>
-                    <p className="mt-1 leading-relaxed text-slate-400">
+                    <p className="mt-1 leading-relaxed" style={{ color: "var(--nv-text-tertiary)" }}>
                       Yalnızca analiz ve arşiv desenleri maçtan önce kaydedilmiş, sonucu bilinen maçlar sayılır.
                     </p>
                     <div className="mt-3 grid grid-cols-3 gap-2">
@@ -304,55 +437,74 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                         ["Arşiv 1", evidenceData.archive_1_evaluated],
                         ["Arşiv 2", evidenceData.archive_2_evaluated],
                       ].map(([label, count]) => (
-                        <div key={label} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-center">
-                          <div className="font-mono text-lg font-bold text-slate-100">{count}</div>
-                          <div className="text-[10px] text-slate-400">{label}</div>
+                        <div
+                          key={label}
+                          className="nv-card px-2 py-2 text-center"
+                          style={{ borderRadius: "var(--nv-radius-md)" }}
+                        >
+                          <div
+                            className="text-lg font-bold"
+                            style={{
+                              fontFamily: "var(--nv-font-mono)",
+                              color: "var(--nv-text-primary)",
+                            }}
+                          >
+                            {count}
+                          </div>
+                          <div className="text-[10px]" style={{ color: "var(--nv-text-tertiary)" }}>{label}</div>
                         </div>
                       ))}
                     </div>
-                    <p className="mt-3 leading-relaxed text-slate-400">
+                    <p className="mt-3 leading-relaxed" style={{ color: "var(--nv-text-tertiary)" }}>
                       Her arşiv için {evidenceData.minimum_for_rate} sonuçlu maç tamamlanmadan isabet oranı sunulmuyor.
                       Ekrandaki yüzdeler geçmiş eşleşme sıklığıdır.
                     </p>
-                    <p className="mt-2 leading-relaxed text-slate-300">
+                    <p className="mt-2 leading-relaxed" style={{ color: "var(--nv-text-secondary)" }}>
                       Maç sonu skor listesi: {evidenceData.score_list_hits}/{evidenceData.score_list_evaluated} maçta
                       gerçek skor seçilen listede bulundu.
                       {evidenceData.score_list_evaluated < evidenceData.minimum_for_rate
                         ? " Örneklem henüz sonuç çıkarmak için küçük."
                         : ` Skor kapsama oranı: %${Math.round(100 * evidenceData.score_list_hits / evidenceData.score_list_evaluated)}. Bu oran bahis getirisi veya olasılık kalibrasyonu değildir.`}
                     </p>
-                    <p className="mt-2 leading-relaxed text-amber-300/80">
+                    <p className="mt-2 leading-relaxed" style={{ color: "var(--nv-accent-amber)" }}>
                       Skor listesinin basit bir yaygın skor seçimini geçtiği henüz gösterilmedi. Bu liste doğrulanmış bahis önerisi değildir.
                     </p>
                     </>)}
                     {validationData && (
-                      <div className="mt-4 border-t border-slate-700 pt-3">
-                        <h3 className="font-semibold text-slate-100">İleri dönem seçim takibi</h3>
-                        <p className="mt-1 leading-relaxed text-slate-400">
+                      <div className="mt-4 pt-3" style={{ borderTop: "1px solid var(--nv-border)" }}>
+                        <h3 className="font-semibold" style={{ color: "var(--nv-text-primary)" }}>İleri dönem seçim takibi</h3>
+                        <p className="mt-1 leading-relaxed" style={{ color: "var(--nv-text-tertiary)" }}>
                           Toplam {validationData.total_snapshots} snapshot sabitlendi.
-                          Kurallar: {validationData.rule_version} · Temel: {validationData.baseline_version}.
+                          Kurallar: {validationData.rule_version} -- Temel: {validationData.baseline_version}.
                         </p>
                         {validationData.markets.length === 0 ? (
-                          <p className="mt-2 text-slate-400">Henüz pazar verisi yok.</p>
+                          <p className="mt-2" style={{ color: "var(--nv-text-tertiary)" }}>Henüz pazar verisi yok.</p>
                         ) : (
                           <div className="mt-3 space-y-4">
                             {validationData.markets.map((m) => {
                               const mLabel = { result: "Maç sonucu", over_25: "2.5 Alt/Üst", btts: "Karşılıklı gol" }[m.market];
                               const tierBadge = m.display_tier === "cok_erken"
-                                ? <span className="ml-2 rounded bg-amber-700/60 px-1.5 py-0.5 text-[10px] text-amber-200">Çok Erken</span>
+                                ? <span className="nv-badge nv-badge-amber ml-2">Çok Erken</span>
                                 : m.display_tier === "on_bulgu"
-                                ? <span className="ml-2 rounded bg-yellow-700/60 px-1.5 py-0.5 text-[10px] text-yellow-200">Ön Bulgu</span>
-                                : <span className="ml-2 rounded bg-emerald-700/60 px-1.5 py-0.5 text-[10px] text-emerald-200">Tam</span>;
-                              const pct = (v: number | null) => v !== null ? `%${(v * 100).toFixed(1)}` : "—";
+                                ? <span className="nv-badge nv-badge-amber ml-2">Ön Bulgu</span>
+                                : <span className="nv-badge nv-badge-green ml-2">Tam</span>;
+                              const pct = (v: number | null) => v !== null ? `%${(v * 100).toFixed(1)}` : "---";
                               const ci = (lo: number | null, hi: number | null) =>
-                                lo !== null && hi !== null ? `(${pct(lo)} – ${pct(hi)})` : "";
+                                lo !== null && hi !== null ? `(${pct(lo)} -- ${pct(hi)})` : "";
                               return (
-                                <div key={m.market} className="rounded-lg border border-slate-700 bg-slate-950 p-3">
+                                <div
+                                  key={m.market}
+                                  className="nv-card"
+                                  style={{
+                                    borderRadius: "var(--nv-radius-md)",
+                                    padding: "var(--nv-space-md)",
+                                  }}
+                                >
                                   <div className="flex items-center">
-                                    <span className="font-semibold text-slate-100">{mLabel}</span>
+                                    <span className="font-semibold" style={{ color: "var(--nv-text-primary)" }}>{mLabel}</span>
                                     {tierBadge}
                                   </div>
-                                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
+                                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1" style={{ color: "var(--nv-text-secondary)" }}>
                                     <span>Fırsat: {m.opportunities}</span>
                                     <span>Seçim: {m.issued}</span>
                                     <span>Kaçınma: {m.abstained}</span>
@@ -360,7 +512,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                                   </div>
                                   {m.display_tier !== "cok_erken" && (
                                     <>
-                                      <div className="mt-2 space-y-1 text-slate-300">
+                                      <div className="mt-2 space-y-1" style={{ color: "var(--nv-text-secondary)" }}>
                                         <div>Kapsam: {pct(m.coverage)} {ci(m.coverage_ci_low, m.coverage_ci_high)}</div>
                                         <div>Model isabet: {pct(m.model_hit_rate)} {ci(m.model_hit_rate_ci_low, m.model_hit_rate_ci_high)}</div>
                                         <div>Temel isabet: {pct(m.baseline_hit_rate)} {ci(m.baseline_hit_rate_ci_low, m.baseline_hit_rate_ci_high)}</div>
@@ -368,36 +520,36 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                                           <div>Fark: {(m.paired_difference * 100).toFixed(1)} puan</div>
                                         )}
                                       </div>
-                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-slate-400">
-                                        <span>İkisi de ✓: {m.both_hit}</span>
+                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1" style={{ color: "var(--nv-text-tertiary)" }}>
+                                        <span>İkisi de ok: {m.both_hit}</span>
                                         <span>Sadece model: {m.model_only}</span>
                                         <span>Sadece temel: {m.baseline_only}</span>
-                                        <span>İkisi de ✗: {m.neither}</span>
+                                        <span>İkisi de x: {m.neither}</span>
                                       </div>
                                     </>
                                   )}
                                   {m.display_tier === "tam" && (
-                                    <div className="mt-2 space-y-1 text-slate-400">
-                                      <div>Yayımlanan sıklık ort.: %{m.avg_published_frequency?.toFixed(1) ?? "—"}</div>
-                                      <div>Gözlenen isabet: %{m.observed_hit_rate?.toFixed(1) ?? "—"}</div>
-                                      <div>Kalibrasyon farkı: {m.calibration_gap?.toFixed(1) ?? "—"} puan</div>
-                                      <div>Brier (seçilen olay): {m.selected_event_brier?.toFixed(4) ?? "—"}</div>
+                                    <div className="mt-2 space-y-1" style={{ color: "var(--nv-text-tertiary)" }}>
+                                      <div>Yayımlanan sıklık ort.: %{m.avg_published_frequency?.toFixed(1) ?? "---"}</div>
+                                      <div>Gözlenen isabet: %{m.observed_hit_rate?.toFixed(1) ?? "---"}</div>
+                                      <div>Kalibrasyon farkı: {m.calibration_gap?.toFixed(1) ?? "---"} puan</div>
+                                      <div>Brier (seçilen olay): {m.selected_event_brier?.toFixed(4) ?? "---"}</div>
                                     </div>
                                   )}
                                   {m.display_tier === "cok_erken" && (
-                                    <p className="mt-2 text-amber-300/70">Sonuç çıkarmak için çok erken.</p>
+                                    <p className="mt-2" style={{ color: "var(--nv-accent-amber)", opacity: 0.8 }}>Sonuç çıkarmak için çok erken.</p>
                                   )}
                                   {m.display_tier === "on_bulgu" && (
-                                    <p className="mt-2 text-yellow-300/70">Ön bulgu — sonuçlar değişebilir.</p>
+                                    <p className="mt-2" style={{ color: "var(--nv-accent-amber)", opacity: 0.8 }}>Ön bulgu — sonuçlar değişebilir.</p>
                                   )}
                                 </div>
                               );
                             })}
                           </div>
                         )}
-                        <div className="mt-3 space-y-1 text-slate-500">
+                        <div className="mt-3 space-y-1" style={{ color: "var(--nv-text-tertiary)" }}>
                           <p>Arşiv yüzdesi kalibre olasılık değildir.</p>
-                          <p>Oran verisi olmadan ROI veya kârlılık ölçülemez.</p>
+                          <p>Oran verisi olmadan ROI veya karlılık ölçülemez.</p>
                           {validationData.markets.some((m) => m.display_tier === "tam" && m.market === "result") && (
                             <p>{validationData.brier_note}</p>
                           )}
@@ -407,14 +559,22 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                   </section>
                 )}
                 {scoreValidation && (
-                  <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-4 text-xs text-slate-300" aria-label="İleri dönem skor karşılaştırması">
-                    <h2 className="text-sm font-semibold text-slate-100">İleri dönem skor karşılaştırması</h2>
-                    <p className="mt-1 leading-relaxed text-slate-400">
+                  <section
+                    className="nv-card nv-fade-in text-xs"
+                    style={{
+                      borderRadius: "var(--nv-radius-lg)",
+                      padding: "var(--nv-space-lg)",
+                      color: "var(--nv-text-secondary)",
+                    }}
+                    aria-label="İleri dönem skor karşılaştırması"
+                  >
+                    <h2 className="text-sm font-semibold" style={{ color: "var(--nv-text-primary)" }}>İleri dönem skor karşılaştırması</h2>
+                    <p className="mt-1 leading-relaxed" style={{ color: "var(--nv-text-tertiary)" }}>
                       Maç öncesi {scoreValidation.recorded} skor listesi sabitlendi; {scoreValidation.resolved} maçın kesin sonucu doğrulandı.
                       {" "}{scoreValidation.paired} maçta aynı uzunlukta geçmişte en sık görülen skor listesiyle karşılaştırma yapılabildi.
                     </p>
                     {scoreValidation.paired > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-slate-100">
+                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1" style={{ color: "var(--nv-text-primary)" }}>
                         <span>Analiz listesi: {scoreValidation.paired_model_hits}/{scoreValidation.paired}</span>
                         <span>Basit liste: {scoreValidation.baseline_hits}/{scoreValidation.paired}</span>
                         <span>İkisi de: {scoreValidation.both_hit}</span>
@@ -423,7 +583,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                         <span>İkisi de değil: {scoreValidation.neither}</span>
                       </div>
                     )}
-                    <p className="mt-2 text-slate-400">
+                    <p className="mt-2" style={{ color: "var(--nv-text-tertiary)" }}>
                       {scoreValidation.paired < scoreValidation.minimum_for_rate
                         ? `${scoreValidation.minimum_for_rate} eşleşmiş sonuçtan önce oran gösterilmez.`
                         : `Analiz listesi %${Math.round(100 * scoreValidation.paired_model_hits / scoreValidation.paired)}, basit liste %${Math.round(100 * scoreValidation.baseline_hits / scoreValidation.paired)} kapsam sağladı. Fark %95 aralığı: ${scoreValidation.difference_ci_low_pp} ile ${scoreValidation.difference_ci_high_pp} puan.`}

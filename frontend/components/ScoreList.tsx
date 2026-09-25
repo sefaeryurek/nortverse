@@ -4,42 +4,74 @@ interface Props {
   label: string;
 }
 
-const COLORS = {
-  "1": { bg: "#052e16", border: "#166534", text: "#86efac", dot: "#4ade80" },
-  x: { bg: "#1c1917", border: "#44403c", text: "#d6d3d1", dot: "#a8a29e" },
-  "2": { bg: "#1c0816", border: "#86198f", text: "#f0abfc", dot: "#d946ef" },
+const TYPE_STYLES = {
+  "1": {
+    labelColor: "var(--nv-accent-green)",
+    badgeBg: "var(--nv-accent-green-dim)",
+    badgeColor: "var(--nv-accent-green)",
+    badgeBorder: "var(--nv-accent-green)",
+  },
+  x: {
+    labelColor: "var(--nv-accent-amber)",
+    badgeBg: "var(--nv-accent-amber-dim)",
+    badgeColor: "var(--nv-accent-amber)",
+    badgeBorder: "var(--nv-accent-amber)",
+  },
+  "2": {
+    labelColor: "var(--nv-accent-red)",
+    badgeBg: "var(--nv-accent-red-dim)",
+    badgeColor: "var(--nv-accent-red)",
+    badgeBorder: "var(--nv-accent-red)",
+  },
 };
 
 export default function ScoreList({ scores, type, label }: Props) {
-  const c = COLORS[type];
+  const s = TYPE_STYLES[type];
 
   return (
     <div className="flex-1 min-w-0">
       <div
-        className="text-xs font-semibold uppercase tracking-wider mb-2 px-1"
-        style={{ color: c.dot }}
+        className="text-xs font-semibold uppercase mb-2 px-1 flex items-center gap-2"
+        style={{
+          color: s.labelColor,
+          letterSpacing: "var(--nv-tracking-wide)",
+          fontSize: "var(--nv-text-xs)",
+        }}
       >
         {label}
         <span
-          className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded"
-          style={{ backgroundColor: c.bg, color: c.text }}
+          className="nv-badge"
+          style={{
+            backgroundColor: s.badgeBg,
+            color: s.badgeColor,
+          }}
         >
           {scores.length}
         </span>
       </div>
       {scores.length === 0 ? (
-        <p className="text-xs px-1" style={{ color: "#475569" }}>
+        <p
+          className="text-xs px-1"
+          style={{ color: "var(--nv-text-tertiary)" }}
+        >
           —
         </p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
-          {scores.map((s) => (
+          {scores.map((score) => (
             <span
-              key={s}
-              className="text-xs px-2 py-1 rounded border font-mono font-semibold"
-              style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
+              key={score}
+              className="text-xs px-2.5 py-1 font-semibold"
+              style={{
+                backgroundColor: s.badgeBg,
+                color: s.badgeColor,
+                border: `1px solid ${s.badgeBorder}`,
+                borderRadius: "var(--nv-radius-full)",
+                fontFamily: "var(--nv-font-mono)",
+                fontSize: "var(--nv-text-xs)",
+              }}
             >
-              {s}
+              {score}
             </span>
           ))}
         </div>

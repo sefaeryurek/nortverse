@@ -25,29 +25,125 @@ const ARCHIVE_LABELS: Record<FTRecommendation["archive"], string> = {
   archive_1: "Arşiv 1", archive_2: "Arşiv 2", both: "1+2",
 };
 
+function pctColor(pct: number) {
+  if (pct >= 80) return "var(--nv-accent-green)";
+  if (pct >= 65) return "var(--nv-accent-blue)";
+  if (pct >= 50) return "var(--nv-text-secondary)";
+  return "var(--nv-text-tertiary)";
+}
+
+function pctBarBg(pct: number) {
+  if (pct >= 80) return "var(--nv-accent-green)";
+  if (pct >= 65) return "var(--nv-accent-blue)";
+  if (pct >= 50) return "var(--nv-text-secondary)";
+  return "var(--nv-text-tertiary)";
+}
+
+function archiveBadgeClass(archive: FTRecommendation["archive"]) {
+  if (archive === "both") return "nv-badge nv-badge-purple";
+  if (archive === "archive_1") return "nv-badge nv-badge-blue";
+  return "nv-badge nv-badge-amber";
+}
+
 function RecommendationRow({ recommendation }: { recommendation: FTRecommendation }) {
   const match = useMatchInfo();
+  const pct = Math.round(recommendation.frequency_pct);
+  const color = pctColor(pct);
   const archive = recommendation.archive === "archive_1" ? "A"
     : recommendation.archive === "archive_2" ? "B" : "AB";
+
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-emerald-900 bg-emerald-950/40 px-3 py-2">
-      <span className="min-w-12 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-center font-mono text-[9px] font-bold text-slate-300">
-        {ARCHIVE_LABELS[recommendation.archive]}
-      </span>
+    <div
+      className="nv-card-interactive flex items-center gap-3"
+      style={{
+        padding: "var(--nv-space-md)",
+        borderRadius: "var(--nv-radius-md)",
+      }}
+    >
+      {/* Confidence ring */}
+      <div
+        className="nv-conf-ring flex-shrink-0"
+        style={{
+          "--size": "40px",
+          "--stroke": "4px",
+          "--pct": pct,
+          "--ring-color": color,
+        } as React.CSSProperties}
+      >
+        <span
+          className="absolute text-[10px] font-bold"
+          style={{
+            fontFamily: "var(--nv-font-mono)",
+            color: color,
+          }}
+        >
+          {pct}
+        </span>
+      </div>
+
+      {/* Content */}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[10px] uppercase tracking-wider text-slate-500">{MARKET_LABELS[recommendation.market]}</div>
-        <div className="truncate text-sm font-semibold text-emerald-100">{SELECTION_LABELS[recommendation.selection]}</div>
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className={archiveBadgeClass(recommendation.archive)}>
+            {ARCHIVE_LABELS[recommendation.archive]}
+          </span>
+          <span
+            className="text-[10px] uppercase"
+            style={{
+              color: "var(--nv-text-tertiary)",
+              letterSpacing: "var(--nv-tracking-wide)",
+            }}
+          >
+            {MARKET_LABELS[recommendation.market]}
+          </span>
+        </div>
+        <div
+          className="text-sm font-semibold"
+          style={{ color: "var(--nv-text-primary)" }}
+        >
+          {SELECTION_LABELS[recommendation.selection]}
+        </div>
+        {/* Percentage bar */}
+        <div className="nv-pct-bar mt-1.5" style={{ height: "4px" }}>
+          <div
+            className="nv-pct-bar-fill"
+            style={{
+              width: `${pct}%`,
+              backgroundColor: pctBarBg(pct),
+            }}
+          />
+        </div>
       </div>
-      <div className="shrink-0 text-right">
-        <div className="font-mono text-base font-extrabold leading-none text-emerald-100">%{Math.round(recommendation.frequency_pct)}</div>
-        <div className="mt-0.5 font-mono text-[9px] text-slate-500">{recommendation.match_count} maç</div>
+
+      {/* Right side: pct + count + cart */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="text-right">
+          <div
+            className="text-base font-extrabold leading-none"
+            style={{
+              fontFamily: "var(--nv-font-mono)",
+              color: color,
+            }}
+          >
+            %{pct}
+          </div>
+          <div
+            className="mt-0.5 text-[9px]"
+            style={{
+              fontFamily: "var(--nv-font-mono)",
+              color: "var(--nv-text-tertiary)",
+            }}
+          >
+            {recommendation.match_count} maç
+          </div>
+        </div>
+        {match && <AddToCartButton item={{
+          matchId: match.matchId, homeTeam: match.homeTeam, awayTeam: match.awayTeam,
+          marketKey: recommendation.market, marketLabel: MARKET_LABELS[recommendation.market],
+          selectionLabel: SELECTION_LABELS[recommendation.selection], pct: recommendation.frequency_pct,
+          archive, period: "ft",
+        }} />}
       </div>
-      {match && <AddToCartButton item={{
-        matchId: match.matchId, homeTeam: match.homeTeam, awayTeam: match.awayTeam,
-        marketKey: recommendation.market, marketLabel: MARKET_LABELS[recommendation.market],
-        selectionLabel: SELECTION_LABELS[recommendation.selection], pct: recommendation.frequency_pct,
-        archive, period: "ft",
-      }} />}
     </div>
   );
 }
@@ -56,9 +152,26 @@ export default function TopPicks({ recommendations, period }: Props) {
   if (period !== "ft") return null;
   if (recommendations.length === 0) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-        <h3 className="text-sm font-bold tracking-wide text-slate-300">İleri dönem deneysel seçimler</h3>
-        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+      <div
+        className="nv-card nv-fade-in"
+        style={{
+          borderRadius: "var(--nv-radius-lg)",
+          padding: "var(--nv-space-lg)",
+        }}
+      >
+        <h3
+          className="text-sm font-bold"
+          style={{
+            color: "var(--nv-text-secondary)",
+            letterSpacing: "var(--nv-tracking-wide)",
+          }}
+        >
+          İleri dönem deneysel seçimler
+        </h3>
+        <p
+          className="mt-1 text-xs leading-relaxed"
+          style={{ color: "var(--nv-text-tertiary)" }}
+        >
           Bu maç için ft-display-v3 kuralıyla maç öncesi kaydedilmiş seçim bulunmuyor.
           Ayrıntılı arşiv istatistikleri aşağıda bilgi amacıyla gösteriliyor.
         </p>
@@ -66,15 +179,30 @@ export default function TopPicks({ recommendations, period }: Props) {
     );
   }
   return (
-    <div className="space-y-3 rounded-xl border border-emerald-800 bg-emerald-950/20 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold tracking-wide text-emerald-200">İleri dönem deneysel seçimler</h3>
-        <span className="font-mono text-[10px] text-slate-500">ft-display-v3 · {recommendations.length} seçim</span>
+    <div className="nv-card nv-fade-in" style={{ borderRadius: "var(--nv-radius-lg)", padding: "var(--nv-space-lg)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3
+          className="text-sm font-bold"
+          style={{
+            color: "var(--nv-text-primary)",
+            letterSpacing: "var(--nv-tracking-wide)",
+          }}
+        >
+          İleri dönem deneysel seçimler
+        </h3>
+        <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
+          ft-display-v3 · {recommendations.length} seçim
+        </span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {recommendations.map((recommendation) => <RecommendationRow key={recommendation.recommendation_id} recommendation={recommendation} />)}
+        {recommendations.map((recommendation) => (
+          <RecommendationRow key={recommendation.recommendation_id} recommendation={recommendation} />
+        ))}
       </div>
-      <p className="text-[10px] leading-relaxed text-slate-500">
+      <p
+        className="text-[10px] leading-relaxed mt-3"
+        style={{ color: "var(--nv-text-tertiary)" }}
+      >
         Seçimler maç başlamadan sabitlenir ve aynı kayıt sonuçlandıktan sonra ölçülür.
         Yüzde, benzer geçmiş maçlardaki görülme sıklığıdır; kalibre edilmiş olasılık veya getiri tahmini değildir.
       </p>

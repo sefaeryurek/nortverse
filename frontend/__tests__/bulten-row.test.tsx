@@ -60,7 +60,7 @@ describe("BultenRow", () => {
     const timeEls = screen.getAllByText("--:--");
     expect(timeEls.length).toBeGreaterThan(0);
     const el = timeEls[0];
-    expect(el.style.color).toBe("rgb(71, 85, 105)");
+    expect(el.style.color).toBe("var(--nv-text-tertiary)");
   });
 
   it("links to analyze page with query params", () => {

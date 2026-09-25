@@ -7,8 +7,12 @@ function PeriodBadge({ period }: { period: "ht" | "h2" | "ft" }) {
   const label = period === "ht" ? "İY" : period === "h2" ? "2Y" : "MS";
   return (
     <span
-      className="text-[8px] font-bold px-1 rounded font-mono"
-      style={{ backgroundColor: "#1e293b", color: "#94a3b8" }}
+      className="nv-badge"
+      style={{
+        backgroundColor: "var(--nv-bg-elevated)",
+        color: "var(--nv-text-secondary)",
+        fontSize: "8px",
+      }}
     >
       {label}
     </span>
@@ -41,64 +45,79 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
 
   return (
     <>
-      {/* Floating buton — sadece desktop (md+); mobile'de sticky bar ile değiştirildi */}
+      {/* Floating buton -- sadece desktop (md+); mobile'de sticky bar ile degistirildi */}
       {!open && (
         <button
           ref={desktopTrigger}
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-40 hidden md:flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-transform hover:scale-105"
+          className="fixed bottom-4 right-4 z-40 hidden md:flex items-center gap-2 px-4 py-3 transition-transform"
           style={{
-            backgroundColor: "#16a34a",
-            color: "#ecfdf5",
-            boxShadow: "0 8px 32px rgba(22,163,74,0.4)",
+            backgroundColor: "var(--nv-accent-green)",
+            color: "var(--nv-text-inverse)",
+            borderRadius: "var(--nv-radius-full)",
+            boxShadow: "var(--nv-shadow-glow-green), var(--nv-shadow-lg)",
+            transitionDuration: "var(--nv-duration-normal)",
+            transitionTimingFunction: "var(--nv-ease)",
           }}
           aria-label={`Bahis sepetini aç (${count} tahmin)`}
         >
-          <span className="text-lg">🧾</span>
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
           <span className="text-sm font-bold">Sepet</span>
           <span
-            className="text-xs font-mono px-1.5 py-0.5 rounded-full"
-            style={{ backgroundColor: "#052e16", color: "#bbf7d0" }}
+            className="nv-badge"
+            style={{
+              backgroundColor: "var(--nv-accent-green-dim)",
+              color: "var(--nv-accent-green)",
+            }}
           >
             {count}
           </span>
         </button>
       )}
 
-      {/* Mobile sticky bottom bar — md altında her zaman görünür (count > 0 zaten yukarıda guard'lı) */}
+      {/* Mobile sticky bottom bar -- md altinda her zaman gorunur (count > 0 zaten yukarida guard'li) */}
       {!open && (
         <button
           ref={mobileTrigger}
           onClick={() => setOpen(true)}
-          className="fixed bottom-0 left-0 right-0 md:hidden flex items-center gap-3 px-4 py-3 border-t shadow-2xl"
+          className="fixed bottom-[60px] left-0 right-0 md:hidden flex items-center gap-3 px-4 py-3 nv-glass"
           style={{
             zIndex: 45,
-            backgroundColor: "#0a1410",
-            borderColor: "#15803d",
+            borderTop: "1px solid var(--nv-accent-green)",
             boxShadow: "0 -4px 16px rgba(0,0,0,0.4)",
           }}
           aria-label={`Bahis sepetini aç (${count} tahmin)`}
         >
-          <span className="text-lg">🧾</span>
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="var(--nv-accent-green)" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
           <span
-            className="text-xs font-mono px-1.5 py-0.5 rounded-full flex-shrink-0"
-            style={{ backgroundColor: "#052e16", color: "#bbf7d0" }}
+            className="nv-badge nv-badge-green flex-shrink-0"
           >
             {count} seçim
           </span>
-          <div className="flex-1 text-center text-xs" style={{ color: "#86efac" }}>
+          <div
+            className="flex-1 text-center text-xs"
+            style={{ color: "var(--nv-accent-green)" }}
+          >
             Arşiv seçimleri
           </div>
           <span
-            className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
-            style={{ backgroundColor: "#16a34a", color: "#ecfdf5" }}
+            className="text-xs font-bold px-3 py-1.5 flex-shrink-0"
+            style={{
+              backgroundColor: "var(--nv-accent-green)",
+              color: "var(--nv-text-inverse)",
+              borderRadius: "var(--nv-radius-md)",
+            }}
           >
             Aç
           </span>
         </button>
       )}
 
-      {/* Açık panel — desktop'ta sticky kart, mobile'da tam sheet */}
+      {/* Acik panel -- desktop'ta sticky kart, mobile'da tam sheet */}
       {open && (
         <>
           <dialog
@@ -106,37 +125,41 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
             aria-label="Bahis Sepeti"
             onCancel={() => setOpen(false)}
             onClose={() => setOpen(false)}
-            className="fixed z-50 m-0 top-auto w-full max-w-none flex flex-col md:left-auto md:right-4 md:bottom-4 md:w-80 md:max-h-[80vh] md:rounded-xl right-0 left-0 bottom-0 max-h-[85vh] rounded-t-2xl border backdrop:bg-black/60"
+            className="fixed z-50 m-0 top-auto w-full max-w-none flex flex-col md:left-auto md:right-4 md:bottom-4 md:w-80 md:max-h-[80vh] md:rounded-xl right-0 left-0 bottom-0 max-h-[85vh] rounded-t-2xl nv-glass backdrop:bg-black/60"
             style={{
-              backgroundColor: "#0a1410",
-              borderColor: "#15803d",
-              boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
+              backgroundColor: "var(--nv-bg-glass)",
+              border: "1px solid var(--nv-border-accent)",
+              boxShadow: "var(--nv-shadow-lg)",
             }}
           >
             {/* Header */}
             <div
-              className="flex items-center justify-between px-4 py-3 border-b"
-              style={{ borderColor: "#1e293b" }}
+              className="flex items-center justify-between px-4 py-3"
+              style={{ borderBottom: "1px solid var(--nv-border)" }}
             >
               <div className="flex items-center gap-2">
-                <span className="text-base">🧾</span>
-                <h3 className="text-sm font-bold" style={{ color: "#86efac" }}>
+                <svg className="w-5 h-5" fill="none" stroke="var(--nv-accent-green)" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <h3 className="text-sm font-bold" style={{ color: "var(--nv-accent-green)" }}>
                   Bahis Sepeti
                 </h3>
-                <span
-                  className="text-[10px] px-1.5 py-0.5 rounded font-mono"
-                  style={{ backgroundColor: "#0a1f17", color: "#4ade80" }}
-                >
+                <span className="nv-badge nv-badge-green">
                   {count}
                 </span>
               </div>
               <button
                 onClick={() => setOpen(false)}
-                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors hover:bg-slate-800"
-                style={{ color: "#94a3b8" }}
+                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+                style={{
+                  color: "var(--nv-text-secondary)",
+                  backgroundColor: "var(--nv-bg-elevated)",
+                }}
                 aria-label="Sepeti kapat"
               >
-                ✕
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
@@ -145,37 +168,60 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
               {items.map((it) => (
                 <div
                   key={itemKey(it)}
-                  className="rounded-lg p-2 border flex items-start gap-2"
-                  style={{ backgroundColor: "#0a0f17", borderColor: "#1e293b" }}
+                  className="nv-card flex items-start gap-2"
+                  style={{
+                    borderRadius: "var(--nv-radius-md)",
+                    padding: "var(--nv-space-sm) var(--nv-space-md)",
+                  }}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <PeriodBadge period={it.period} />
                       <span
                         className="text-[10px] truncate"
-                        style={{ color: "#64748b" }}
+                        style={{ color: "var(--nv-text-tertiary)" }}
                       >
                         {it.homeTeam} - {it.awayTeam}
                       </span>
                     </div>
-                    <div className="text-[10px] uppercase tracking-wider truncate" style={{ color: "#475569" }}>
+                    <div
+                      className="text-[10px] uppercase truncate"
+                      style={{
+                        color: "var(--nv-text-tertiary)",
+                        letterSpacing: "var(--nv-tracking-wide)",
+                      }}
+                    >
                       {it.marketLabel}
                     </div>
-                    <div className="text-sm font-semibold truncate" style={{ color: "#cbd5e1" }}>
+                    <div
+                      className="text-sm font-semibold truncate"
+                      style={{ color: "var(--nv-text-primary)" }}
+                    >
                       {it.selectionLabel}
                     </div>
                   </div>
                   <div className="flex flex-col items-end flex-shrink-0 gap-1">
-                    <span className="text-sm font-bold font-mono" style={{ color: "#86efac" }}>
+                    <span
+                      className="text-sm font-bold"
+                      style={{
+                        fontFamily: "var(--nv-font-mono)",
+                        color: "var(--nv-accent-green)",
+                      }}
+                    >
                       %{Math.round(it.pct)}
                     </span>
                     <button
                       onClick={() => removeItem(itemKey(it))}
-                      className="text-xs w-5 h-5 rounded flex items-center justify-center transition-colors hover:bg-slate-700"
-                      style={{ color: "#64748b" }}
+                      className="w-5 h-5 rounded flex items-center justify-center transition-colors"
+                      style={{
+                        color: "var(--nv-text-tertiary)",
+                        backgroundColor: "var(--nv-bg-elevated)",
+                      }}
                       aria-label="Tahmini sepetten kaldır"
                     >
-                      ✕
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -184,19 +230,29 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
 
             {/* Footer */}
             <div
-              className="border-t px-4 py-3 space-y-2"
-              style={{ borderColor: "#1e293b", backgroundColor: "#0a0f17" }}
+              className="px-4 py-3 space-y-2"
+              style={{
+                borderTop: "1px solid var(--nv-border)",
+                backgroundColor: "var(--nv-bg-surface)",
+              }}
             >
-              <p className="text-xs text-slate-400" role="status">
+              <p
+                className="text-xs"
+                style={{ color: "var(--nv-text-tertiary)" }}
+                role="status"
+              >
                 Yüzdeler geçmiş arşiv eşleşmelerinin sıklığıdır. Seçimlerin birlikte gerçekleşme olasılığı veya bahis oranı olarak kullanılamaz.
               </p>
               <button
                 onClick={clear}
-                className="w-full text-xs py-2 rounded-lg transition-colors hover:bg-red-950"
+                className="w-full text-xs py-2 transition-colors font-semibold"
                 style={{
-                  backgroundColor: "#1c0816",
-                  color: "#fca5a5",
-                  border: "1px solid #7f1d1d",
+                  backgroundColor: "var(--nv-accent-red-dim)",
+                  color: "var(--nv-accent-red)",
+                  border: "1px solid var(--nv-accent-red)",
+                  borderRadius: "var(--nv-radius-md)",
+                  transitionDuration: "var(--nv-duration-normal)",
+                  transitionTimingFunction: "var(--nv-ease)",
                 }}
               >
                 Sepeti Temizle

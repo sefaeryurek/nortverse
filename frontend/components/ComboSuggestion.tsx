@@ -39,35 +39,67 @@ function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
 
   return (
     <div
-      className="rounded-xl p-3 border space-y-2 flex flex-col"
-      style={{ backgroundColor: accent.bg, borderColor: accent.border }}
+      className="nv-card flex flex-col"
+      style={{
+        borderRadius: "var(--nv-radius-lg)",
+        borderTop: `3px solid ${accent.color}`,
+        padding: "var(--nv-space-md)",
+      }}
     >
-      {/* Başlık */}
-      <div className="flex items-center justify-between">
-        <h4 className="text-xs font-bold tracking-wide uppercase" style={{ color: accent.color }}>
+      {/* Baslik */}
+      <div className="flex items-center justify-between mb-2">
+        <span
+          className="nv-badge"
+          style={{ backgroundColor: accent.bg, color: accent.color }}
+        >
           {tierLabel}
-        </h4>
-        <span className="text-[10px] font-mono" style={{ color: accent.color, opacity: 0.7 }}>
+        </span>
+        <span
+          className="text-[10px]"
+          style={{
+            fontFamily: "var(--nv-font-mono)",
+            color: "var(--nv-text-tertiary)",
+          }}
+        >
           {combo.legs.length} seçim
         </span>
       </div>
 
       {/* Leg listesi */}
-      <div className="space-y-1 flex-1">
+      <div className="space-y-1.5 flex-1">
         {combo.legs.map((leg) => (
           <div
             key={`${leg.marketKey}-${leg.selectionLabel}`}
-            className="flex items-center gap-2 px-2 py-1 rounded text-xs"
-            style={{ backgroundColor: "#0a0f17" }}
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs"
+            style={{
+              backgroundColor: "var(--nv-bg-surface)",
+              borderRadius: "var(--nv-radius-md)",
+            }}
           >
-            <span className="flex-1 min-w-0 truncate" style={{ color: "#cbd5e1" }}>
-              <span className="text-[9px] uppercase tracking-wider" style={{ color: "#475569" }}>
+            <div className="flex-1 min-w-0">
+              <span
+                className="text-[9px] uppercase block truncate"
+                style={{
+                  color: "var(--nv-text-tertiary)",
+                  letterSpacing: "var(--nv-tracking-wide)",
+                }}
+              >
                 {leg.marketLabel}
               </span>
-              <br />
-              <span className="font-semibold">{leg.selectionLabel}</span>
-            </span>
-            <span className="font-mono font-bold flex-shrink-0" style={{ color: accent.color }}>
+              <span
+                className="font-semibold block truncate"
+                style={{ color: "var(--nv-text-primary)" }}
+              >
+                {leg.selectionLabel}
+              </span>
+            </div>
+            <span
+              className="font-bold flex-shrink-0"
+              style={{
+                fontFamily: "var(--nv-font-mono)",
+                color: accent.color,
+              }}
+            >
               %{Math.round(leg.pct)}
             </span>
           </div>
@@ -77,13 +109,22 @@ function ComboCard({ combo, period }: { combo: Combo; period: Period }) {
       {match && (
         <button
           onClick={addAllLegs}
-          className="w-full text-xs py-1.5 rounded-lg font-semibold transition-colors hover:opacity-80"
-          style={{ backgroundColor: "#0a0f17", color: accent.color, border: `1px solid ${accent.border}` }}
+          className="w-full text-xs py-2 mt-3 font-semibold transition-all"
+          style={{
+            backgroundColor: "var(--nv-accent-green-dim)",
+            color: "var(--nv-accent-green)",
+            border: "1px solid var(--nv-accent-green)",
+            borderRadius: "var(--nv-radius-md)",
+            transitionDuration: "var(--nv-duration-normal)",
+            transitionTimingFunction: "var(--nv-ease)",
+          }}
         >
-          + Sepete Ekle ({combo.legs.length} seçim)
+          <svg className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+          </svg>
+          Sepete Ekle ({combo.legs.length} seçim)
         </button>
       )}
-
     </div>
   );
 }
@@ -97,37 +138,39 @@ export default function ComboSuggestion({ patternB, patternC, period }: Props) {
   if (combos.length === 0) return null;
 
   return (
-    <div
-      className="rounded-xl p-4 border space-y-3"
-      style={{ backgroundColor: "#0a0f1a", borderColor: "#1e293b" }}
-    >
-      {/* Başlık */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="nv-card nv-fade-in" style={{ borderRadius: "var(--nv-radius-lg)", padding: "var(--nv-space-lg)" }}>
+      {/* Baslik */}
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-base">🎯</span>
-          <h3 className="text-sm font-bold tracking-wide" style={{ color: "#cbd5e1" }}>
+          <h3
+            className="text-sm font-bold"
+            style={{
+              color: "var(--nv-text-primary)",
+              letterSpacing: "var(--nv-tracking-wide)",
+            }}
+          >
             Birlikte Değerlendirilebilen Seçimler
           </h3>
-          <span
-            className="text-[10px] px-1.5 py-0.5 rounded font-mono"
-            style={{ backgroundColor: "#1e293b", color: "#94a3b8" }}
-          >
+          <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-secondary)" }}>
             {combos.length}
           </span>
         </div>
-        <span className="text-[10px]" style={{ color: "#475569" }}>
+        <span className="text-[10px]" style={{ color: "var(--nv-text-tertiary)" }}>
           Bu maçın tahminlerinden oluşturulan seçimler
         </span>
       </div>
 
-      {/* Kombo kartları */}
+      {/* Kombo kartlari */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {combos.map((c) => (
           <ComboCard key={c.tier} combo={c} period={period} />
         ))}
       </div>
 
-      <p className="text-[10px] leading-snug" style={{ color: "#475569" }}>
+      <p
+        className="text-[10px] leading-snug mt-3"
+        style={{ color: "var(--nv-text-tertiary)" }}
+      >
         Aynı maçın seçimleri bağımsız değildir; birlikte gerçekleşme oranı için doğrulanmış bir tahmin sunulmuyor.
       </p>
     </div>

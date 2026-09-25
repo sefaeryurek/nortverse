@@ -1,40 +1,375 @@
 @import "tailwindcss" source("../");
 
+/* ============================================================
+   NORTVERSE DESIGN TOKENS
+   --nv- prefix ile tum CSS degiskenleri
+   ============================================================ */
+
 :root {
-  --bg-primary: #0f1117;
-  --bg-secondary: #161b27;
-  --bg-card: #1c2333;
-  --border: #2d3748;
-  --accent: #3b82f6;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
+  /* --- Backgrounds --- */
+  --nv-bg-base: #0a0c10;
+  --nv-bg-surface: #111318;
+  --nv-bg-card: #161a22;
+  --nv-bg-card-hover: #1c2029;
+  --nv-bg-elevated: #1e222c;
+  --nv-bg-overlay: rgba(0, 0, 0, 0.6);
+  --nv-bg-glass: rgba(17, 19, 24, 0.8);
+
+  /* --- Borders --- */
+  --nv-border: #1e2230;
+  --nv-border-subtle: #161a22;
+  --nv-border-accent: #2a3040;
+
+  /* --- Text --- */
+  --nv-text-primary: #e8ecf4;
+  --nv-text-secondary: #8b95a8;
+  --nv-text-tertiary: #555d6e;
+  --nv-text-inverse: #0a0c10;
+
+  /* --- Accent Colors --- */
+  --nv-accent-blue: #4b8cef;
+  --nv-accent-blue-dim: rgba(75, 140, 239, 0.12);
+  --nv-accent-blue-glow: rgba(75, 140, 239, 0.25);
+  --nv-accent-green: #3dd68c;
+  --nv-accent-green-dim: rgba(61, 214, 140, 0.12);
+  --nv-accent-green-glow: rgba(61, 214, 140, 0.25);
+  --nv-accent-amber: #f0b429;
+  --nv-accent-amber-dim: rgba(240, 180, 41, 0.12);
+  --nv-accent-red: #ef5350;
+  --nv-accent-red-dim: rgba(239, 83, 80, 0.12);
+  --nv-accent-purple: #a78bfa;
+  --nv-accent-purple-dim: rgba(167, 139, 250, 0.12);
+
+  /* --- Semantic --- */
+  --nv-win: #3dd68c;
+  --nv-draw: #f0b429;
+  --nv-loss: #ef5350;
+  --nv-live: #ef5350;
+  --nv-live-glow: rgba(239, 83, 80, 0.3);
+
+  /* --- Typography --- */
+  --nv-font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --nv-font-mono: var(--font-jetbrains), ui-monospace, "Cascadia Code", monospace;
+  --nv-text-xs: 0.6875rem;
+  --nv-text-sm: 0.8125rem;
+  --nv-text-base: 0.9375rem;
+  --nv-text-lg: 1.125rem;
+  --nv-text-xl: 1.375rem;
+  --nv-text-2xl: 1.75rem;
+  --nv-text-3xl: 2.25rem;
+  --nv-leading-tight: 1.2;
+  --nv-leading-normal: 1.5;
+  --nv-tracking-tight: -0.01em;
+  --nv-tracking-wide: 0.04em;
+
+  /* --- Spacing --- */
+  --nv-space-xs: 0.25rem;
+  --nv-space-sm: 0.5rem;
+  --nv-space-md: 0.75rem;
+  --nv-space-lg: 1rem;
+  --nv-space-xl: 1.5rem;
+  --nv-space-2xl: 2rem;
+  --nv-space-3xl: 3rem;
+  --nv-page-gutter: 1rem;
+
+  /* --- Radius --- */
+  --nv-radius-sm: 6px;
+  --nv-radius-md: 10px;
+  --nv-radius-lg: 14px;
+  --nv-radius-xl: 20px;
+  --nv-radius-full: 9999px;
+
+  /* --- Shadows --- */
+  --nv-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --nv-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --nv-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --nv-shadow-glow-blue: 0 0 20px rgba(75, 140, 239, 0.15);
+  --nv-shadow-glow-green: 0 0 20px rgba(61, 214, 140, 0.15);
+
+  /* --- Transitions --- */
+  --nv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --nv-duration-fast: 120ms;
+  --nv-duration-normal: 200ms;
+  --nv-duration-slow: 350ms;
+
+  /* --- Layout --- */
+  --nv-sidebar-collapsed: 64px;
+  --nv-sidebar-expanded: 240px;
+  --nv-header-h: 56px;
+  --nv-bottom-bar-h: 60px;
+  --nv-max-content: 1280px;
 }
 
-body {
-  background-color: #0f1117;
-  color: #e2e8f0;
-}
-
-:focus-visible {
-  outline: 2px solid #60a5fa;
-  outline-offset: 3px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+@media (min-width: 768px) {
+  :root {
+    --nv-page-gutter: 1.5rem;
   }
 }
+
+@media (min-width: 1280px) {
+  :root {
+    --nv-page-gutter: 2rem;
+  }
+}
+
+/* ============================================================
+   BASE STYLES
+   ============================================================ */
+
+body {
+  font-family: var(--nv-font-sans);
+  font-size: var(--nv-text-base);
+  line-height: var(--nv-leading-normal);
+  background-color: var(--nv-bg-base);
+  color: var(--nv-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   FOCUS VISIBLE
+   ============================================================ */
+
+:focus-visible {
+  outline: 2px solid var(--nv-accent-blue);
+  outline-offset: 2px;
+  border-radius: var(--nv-radius-sm);
+}
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
 
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #0f1117;
+  background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #2d3748;
-  border-radius: 3px;
+  background: var(--nv-border-accent);
+  border-radius: var(--nv-radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--nv-text-tertiary);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nv-border-accent) transparent;
+}
+
+/* ============================================================
+   UTILITY CLASSES
+   ============================================================ */
+
+.nv-glass {
+  background: var(--nv-bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--nv-border);
+}
+
+.nv-card {
+  background: var(--nv-bg-card);
+  border: 1px solid var(--nv-border);
+  border-radius: var(--nv-radius-lg);
+  transition: border-color var(--nv-duration-normal) var(--nv-ease),
+              box-shadow var(--nv-duration-normal) var(--nv-ease);
+}
+
+.nv-card:hover {
+  border-color: var(--nv-border-accent);
+  box-shadow: var(--nv-shadow-sm);
+}
+
+.nv-card-interactive {
+  background: var(--nv-bg-card);
+  border: 1px solid var(--nv-border);
+  border-radius: var(--nv-radius-lg);
+  cursor: pointer;
+  transition: background-color var(--nv-duration-normal) var(--nv-ease),
+              border-color var(--nv-duration-normal) var(--nv-ease),
+              box-shadow var(--nv-duration-normal) var(--nv-ease),
+              transform var(--nv-duration-fast) var(--nv-ease);
+}
+
+.nv-card-interactive:hover {
+  background: var(--nv-bg-card-hover);
+  border-color: var(--nv-accent-blue);
+  box-shadow: var(--nv-shadow-glow-blue);
+  transform: translateY(-1px);
+}
+
+.nv-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--nv-radius-full);
+  font-size: var(--nv-text-xs);
+  font-weight: 600;
+  font-family: var(--nv-font-mono);
+  letter-spacing: var(--nv-tracking-wide);
+  line-height: 1.4;
+}
+
+.nv-badge-green {
+  background: var(--nv-accent-green-dim);
+  color: var(--nv-accent-green);
+}
+
+.nv-badge-blue {
+  background: var(--nv-accent-blue-dim);
+  color: var(--nv-accent-blue);
+}
+
+.nv-badge-amber {
+  background: var(--nv-accent-amber-dim);
+  color: var(--nv-accent-amber);
+}
+
+.nv-badge-red {
+  background: var(--nv-accent-red-dim);
+  color: var(--nv-accent-red);
+}
+
+.nv-badge-purple {
+  background: var(--nv-accent-purple-dim);
+  color: var(--nv-accent-purple);
+}
+
+/* --- Percentage bar (CSS-only visualization) --- */
+.nv-pct-bar {
+  position: relative;
+  height: 6px;
+  background: var(--nv-bg-elevated);
+  border-radius: var(--nv-radius-full);
+  overflow: hidden;
+}
+
+.nv-pct-bar-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transition: width var(--nv-duration-slow) var(--nv-ease);
+}
+
+/* --- Confidence ring (conic-gradient CSS visualization) --- */
+.nv-conf-ring {
+  --size: 40px;
+  --stroke: 4px;
+  --pct: 0;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--ring-color, var(--nv-accent-blue)) calc(var(--pct) * 3.6deg),
+    var(--nv-bg-elevated) 0deg
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nv-conf-ring::after {
+  content: "";
+  width: calc(var(--size) - var(--stroke) * 2);
+  height: calc(var(--size) - var(--stroke) * 2);
+  border-radius: 50%;
+  background: var(--nv-bg-card);
+}
+
+/* --- Live pulse --- */
+.nv-live-pulse {
+  animation: nv-pulse 2s ease-in-out infinite;
+}
+
+@keyframes nv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* --- Skeleton loading --- */
+.nv-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--nv-bg-card) 0%,
+    var(--nv-bg-elevated) 50%,
+    var(--nv-bg-card) 100%
+  );
+  background-size: 200% 100%;
+  animation: nv-shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--nv-radius-sm);
+}
+
+@keyframes nv-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* --- Fade in animation --- */
+.nv-fade-in {
+  animation: nv-fade-in var(--nv-duration-slow) var(--nv-ease) both;
+}
+
+@keyframes nv-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Slide up (for mobile sheets) --- */
+.nv-slide-up {
+  animation: nv-slide-up var(--nv-duration-normal) var(--nv-ease) both;
+}
+
+@keyframes nv-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* ============================================================
+   SELECTION
+   ============================================================ */
+
+/* --- DayTabs --- */
+.nv-daytab-inactive:hover {
+  background-color: var(--nv-bg-card-hover) !important;
+  border-color: var(--nv-border-accent) !important;
+}
+
+.nv-hide-scrollbar {
+  scrollbar-width: none;
+}
+
+.nv-hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================
+   SELECTION
+   ============================================================ */
+
+::selection {
+  background: var(--nv-accent-blue-dim);
+  color: var(--nv-text-primary);
 }

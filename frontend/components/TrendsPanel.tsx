@@ -11,16 +11,20 @@ interface Props {
 function ResultDot({ r }: { r: "G" | "B" | "M" }) {
   const cfg =
     r === "G"
-      ? { bg: "#16a34a", text: "G", color: "#ecfdf5" }
+      ? { bg: "var(--nv-win)", label: "G" }
       : r === "B"
-        ? { bg: "#ca8a04", text: "B", color: "#fefce8" }
-        : { bg: "#b91c1c", text: "M", color: "#fef2f2" };
+        ? { bg: "var(--nv-draw)", label: "B" }
+        : { bg: "var(--nv-loss)", label: "M" };
   return (
     <span
-      className="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold font-mono"
-      style={{ backgroundColor: cfg.bg, color: cfg.color }}
+      className="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold"
+      style={{
+        backgroundColor: cfg.bg,
+        color: "var(--nv-text-inverse)",
+        fontFamily: "var(--nv-font-mono)",
+      }}
     >
-      {cfg.text}
+      {cfg.label}
     </span>
   );
 }
@@ -36,10 +40,13 @@ function MetricRow({
 }) {
   return (
     <div className="flex items-center justify-between text-xs">
-      <span style={{ color: "#64748b" }}>{label}</span>
+      <span style={{ color: "var(--nv-text-secondary)" }}>{label}</span>
       <span
-        className="font-mono font-bold"
-        style={{ color: highlight ? "#86efac" : "#cbd5e1" }}
+        className="font-bold"
+        style={{
+          fontFamily: "var(--nv-font-mono)",
+          color: highlight ? "var(--nv-accent-green)" : "var(--nv-text-primary)",
+        }}
       >
         {value}
       </span>
@@ -49,62 +56,70 @@ function MetricRow({
 
 function TrendCard({
   block,
-  icon,
   title,
   subtitle,
   accent,
 }: {
   block: TrendBlock;
-  icon: string;
   title: string;
   subtitle?: string;
   accent: string;
 }) {
   return (
     <div
-      className="rounded-xl p-3 border space-y-2.5 flex flex-col"
-      style={{ backgroundColor: "#0f1625", borderColor: "#1e293b" }}
+      className="nv-card flex flex-col"
+      style={{
+        borderRadius: "var(--nv-radius-lg)",
+        borderTop: `2px solid ${accent}`,
+        padding: "var(--nv-space-md)",
+      }}
     >
       {/* Başlık */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-base flex-shrink-0">{icon}</span>
-          <div className="min-w-0">
-            <h4
-              className="text-xs font-bold tracking-wide truncate"
-              style={{ color: accent }}
+      <div className="flex items-center justify-between mb-2">
+        <div className="min-w-0">
+          <h4
+            className="text-xs font-bold truncate"
+            style={{
+              color: accent,
+              letterSpacing: "var(--nv-tracking-wide)",
+            }}
+          >
+            {title}
+          </h4>
+          {subtitle && (
+            <div
+              className="text-[9px] truncate mt-0.5"
+              style={{ color: "var(--nv-text-tertiary)" }}
             >
-              {title}
-            </h4>
-            {subtitle && (
-              <div className="text-[9px] truncate" style={{ color: "#475569" }}>
-                {subtitle}
-              </div>
-            )}
-          </div>
+              {subtitle}
+            </div>
+          )}
         </div>
-        <span
-          className="text-[10px] font-mono px-1.5 py-0.5 rounded flex-shrink-0"
-          style={{ backgroundColor: "#1e293b", color: "#94a3b8" }}
-        >
+        <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-secondary)" }}>
           {block.sample_size} maç
         </span>
       </div>
 
       {/* Son N Sonuç Timeline */}
       {block.last_n_results.length > 0 && (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 mb-2">
           {block.last_n_results.map((r, i) => (
             <ResultDot key={i} r={r} />
           ))}
-          <span className="text-[9px] ml-1" style={{ color: "#475569" }}>
+          <span
+            className="text-[9px] ml-1"
+            style={{ color: "var(--nv-text-tertiary)" }}
+          >
             son {block.last_n_results.length}
           </span>
         </div>
       )}
 
       {/* Metrikler */}
-      <div className="space-y-1 pt-1 border-t" style={{ borderColor: "#1e293b" }}>
+      <div
+        className="space-y-1 pt-2 mt-auto"
+        style={{ borderTop: "1px solid var(--nv-border)" }}
+      >
         <MetricRow label="Galibiyet" value={`%${Math.round(block.win_pct)}`} highlight={block.win_pct >= 60} />
         <MetricRow label="Beraberlik" value={`%${Math.round(block.draw_pct)}`} />
         <MetricRow label="Mağlubiyet" value={`%${Math.round(block.loss_pct)}`} />
@@ -121,27 +136,24 @@ function TrendCard({
 
 export default function TrendsPanel({ trends, homeTeam, awayTeam }: Props) {
   if (!trends) return null;
-  const blocks: { block: TrendBlock | null; icon: string; title: string; subtitle?: string; accent: string }[] = [
+  const blocks: { block: TrendBlock | null; title: string; subtitle?: string; accent: string }[] = [
     {
       block: trends.home_form,
-      icon: "🏠",
       title: "Ev Form",
       subtitle: homeTeam,
-      accent: "#86efac",
+      accent: "var(--nv-accent-green)",
     },
     {
       block: trends.away_form,
-      icon: "✈",
       title: "Dep Form",
       subtitle: awayTeam,
-      accent: "#fbbf24",
+      accent: "var(--nv-accent-amber)",
     },
     {
       block: trends.h2h,
-      icon: "⚔",
       title: "H2H",
       subtitle: "Ev sahibi perspektifi",
-      accent: "#c084fc",
+      accent: "var(--nv-accent-purple)",
     },
   ];
 
@@ -149,16 +161,22 @@ export default function TrendsPanel({ trends, homeTeam, awayTeam }: Props) {
   if (visible.length === 0) return null;
 
   return (
-    <div
-      className="rounded-xl p-4 border space-y-3"
-      style={{ backgroundColor: "#0a0f1a", borderColor: "#1e293b" }}
-    >
-      <div className="flex items-center gap-2">
-        <span style={{ color: "#64748b" }}>📈</span>
-        <h3 className="text-sm font-bold tracking-wide" style={{ color: "#cbd5e1" }}>
+    <div className="nv-card nv-fade-in" style={{ borderRadius: "var(--nv-radius-lg)", padding: "var(--nv-space-lg)" }}>
+      <div className="flex items-center gap-2 mb-3">
+        <span style={{ color: "var(--nv-text-tertiary)" }}>📈</span>
+        <h3
+          className="text-sm font-bold"
+          style={{
+            color: "var(--nv-text-primary)",
+            letterSpacing: "var(--nv-tracking-wide)",
+          }}
+        >
           Form & H2H Trendleri
         </h3>
-        <span className="text-[10px]" style={{ color: "#475569" }}>
+        <span
+          className="nv-badge"
+          style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}
+        >
           son lig maçları
         </span>
       </div>
@@ -168,7 +186,6 @@ export default function TrendsPanel({ trends, homeTeam, awayTeam }: Props) {
           <TrendCard
             key={b.title}
             block={b.block!}
-            icon={b.icon}
             title={b.title}
             subtitle={b.subtitle}
             accent={b.accent}
