@@ -86,6 +86,7 @@ async def test_failed_refresh_is_503_and_preserves_cached_result(monkeypatch):
 async def test_background_analysis_waits_for_foreground_refresh(monkeypatch):
     worker = AsyncMock(return_value=True)
     monkeypatch.setattr(svc, "_analyze_db_only_locked", worker)
+    svc._analysis_locks.pop("123", None)
     lock = svc.get_or_make_lock("123")
     async with lock:
         task = asyncio.create_task(svc._analyze_db_only("123"))

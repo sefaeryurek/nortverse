@@ -279,7 +279,7 @@ async def test_prepared_capture_uses_frozen_analysis_time_and_v3_bundle(monkeypa
     prepared = SimpleNamespace(
         match_id="prepared-1",
         analyzed_at=V3_ACTIVATION_CUTOFF,
-        kickoff_time=datetime(2026, 9, 24, 18, tzinfo=timezone.utc),
+        kickoff_time=datetime(2099, 1, 1, 18, tzinfo=timezone.utc),
         league_name="English Premier League",
         league_code="ENG PR",
         ht_scores_1=[], ht_scores_x=[], ht_scores_2=[],
@@ -308,7 +308,7 @@ async def test_prepared_capture_uses_frozen_analysis_time_and_v3_bundle(monkeypa
     load_baselines = AsyncMock(return_value={"result": None, "over_25": None, "btts": None})
     monkeypatch.setattr(snapshots, "load_market_baselines", load_baselines)
 
-    count = await snapshots.capture_prepared_recommendations(date(2026, 9, 24))
+    count = await snapshots.capture_prepared_recommendations(date(2099, 1, 1))
 
     assert count == 1
     assert compute.await_args.kwargs["as_of"] == V3_ACTIVATION_CUTOFF
