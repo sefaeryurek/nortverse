@@ -280,6 +280,13 @@ def prekickoff_picks(
     ):
         return None
 
+    has_ft_data = any(
+        isinstance(patterns.get(k), dict)
+        for k in ("pattern_ft_b", "pattern_ft_c")
+    )
+    if not has_ft_data:
+        return None
+
     return build_ft_recommendations(patterns)
 
 
