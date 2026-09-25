@@ -337,18 +337,8 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* --- Slide up (for mobile sheets) --- */
-.nv-slide-up {
-  animation: nv-slide-up var(--nv-duration-normal) var(--nv-ease) both;
-}
-
-@keyframes nv-slide-up {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
-
 /* ============================================================
-   SELECTION
+   UI HELPERS
    ============================================================ */
 
 /* --- DayTabs --- */

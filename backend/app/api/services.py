@@ -315,6 +315,20 @@ async def _analyze_db_only_locked(match_id: str) -> bool:
         return False
 
 
+def _skipped_response(
+    match_id: str, home_team: str, away_team: str,
+    league_code: str, reason: str | None = None,
+) -> AnalyzeResponse:
+    return AnalyzeResponse(
+        match_id=match_id, home_team=home_team, away_team=away_team,
+        league_code=league_code, season="",
+        ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+        half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+        ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
+        skipped=True, skip_reason=reason,
+    )
+
+
 async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
     """DB kontrol et → bulursa B/C hesapla (hızlı). Yoksa Playwright scrape (yavaş)."""
     cached = cache_get(match_id)
@@ -339,34 +353,21 @@ async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
 
         fixture = await _fixture_metadata(match_id, db_row.kickoff_time if db_row else None)
         if fixture is not None and not is_supported_league(fixture.get("league_name"), fixture.get("league_code")):
-            response = AnalyzeResponse(
-                match_id=match_id,
-                home_team=fixture.get("home_team") or (db_row.home_team if db_row else ""),
-                away_team=fixture.get("away_team") or (db_row.away_team if db_row else ""),
-                league_code=fixture.get("league_code") or "",
-                season="",
-                ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-                half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-                ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-                skipped=True,
-                skip_reason="not_league_match",
+            response = _skipped_response(
+                match_id,
+                fixture.get("home_team") or (db_row.home_team if db_row else ""),
+                fixture.get("away_team") or (db_row.away_team if db_row else ""),
+                fixture.get("league_code") or "",
+                "not_league_match",
             )
             cache_put(match_id, response)
             return response
 
         if db_row is not None:
             if not is_supported_league(db_row.league_name, db_row.league_code):
-                response = AnalyzeResponse(
-                    match_id=match_id,
-                    home_team=db_row.home_team,
-                    away_team=db_row.away_team,
-                    league_code=db_row.league_code or "",
-                    season="",
-                    ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-                    half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-                    ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-                    skipped=True,
-                    skip_reason="not_league_match",
+                response = _skipped_response(
+                    match_id, db_row.home_team, db_row.away_team,
+                    db_row.league_code or "", "not_league_match",
                 )
                 cache_put(match_id, response)
                 return response
@@ -382,17 +383,9 @@ async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
             log.warning("Atlanmış analiz önbelleği okunamadı [%s]: %s", match_id, exc)
             skipped = None
         if skipped is not None:
-            response = AnalyzeResponse(
-                match_id=skipped.match_id,
-                home_team=skipped.home_team,
-                away_team=skipped.away_team,
-                league_code=skipped.league_code,
-                season="",
-                ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-                half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-                ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-                skipped=True,
-                skip_reason=skipped.reason,
+            response = _skipped_response(
+                skipped.match_id, skipped.home_team, skipped.away_team,
+                skipped.league_code, skipped.reason,
             )
             cache_put(match_id, response)
             return response
@@ -414,17 +407,10 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
                 await save_skip(raw, check.reason)
             except Exception as exc:
                 log.warning("Atlanmış analiz kaydedilemedi [%s]: %s", match_id, exc)
-        return AnalyzeResponse(
-            match_id=match_id,
-            home_team=raw.home_team,
-            away_team=raw.away_team,
-            league_code=raw.league_code or "",
-            season="",
-            ht=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-            half2=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-            ft=PeriodOut(scores_1=[], scores_x=[], scores_2=[]),
-            skipped=True,
-            skip_reason=check.reason.value if check.reason else None,
+        return _skipped_response(
+            match_id, raw.home_team, raw.away_team,
+            raw.league_code or "",
+            check.reason.value if check.reason else None,
         )
 
     result = analyze_match(raw)
