@@ -17,8 +17,18 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nortverse",
-  description: "Futbol istatistik ve tahmin sistemi",
+  title: {
+    default: "Nortverse",
+    template: "%s | Nortverse",
+  },
+  description: "Futbol istatistik ve tahmin sistemi — maç analizi, arşiv desenleri ve akıllı kombinasyonlar",
+  openGraph: {
+    title: "Nortverse",
+    description: "Futbol istatistik ve tahmin sistemi",
+    siteName: "Nortverse",
+    type: "website",
+    locale: "tr_TR",
+  },
 };
 
 export const viewport: Viewport = {

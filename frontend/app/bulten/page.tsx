@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { isRecentScoreDate, resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
@@ -9,6 +10,11 @@ import { getFixture } from "@/lib/api";
 import { showBulletinMatch } from "@/lib/match-visibility";
 import type { FixtureMatch } from "@/lib/types";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Bülten",
+  description: "Günün futbol maçları — istatistiksel analiz ve tahminler",
+};
 
 function BultenSkeleton() {
   return (

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import AnalyzeClient from "./AnalyzeClient";
 import { analyzeMatch } from "@/lib/api";
 import type { AnalyzeResponse } from "@/lib/types";
@@ -5,6 +6,17 @@ import type { AnalyzeResponse } from "@/lib/types";
 interface Props {
   params: Promise<{ match_id: string }>;
   searchParams: Promise<{ home?: string | string[]; away?: string | string[] }>;
+}
+
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const query = await searchParams;
+  const home = typeof query.home === "string" ? query.home : "";
+  const away = typeof query.away === "string" ? query.away : "";
+  const title = home && away ? `${home} vs ${away}` : "Maç Analizi";
+  return {
+    title,
+    description: `${title} — istatistiksel analiz, arşiv desenleri ve tahminler`,
+  };
 }
 
 export default async function AnalyzePage({ params, searchParams }: Props) {

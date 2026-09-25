@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { isRecentScoreDate, resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
@@ -9,6 +10,11 @@ import { showResultMatch } from "@/lib/match-visibility";
 import { leagueDisplay } from "@/lib/leagues";
 import type { ResultMatch } from "@/lib/types";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Sonuçlar",
+  description: "Biten futbol maçları ve skorları — tahmin sonuçları",
+};
 
 /* ------------------------------------------------------------------ */
 /*  Skeleton                                                          */
@@ -144,13 +150,15 @@ function ResultRow({ match }: { match: ResultMatch }) {
         {scoreStr && (
           <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
             <span
-              className="font-bold px-2.5 py-0.5"
+              className="font-bold px-3 py-1"
               style={{
                 fontFamily: "var(--nv-font-mono)",
-                fontSize: "var(--nv-text-base)",
-                color,
-                backgroundColor: "var(--nv-bg-base)",
-                borderRadius: "var(--nv-radius-sm)",
+                fontSize: "var(--nv-text-lg)",
+                color: "#ffffff",
+                backgroundColor: color,
+                borderRadius: "var(--nv-radius-md)",
+                letterSpacing: "0.05em",
+                lineHeight: 1.2,
               }}
             >
               {scoreStr}
