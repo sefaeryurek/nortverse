@@ -117,6 +117,8 @@ def _result_to_row(
         "actual_h2_home": raw.actual_h2_home if raw else None,
         "actual_h2_away": raw.actual_h2_away if raw else None,
     }
+    if raw and raw.actual_ft_home is not None and raw.kickoff_time:
+        row["result_fetched_at"] = raw.kickoff_time + timedelta(hours=2)
     # A completed calculation may legitimately find no matches in any pattern.
     # Keep that state separate from the nullable pattern result columns.
     for key in ("pattern_ht_b", "pattern_ht_c", "pattern_h2_b", "pattern_h2_c",
