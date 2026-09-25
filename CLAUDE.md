@@ -929,6 +929,44 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - `tests/test_config.py` — 25 test: `_env_float`/`_env_int`/`_env_bool` helper'lar, `ScraperConfig`/`AnalysisConfig` default ve override, frozen dataclass koruması
 - **Sonuç:** 432 backend + 241 frontend + 28 E2E = **701 toplam test**
 
+### Sprint 25-26 — TAMAMLANDI ✅ (Local Docker PostgreSQL + 7 Lig Arşiv)
+- **Bağlam:** Cloud DB'ler (Supabase, Neon) kota/egress sorunlarına yol açtı. Local Docker PostgreSQL'e geçildi.
+- **Docker PostgreSQL:** Port 5433 (native PG 5432'de olduğu için), `nortverse` DB
+- **7 lig × 5 sezon arşiv:** ENG PR (1,537), SPA D1 (1,642), ITA D1 (1,332), GER D1 (1,209), FRA D1 (1,274), TUR D1 (1,062), HOL D1 (1,201) = **9,257 aktif maç**
+- **Task Scheduler otomasyonu:** 4 bat script — `backup-db.bat` (07:00), `run-pipeline.bat` (08:00), `update-scores.bat` (22:00 + 00:30)
+- **Pattern recompute:** 9,257/9,257 tamamlandı, 0 hata
+- **Veri kalitesi:** 100/100 (tüm kontroller yeşil)
+- **Nowgoal lig ID'leri doğrulandı:** GER D1=8 (35 değil!), FRA D1=11 (37 değil!), TUR D1=30 (52 değil!)
+
+### Sprint 27 — TAMAMLANDI ✅ (Güvenlik + Temizlik)
+- **DB yedekleme:** `scripts/backup-db.bat` — günlük pg_dump, 7 gün rotasyon
+- **GitHub Actions cron devre dışı:** Tüm schedule'lar yorum satırına alındı (local DB ile gereksiz), sadece `workflow_dispatch` aktif
+- **Audit raporları:** `docs/audit-backend-sept2026.md`, `docs/audit-frontend-sept2026.md`, `docs/audit-infrastructure-sept2026.md`
+- **Local E2E test:** Backend serve + frontend dev birlikte çalıştı, health/analyze/bulten/sonuclar endpoint'leri doğrulandı
+
+### Sprint 28 — TAMAMLANDI ✅ (Frontend Tam Yeniden Tasarım — Dark Tema Design System)
+- **Bağlam:** Tüm frontend 24 dosyada yeniden yazıldı. Eski Tailwind sınıfları `--nv-` design token sistemine geçirildi.
+- **Design token sistemi (`globals.css`):** 40+ CSS custom property — renkler, tipografi, spacing, shadow, radius. Dark-first.
+- **Fontlar:** Inter (sans) + JetBrains Mono (mono) via `next/font/google`
+- **Glassmorphism:** `backdrop-blur`, `bg-opacity` ile kart ve sidebar efektleri
+- **Collapsible sidebar (desktop):** Dar/geniş toggle, localStorage hatırlama
+- **Mobile bottom tab bar:** Sidebar yerine alt tab navigasyonu
+- **CSS-only görseller:** `.nv-conf-ring` (conic-gradient confidence halkası), `.nv-pct-bar` (yüzde çubuğu) — 0 yeni npm bağımlılığı
+- **Component listesi (16 component):** Tümü yeni design system ile yeniden yazıldı
+- **Sonuç:** 638 backend + 266 frontend = **904 toplam test** (tümü yeşil)
+
+### Sprint 29 — TAMAMLANDI ✅ (Test Uyumu + Görsel Zenginleştirme)
+- **Faz A — Test Uyumu:**
+  - `test_analysis_snapshots.py`: Zaman-bağımlı test düzeltildi — `kickoff_time` gelecek tarihe (2099) alındı (`prekickoff_picks` kontrolü)
+  - `test_pattern_failure_handling.py`: asyncio.Lock event loop mismatch düzeltildi — stale lock temizleme eklendi
+  - 638 backend + 266 frontend test yeşil
+- **Faz B — Görsel Zenginleştirme (CSS-only, 0 yeni bağımlılık):**
+  - **Maç Güç Skoru (`AnalyzeClient.tsx`):** `computePowerScore()` fonksiyonu — 5 faktörden 0-100 skor (Pattern B/C hacmi, top selection %, trends, dual archive). CSS conic-gradient gauge (80px), faktör badge'leri. Sadece MS sekmesinde, score > 0 ise görünür
+  - **TrendsPanel W/D/L bar:** 6px yatay stacked bar (yeşil/amber/kırmızı) — galibiyet/beraberlik/mağlubiyet oranı görsel
+  - **TrendsPanel Att/Yedi mini bar:** 4px karşılaştırmalı çubuklar (yeşil=atılan, kırmızı=yenilen), max değere ölçekli
+  - **ScoreList frekans göstergesi:** Opacity gradient (1.0→0.6) + genişlik azalan frekans çubuğu + en iyi skora accent dot
+- **Sonuç:** 638 backend + 266 frontend = **904 toplam test** (tümü yeşil)
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1145,51 +1183,53 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-16 — Sprint 23 sonu, Production CANLI + Veri Kalitesi 89.4+)
+## Kaldığımız Yer (2026-09-25 — Sprint 29 sonu, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Production Durumu — CANLI + Sprint 12-23 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 25-29 Tamamlandı
 
-4 aylık downtime sona erdi. Tam altyapı:
+Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
 | Katman | Servis | Detay |
 |---|---|---|
-| **Frontend** | Vercel | `https://nortverse.vercel.app` |
-| **Backend** | Render.com (free tier) | `https://nortverse-backend.onrender.com` |
-| **Veritabanı** | Neon PostgreSQL (free tier) | Sınırsız egress, 0.5 GB depo, 19.6 MB kullanımda |
-| **CI/CD** | GitHub Actions | 3 cron aktif (1× pipeline + 2× update-scores) + aylık recompute |
+| **Frontend** | Local Next.js dev | `http://localhost:3000` |
+| **Backend** | Local FastAPI | `http://localhost:8000` |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 9,257 aktif maç |
+| **Otomasyon** | Windows Task Scheduler | 4 bat script (pipeline + skor + yedekleme) |
+| **CI/CD** | GitHub Actions | `quality.yml` aktif (push/PR), cron'lar devre dışı |
 
-**Render.com free tier kısıtları:** 15dk inaktivite → uyku (~30sn cold start), 512 MB RAM, Playwright timeout alıyor.
-**Neon free tier:** Sınırsız egress, 0.5 GB depo, `statement_cache_size=0` zorunlu.
+**Eski cloud deployment (Render + Vercel + Neon):** Konfigürasyon korunuyor ama aktif değil.
 
-### Veri Kalitesi (Sprint 15 sonrası)
+### Veri Kalitesi (Sprint 26 sonrası)
 
 | Metrik | Değer |
 |---|---|
-| Aktif maç | 4,406 |
+| Aktif maç | 9,257 |
 | Pattern eksik | 0 |
 | Pattern tutarsızlık | 0 |
-| Quality score | 89.4 / 100 |
-| Trends NULL | 4,302 (Sprint 8.8 öncesi, beklenen) |
+| Quality score | 100 / 100 |
+| Arşiv | 7 lig × 5 sezon |
 
-### Test Durumu (Sprint 23 sonrası)
+### Test Durumu (Sprint 29 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 432 | ✅ Yeşil |
-| **Frontend birim** | vitest | 241 | ✅ Yeşil |
+| **Backend** | pytest | 638 | ✅ Yeşil |
+| **Frontend birim** | vitest | 266 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 701 | — |
+| **Toplam** | — | 932 | — |
 
-### Sıradaki Adım: Yol haritasının sonuna gelindi
+### Sıradaki Adımlar
 
-Sprint 12-23 tamamlandı. Uzun vadeli planlanmamış konular (Canlı maç + WebSocket, Auth/Premium vb.) kullanıcı talebiyle başlayacak.
+Sprint 29 tamamlandı. Bekleyen konular kullanıcı kararı gerektirir:
+
+- **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
+- **Excel audit:** `Claude.xlsm` ile DB çapraz doğrulama (dosya kullanıcıda)
+- **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
+- **Canlı maç + WebSocket:** Real-time skor push (onay gerekir)
 
 ### Bilinen Açık Konular
 
-- **Joint olasılık korelasyon düzeltmesi (Sprint 19 tamamlandı):** Combo/sepet artık Poisson korelasyon düzeltmesi kullanıyor. Gelecekte arşiv verisinden empirik korelasyon ile iyileştirilebilir
-- **Tarihsel veri onarımı (Sprint 20 tamamlandı):** `repair-archive` ve `normalize-leagues` CLI komutları hazır. Production'da `--apply` ile çalıştırılması gerekiyor (quality_score iyileşecek)
 - **Veri doğruluğu derin audit:** Excel ile çapraz doğrulama yapılmadı; spot-check geçti
 - **Windows console Türkçe karakter:** PYTHONIOENCODING=utf-8 olmadan CLI çıktısında UnicodeEncodeError olabilir
-- **Render Playwright timeout:** Free tier 512 MB RAM + 20sn limit → on-demand scrape çalışmıyor; fixture_cache artık pipeline üzerinden dolduruluyor (Sprint 14)
-
-> **Not:** Eski Oracle Cloud migration yol haritası git history'de `08ae36a` ve `fa89bd3` commit'lerinde mevcut — artık geçersiz (Neon'a geçildi).
+- **CLAUDE_HANDOFF.md:** Önceki oturumdan kalan V3 doğrulama şeması devir notu — mevcut yol haritasıyla ilgisiz, temizlenebilir
+- **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
