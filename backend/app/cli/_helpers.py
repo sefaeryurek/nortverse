@@ -1,6 +1,8 @@
 """CLI ortak yardımcılar — tüm komut modüllerinin kullandığı araçlar."""
 
+import io
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -12,6 +14,10 @@ from rich.table import Table
 from app.analysis.pattern_stats import PatternResult
 from app.analysis.scores import MS1_SCORES, MSX_SCORES, MS2_SCORES
 from app.models import MatchAnalysisResult, MatchRawData, Period, PeriodAnalysis
+
+if sys.platform == "win32" and getattr(sys.stdout, "encoding", "").lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 console = Console()
 DEBUG_DIR = Path("debug")
