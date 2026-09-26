@@ -41,8 +41,6 @@ class ScraperConfig:
 
     page_timeout: float = field(default_factory=lambda: _env_float("SCRAPER_TIMEOUT", 30.0))
     default_wait: float = field(default_factory=lambda: _env_float("SCRAPER_WAIT", 4.0))
-    between_requests: float = field(default_factory=lambda: _env_float("SCRAPER_BETWEEN_REQUESTS", 2.5))
-
     save_html_on_error: bool = True
     debug_dir: Path = field(default_factory=lambda: Path("debug_html"))
 

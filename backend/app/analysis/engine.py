@@ -96,19 +96,6 @@ def _goal_count_distribution(
     return distribution
 
 
-def _filter_h2h_for_team(
-    h2h_matches: list[HistoricalMatch], home_team: str, away_team: str
-) -> tuple[list[HistoricalMatch], list[HistoricalMatch]]:
-    """H2H maçlarını ev sahibi perspektifi ve deplasman perspektifi olarak ayırır.
-
-    Aslında aynı maçlar — ama ev sahibinin attığı vs deplasmanın attığı
-    gol dağılımlarını ayrı ayrı hesaplamak için böyle düşünüyoruz.
-    """
-    # Tüm h2h maçları ev sahibi için "biz home"
-    for_home = h2h_matches
-    for_away = h2h_matches
-    return for_home, for_away
-
 
 def _analyze_period(data: MatchRawData, period: Period, cfg_n: int, cfg_threshold: float) -> PeriodAnalysis:
     """Tek bir periyot için 35 skoru hesapla."""

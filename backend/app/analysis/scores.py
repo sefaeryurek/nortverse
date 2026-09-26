@@ -39,10 +39,6 @@ def score_key(home: int, away: int) -> str:
     return f"{home}-{away}"
 
 
-def column_name(home: int, away: int) -> str:
-    """DB sütun adı: (1, 0) -> 'score_1_0'."""
-    return f"score_{home}_{away}"
-
 
 def categorize(home: int, away: int) -> str:
     """Bir skorun MS1 / MSX / MS2'den hangisi olduğunu söyler."""

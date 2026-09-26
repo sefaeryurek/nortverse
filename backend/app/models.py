@@ -166,4 +166,4 @@ class SkippedMatch(BaseModel):
     league_code: str
     reason: SkipReason
     detail: Optional[str] = None
-    skipped_at: datetime = Field(default_factory=datetime.utcnow)
+    skipped_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

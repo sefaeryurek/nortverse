@@ -105,7 +105,7 @@ class HealthResponse(BaseModel):
     aşımına yol açıyordu). Detaylı kalite raporu için /api/admin/quality.
     """
     status: str
-    version: str = "0.2.0"
+    version: str = __import__("app").__version__
     db_ok: bool
     last_pipeline_at: Optional[str] = None
     last_fixture_cached_at: Optional[str] = None

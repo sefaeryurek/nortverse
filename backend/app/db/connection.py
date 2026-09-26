@@ -53,13 +53,13 @@ engine = create_async_engine(
 ) if _async_url else None
 sync_engine = create_engine(_sync_url, pool_pre_ping=True) if _sync_url else None
 
-_SessionFactory = async_sessionmaker(engine, expire_on_commit=False)
+_SessionFactory = async_sessionmaker(engine, expire_on_commit=False) if engine else None
 
 
 @asynccontextmanager
 async def get_session() -> AsyncSession:
     """Async veritabanı oturumu context manager."""
-    if engine is None:
+    if engine is None or _SessionFactory is None:
         raise RuntimeError("DATABASE_URL yapılandırılmamış")
     async with _SessionFactory() as session:
         try:

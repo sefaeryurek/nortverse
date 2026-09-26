@@ -307,8 +307,3 @@ async def fetch_leagues(ctx=None) -> dict[str, str]:
     return leagues
 
 
-async def fetch_fixture_for_tomorrow(only_hot: bool = True) -> list[FixtureMatch]:
-    """Yarının fixture'ını çek (günlük cron için kısayol)."""
-    return await fetch_fixture(
-        target_date=date.today() + timedelta(days=1), only_hot=only_hot
-    )

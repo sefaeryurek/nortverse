@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Nortverse API",
     description="Futbol maçı istatistik ve analiz sistemi",
-    version="0.2.0",
+    version=__import__("app").__version__,
     lifespan=lifespan,
 )
 
