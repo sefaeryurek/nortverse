@@ -170,13 +170,13 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
     return await _bulletin_items([m.model_dump() for m in result], req_date)
 
 
-@router.get("/fixture/pattern-status")
+@router.get("/api/fixture/pattern-status")
 async def get_pattern_status(
     match_ids: str = Query(..., description="Virgülle ayrılmış match_id listesi"),
 ) -> dict[str, dict[str, bool]]:
     """Bülten maçlarının arşiv eşleşme durumunu toplu sorgular."""
     ids = [mid.strip() for mid in match_ids.split(",") if mid.strip()]
-    if not ids or len(ids) > 200:
+    if not ids or len(ids) > 500:
         return {}
 
     async with get_session() as session:
