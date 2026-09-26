@@ -65,7 +65,7 @@ export default function DayTabs({ activeDate, basePath = "/bulten", referenceDat
               ? "var(--nv-accent-blue)"
               : "var(--nv-bg-card)",
             color: active
-              ? "#ffffff"
+              ? "var(--nv-text-on-accent)"
               : "var(--nv-text-secondary)",
             boxShadow: active
               ? "var(--nv-shadow-glow-blue)"
@@ -93,7 +93,7 @@ export default function DayTabs({ activeDate, basePath = "/bulten", referenceDat
                     height: 4,
                     borderRadius: "var(--nv-radius-full)",
                     backgroundColor: active
-                      ? "#ffffff"
+                      ? "var(--nv-text-on-accent)"
                       : "var(--nv-accent-blue)",
                     marginTop: 1,
                   }}

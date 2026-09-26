@@ -12,7 +12,7 @@ export default function RetryButton() {
       onClick={() => startTransition(() => router.refresh())}
       style={{
         backgroundColor: "var(--nv-accent-blue)",
-        color: "#ffffff",
+        color: "var(--nv-text-on-accent)",
         fontFamily: "var(--nv-font-sans)",
         fontSize: "var(--nv-text-sm)",
         fontWeight: 600,

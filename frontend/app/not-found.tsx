@@ -64,7 +64,7 @@ export default function NotFound() {
             padding: "8px 20px",
             borderRadius: "var(--nv-radius-lg)",
             backgroundColor: "var(--nv-accent-blue)",
-            color: "#ffffff",
+            color: "var(--nv-text-on-accent)",
             textDecoration: "none",
             transition: `opacity var(--nv-duration-normal) var(--nv-ease)`,
           }}

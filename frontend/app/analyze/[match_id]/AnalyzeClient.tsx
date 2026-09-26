@@ -127,7 +127,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
         <div className="flex items-start gap-3">
           {/* Back button */}
           <button
-            onClick={() => router.back()}
+            onClick={() => (window.history.length > 1 ? router.back() : router.push("/bulten"))}
             aria-label="Önceki sayfaya dön"
             className="flex items-center justify-center w-9 h-9 flex-shrink-0 transition-all"
             style={{
@@ -264,7 +264,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                 className="mt-4 px-4 py-2 text-sm font-semibold transition-all"
                 style={{
                   backgroundColor: "var(--nv-accent-blue)",
-                  color: "white",
+                  color: "var(--nv-text-on-accent)",
                   borderRadius: "var(--nv-radius-md)",
                   transitionDuration: "var(--nv-duration-normal)",
                 }}
@@ -423,7 +423,6 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                     patternB={patternB}
                     patternC={patternC}
                     period={activePeriod}
-                    trends={data.trends}
                     recommendations={data.ft_recommendations}
                   />
                 </MatchProvider>

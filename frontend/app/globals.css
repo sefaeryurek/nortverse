@@ -23,8 +23,9 @@
   /* --- Text --- */
   --nv-text-primary: #e8ecf4;
   --nv-text-secondary: #8b95a8;
-  --nv-text-tertiary: #555d6e;
+  --nv-text-tertiary: #6b7385;
   --nv-text-inverse: #0a0c10;
+  --nv-text-on-accent: #ffffff;
 
   /* --- Accent Colors --- */
   --nv-accent-blue: #4b8cef;

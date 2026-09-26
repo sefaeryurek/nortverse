@@ -87,7 +87,7 @@ export default function GlobalError({ error, reset }: Props) {
             border: "none",
             cursor: "pointer",
             backgroundColor: "var(--nv-accent-red)",
-            color: "#ffffff",
+            color: "var(--nv-text-on-accent)",
             transition: `opacity var(--nv-duration-normal) var(--nv-ease)`,
           }}
         >

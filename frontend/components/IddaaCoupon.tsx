@@ -1,4 +1,4 @@
-import type { FTRecommendation, PatternResult, TrendsData } from "@/lib/types";
+import type { FTRecommendation, PatternResult } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import TopPicks from "./TopPicks";
 import MarketSummary from "./MarketSummary";
@@ -8,7 +8,6 @@ interface Props {
   patternB: PatternResult | null;
   patternC: PatternResult | null;
   period: Period;
-  trends?: TrendsData | null;
   recommendations: FTRecommendation[];
 }
 

@@ -154,7 +154,7 @@ function ResultRow({ match }: { match: ResultMatch }) {
               style={{
                 fontFamily: "var(--nv-font-mono)",
                 fontSize: "var(--nv-text-lg)",
-                color: "#ffffff",
+                color: "var(--nv-text-on-accent)",
                 backgroundColor: color,
                 borderRadius: "var(--nv-radius-md)",
                 letterSpacing: "0.05em",
