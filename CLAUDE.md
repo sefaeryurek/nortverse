@@ -191,6 +191,7 @@ nortverse/
 │   └── repair_archive.yml         # Manuel: repair-archive + normalize-leagues + audit-db (Sprint 20)
 ├── backend/
 │   ├── app/
+│   │   ├── __init__.py             # __version__ = "0.2.0" — tek versiyon kaynağı
 │   │   ├── config.py              # ScraperConfig, AnalysisConfig (env-aware frozen dataclass)
 │   │   ├── models.py              # Pydantic: FixtureMatch, HistoricalMatch, MatchRawData
 │   │   ├── db/
@@ -199,7 +200,10 @@ nortverse/
 │   │   ├── scraper/
 │   │   │   ├── browser.py         # Playwright wrapper (browser_context context manager)
 │   │   │   ├── fixture.py         # Günlük bülten — Hot filtreli, kickoff UTC timezone
+│   │   │   ├── fixture_scores.py  # Biten maç skorları çekme
+│   │   │   ├── live_scores.py     # Canlı skor scraper
 │   │   │   ├── match_detail.py    # H2H sayfası parse + gerçek skor çıkarımı
+│   │   │   ├── source_board.py    # Kaynak pano scraper
 │   │   │   └── league.py          # Lig sayfasından maç ID listesi (arşiv için)
 │   │   ├── analysis/
 │   │   │   ├── scores.py          # ALL_SCORES sabiti
@@ -213,6 +217,9 @@ nortverse/
 │   │   │   ├── persist.py         # compute_all_patterns + update_match_patterns (Sprint 8)
 │   │   │   ├── correlation.py      # Poisson korelasyon faktörleri — pazar çiftleri arası (Sprint 19)
 │   │   │   ├── repair.py          # detect_issues + needs_normalization — tarihsel veri onarımı (Sprint 20)
+│   │   │   ├── score_snapshots.py # Skor snapshot yönetimi
+│   │   │   ├── skip_cache.py      # Atlanan maç cache'i
+│   │   │   ├── snapshots.py       # Analiz snapshot'ları
 │   │   │   └── trends.py          # compute_trends — form & H2H trend verileri (Sprint 8.8)
 │   │   ├── api/
 │   │   │   ├── main.py            # FastAPI hub — router include, lifespan, CORS, middleware (Sprint 22)
@@ -221,7 +228,9 @@ nortverse/
 │   │   │   ├── routes_fixture.py  # /api/fixture endpoint (Sprint 22)
 │   │   │   ├── routes_analysis.py # /api/analyze, /api/match endpoint'leri (Sprint 22)
 │   │   │   ├── routes_results.py  # /api/results, /api/matches endpoint'leri (Sprint 22)
-│   │   │   └── routes_admin.py    # /api/health, /api/admin/quality, /api/correlations (Sprint 22)
+│   │   │   ├── routes_admin.py    # /api/health, /api/admin/quality, /api/correlations (Sprint 22)
+│   │   │   ├── score_state.py     # Skor durumu yönetimi
+│   │   │   └── live_snapshot.py   # Canlı snapshot endpoint
 │   │   ├── pipeline/
 │   │   │   └── runner.py          # run_pipeline + update_results: fetch → analiz → upsert
 │   │   └── cli/
@@ -230,8 +239,8 @@ nortverse/
 │   │       ├── pipeline_cmds.py   # analyze, fetch-fixture, run-pipeline, serve (Sprint 21)
 │   │       ├── archive_cmds.py    # build-archive, repair-archive, normalize-leagues (Sprint 21)
 │   │       └── audit_cmds.py      # audit-db, self-test, prune-non-league (Sprint 21)
-│   ├── alembic/                   # DB migration (6 migration)
-│   ├── tests/                     # 432 test
+│   ├── alembic/                   # DB migration (15 migration)
+│   ├── tests/                     # 638 test
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -265,12 +274,19 @@ nortverse/
 │   │   ├── layout.tsx             # Root layout (dark tema, sidebar, BetCart)
 │   │   ├── page.tsx               # Root → /bulten redirect
 │   │   ├── error.tsx              # Global error boundary (Sprint 8.3)
+│   │   ├── not-found.tsx          # 404 sayfası — design system uyumlu (Sprint 30)
+│   │   ├── robots.ts              # robots.txt route handler (Sprint 34)
+│   │   ├── sitemap.ts             # sitemap.xml route handler (Sprint 34)
 │   │   ├── bulten/
-│   │   │   └── page.tsx           # Server component — fixture listesi (Suspense)
+│   │   │   ├── page.tsx           # Server component — fixture listesi (Suspense)
+│   │   │   └── loading.tsx        # Skeleton fallback (Sprint 33)
 │   │   ├── sonuclar/
-│   │   │   └── page.tsx           # Server component — biten maçlar, skor, tahmin özeti
+│   │   │   ├── page.tsx           # Server component — biten maçlar, skor, tahmin özeti
+│   │   │   └── loading.tsx        # Skeleton fallback (Sprint 33)
 │   │   └── analyze/[match_id]/
-│   │       └── page.tsx           # Client component — maç analiz sayfası
+│   │       ├── page.tsx           # Client component — maç analiz sayfası
+│   │       ├── AnalyzeClient.tsx  # Analiz client component (Sprint 28)
+│   │       └── loading.tsx        # Skeleton fallback
 │   ├── components/
 │   │   ├── AddToCartButton.tsx    # "+" / "✓" sepet toggle butonu (Sprint 8.7)
 │   │   ├── BetCart.tsx            # Floating bahis sepeti — desktop panel + mobile sheet (Sprint 8.7)
@@ -285,7 +301,12 @@ nortverse/
 │   │   ├── Sidebar.tsx            # Sol menü (md altı gizli — mobile)
 │   │   ├── StatBadge.tsx          # Yeniden kullanılabilir yüzde rozeti
 │   │   ├── TopPicks.tsx           # Confidence sıralı en güçlü tahminler (Sprint 8.4)
-│   │   └── TrendsPanel.tsx        # Form & H2H trend kartları (Sprint 8.8)
+│   │   ├── TrendsPanel.tsx        # Form & H2H trend kartları (Sprint 8.8)
+│   │   ├── PowerScoreGauge.tsx    # Maç güç skoru gauge component (Sprint 33)
+│   │   ├── ValidationSection.tsx  # Analiz doğrulama bölümü (Sprint 30)
+│   │   ├── ScoreValidationSection.tsx  # Skor doğrulama bölümü (Sprint 30)
+│   │   ├── AutoRefresh.tsx        # Otomatik yenileme component
+│   │   └── LiveMatchBadge.tsx     # Canlı maç rozeti
 │   ├── lib/
 │   │   ├── analysis-validation.ts # Analiz verisi doğrulama (Sprint 12 denetim)
 │   │   ├── api.ts                 # Backend API çağrıları
@@ -303,7 +324,7 @@ nortverse/
 │   │   ├── pattern-fields.ts      # Pattern alan isimleri (Sprint 12 denetim)
 │   │   ├── selection-compatibility.ts  # Seçim uyumluluk kontrolü (Sprint 12 denetim)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
-│   ├── __tests__/                 # 241 vitest test
+│   ├── __tests__/                 # 277 vitest test
 │   │   ├── fixtures.ts            # Test factory'leri
 │   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
 │   │   ├── combos.test.ts         # Kombo üretimi (~15 test)
@@ -328,7 +349,13 @@ nortverse/
 │   │   ├── leagues.test.ts               # Lig eşleme (12 test)
 │   │   ├── trends-panel.test.tsx          # TrendsPanel component (13 test)
 │   │   ├── retry-button.test.tsx          # RetryButton component (4 test)
-│   │   └── correlations.test.ts          # Korelasyon faktörleri (10 test, Sprint 19)
+│   │   ├── correlations.test.ts          # Korelasyon faktörleri (10 test, Sprint 19)
+│   │   ├── power-score-gauge.test.tsx    # PowerScoreGauge component (11 test, Sprint 33)
+│   │   ├── iddaa-coupon.test.tsx         # IddaaCoupon component testleri
+│   │   ├── analyze-client.test.tsx       # AnalyzeClient component testleri
+│   │   ├── auto-refresh.test.tsx         # AutoRefresh component testleri
+│   │   ├── score-freshness.test.tsx      # Skor tazeliği testleri
+│   │   └── match-visibility.test.ts      # Maç görünürlük testleri
 │   ├── e2e/                       # 14 Playwright E2E test (×2 viewport = 28)
 │   │   ├── navigation.spec.ts     # Sayfa yükleme, redirect, DayTabs (6 test)
 │   │   ├── analyze.spec.ts        # Analiz sayfası, periyot sekmeleri (4 test)
@@ -990,6 +1017,32 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **PowerScoreGauge testleri (`0cd9f07`):** 11 yeni test — computePowerScore hesaplama (6 test) + component render davranışı (5 test)
 - **Sonuç:** 638 backend + 277 frontend + 28 E2E = **943 toplam test**
 
+### Sprint 34 — TAMAMLANDI ✅ (Kapsamlı Kod Denetimi — 3 Ajan Raporu Sonrası Fix'ler)
+- **Bağlam:** 3 bağımsız ajan (Backend, Frontend, Altyapı) tüm codebase'i taradı — buglar, dead code, güvenlik, UX sorunları tespit edildi ve düzeltildi
+- **Güvenlik (`c57c801`):**
+  - `.claude/settings.local.json` git tracking'den kaldırıldı — eski Neon DB connection string (şifre dahil) açıktaydı
+- **Backend kritik fix'ler (`6cf3fe4`):**
+  - `connection.py:56` SessionFactory guard: `engine=None` iken `async_sessionmaker(None)` çağrılması engellendi
+  - `models.py:169` deprecated `datetime.utcnow()` → `datetime.now(timezone.utc)` (Python 3.12+ uyumu)
+  - Versiyon birleştirme: `__init__.py` `0.2.0` tek kaynak, `main.py`/`schemas.py` import eder
+  - Dead code temizliği: `_filter_h2h_for_team` (engine.py), `column_name` (scores.py), `fetch_fixture_for_tomorrow` (fixture.py)
+  - `config.py` kullanılmayan `between_requests` alanı silindi
+  - `requirements.txt`'ten hiç import edilmeyen `httpx==0.27.2` kaldırıldı
+  - Yeni Alembic migration `r2e5f8b1c674`: `kickoff_time` index — hot query'ler için performans
+- **Frontend fix'ler (`2bebb9f`):**
+  - `IddaaCoupon.tsx` vestigial `trends` prop'u kaldırıldı (Sprint 28 yeniden tasarımından kalma, artık `recommendations` kullanılıyor)
+  - `AnalyzeClient.tsx` router.back() fallback: direkt navigasyonda history yoksa `/bulten`'e yönlendir
+  - WCAG AA kontrast düzeltmesi: `--nv-text-tertiary` `#555d6e` → `#6b7385` (3.3:1 → ~4.5:1)
+  - Yeni `--nv-text-on-accent` design token: 6 dosyada hardcoded `#ffffff`/`white` → token
+  - `Sidebar.tsx` collapsed durumda `aria-label` eklendi (a11y)
+- **Altyapı fix'ler (`a2a9cc8`):**
+  - `docker-compose.yml`: `healthcheck` (pg_isready) + `restart: unless-stopped`
+  - `.env.example` tamamen yeniden yazıldı — tüm env var'lar dokümante edildi
+  - SEO: `app/robots.ts` + `app/sitemap.ts` Next.js route handler'ları eklendi
+  - CI: `quality.yml` E2E job'u tüm projeler çalıştırır (sadece desktop değil)
+  - Stale dosyalar silindi: `CLAUDE_HANDOFF.md`, `CHANGELOG.md`, `KULLANIM.md`, `backend/railway.json`
+- **Sonuç:** 638 backend + 277 frontend + 28 E2E = **943 toplam test** (değişmedi, fix-only sprint)
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1206,9 +1259,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-25 — Sprint 33 sonu, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-09-26 — Sprint 34 sonu, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 25-33 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 25-34 Tamamlandı
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1232,7 +1285,7 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | Quality score | 100 / 100 |
 | Arşiv | 7 lig × 5 sezon |
 
-### Test Durumu (Sprint 33 sonrası)
+### Test Durumu (Sprint 34 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
@@ -1243,7 +1296,7 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 ### Sıradaki Adımlar
 
-Sprint 33 tamamlandı. Bekleyen konular kullanıcı kararı gerektirir:
+Sprint 34 tamamlandı. Bekleyen konular kullanıcı kararı gerektirir:
 
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
@@ -1253,6 +1306,6 @@ Sprint 33 tamamlandı. Bekleyen konular kullanıcı kararı gerektirir:
 ### Bilinen Açık Konular
 
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
-- **Windows console Türkçe karakter:** Sprint 32'de düzeltildi — `cli/_helpers.py` stdout'u UTF-8'e reconfigure ediyor
-- **CLAUDE_HANDOFF.md:** Önceki oturumdan kalan V3 doğrulama şeması devir notu — mevcut yol haritasıyla ilgisiz, temizlenebilir
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
+- **`beautifulsoup4==4.15.0` sürüm doğrulaması:** requirements.txt'teki sürüm doğrulanmalı (pip install testi gerekir)
+- **`ComboSuggestion` ve `StatBadge` dead component'ler:** Hiçbir yerde render edilmiyor (sadece test), gelecekte kullanılacak mı karar verilmeli
