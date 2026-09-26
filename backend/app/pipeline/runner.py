@@ -265,7 +265,7 @@ async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> i
     return len(cache_json)
 
 
-async def refresh_fixture_cache(target_date: date, only_hot: bool = True) -> int:
+async def refresh_fixture_cache(target_date: date, only_hot: bool = False) -> int:
     """Prepare a future bulletin without running analysis or storing match details."""
     async with browser_context() as ctx:
         fixtures = await fetch_istanbul_fixture(target_date, only_hot=only_hot, ctx=ctx)
@@ -297,7 +297,7 @@ async def _prepared_match_ids(match_ids: list[str]) -> set[str]:
 
 async def run_pipeline(
     target_date: Optional[date] = None,
-    only_hot: bool = True,
+    only_hot: bool = False,
     incremental: bool = False,
 ) -> dict:
     """Hot maçları çek, analiz et, Supabase'e yaz.

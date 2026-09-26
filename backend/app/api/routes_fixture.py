@@ -127,7 +127,7 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
     log.info("Fixture Playwright scrape başlıyor: %s", cache_key)
     try:
         matches = await asyncio.wait_for(
-            fetch_istanbul_fixture(req_date, only_hot=True),
+            fetch_istanbul_fixture(req_date, only_hot=False),
             timeout=45.0,
         )
     except asyncio.TimeoutError:

@@ -3,11 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse, PatternResult, ScoreValidation } from "@/lib/types";
-import { analyzeMatch, getAnalysisEvidence, getAnalysisValidation, getScoreValidation } from "@/lib/api";
+import type { AnalyzeResponse, PatternResult } from "@/lib/types";
+import { analyzeMatch } from "@/lib/api";
 import ScoreList from "@/components/ScoreList";
-import ValidationSection from "@/components/ValidationSection";
-import ScoreValidationSection from "@/components/ScoreValidationSection";
 import PowerScoreGauge, { computePowerScore } from "@/components/PowerScoreGauge";
 import { MatchProvider } from "@/lib/match-context";
 
@@ -45,19 +43,15 @@ function scoresFor(data: AnalyzeResponse, period: Period) {
 interface Props {
   match_id: string;
   initialData: AnalyzeResponse | null;
-  evidence?: AnalysisEvidence | null;
   initialError: string;
   urlHome: string;
   urlAway: string;
 }
 
-export default function AnalyzeClient({ match_id, initialData, evidence, initialError, urlHome, urlAway }: Props) {
+export default function AnalyzeClient({ match_id, initialData, initialError, urlHome, urlAway }: Props) {
   const router = useRouter();
   const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<AnalyzeResponse | null>(initialData);
-  const [evidenceData, setEvidenceData] = useState<AnalysisEvidence | null>(evidence ?? null);
-  const [validationData, setValidationData] = useState<AnalysisValidation | null>(null);
-  const [scoreValidation, setScoreValidation] = useState<ScoreValidation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(initialError);
   const [activePeriod, setActivePeriod] = useState<Period>("ft");
@@ -79,32 +73,7 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
     return () => { cancelled = true; controller.abort(); };
   }, [attempt, match_id]);
 
-  useEffect(() => {
-    if (evidence || !data || data.skipped) return;
-    let cancelled = false;
-    getAnalysisEvidence()
-      .then((value) => { if (!cancelled) setEvidenceData(value); })
-      .catch(() => { /* Optional coverage data must not delay the analysis. */ });
-    return () => { cancelled = true; };
-  }, [data, evidence]);
 
-  useEffect(() => {
-    if (!data || data.skipped) return;
-    let cancelled = false;
-    getAnalysisValidation()
-      .then((value) => { if (!cancelled) setValidationData(value); })
-      .catch(() => { /* Optional outcome data must not delay the analysis. */ });
-    return () => { cancelled = true; };
-  }, [data]);
-
-  useEffect(() => {
-    if (!data || data.skipped) return;
-    let cancelled = false;
-    getScoreValidation()
-      .then((value) => { if (!cancelled) setScoreValidation(value); })
-      .catch(() => { /* Optional comparison must not delay the analysis. */ });
-    return () => { cancelled = true; };
-  }, [data]);
 
   const retry = () => {
     setError("");
@@ -427,8 +396,6 @@ export default function AnalyzeClient({ match_id, initialData, evidence, initial
                   />
                 </MatchProvider>
                 </div>
-                <ValidationSection evidenceData={evidenceData} validationData={validationData} />
-                <ScoreValidationSection scoreValidation={scoreValidation} />
               </>
             )}
           </div>
