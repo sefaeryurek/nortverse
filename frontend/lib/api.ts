@@ -160,6 +160,16 @@ export async function getScoreValidation(): Promise<ScoreValidation> {
   return value as unknown as ScoreValidation;
 }
 
+export type PatternStatusMap = Record<string, { has_b: boolean; has_c: boolean }>;
+
+export async function getPatternStatus(matchIds: string[]): Promise<PatternStatusMap> {
+  if (matchIds.length === 0) return {};
+  return request<PatternStatusMap>(
+    `/api/fixture/pattern-status?${new URLSearchParams({ match_ids: matchIds.join(",") })}`,
+    { next: { revalidate: 300 } },
+  );
+}
+
 export async function getResults(date: string): Promise<ResultMatch[]> {
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   return checkedList(await request<ResultMatch[]>(`/api/results?${new URLSearchParams({ date })}`, {

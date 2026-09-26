@@ -18,8 +18,10 @@ from app.api.services import (
     FIXTURE_CACHE_TTL,
     fixture_cache,
 )
+from sqlalchemy import select
+
 from app.db.connection import get_session
-from app.db.models import FixtureCache
+from app.db.models import FixtureCache, Match
 from app.pipeline.runner import save_fixture_cache
 from app.scraper import fetch_istanbul_fixture
 
@@ -166,3 +168,35 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
 
     fixture_cache[cache_key] = (time.time(), [m.model_dump() for m in result])
     return await _bulletin_items([m.model_dump() for m in result], req_date)
+
+
+@router.get("/fixture/pattern-status")
+async def get_pattern_status(
+    match_ids: str = Query(..., description="Virgülle ayrılmış match_id listesi"),
+) -> dict[str, dict[str, bool]]:
+    """Bülten maçlarının arşiv eşleşme durumunu toplu sorgular."""
+    ids = [mid.strip() for mid in match_ids.split(",") if mid.strip()]
+    if not ids or len(ids) > 200:
+        return {}
+
+    async with get_session() as session:
+        stmt = (
+            select(
+                Match.match_id,
+                Match.pattern_ft_b,
+                Match.pattern_ft_c,
+            )
+            .where(Match.match_id.in_(ids))
+            .where(Match.deleted_at.is_(None))
+        )
+        rows = (await session.execute(stmt)).all()
+
+    result: dict[str, dict[str, bool]] = {}
+    for row in rows:
+        b_data = row[1]
+        c_data = row[2]
+        has_b = bool(b_data and isinstance(b_data, dict) and b_data.get("match_count", 0) >= 5)
+        has_c = bool(c_data and isinstance(c_data, dict) and c_data.get("match_count", 0) >= 1)
+        if has_b or has_c:
+            result[row[0]] = {"has_b": has_b, "has_c": has_c}
+    return result

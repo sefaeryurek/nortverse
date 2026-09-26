@@ -8,9 +8,10 @@ import LiveMatchBadge from "./LiveMatchBadge";
 interface Props {
   match: FixtureMatch;
   timeStr: string;
+  patternStatus?: { has_b: boolean; has_c: boolean };
 }
 
-export default memo(function BultenRow({ match, timeStr }: Props) {
+export default memo(function BultenRow({ match, timeStr, patternStatus }: Props) {
   const { flag } = leagueDisplay(match.league_code, match.league_name);
   const leagueName = match.league_name || match.league_code;
   const checkedLabel = match.score_checked_at
@@ -128,6 +129,44 @@ export default memo(function BultenRow({ match, timeStr }: Props) {
             checkedLabel={checkedLabel}
             initialStale={isLiveScoreStale(match.score_checked_at)}
           />
+        )}
+
+        {/* Arsiv eslesmesi gostergesi */}
+        {patternStatus && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {patternStatus.has_b && (
+              <span
+                title="Arşiv 1 eşleşmesi var"
+                style={{
+                  fontSize: "var(--nv-text-xs)",
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  padding: "2px 6px",
+                  borderRadius: "var(--nv-radius-sm)",
+                  backgroundColor: "var(--nv-accent-blue-dim)",
+                  color: "var(--nv-accent-blue)",
+                }}
+              >
+                A1
+              </span>
+            )}
+            {patternStatus.has_c && (
+              <span
+                title="Arşiv 2 eşleşmesi var"
+                style={{
+                  fontSize: "var(--nv-text-xs)",
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  padding: "2px 6px",
+                  borderRadius: "var(--nv-radius-sm)",
+                  backgroundColor: "var(--nv-accent-green-dim)",
+                  color: "var(--nv-accent-green)",
+                }}
+              >
+                A2
+              </span>
+            )}
+          </div>
         )}
 
         {/* Chevron ok */}

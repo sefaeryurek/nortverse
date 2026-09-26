@@ -89,6 +89,30 @@ describe("BultenRow", () => {
     expect(flagEl.textContent!.length).toBeGreaterThan(0);
   });
 
+  it("shows A1 badge when pattern B matches exist", () => {
+    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: false }} />);
+    expect(screen.getByText("A1")).toBeDefined();
+    expect(screen.queryByText("A2")).toBeNull();
+  });
+
+  it("shows A2 badge when pattern C matches exist", () => {
+    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: false, has_c: true }} />);
+    expect(screen.queryByText("A1")).toBeNull();
+    expect(screen.getByText("A2")).toBeDefined();
+  });
+
+  it("shows both A1 and A2 badges when both patterns match", () => {
+    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: true }} />);
+    expect(screen.getByText("A1")).toBeDefined();
+    expect(screen.getByText("A2")).toBeDefined();
+  });
+
+  it("shows no badge when patternStatus is undefined", () => {
+    render(<BultenRow match={makeMatch()} timeStr="21:00" />);
+    expect(screen.queryByText("A1")).toBeNull();
+    expect(screen.queryByText("A2")).toBeNull();
+  });
+
   it("encodes special characters in team name URL params", () => {
     render(
       <BultenRow

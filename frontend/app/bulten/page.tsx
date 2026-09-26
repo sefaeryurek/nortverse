@@ -6,7 +6,8 @@ import DayTabs from "@/components/DayTabs";
 import RetryButton from "@/components/RetryButton";
 import BultenRow from "@/components/BultenRow";
 import AutoRefresh from "@/components/AutoRefresh";
-import { getFixture } from "@/lib/api";
+import { getFixture, getPatternStatus } from "@/lib/api";
+import type { PatternStatusMap } from "@/lib/api";
 import { showBulletinMatch } from "@/lib/match-visibility";
 import type { FixtureMatch } from "@/lib/types";
 import Link from "next/link";
@@ -111,11 +112,19 @@ function sortMatches(
 
 async function MatchList({ date }: { date: string }) {
   let matches: FixtureMatch[] = [];
+  let patternStatus: PatternStatusMap = {};
   let error = "";
   try {
     const now = new Date();
     const today = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
     matches = (await getFixture(date)).filter((match) => showBulletinMatch(match, now.getTime(), today, date));
+    if (matches.length > 0) {
+      try {
+        patternStatus = await getPatternStatus(matches.map((m) => m.match_id));
+      } catch {
+        /* Pattern status opsiyonel — hata olursa boş kalır */
+      }
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : "Bağlantı hatası";
   }
@@ -271,7 +280,12 @@ async function MatchList({ date }: { date: string }) {
       {/* Mac listesi */}
       <div style={{ padding: "var(--nv-space-sm) var(--nv-page-gutter)" }}>
         {sorted.map(({ match, timeStr }) => (
-          <BultenRow key={match.match_id} match={match} timeStr={timeStr} />
+          <BultenRow
+            key={match.match_id}
+            match={match}
+            timeStr={timeStr}
+            patternStatus={patternStatus[match.match_id]}
+          />
         ))}
       </div>
     </>
