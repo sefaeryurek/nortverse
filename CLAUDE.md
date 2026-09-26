@@ -303,8 +303,9 @@ nortverse/
 │   │   ├── TopPicks.tsx           # Confidence sıralı en güçlü tahminler (Sprint 8.4)
 │   │   ├── TrendsPanel.tsx        # Form & H2H trend kartları (Sprint 8.8)
 │   │   ├── PowerScoreGauge.tsx    # Maç güç skoru gauge component (Sprint 33)
-│   │   ├── ValidationSection.tsx  # Analiz doğrulama bölümü (Sprint 30)
-│   │   ├── ScoreValidationSection.tsx  # Skor doğrulama bölümü (Sprint 30)
+│   │   ├── ValidationSection.tsx  # Analiz doğrulama bölümü (Sprint 30) — Sprint 36'da analiz sayfasından kaldırıldı
+│   │   ├── ScoreValidationSection.tsx  # Skor doğrulama bölümü (Sprint 30) — Sprint 36'da analiz sayfasından kaldırıldı
+│   │   ├── MatchedMatchesList.tsx # Eşleşen arşiv maçları accordion — İY/2Y/MS skorları (Sprint 36)
 │   │   ├── AutoRefresh.tsx        # Otomatik yenileme component
 │   │   └── LiveMatchBadge.tsx     # Canlı maç rozeti
 │   ├── lib/
@@ -1043,6 +1044,18 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - Stale dosyalar silindi: `CLAUDE_HANDOFF.md`, `CHANGELOG.md`, `KULLANIM.md`, `backend/railway.json`
 - **Sonuç:** 638 backend + 277 frontend + 28 E2E = **943 toplam test** (değişmedi, fix-only sprint)
 
+### Sprint 35 — TAMAMLANDI ✅ (Quality Score DRY + Dead Code Temizliği)
+- **`compute_quality_score()` ortak helper:** `repair.py`'ye taşındı — CLI (`audit_cmds.py`) ve API (`routes_admin.py`) aynı formülü kullanır; API'de eksik olan `repair_candidates` ve `unnormalized` penaltıları eklendi
+- **Dead code temizliği:** `correlation.py` kullanılmayan `correlation_to_json` fonksiyonu + `json` import'u silindi; `ResultOut` ve `ResultMatch`'ten hiç set edilmeyen `live_home`/`live_away` alanları kaldırıldı; `list-validation.ts` vestigial doğrulama satırı silindi
+- **Sonuç:** 638 backend + 277 frontend = **915 toplam test**
+
+### Sprint 36 — TAMAMLANDI ✅ (Bülten İyileştirme + Analiz Sayfası Temizliği)
+- **Hot filtre kaldırıldı:** `routes_fixture.py` ve `runner.py`'de `only_hot=True` → `only_hot=False` — nowgoal'un tüm lig maçları bültene geliyor (sadece popüler maçlar değil)
+- **Debug bölümleri kaldırıldı:** `AnalyzeClient.tsx`'ten `ValidationSection`, `ScoreValidationSection` ve ilgili state/useEffect/API çağrıları silindi — son kullanıcı için anlamsız Brier skoru, güven aralığı, snapshot bölümleri temizlendi
+- **Bülten arşiv göstergesi:** Yeni `/api/fixture/pattern-status` endpoint — match_id listesi alıp pattern_ft_b/c durumunu döner; `BultenRow.tsx`'e A1 (mavi) ve A2 (yeşil) badge'leri eklendi — arşiv eşleşmesi olan maçlar bültende hızlıca görülür
+- **Eşleşen arşiv maçları detay bölümü:** Yeni `/api/analyze/{id}/matched-matches` endpoint — Pattern B ve C eşleşen maçların takım adı, lig, İY/2Y/MS skorlarını döndürür; `MatchedMatchesList.tsx` accordion component — lazy-load ile eşleşen maçları A1/A2 başlıklarıyla listeler
+- **Sonuç:** 638 backend + 277 frontend + 28 E2E = **943 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1259,9 +1272,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-26 — Sprint 34 sonu, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-09-26 — Sprint 36 sonu, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 25-34 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 25-36 Tamamlandı
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1285,7 +1298,7 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | Quality score | 100 / 100 |
 | Arşiv | 7 lig × 5 sezon |
 
-### Test Durumu (Sprint 34 sonrası)
+### Test Durumu (Sprint 36 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
@@ -1296,7 +1309,7 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 ### Sıradaki Adımlar
 
-Sprint 34 tamamlandı. Bekleyen konular kullanıcı kararı gerektirir:
+Sprint 36 tamamlandı. Bekleyen konular kullanıcı kararı gerektirir:
 
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
