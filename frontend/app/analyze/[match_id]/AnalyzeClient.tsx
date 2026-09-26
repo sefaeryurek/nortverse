@@ -7,6 +7,7 @@ import type { AnalyzeResponse, PatternResult } from "@/lib/types";
 import { analyzeMatch } from "@/lib/api";
 import ScoreList from "@/components/ScoreList";
 import PowerScoreGauge, { computePowerScore } from "@/components/PowerScoreGauge";
+import MatchedMatchesList from "@/components/MatchedMatchesList";
 import { MatchProvider } from "@/lib/match-context";
 
 const IddaaCoupon = dynamic(() => import("@/components/IddaaCoupon"));
@@ -395,6 +396,12 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                     recommendations={data.ft_recommendations}
                   />
                 </MatchProvider>
+
+                <MatchedMatchesList
+                  matchId={data.match_id}
+                  hasPatternB={!!patternB && patternB.match_count >= 5}
+                  hasPatternC={!!patternC && patternC.match_count >= 1}
+                />
                 </div>
               </>
             )}

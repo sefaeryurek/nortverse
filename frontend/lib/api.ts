@@ -170,6 +170,28 @@ export async function getPatternStatus(matchIds: string[]): Promise<PatternStatu
   );
 }
 
+export interface MatchedMatch {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  league_code: string | null;
+  ht: string | null;
+  h2: string | null;
+  ft: string | null;
+  kickoff_time: string | null;
+}
+
+export interface MatchedMatchesResponse {
+  archive_b: MatchedMatch[];
+  archive_c: MatchedMatch[];
+}
+
+export async function getMatchedMatches(matchId: string): Promise<MatchedMatchesResponse> {
+  return request<MatchedMatchesResponse>(`/api/analyze/${encodeURIComponent(matchId)}/matched-matches`, {
+    cache: "no-store",
+  });
+}
+
 export async function getResults(date: string): Promise<ResultMatch[]> {
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   return checkedList(await request<ResultMatch[]>(`/api/results?${new URLSearchParams({ date })}`, {
