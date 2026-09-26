@@ -26,7 +26,6 @@ export function validMatchList(value: unknown, results = false): boolean {
     }
     if (row.status !== "finished") return false;
     if (!["actual_ft_home", "actual_ft_away", "actual_ht_home", "actual_ht_away"].every((key) => score(row[key]))) return false;
-    if (!["live_home", "live_away"].every((key) => row[key] === undefined || score(row[key]))) return false;
     if (row.score_checked_at !== undefined && row.score_checked_at !== null
       && (typeof row.score_checked_at !== "string" || !Number.isFinite(Date.parse(row.score_checked_at)))) return false;
     if (row.actual_ft_home === null || row.actual_ft_away === null) return false;

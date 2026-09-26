@@ -143,6 +143,7 @@ def audit_db_cmd(
     from datetime import datetime, timezone, timedelta
     from sqlalchemy import select, func, or_
     from app.analysis.league_filter import is_supported_league, canonical_league_name
+    from app.analysis.repair import compute_quality_score
     from app.db.connection import get_session
     from app.db.models import Match
 
@@ -247,18 +248,15 @@ def audit_db_cmd(
                     pattern_anomalies.append((r.match_id, total_pct))
 
             repair_candidates = bad_scores + inconsistent_halves
-            if total == 0:
-                quality = 0.0
-            else:
-                penalties = (
-                    (len(non_league_active) / total) * 40
-                    + (missing_pattern / max(active, 1)) * 20
-                    + (missing_actual / max(active, 1)) * 30
-                    + (missing_trends / max(active, 1)) * 10
-                    + (repair_candidates / max(active, 1)) * 15
-                    + (unnormalized / max(active, 1)) * 5
-                )
-                quality = max(0.0, 100.0 - penalties)
+            quality = compute_quality_score(
+                total=total, active=active,
+                non_league=len(non_league_active),
+                missing_pattern=missing_pattern,
+                missing_actual=missing_actual,
+                missing_trends=missing_trends,
+                repair_candidates=repair_candidates,
+                unnormalized=unnormalized,
+            )
 
         console.print(Panel.fit(
             f"[bold]Toplam maç:[/bold] {total:,}\n"

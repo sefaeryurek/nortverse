@@ -270,8 +270,6 @@ export interface ResultMatch {
   actual_ft_away: number | null;
   actual_ht_home: number | null;
   actual_ht_away: number | null;
-  live_home?: number | null;
-  live_away?: number | null;
   score_checked_at?: string | null;
   status: "scheduled" | "pending" | "live" | "finished" | "postponed";
   result: "1" | "X" | "2" | null;

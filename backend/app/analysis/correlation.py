@@ -12,7 +12,7 @@ corr = 1.0 → bağımsız
 
 from __future__ import annotations
 
-import json
+
 import math
 from collections import defaultdict
 from typing import Any
@@ -203,10 +203,6 @@ def compute_from_matches(
                 result[key] = round(corr, 3)
 
     return result
-
-
-def correlation_to_json(corr: dict[str, float]) -> str:
-    return json.dumps(corr, indent=2, ensure_ascii=False, sort_keys=True)
 
 
 def get_correction_factor(

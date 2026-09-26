@@ -62,3 +62,28 @@ def needs_normalization(league_code: str | None, league_name: str | None) -> boo
     if league_name and canonical_league_name(league_name) != league_name:
         return True
     return False
+
+
+def compute_quality_score(
+    *,
+    total: int,
+    active: int,
+    non_league: int,
+    missing_pattern: int,
+    missing_actual: int,
+    missing_trends: int,
+    repair_candidates: int = 0,
+    unnormalized: int = 0,
+) -> float:
+    """0-100 kalite skoru — CLI ve API ortak formülü."""
+    if total == 0:
+        return 0.0
+    penalties = (
+        (non_league / total) * 40
+        + (missing_pattern / max(active, 1)) * 20
+        + (missing_actual / max(active, 1)) * 30
+        + (missing_trends / max(active, 1)) * 10
+        + (repair_candidates / max(active, 1)) * 15
+        + (unnormalized / max(active, 1)) * 5
+    )
+    return max(0.0, 100.0 - penalties)

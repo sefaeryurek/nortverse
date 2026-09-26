@@ -12,6 +12,7 @@ from sqlalchemy import case, func, or_, select, text
 
 from app.analysis.correlation import compute_poisson_correlations
 from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
+from app.analysis.repair import compute_quality_score
 from app.analysis.snapshots import BASELINE_VERSION, RULE_VERSION
 from app.analysis.score_snapshots import SCORE_RULE_VERSION
 from app.api.schemas import AnalysisEvidence, AnalysisValidationV3, DataQuality, HealthResponse, MarketValidationV3, ScoreValidation
@@ -390,16 +391,13 @@ async def admin_quality() -> DataQuality:
             )
         )).scalar() or 0
 
-    if active == 0:
-        score = 0.0
-    else:
-        penalties = (
-            (non_league / max(total, 1)) * 40
-            + (missing_pattern / max(active, 1)) * 20
-            + (missing_actual / max(active, 1)) * 30
-            + (missing_trends / max(active, 1)) * 10
-        )
-        score = max(0.0, 100.0 - penalties)
+    score = compute_quality_score(
+        total=total, active=active,
+        non_league=non_league,
+        missing_pattern=missing_pattern,
+        missing_actual=missing_actual,
+        missing_trends=missing_trends,
+    )
 
     return DataQuality(
         total_matches=total,
