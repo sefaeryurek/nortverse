@@ -22,6 +22,7 @@ from app.analysis.persist import PatternComputationError
 from app.api.live_snapshot import shutdown_live_snapshot
 from app.api.routes_admin import router as admin_router
 from app.api.routes_analysis import router as analysis_router
+from app.api.routes_evaluation import router as evaluation_router
 from app.api.routes_fixture import router as fixture_router
 from app.api.routes_results import router as results_router
 from app.api.services import bg_worker, init_bg_queue, shutdown_bg_queue
@@ -116,4 +117,5 @@ async def add_cache_headers(request, call_next):
 app.include_router(fixture_router)
 app.include_router(analysis_router)
 app.include_router(results_router)
+app.include_router(evaluation_router)
 app.include_router(admin_router)

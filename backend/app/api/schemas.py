@@ -183,6 +183,58 @@ class MatchSummary(BaseModel):
     ft_scores_2: Optional[list]
 
 
+# ─── Günlük Değerlendirme (Sprint 37) ────────────────────────────────────────
+
+class PatternEvaluation(BaseModel):
+    match_count: int
+    result_pick: str
+    result_pct: float
+    result_hit: bool
+    over_25_pick: str
+    over_25_pct: float
+    over_25_hit: bool
+    btts_pick: str
+    btts_pct: float
+    btts_hit: bool
+
+
+class MatchEvaluation(BaseModel):
+    match_id: str
+    home_team: str
+    away_team: str
+    league_code: Optional[str] = None
+    league_name: Optional[str] = None
+    kickoff_time: Optional[str] = None
+    actual_ft: str
+    actual_ht: Optional[str] = None
+    result: str
+    over_25: bool
+    btts: bool
+    pattern_b: Optional[PatternEvaluation] = None
+    pattern_c: Optional[PatternEvaluation] = None
+    score_list: list[str] = Field(default_factory=list)
+    score_list_hit: bool = False
+
+
+class EvaluationSummary(BaseModel):
+    total_matches: int = 0
+    evaluated: int = 0
+    result_hit: int = 0
+    result_hit_pct: float = 0.0
+    over_25_hit: int = 0
+    over_25_hit_pct: float = 0.0
+    btts_hit: int = 0
+    btts_hit_pct: float = 0.0
+    score_list_hit: int = 0
+    score_list_hit_pct: float = 0.0
+
+
+class DailyEvaluation(BaseModel):
+    date: str
+    summary: EvaluationSummary
+    matches: list[MatchEvaluation] = Field(default_factory=list)
+
+
 class ResultOut(BaseModel):
     match_id: str
     home_team: str
