@@ -278,6 +278,58 @@ export interface ResultMatch {
   katman_a_covered: boolean | null;
 }
 
+// ─── Günlük Değerlendirme (Sprint 37) ────────────────────────────────────────
+
+export interface PatternEvaluation {
+  match_count: number;
+  result_pick: string;
+  result_pct: number;
+  result_hit: boolean;
+  over_25_pick: string;
+  over_25_pct: number;
+  over_25_hit: boolean;
+  btts_pick: string;
+  btts_pct: number;
+  btts_hit: boolean;
+}
+
+export interface MatchEvaluation {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  league_code: string | null;
+  league_name: string | null;
+  kickoff_time: string | null;
+  actual_ft: string;
+  actual_ht: string | null;
+  result: string;
+  over_25: boolean;
+  btts: boolean;
+  pattern_b: PatternEvaluation | null;
+  pattern_c: PatternEvaluation | null;
+  score_list: string[];
+  score_list_hit: boolean;
+}
+
+export interface EvaluationSummary {
+  total_matches: number;
+  evaluated: number;
+  result_hit: number;
+  result_hit_pct: number;
+  over_25_hit: number;
+  over_25_hit_pct: number;
+  btts_hit: number;
+  btts_hit_pct: number;
+  score_list_hit: number;
+  score_list_hit_pct: number;
+}
+
+export interface DailyEvaluation {
+  date: string;
+  summary: EvaluationSummary;
+  matches: MatchEvaluation[];
+}
+
 export interface MatchSummary {
   match_id: string;
   home_team: string;

@@ -1,4 +1,4 @@
-import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse, FixtureMatch, MatchSummary, ResultMatch, ScoreValidation } from "./types";
+import type { AnalysisEvidence, AnalysisValidation, AnalyzeResponse, DailyEvaluation, FixtureMatch, MatchSummary, ResultMatch, ScoreValidation } from "./types";
 import { getApiBase } from "./env";
 import { isRecentScoreDate } from "./dates";
 import { validMatchList } from "./list-validation";
@@ -190,6 +190,13 @@ export async function getMatchedMatches(matchId: string): Promise<MatchedMatches
   return request<MatchedMatchesResponse>(`/api/analyze/${encodeURIComponent(matchId)}/matched-matches`, {
     cache: "no-store",
   });
+}
+
+export async function getEvaluation(date: string): Promise<DailyEvaluation> {
+  return request<DailyEvaluation>(
+    `/api/evaluation?${new URLSearchParams({ date })}`,
+    { next: { revalidate: 300 } },
+  );
 }
 
 export async function getResults(date: string): Promise<ResultMatch[]> {
