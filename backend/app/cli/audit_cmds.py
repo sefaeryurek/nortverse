@@ -337,6 +337,7 @@ def audit_patterns_cmd(
 
     from app.analysis.pattern_b import find_pattern_b_matches
     from app.analysis.pattern_c import find_pattern_c_all_periods
+    from app.config import ANALYSIS
 
     async def _run() -> None:
         console.print(f"[cyan]Pattern audit başladı: {match_id}[/cyan]\n")
@@ -354,8 +355,10 @@ def audit_patterns_cmd(
             )
             b_results[period_key] = b
 
+        tol = ANALYSIS.pattern_c_tolerance
         c_ht, c_h2, c_ft = await find_pattern_c_all_periods(
-            result.ft.all_ratios, exclude_match_id=match_id, as_of=result.analyzed_at,
+            result.ft.all_ratios, tolerance=tol,
+            exclude_match_id=match_id, as_of=result.analyzed_at,
         )
 
         t = Table(title=f"{raw.home_team} vs {raw.away_team} [{raw.league_code}]")
@@ -375,14 +378,14 @@ def audit_patterns_cmd(
         t.add_row(
             "Pattern C (oran benzerliği)",
             str(c_count), str(c_count), str(c_count),
-            "Tek FT set — üç periyot için aynı maçlar (tolerance=0)",
+            f"Tek FT set — üç periyot için aynı maçlar (tolerance={tol})",
         )
         console.print(t)
 
         if c_count == 0:
             console.print(
                 "\n[yellow]Pattern C eşleşmesi bulunamadı.[/yellow] "
-                "[dim]tolerance=0.0 sıkı; bu maçın oranlarına tam aynı geçmiş maç yok.[/dim]"
+                f"[dim]tolerance={tol}; bu maçın oranlarına benzer geçmiş maç yok.[/dim]"
             )
         elif c_count < 5:
             console.print(
