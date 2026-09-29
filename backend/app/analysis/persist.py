@@ -16,6 +16,7 @@ from sqlalchemy import update as sa_update
 
 from app.analysis.pattern_b import find_pattern_b_matches
 from app.analysis.pattern_c import find_pattern_c_all_periods
+from app.config import ANALYSIS
 from app.db.connection import get_session
 from app.db.models import Match
 
@@ -73,7 +74,8 @@ async def compute_all_patterns(
             return None, None, None
         try:
             ht_c, h2_c, ft_c = await find_pattern_c_all_periods(
-                ft_ratios, exclude_match_id=match_id, as_of=as_of,
+                ft_ratios, tolerance=ANALYSIS.pattern_c_tolerance,
+                exclude_match_id=match_id, as_of=as_of,
             )
             return (
                 ht_c.model_dump() if ht_c else None,

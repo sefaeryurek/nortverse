@@ -152,6 +152,18 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.min_h2h == 5
 
+    def test_default_pattern_c_tolerance(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_C_TOLERANCE", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_c_tolerance == 0.5
+
+    def test_override_pattern_c_tolerance(self, monkeypatch):
+        monkeypatch.setenv("PATTERN_C_TOLERANCE", "1.0")
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_c_tolerance == 1.0
+
     def test_frozen_dataclass(self):
         from app.config import AnalysisConfig
         cfg = AnalysisConfig()

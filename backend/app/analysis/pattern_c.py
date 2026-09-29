@@ -16,7 +16,7 @@ import logging
 import math
 from datetime import datetime
 
-from sqlalchemy import cast, func, select
+from sqlalchemy import Float, cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.analysis.pattern_stats import PatternResult, compute_stats
@@ -114,7 +114,9 @@ async def find_pattern_c_all_periods(
             ).where(*filters)
             matched = list((await session.execute(stmt)).all())
     else:
-        # YAVAŞ YOL — fuzzy match (tolerance > 0), tüm satırlar çekilir
+        # DB-SIDE FUZZY YOL — her anahtar için ±tolerance BETWEEN (Sprint 37)
+        # Eski yol tüm satırları Python'a çekiyordu (~130MB egress).
+        # Yeni yol 35 BETWEEN koşuluyla sadece eşleşen satırları döndürür.
         async with get_session() as session:
             filters = [
                 Match.ft_all_ratios.isnot(None),
@@ -132,17 +134,15 @@ async def find_pattern_c_all_periods(
                 Match.analyzed_at.is_not(None),
                 Match.analyzed_at < Match.kickoff_time,
             ])
+            for key, target_val in ft_ratios.items():
+                ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
+                filters.append(ratio_expr.between(target_val - tolerance, target_val + tolerance))
             stmt = select(
-                Match.ft_all_ratios,
                 Match.actual_ft_home, Match.actual_ft_away,
                 Match.actual_ht_home, Match.actual_ht_away,
                 Match.actual_h2_home, Match.actual_h2_away,
             ).where(*filters)
-            rows = (await session.execute(stmt)).all()
-        matched = [
-            row for row in rows
-            if row.ft_all_ratios and _ratios_match(ft_ratios, row.ft_all_ratios, tolerance)
-        ]
+            matched = list((await session.execute(stmt)).all())
 
     if len(matched) < min_matches:
         log.info(
