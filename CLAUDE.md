@@ -229,6 +229,7 @@ nortverse/
 │   │   │   ├── routes_analysis.py # /api/analyze, /api/match endpoint'leri (Sprint 22)
 │   │   │   ├── routes_results.py  # /api/results, /api/matches endpoint'leri (Sprint 22)
 │   │   │   ├── routes_admin.py    # /api/health, /api/admin/quality, /api/correlations (Sprint 22)
+│   │   │   ├── routes_evaluation.py # /api/evaluation — günlük tahmin vs sonuç karşılaştırması (Sprint 37)
 │   │   │   ├── score_state.py     # Skor durumu yönetimi
 │   │   │   └── live_snapshot.py   # Canlı snapshot endpoint
 │   │   ├── pipeline/
@@ -267,7 +268,8 @@ nortverse/
 │   │   ├── test_runner.py               # Pipeline runner birim testleri (27 test, Sprint 22)
 │   │   ├── test_match_detail_parser.py  # H2H parser birim testleri (58 test, Sprint 23)
 │   │   ├── test_services.py             # API services birim testleri (26 test, Sprint 23)
-│   │   └── test_config.py              # Config env override testleri (25 test, Sprint 23)
+│   │   ├── test_config.py              # Config env override testleri (25+2 test, Sprint 23+37)
+│   │   └── test_evaluation.py          # Günlük değerlendirme testleri (19 test, Sprint 37)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
@@ -283,6 +285,9 @@ nortverse/
 │   │   ├── sonuclar/
 │   │   │   ├── page.tsx           # Server component — biten maçlar, skor, tahmin özeti
 │   │   │   └── loading.tsx        # Skeleton fallback (Sprint 33)
+│   │   ├── degerlendirme/
+│   │   │   ├── page.tsx           # Server component — günlük tahmin isabeti değerlendirmesi (Sprint 37)
+│   │   │   └── loading.tsx        # Skeleton fallback (Sprint 37)
 │   │   └── analyze/[match_id]/
 │   │       ├── page.tsx           # Client component — maç analiz sayfası
 │   │       ├── AnalyzeClient.tsx  # Analiz client component (Sprint 28)
@@ -1056,6 +1061,27 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Eşleşen arşiv maçları detay bölümü:** Yeni `/api/analyze/{id}/matched-matches` endpoint — Pattern B ve C eşleşen maçların takım adı, lig, İY/2Y/MS skorlarını döndürür; `MatchedMatchesList.tsx` accordion component — lazy-load ile eşleşen maçları A1/A2 başlıklarıyla listeler
 - **Sonuç:** 638 backend + 277 frontend + 28 E2E = **943 toplam test**
 
+### Sprint 37 — DEVAM EDİYOR (Pattern C Düzeltme + Günlük Değerlendirme Sayfası)
+- **Pattern C tolerance düzeltmesi (`163e5ea`):**
+  - `tolerance=0.0` → `tolerance=0.5` geri yüklendi (35 boyutlu vektörde birebir eşleşme matematiksel olarak imkansızdı — ~46 milyar kombinasyon vs ~9,300 maç)
+  - **DB-side fuzzy query** eklendi — her anahtar için `BETWEEN(target - 0.5, target + 0.5)` SQL koşulu; egress koruması korundu (130MB → 50KB)
+  - `config.py`'e `pattern_c_tolerance` env-configurable alan (default 0.5, `PATTERN_C_TOLERANCE` env var ile override)
+  - `persist.py` config'den tolerance'ı `find_pattern_c_all_periods`'a geçiriyor
+- **Günlük değerlendirme endpoint'i (`4ada9ac`):**
+  - `routes_evaluation.py` — `GET /api/evaluation?date=YYYY-MM-DD`: biten maçlarda Pattern B/C tahminlerini gerçek sonuçla karşılaştırır
+  - Değerlendirme mantığı: result argmax (1/X/2), ust_25_pct > 50 → Üst/Alt, kg_var_pct > 50 → KG Var/Yok, skor listesi kontrolü
+  - `schemas.py`'e 4 yeni model: `PatternEvaluation`, `MatchEvaluation`, `EvaluationSummary`, `DailyEvaluation`
+  - 19 test (`test_evaluation.py`)
+- **Günlük değerlendirme sayfası (`71f9d52`):**
+  - `app/degerlendirme/page.tsx` — server component, `sonuclar/page.tsx` yapısını takip eder
+  - `DayTabs` ile `basePath="/degerlendirme"` ve `range="past"` (geçmiş 8 gün)
+  - Üstte 4 özet kartı: Sonuç / 2.5 Üst-Alt / KG / Skor Listesi isabet oranları (renk kodlu)
+  - Her maç satırında: lig bayrak, saat, takımlar, gerçek skor, Pattern B/C tahminleri, isabet/kaçırma badge'leri
+  - `loading.tsx` skeleton fallback, `Sidebar.tsx`'e navigasyon linki eklendi
+  - `lib/types.ts`'e değerlendirme interface'leri, `lib/api.ts`'e `getEvaluation()` fonksiyonu
+- **Bekleyen:** Pattern recompute (9,293 maç tolerance=0.5 ile yeniden hesaplanacak — Docker başlatıldığında)
+- **Sonuç:** 659 backend + 277 frontend + 28 E2E = **964 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1202,7 +1228,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Pre-write validation (Sprint 8.9):** `_validate_row(row)` `_upsert` öncesi kontrol — boş takım/lig kodu, kupa filtresi, saçma skor (negatif/>30) → reddedilir, log.error, ama pipeline devam eder. Pipeline başarısızlığı sayılmaz.
 
-- **Pattern C tolerance=0.0 (Sprint 8.9):** Eski `±0.5` toleransta yan yana iki "kova" eşleşmiş sayılıyordu (örn. 3.5 ile 4.0). Yeni: tam eşleşme. Eşleşme sayısı 5-10x düştü ama kalite arttı. `min_matches: 5 → 1` çünkü tolerance=0 sıkı, 1-4 maç düşük güven kabul edilebilir. Frontend `match_count >= 1` ile Pattern C'yi gösterir; UI'da düşük örneklemde dynamicMinPct doğal koruma sağlar (Sprint 8.6).
+- **Pattern C tolerance=0.5 (Sprint 37, öncesi 0.0):** Sprint 8.9'da tolerance 0.5→0.0 yapılmıştı ama 35 boyutlu vektörde birebir eşleşme matematiksel olarak imkansız (~46 milyar kombinasyon vs ~9,300 maç = beklenen 0.21 eşleşme). Sprint 37'de 0.5'e geri yüklendi + DB-side fuzzy query (BETWEEN koşulları) ile egress koruması korundu. `min_matches: 1` çünkü tolerance=0.5 makul eşleşme üretir ama garanti değil. `config.py`'de `PATTERN_C_TOLERANCE` env var ile override edilebilir.
 
 - **Kanonik lig adı (Sprint 8.9+20):** `LEAGUE_ALIASES` 50+ alias → kanonik ad. `_result_to_row` `canonical_league_name(r.league_code)` uygular → yeni maçlar tutarlı. Eski maçlar için `normalize-leagues --apply` CLI komutu (Sprint 20) toplu normalize yapar. `repair.py:needs_normalization()` ile `audit-db` normalize edilmemiş kayıt sayısını gösterir.
 
@@ -1272,9 +1298,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-26 — Sprint 36 sonu, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-09-30 — Sprint 37 devam ediyor, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 25-36 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 37 Devam Ediyor
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1298,18 +1324,23 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | Quality score | 100 / 100 |
 | Arşiv | 7 lig × 5 sezon |
 
-### Test Durumu (Sprint 36 sonrası)
+### Test Durumu (Sprint 37 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 638 | ✅ Yeşil |
+| **Backend** | pytest | 659 | ✅ Yeşil |
 | **Frontend birim** | vitest | 277 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 943 | — |
+| **Toplam** | — | 964 | — |
 
 ### Sıradaki Adımlar
 
-Sprint 36 tamamlandı. Bekleyen konular kullanıcı kararı gerektirir:
+Sprint 37 devam ediyor — Pattern recompute bekliyor (Docker başlatılınca):
+
+- **Pattern recompute:** 9,293 maç tolerance=0.5 ile yeniden hesaplanacak (`python -m app.cli.main recompute-patterns --batch-size 500`)
+- **Değerlendirme sayfası test:** Backend + frontend çalışırken `/degerlendirme` sayfasında geçmiş tarih seçip tahmin isabetlerini gözle doğrula
+
+Bekleyen konular kullanıcı kararı gerektirir:
 
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
