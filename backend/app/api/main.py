@@ -7,6 +7,7 @@ Slim hub: app oluşturma, middleware, lifespan, router kayıtları.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
@@ -64,10 +65,19 @@ async def pattern_computation_error(request, exc):
     })
 
 
+_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        "CORS_ORIGINS",
+        "http://localhost:3000,https://nortverse.vercel.app",
+    ).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_methods=["GET", "HEAD", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -79,6 +89,7 @@ _CACHE_RULES: dict[str, str] = {
     "/api/results": "public, s-maxage=120, stale-while-revalidate=60",
     "/api/matches": "public, s-maxage=300, stale-while-revalidate=60",
     "/api/health": "public, s-maxage=30",
+    "/api/evaluation": "public, s-maxage=300, stale-while-revalidate=60",
     "/api/analysis-evidence": "public, s-maxage=300, stale-while-revalidate=60",
     "/api/analysis-validation": "public, s-maxage=300, stale-while-revalidate=60",
     "/api/score-validation": "public, s-maxage=300, stale-while-revalidate=60",
