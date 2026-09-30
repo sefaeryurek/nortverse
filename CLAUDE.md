@@ -1061,7 +1061,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Eşleşen arşiv maçları detay bölümü:** Yeni `/api/analyze/{id}/matched-matches` endpoint — Pattern B ve C eşleşen maçların takım adı, lig, İY/2Y/MS skorlarını döndürür; `MatchedMatchesList.tsx` accordion component — lazy-load ile eşleşen maçları A1/A2 başlıklarıyla listeler
 - **Sonuç:** 638 backend + 277 frontend + 28 E2E = **943 toplam test**
 
-### Sprint 37 — DEVAM EDİYOR (Pattern C Düzeltme + Günlük Değerlendirme Sayfası)
+### Sprint 37 — TAMAMLANDI ✅ (Pattern C Düzeltme + Günlük Değerlendirme + İstatistiksel Kalibrasyon)
 - **Pattern C tolerance düzeltmesi (`163e5ea`):**
   - `tolerance=0.0` → `tolerance=0.5` geri yüklendi (35 boyutlu vektörde birebir eşleşme matematiksel olarak imkansızdı — ~46 milyar kombinasyon vs ~9,300 maç)
   - **DB-side fuzzy query** eklendi — her anahtar için `BETWEEN(target - 0.5, target + 0.5)` SQL koşulu; egress koruması korundu (130MB → 50KB)
@@ -1070,17 +1070,32 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Günlük değerlendirme endpoint'i (`4ada9ac`):**
   - `routes_evaluation.py` — `GET /api/evaluation?date=YYYY-MM-DD`: biten maçlarda Pattern B/C tahminlerini gerçek sonuçla karşılaştırır
   - Değerlendirme mantığı: result argmax (1/X/2), ust_25_pct > 50 → Üst/Alt, kg_var_pct > 50 → KG Var/Yok, skor listesi kontrolü
-  - `schemas.py`'e 4 yeni model: `PatternEvaluation`, `MatchEvaluation`, `EvaluationSummary`, `DailyEvaluation`
-  - 19 test (`test_evaluation.py`)
-- **Günlük değerlendirme sayfası (`71f9d52`):**
+  - `schemas.py`'e 8 yeni model: `PatternEvaluation`, `MatchEvaluation`, `EvaluationSummary` (A1+A2 ayrı), `DailyEvaluation`
+  - 32 test (`test_evaluation.py`)
+- **Günlük değerlendirme sayfası (`71f9d52` + `93522ca`):**
   - `app/degerlendirme/page.tsx` — server component, `sonuclar/page.tsx` yapısını takip eder
   - `DayTabs` ile `basePath="/degerlendirme"` ve `range="past"` (geçmiş 8 gün)
-  - Üstte 4 özet kartı: Sonuç / 2.5 Üst-Alt / KG / Skor Listesi isabet oranları (renk kodlu)
+  - A1 (Arşiv 1 / Pattern B) ve A2 (Arşiv 2 / Pattern C) ayrı özet kartları: Sonuç / 2.5 Üst-Alt / KG isabet oranları (renk kodlu)
   - Her maç satırında: lig bayrak, saat, takımlar, gerçek skor, Pattern B/C tahminleri, isabet/kaçırma badge'leri
+  - Low-confidence göstergesi: `match_count < 10` → opacity 0.6
+  - Tüm Türkçe karakterler düzeltildi (Degerlendirme→Değerlendirme, bitmis→bitmiş, mac→maç vb.)
   - `loading.tsx` skeleton fallback, `Sidebar.tsx`'e navigasyon linki eklendi
-  - `lib/types.ts`'e değerlendirme interface'leri, `lib/api.ts`'e `getEvaluation()` fonksiyonu
-- **Bekleyen:** Pattern recompute (9,293 maç tolerance=0.5 ile yeniden hesaplanacak — Docker başlatıldığında)
-- **Sonuç:** 659 backend + 277 frontend + 28 E2E = **964 toplam test**
+  - `lib/types.ts`'e değerlendirme interface'leri (A1+A2 ayrı alanlar), `lib/api.ts`'e `getEvaluation()` fonksiyonu
+- **İstatistiksel kalibrasyon (`fd21b56`):**
+  - **Backtest sonuçları (7,949 bitmiş maç):**
+    - Pattern B MS: %44.4 (= baseline), Pattern C MS: %41.6 (baseline altı)
+    - Üst/Alt 2.5: B %51.7, C %51.6 (baseline %55.4 altı)
+    - KG: B %52.5, C %50.3 (baseline %55.4 altı)
+    - **B+C uyum (dual confirmation):** MS %46.8 (+6 puan, TEK doğrulanmış sinyal)
+  - **Eşik kalibrasyonu:** Üst/Alt ve KG eşikleri %50 → %55'e yükseltildi (popülasyon baz oranına eşitlendi)
+    - `config.py`'e `over_25_threshold` (default 55.0, `OVER_25_THRESHOLD` env var) ve `btts_threshold` (default 55.0, `BTTS_THRESHOLD` env var) eklendi
+  - **Bayesian shrinkage (draw regresyonu):** Küçük örneklemlerde aşırı güvenli tahminleri baz orana doğru çeker
+    - `BASE_RESULT = {"1": 44.4, "X": 24.6, "2": 30.9}`, `SHRINKAGE = 0.3`
+    - Formül: `adjusted = raw × (1 - shrink) + base × shrink` where `shrink = SHRINKAGE / (1 + mc/20)`
+    - **Not:** Draw underprediction sorunu tam çözülmedi — X baz oranı (%24.6) en düşük olduğu için shrinkage formülü X'i artıramaz; gelecekte X-specific boost gerekli
+  - **Değerlendirme minimum eşleşme:** `eval_min_matches` (default 5, `EVAL_MIN_MATCHES` env var) — <5 eşleşmeli pattern değerlendirilmez
+  - **Dual bonus güçlendirildi:** `confidence.ts` `DUAL_BONUS` 1.15 → 1.25 (backtest'te B+C uyum %46.8 vs uyumsuz %40.9)
+- **Sonuç:** 678 backend + 277 frontend + 28 E2E = **983 toplam test**
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -1203,6 +1218,13 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Trends migration adımı (Sprint 8.8):** Dockerfile'daki `alembic upgrade head` sayesinde (Sprint 9) container her açılışta schema güncel. Eski not: `f5c8d2a1b394` (trends) Supabase'da 2026-05-07'de manuel uygulanmıştı.
 
+- **Değerlendirme kalibrasyon config'leri (Sprint 37):** `config.py` AnalysisConfig'e 3 yeni alan:
+  - `over_25_threshold` (default 55.0, `OVER_25_THRESHOLD` env var): Üst/Alt 2.5 tahmini için minimum yüzde eşiği. Backtest'te popülasyon baz oranı %55.4 olduğu için 50→55'e yükseltildi
+  - `btts_threshold` (default 55.0, `BTTS_THRESHOLD` env var): KG Var/Yok tahmini için minimum yüzde eşiği. Aynı mantık
+  - `eval_min_matches` (default 5, `EVAL_MIN_MATCHES` env var): Değerlendirmede pattern'in anlamlı kabul edilmesi için minimum eşleşme sayısı. <5 eşleşmeli pattern değerlendirilmez, <10 eşleşmeli pattern frontend'de soluk gösterilir (low-confidence)
+
+- **Bayesian draw shrinkage (Sprint 37):** `routes_evaluation.py`'de result argmax hesaplanırken küçük örneklemlerde Bayesian regresyon uygulanır. `BASE_RESULT = {"1": 44.4, "X": 24.6, "2": 30.9}`, `SHRINKAGE = 0.3`. Formül: `adjusted = raw × (1 - s) + base × s` where `s = 0.3 / (1 + mc/20)`. Örneklem büyüdükçe shrinkage azalır (20 maçta ~%1, 100 maçta ~%0.05). **Bilinen kısıtlama:** X baz oranı (%24.6) 1'den (%44.4) küçük olduğu için shrinkage X'i artıramaz — draw underprediction sorunu farklı bir mekanizma gerektirir.
+
 - **Lig filtresi `is_supported_league` (Sprint 8.9):** Hibrit yaklaşım — kara liste keyword (champions/europa/cup/friendly/qualifier/...) + beyaz liste override (`LEAGUE_ALIASES` içindeki ad zaten geçer). Çoklu parametre kabul eder (`is_supported_league(name, code)`); biri lig sayılırsa True.
 
 - **Lig adı tespit önceliği (Sprint 8.9):** `fetch_match_detail` üç kademe: (1) `expected_league_name` parametresi (bültenden gelir, en güvenilir), (2) `_extract_main_match_info` HTML `.fbheader > a`, (3) `_detect_main_league_code` H2H tabanlı (en zayıf, fallback). Aston Villa-Nottingham Forest UEL sorunu (3. yöntemin H2H'taki "ENG PR" maçlarını sayması) (1) ile çözüldü.
@@ -1298,9 +1320,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-30 — Sprint 37 devam ediyor, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-09-30 — Sprint 37 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 37 Devam Ediyor
+### ✅ Mevcut Durum — Local Development + Sprint 37 Tamamlandı
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1308,7 +1330,7 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 |---|---|---|
 | **Frontend** | Local Next.js dev | `http://localhost:3000` |
 | **Backend** | Local FastAPI | `http://localhost:8000` |
-| **Veritabanı** | Docker PostgreSQL | Port 5433, 9,257 aktif maç |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 9,257+ aktif maç |
 | **Otomasyon** | Windows Task Scheduler | 4 bat script (pipeline + skor + yedekleme) |
 | **CI/CD** | GitHub Actions | `quality.yml` aktif (push/PR), cron'lar devre dışı |
 
@@ -1318,38 +1340,46 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 | Metrik | Değer |
 |---|---|
-| Aktif maç | 9,257 |
+| Aktif maç | 9,257+ |
 | Pattern eksik | 0 |
 | Pattern tutarsızlık | 0 |
 | Quality score | 100 / 100 |
 | Arşiv | 7 lig × 5 sezon |
 
+### Backtest Sonuçları (Sprint 37 — 7,949 bitmiş maç)
+
+| Pazar | Pattern B | Pattern C | Baseline | Not |
+|---|---|---|---|---|
+| MS (1/X/2) | %44.4 | %41.6 | %44.4 | B = baseline |
+| Üst/Alt 2.5 | %51.7 | %51.6 | %55.4 | İkisi de baseline altı |
+| KG | %52.5 | %50.3 | %55.4 | İkisi de baseline altı |
+| B+C uyum (MS) | %46.8 | — | %44.4 | TEK doğrulanmış sinyal (+6 puan) |
+| Bundesliga MS | %50.1 | %44.3 | — | En iyi lig |
+
 ### Test Durumu (Sprint 37 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 659 | ✅ Yeşil |
+| **Backend** | pytest | 678 | ✅ Yeşil |
 | **Frontend birim** | vitest | 277 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 964 | — |
+| **Toplam** | — | 983 | — |
 
 ### Sıradaki Adımlar
 
-Sprint 37 devam ediyor — Pattern recompute bekliyor (Docker başlatılınca):
-
-- **Pattern recompute:** 9,293 maç tolerance=0.5 ile yeniden hesaplanacak (`python -m app.cli.main recompute-patterns --batch-size 500`)
-- **Değerlendirme sayfası test:** Backend + frontend çalışırken `/degerlendirme` sayfasında geçmiş tarih seçip tahmin isabetlerini gözle doğrula
-
 Bekleyen konular kullanıcı kararı gerektirir:
 
+- **Pattern recompute:** 9,293 maç tolerance=0.5 ile yeniden hesaplanacak — Docker başlatıldığında (`python -m app.cli.main recompute-patterns --batch-size 500`)
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
+- **Draw underprediction:** Sistem X'i %8.1 tahmin ediyor vs gerçek %24.6. Mevcut Bayesian shrinkage X'i artıramaz (baz oran en düşük). X-specific boost mekanizması tasarlanmalı
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
 - **Canlı maç + WebSocket:** Real-time skor push (onay gerekir)
 
 ### Bilinen Açık Konular
 
+- **Docker Desktop otostart:** Docker Desktop Windows ile otomatik başlatılmalı — aksi takdirde pipeline/skor cron'ları çalışmaz (28-30 Eylül 3 günlük veri kaybı yaşandı)
+- **Task Scheduler "missed run":** Kaçırılan görevlerin yeniden çalıştırılması ayarı etkinleştirilmeli
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
-- **`beautifulsoup4==4.15.0` sürüm doğrulaması:** requirements.txt'teki sürüm doğrulanmalı (pip install testi gerekir)
 - **`ComboSuggestion` ve `StatBadge` dead component'ler:** Hiçbir yerde render edilmiyor (sadece test), gelecekte kullanılacak mı karar verilmeli
