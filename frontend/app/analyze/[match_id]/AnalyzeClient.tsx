@@ -289,7 +289,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                       className="px-4 py-2 text-sm font-semibold transition-all"
                       style={{
                         backgroundColor: activePeriod === key ? "var(--nv-accent-blue)" : "var(--nv-bg-card)",
-                        color: activePeriod === key ? "white" : "var(--nv-text-secondary)",
+                        color: activePeriod === key ? "var(--nv-text-on-accent)" : "var(--nv-text-secondary)",
                         border: `1px solid ${activePeriod === key ? "var(--nv-accent-blue)" : "var(--nv-border)"}`,
                         borderRadius: "var(--nv-radius-full)",
                         boxShadow: activePeriod === key

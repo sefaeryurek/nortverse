@@ -1,6 +1,6 @@
 """Pipeline: Fetch → Analyze → Persist.
 
-Tek browser context ile tüm maçları işler, sonuçları Supabase'e yazar.
+Tek browser context ile tüm maçları işler, sonuçları PostgreSQL'e yazar.
 Idempotent: aynı match_id için tekrar çalıştırılırsa günceller (upsert).
 """
 

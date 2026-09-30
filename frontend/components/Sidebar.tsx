@@ -7,7 +7,7 @@ import { useState } from "react";
 const NAV = [
   {
     href: "/bulten",
-    label: "Bulten",
+    label: "Bülten",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -17,7 +17,7 @@ const NAV = [
   },
   {
     href: "/sonuclar",
-    label: "Sonuclar",
+    label: "Sonuçlar",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
@@ -26,7 +26,7 @@ const NAV = [
   },
   {
     href: "/degerlendirme",
-    label: "Degerlendirme",
+    label: "Değerlendirme",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 11l3 3L22 4" />

@@ -64,7 +64,7 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC }
     setLoading(true);
     getMatchedMatches(matchId)
       .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => {})
+      .catch((err) => { console.error("Matched matches fetch failed:", err); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, matchId, data]);

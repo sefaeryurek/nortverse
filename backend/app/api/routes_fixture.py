@@ -32,7 +32,7 @@ router = APIRouter()
 
 async def _enrich_prediction_status(items: list[dict]) -> dict[str, bool]:
     """Match ID'leri için DB'de analiz verisi olup olmadığını toplu sorgular."""
-    ids = [it.get("match_id") or it.get("match_id", "") for it in items]
+    ids = [it.get("match_id", "") for it in items]
     ids = [mid for mid in ids if mid]
     if not ids:
         return {}
