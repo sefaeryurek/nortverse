@@ -52,6 +52,16 @@ _snapshot_checked_at: dict[str, float] = {}
 _snapshot_finalized: set[str] = set()
 
 fixture_cache: dict[str, tuple[float, list]] = {}
+_FIXTURE_CACHE_MAX = 30
+
+
+def fixture_cache_put(key: str, data: list) -> None:
+    """Fixture cache'e yaz, sınırı aşarsa en eski entry'yi at."""
+    import time as _time
+    fixture_cache[key] = (_time.time(), data)
+    if len(fixture_cache) > _FIXTURE_CACHE_MAX:
+        oldest_key = min(fixture_cache, key=lambda k: fixture_cache[k][0])
+        del fixture_cache[oldest_key]
 
 bg_queue: asyncio.Queue[str] | None = None
 _bg_queued: set[str] = set()

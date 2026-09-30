@@ -7,6 +7,7 @@ reklam kapatma, user agent ayarı gibi ortak işler tek yerde.
 from __future__ import annotations
 
 import logging
+import random
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -15,6 +16,14 @@ from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 from app.config import SCRAPER
 
 log = logging.getLogger(__name__)
+
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+]
 
 
 @asynccontextmanager
@@ -30,7 +39,7 @@ async def browser_context() -> AsyncIterator[BrowserContext]:
         browser: Browser = await pw.chromium.launch(headless=SCRAPER.headless)
         try:
             context: BrowserContext = await browser.new_context(
-                user_agent=SCRAPER.user_agent,
+                user_agent=random.choice(_USER_AGENTS),
                 viewport={"width": 1280, "height": 800},
                 locale="en-US",
             )

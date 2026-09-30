@@ -17,6 +17,7 @@ from app.api.score_state import _utc, resolve_match_state
 from app.api.services import (
     FIXTURE_CACHE_TTL,
     fixture_cache,
+    fixture_cache_put,
 )
 from sqlalchemy import select
 
@@ -146,7 +147,7 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
                 if match.kickoff_time and datetime.fromisoformat(match.kickoff_time).astimezone(istanbul_tz).date() != req_date:
                     continue
                 result.append(raw)
-            fixture_cache[cache_key] = (time.time(), result)
+            fixture_cache_put(cache_key, result)
             log.info("Fixture DB cache hit: %s (%d lig maçı)", cache_key, len(result))
             return await _bulletin_items(result, req_date)
         except (ValueError, TypeError, AttributeError) as exc:
@@ -193,7 +194,7 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
     except Exception as exc:
         log.warning("Fixture DB'ye kaydedilemedi: %s", exc)
 
-    fixture_cache[cache_key] = (time.time(), [m.model_dump() for m in result])
+    fixture_cache_put(cache_key, [m.model_dump() for m in result])
     return await _bulletin_items([m.model_dump() for m in result], req_date)
 
 
