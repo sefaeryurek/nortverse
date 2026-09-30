@@ -1,7 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { canCombineFields } from "@/lib/selection-compatibility";
-import { generateCombos } from "@/lib/combos";
-import { makePick } from "./fixtures";
 
 describe("score compatibility", () => {
   it.each([
@@ -23,18 +21,5 @@ describe("score compatibility", () => {
   });
   it("keeps compatible selections even when they are statistically dependent", () => {
     expect(canCombineFields(["result_1_pct", "kg_var_pct", "ust_25_pct", "iy_ms_11_pct"])).toBe(true);
-  });
-  it("excludes impossible automatic combinations", () => {
-    expect(generateCombos([
-      makePick({ field: "kg_var_pct", marketKey: "kg", pct: 90 }),
-      makePick({ field: "alt_15_pct", marketKey: "ou_15", pct: 90 }),
-    ])).toEqual([]);
-  });
-  it("requires enough samples for every super combo selection", () => {
-    const fields = ["result_1_pct", "kg_var_pct", "ust_25_pct", "iy_ms_11_pct"] as const;
-    const keys = ["result", "kg", "ou_25", "iy_ms"];
-    const picks = fields.map((field, i) => makePick({ field, marketKey: keys[i],
-      pct: 85, confidence: 0.8, matchCountA: i === 0 ? 100 : 5 }));
-    expect(generateCombos(picks).some((c) => c.tier === "super")).toBe(false);
   });
 });

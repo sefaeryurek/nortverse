@@ -32,13 +32,6 @@ function pctColor(pct: number) {
   return "var(--nv-text-tertiary)";
 }
 
-function pctBarBg(pct: number) {
-  if (pct >= 80) return "var(--nv-accent-green)";
-  if (pct >= 65) return "var(--nv-accent-blue)";
-  if (pct >= 50) return "var(--nv-text-secondary)";
-  return "var(--nv-text-tertiary)";
-}
-
 function archiveBadgeClass(archive: FTRecommendation["archive"]) {
   if (archive === "both") return "nv-badge nv-badge-purple";
   if (archive === "archive_1") return "nv-badge nv-badge-blue";
@@ -109,7 +102,7 @@ function RecommendationRow({ recommendation }: { recommendation: FTRecommendatio
             className="nv-pct-bar-fill"
             style={{
               width: `${pct}%`,
-              backgroundColor: pctBarBg(pct),
+              backgroundColor: pctColor(pct),
             }}
           />
         </div>

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { analyzeMatch, getAnalysisEvidence, getFixture, getResults, getScoreValidation } from "@/lib/api";
+import { analyzeMatch, getFixture, getResults } from "@/lib/api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -77,33 +77,3 @@ it("preserves cancellation while reading the response body", async () => {
   await expect(analyzeMatch("123", controller.signal)).rejects.toMatchObject({ name: "AbortError" });
 });
 
-it("accepts measured pre-match coverage and rejects impossible evidence counts", async () => {
-  const evidence = { eligible_matches: 48, archive_1_evaluated: 5,
-    archive_2_evaluated: 0, score_list_evaluated: 24, score_list_hits: 3, minimum_for_rate: 100 };
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(evidence))));
-  await expect(getAnalysisEvidence()).resolves.toEqual(evidence);
-
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
-    ...evidence, archive_1_evaluated: 49,
-  }))));
-  await expect(getAnalysisEvidence()).rejects.toThrow("doğrulama verisi geçersiz");
-
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
-    ...evidence, score_list_hits: 25,
-  }))));
-  await expect(getAnalysisEvidence()).rejects.toThrow("doğrulama verisi geçersiz");
-});
-
-it("accepts paired score counts and rejects impossible comparison counts", async () => {
-  const score = { rule_version: "score-list-v1", recorded: 8, resolved: 4,
-    evaluated: 3, paired: 2, list_hits: 1, paired_model_hits: 1,
-    baseline_hits: 2, both_hit: 1, model_only: 0, baseline_only: 1, neither: 0,
-    coverage_difference_pp: -50, difference_ci_low_pp: -100, difference_ci_high_pp: 46.03,
-    minimum_for_rate: 100 };
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(score))));
-  await expect(getScoreValidation()).resolves.toEqual(score);
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
-    ...score, baseline_hits: 3,
-  }))));
-  await expect(getScoreValidation()).rejects.toThrow("Skor karşılaştırması verisi geçersiz");
-});

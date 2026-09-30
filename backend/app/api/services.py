@@ -57,8 +57,7 @@ _FIXTURE_CACHE_MAX = 30
 
 def fixture_cache_put(key: str, data: list) -> None:
     """Fixture cache'e yaz, sınırı aşarsa en eski entry'yi at."""
-    import time as _time
-    fixture_cache[key] = (_time.time(), data)
+    fixture_cache[key] = (time.time(), data)
     if len(fixture_cache) > _FIXTURE_CACHE_MAX:
         oldest_key = min(fixture_cache, key=lambda k: fixture_cache[k][0])
         del fixture_cache[oldest_key]
@@ -91,6 +90,9 @@ def cache_get(match_id: str) -> AnalyzeResponse | None:
     if cached_at is None or time.monotonic() - cached_at >= ANALYSIS_CACHE_TTL:
         analysis_cache.pop(match_id, None)
         _analysis_cached_at.pop(match_id, None)
+        snapshot_key = _snapshot_cache_key(match_id)
+        _snapshot_checked_at.pop(snapshot_key, None)
+        _snapshot_finalized.discard(snapshot_key)
         return None
     analysis_cache.move_to_end(match_id)
     return analysis_cache[match_id]

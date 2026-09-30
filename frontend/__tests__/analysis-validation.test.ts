@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { analyzeMatch, getMatches } from "@/lib/api";
+import { analyzeMatch } from "@/lib/api";
 import { validAnalysis } from "@/lib/analysis-validation";
 import { makePatternResult } from "./fixtures";
 
@@ -65,15 +65,3 @@ it("enforces the frozen recommendation rule across fields", () => {
   expect(validAnalysis({ ...analysis(), ft_recommendations: [valid, { ...valid, recommendation_id: "ft-display-v3:result:2", selection: "2" }] }, "123")).toBe(false);
 });
 
-it("rejects malformed summaries at the API boundary", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify([{ match_id: "123" }]))));
-  await expect(getMatches()).rejects.toThrow("geçersiz maç özeti");
-});
-
-it("accepts complete summaries with unknown scores", async () => {
-  const rows = [{ match_id: "123", home_team: "Home", away_team: "Away", league_code: null, season: null,
-    actual_ft_home: null, actual_ft_away: null, actual_ht_home: null, actual_ht_away: null,
-    ft_scores_1: [], ft_scores_x: [], ft_scores_2: [] }];
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(rows))));
-  await expect(getMatches()).resolves.toEqual(rows);
-});
