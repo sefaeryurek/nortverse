@@ -14,10 +14,19 @@ from app.api.schemas import (
     MatchEvaluation,
     PatternEvaluation,
 )
+from app.config import ANALYSIS
 from app.db.connection import get_session
 from app.db.models import Match
 
 router = APIRouter()
+
+# Beraberlik (X) sistemde neredeyse hiç tahmin edilmiyor — %8.1 tahmin oranına
+# karşılık gerçek beraberlik oranı %24.6 (7,949 maçlık backtest). Pattern
+# matching çoğunluk sınıfını (ev sahibi galibiyeti %44.4) doğal olarak
+# kayırıyor. Bayesian shrinkage ile küçük örneklemli tahminler popülasyon
+# taban oranlarına doğru çekilir — örneklem büyüdükçe shrinkage azalır.
+BASE_RESULT = {"1": 44.4, "X": 24.6, "2": 30.9}
+SHRINKAGE = 0.3  # taban orana doğru maksimum %30 çekiş
 
 
 def _evaluate_pattern(
@@ -25,11 +34,12 @@ def _evaluate_pattern(
     actual_result: str,
     actual_over_25: bool,
     actual_btts: bool,
+    min_matches: int = 1,
 ) -> PatternEvaluation | None:
     if not pattern_data or not isinstance(pattern_data, dict):
         return None
     mc = pattern_data.get("match_count", 0)
-    if mc < 1:
+    if mc < min_matches:
         return None
 
     pcts = {
@@ -37,15 +47,23 @@ def _evaluate_pattern(
         "X": pattern_data.get("result_x_pct", 0) or 0,
         "2": pattern_data.get("result_2_pct", 0) or 0,
     }
-    result_pick = max(pcts, key=lambda k: pcts[k])
+
+    # Shrinkage: pattern yüzdelerini taban oranlara doğru karıştır.
+    # Az veri (küçük mc) → daha fazla shrinkage; çok veri → ham argmax korunur.
+    shrink = SHRINKAGE / (1 + mc / 20)
+    adjusted_pcts = {
+        k: pcts[k] * (1 - shrink) + BASE_RESULT[k] * shrink
+        for k in ("1", "X", "2")
+    }
+    result_pick = max(adjusted_pcts, key=lambda k: adjusted_pcts[k])
     result_hit = result_pick == actual_result
 
     over_pct = pattern_data.get("ust_25_pct", 0) or 0
-    over_pick = over_pct > 50
+    over_pick = over_pct > ANALYSIS.over_25_threshold
     over_hit = over_pick == actual_over_25
 
     btts_pct = pattern_data.get("kg_var_pct", 0) or 0
-    btts_pick = btts_pct > 50
+    btts_pick = btts_pct > ANALYSIS.btts_threshold
     btts_hit = btts_pick == actual_btts
 
     return PatternEvaluation(
@@ -136,8 +154,14 @@ async def daily_evaluation(
         all_scores = list(row.ft_scores_1 or []) + list(row.ft_scores_x or []) + list(row.ft_scores_2 or [])
         score_hit = actual_ft_str in all_scores
 
-        pat_b = _evaluate_pattern(row.pattern_ft_b, actual_result, actual_over_25, actual_btts)
-        pat_c = _evaluate_pattern(row.pattern_ft_c, actual_result, actual_over_25, actual_btts)
+        pat_b = _evaluate_pattern(
+            row.pattern_ft_b, actual_result, actual_over_25, actual_btts,
+            min_matches=ANALYSIS.eval_min_matches,
+        )
+        pat_c = _evaluate_pattern(
+            row.pattern_ft_c, actual_result, actual_over_25, actual_btts,
+            min_matches=ANALYSIS.eval_min_matches,
+        )
 
         if pat_b is not None:
             evaluated += 1

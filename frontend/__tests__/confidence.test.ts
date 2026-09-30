@@ -80,10 +80,12 @@ describe("computeConfidence", () => {
     expect(c).toBeCloseTo(0.8, 1);
   });
 
-  it("dual bonus 1.15x uygulanır", () => {
+  it("dual bonus 1.25x uygulanır", () => {
+    // Backtest: Pattern B/C anlaştığında isabet %46.8 (anlaşmazlıkta %40.9)
+    // — sistemin tek doğrulanmış sinyali, bonus 1.15 → 1.25'e çıkarıldı.
     const single = computeConfidence(70, 30, 1.0, false);
     const dual = computeConfidence(70, 30, 1.0, true);
-    expect(dual / single).toBeCloseTo(1.15, 2);
+    expect(dual / single).toBeCloseTo(1.25, 2);
   });
 
   it("marketWeight çarpan olarak iner (0.7 → %70 confidence)", () => {

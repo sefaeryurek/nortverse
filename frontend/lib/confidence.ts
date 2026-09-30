@@ -13,7 +13,7 @@ export interface Pick {
   matchCountB: number;
   marketWeight: number;
   archive: "A" | "B" | "AB";
-  confidence: number;      // 0..~1.15
+  confidence: number;      // 0..~1.25
 }
 
 // A recommendation needs enough comparable archive matches in every source
@@ -25,7 +25,10 @@ export function effectivePickSample(pick: Pick): number {
     : pick.archive === "A" ? pick.matchCountA : pick.matchCountB;
 }
 
-const DUAL_BONUS = 1.15;
+// Backtest: Pattern B ve Pattern C aynı sonuçta anlaşınca isabet %46.8'e
+// çıkıyor (anlaşmazlıkta %40.9) — sistemdeki tek doğrulanmış istatistiksel
+// sinyal. 1.15 → 1.25: bu sinyali daha belirgin şekilde öne çıkar.
+const DUAL_BONUS = 1.25;
 const DUAL_THRESHOLD = 65;
 
 function volumeWeight(matchCount: number): number {
@@ -35,7 +38,7 @@ function volumeWeight(matchCount: number): number {
 
 // Sprint 10 Faz C: Form & H2H trendleri (Sprint 8.8) → confidence boost.
 // Mantık: belirli pazar-seçim çiftleri için ilgili trend metriği eşiği geçerse
-// confidence'a çarpan uygulanır. Boost cap 1.15 (DUAL_BONUS ile aynı tavan).
+// confidence'a çarpan uygulanır. Boost cap 1.1 (DUAL_BONUS'tan bağımsız, ayrı tavan).
 interface TrendsBoostRule {
   marketKey: string;
   selection: string;

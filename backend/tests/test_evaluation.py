@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.api.routes_evaluation import _evaluate_pattern, _pct
+from app.config import AnalysisConfig
 
 
 # ─── _pct ──────────────────────────────────────────────────────────────────────
@@ -194,3 +195,249 @@ class TestEvaluatePattern:
         assert _evaluate_pattern("invalid", "1", True, True) is None
         assert _evaluate_pattern(42, "1", True, True) is None
         assert _evaluate_pattern([], "1", True, True) is None
+
+
+# ─── Beraberlik (X) shrinkage ───────────────────────────────────────────────────
+#
+# Not: BASE_RESULT = {"1": 44.4, "X": 24.6, "2": 30.9} — "1" popülasyonda en
+# yüksek taban orana sahip. Additive shrink formülü (raw*(1-s) + base*s) her
+# zaman "1"i güçlendirdiği için X, zaten armgax olmadığı bir senaryoda asla
+# devreye giremiyor (base_X üç değerin en küçüğü). Aşağıdaki testler bu
+# matematiksel gerçeği doğru şekilde yansıtır: shrinkage küçük örneklemde
+# çoğunluk sınıfına (genelde "1") doğru regresyon yapıyor, X'i armgax yapmıyor.
+class TestDrawShrinkage:
+    def test_small_sample_regresses_toward_dominant_base_rate(self):
+        """mc=5 (yüksek shrink) — ham argmax '2' (42%) iken taban oranı en
+        yüksek olan '1' (base=44.4) shrink sonrası öne geçer."""
+        data = {
+            "match_count": 5,
+            "result_1_pct": 38.0,
+            "result_x_pct": 20.0,
+            "result_2_pct": 42.0,
+            "ust_25_pct": 50.0,
+            "kg_var_pct": 50.0,
+        }
+        result = _evaluate_pattern(data, "1", False, False)
+        assert result is not None
+        # Ham veride "2" (42%) en yüksekti; shrink sonrası "1" öne geçiyor.
+        assert result.result_pick == "1"
+        assert result.result_hit is True
+
+    def test_large_sample_preserves_raw_argmax(self):
+        """Aynı ham yüzdeler ama mc=500 (düşük shrink) — ham argmax '2' korunur."""
+        data = {
+            "match_count": 500,
+            "result_1_pct": 38.0,
+            "result_x_pct": 20.0,
+            "result_2_pct": 42.0,
+            "ust_25_pct": 50.0,
+            "kg_var_pct": 50.0,
+        }
+        result = _evaluate_pattern(data, "2", False, False)
+        assert result is not None
+        assert result.result_pick == "2"
+        assert result.result_hit is True
+
+    def test_small_sample_flip_is_sample_size_dependent(self):
+        """Aynı ham dağılım (38/20/42) küçük örneklemde '1', büyük örneklemde
+        '2' seçtiriyor — shrink miktarı match_count'a bağlı (mc arttıkça azalır)."""
+        small = _evaluate_pattern(
+            {
+                "match_count": 5,
+                "result_1_pct": 38.0,
+                "result_x_pct": 20.0,
+                "result_2_pct": 42.0,
+                "ust_25_pct": 50.0,
+                "kg_var_pct": 50.0,
+            },
+            "1",
+            False,
+            False,
+        )
+        large = _evaluate_pattern(
+            {
+                "match_count": 500,
+                "result_1_pct": 38.0,
+                "result_x_pct": 20.0,
+                "result_2_pct": 42.0,
+                "ust_25_pct": 50.0,
+                "kg_var_pct": 50.0,
+            },
+            "1",
+            False,
+            False,
+        )
+        assert small is not None and large is not None
+        assert small.result_pick != large.result_pick
+
+    def test_near_tied_pcts_resolve_to_highest_base_rate_not_draw(self):
+        """35/35/30 (1 ve X ham veride eşit) — shrink sonrası '1' netleşerek
+        kazanır; X'in taban oranı (24.6) üçü içinde en düşük olduğundan bu
+        additive formülle asla armgax olamaz (matematiksel olarak imkansız:
+        base_X < base_1 ve base_X < base_2)."""
+        data = {
+            "match_count": 5,
+            "result_1_pct": 35.0,
+            "result_x_pct": 35.0,
+            "result_2_pct": 30.0,
+            "ust_25_pct": 50.0,
+            "kg_var_pct": 50.0,
+        }
+        result = _evaluate_pattern(data, "1", False, False)
+        assert result is not None
+        assert result.result_pick == "1"
+        assert result.result_hit is True
+
+        result_x_actual = _evaluate_pattern(data, "X", False, False)
+        assert result_x_actual is not None
+        assert result_x_actual.result_pick == "1"
+        assert result_x_actual.result_hit is False
+
+    def test_zero_match_count_edge_case_no_division_error(self):
+        """match_count=1 (fonksiyonun kabul ettiği en düşük değer) — shrink
+        formülü (SHRINKAGE / (1 + mc/20)) sıfıra bölme hatası vermemeli."""
+        data = {
+            "match_count": 1,
+            "result_1_pct": 50.0,
+            "result_x_pct": 30.0,
+            "result_2_pct": 20.0,
+            "ust_25_pct": 50.0,
+            "kg_var_pct": 50.0,
+        }
+        result = _evaluate_pattern(data, "1", False, False)
+        assert result is not None
+        assert result.result_pick == "1"
+
+    def test_below_min_matches_returns_none(self):
+        data = {
+            "match_count": 3,
+            "result_1_pct": 100.0,
+            "result_x_pct": 0.0,
+            "result_2_pct": 0.0,
+            "ust_25_pct": 100.0,
+            "kg_var_pct": 0.0,
+        }
+        assert _evaluate_pattern(data, "1", True, False, min_matches=5) is None
+
+    def test_at_min_matches_returns_evaluation(self):
+        data = {
+            "match_count": 5,
+            "result_1_pct": 60.0,
+            "result_x_pct": 20.0,
+            "result_2_pct": 20.0,
+            "ust_25_pct": 60.0,
+            "kg_var_pct": 40.0,
+        }
+        result = _evaluate_pattern(data, "1", True, False, min_matches=5)
+        assert result is not None
+        assert result.match_count == 5
+        assert result.result_pick == "1"
+        assert result.result_hit is True
+
+
+# ─── Kalibre edilmiş eşikler (over_25_threshold / btts_threshold) ─────────────
+
+class TestCalibratedThresholds:
+    """Sistem %59.8 Üst / %61.6 KG Var tahmin ediyordu ama gerçek oran %55.4 idi
+    (sistematik önyargı — sonuçlar naif baseline'ın altına düşüyordu). Eşikler
+    50'den kalibre edilmiş taban orana (55.0) çekildi — pattern verisi popülasyon
+    ortalamasının üzerinde göstermedikçe "Üst"/"KG Var" tahmin edilmez.
+    """
+
+    def test_default_threshold_is_55(self):
+        cfg = AnalysisConfig()
+        assert cfg.over_25_threshold == 55.0
+        assert cfg.btts_threshold == 55.0
+
+    def test_pattern_54_predicts_under_not_over(self, monkeypatch):
+        # Eski davranış (eşik=50): 54 > 50 → "Üst" tahmin ederdi.
+        # Yeni davranış (eşik=55): 54 <= 55 → "Alt" tahmin eder.
+        monkeypatch.setattr(
+            "app.api.routes_evaluation.ANALYSIS",
+            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0),
+        )
+        data = {
+            "match_count": 30,
+            "result_1_pct": 40.0,
+            "result_x_pct": 30.0,
+            "result_2_pct": 30.0,
+            "ust_25_pct": 54.0,
+            "kg_var_pct": 50.0,
+        }
+        result = _evaluate_pattern(data, "1", False, False)
+        assert result is not None
+        assert result.over_25_pick == "Alt"
+
+    def test_pattern_56_still_predicts_over(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.routes_evaluation.ANALYSIS",
+            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0),
+        )
+        data = {
+            "match_count": 30,
+            "result_1_pct": 40.0,
+            "result_x_pct": 30.0,
+            "result_2_pct": 30.0,
+            "ust_25_pct": 56.0,
+            "kg_var_pct": 50.0,
+        }
+        result = _evaluate_pattern(data, "1", True, False)
+        assert result is not None
+        assert result.over_25_pick == "Üst"
+        assert result.over_25_hit is True
+
+    def test_btts_pattern_54_predicts_no_not_yes(self, monkeypatch):
+        # Eski davranış (eşik=50): 54 > 50 → "KG Var" tahmin ederdi.
+        # Yeni davranış (eşik=55): 54 <= 55 → "KG Yok" tahmin eder.
+        monkeypatch.setattr(
+            "app.api.routes_evaluation.ANALYSIS",
+            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0),
+        )
+        data = {
+            "match_count": 30,
+            "result_1_pct": 40.0,
+            "result_x_pct": 30.0,
+            "result_2_pct": 30.0,
+            "ust_25_pct": 50.0,
+            "kg_var_pct": 54.0,
+        }
+        result = _evaluate_pattern(data, "1", False, False)
+        assert result is not None
+        assert result.btts_pick == "KG Yok"
+
+    def test_btts_pattern_56_still_predicts_yes(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.api.routes_evaluation.ANALYSIS",
+            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0),
+        )
+        data = {
+            "match_count": 30,
+            "result_1_pct": 40.0,
+            "result_x_pct": 30.0,
+            "result_2_pct": 30.0,
+            "ust_25_pct": 50.0,
+            "kg_var_pct": 56.0,
+        }
+        result = _evaluate_pattern(data, "1", False, True)
+        assert result is not None
+        assert result.btts_pick == "KG Var"
+        assert result.btts_hit is True
+
+    def test_custom_threshold_override_via_config(self, monkeypatch):
+        # Eşik özelleştirilebilir olmalı — 60.0 eşikte 58.0 hâlâ "Alt" demeli.
+        monkeypatch.setattr(
+            "app.api.routes_evaluation.ANALYSIS",
+            AnalysisConfig(over_25_threshold=60.0, btts_threshold=60.0),
+        )
+        data = {
+            "match_count": 30,
+            "result_1_pct": 40.0,
+            "result_x_pct": 30.0,
+            "result_2_pct": 30.0,
+            "ust_25_pct": 58.0,
+            "kg_var_pct": 58.0,
+        }
+        result = _evaluate_pattern(data, "1", False, False)
+        assert result is not None
+        assert result.over_25_pick == "Alt"
+        assert result.btts_pick == "KG Yok"

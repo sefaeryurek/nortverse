@@ -54,6 +54,9 @@ class AnalysisConfig:
     min_h2h: int = field(default_factory=lambda: _env_int("ANALYSIS_MIN_H2H", 5))
     min_league_matches: int = field(default_factory=lambda: _env_int("ANALYSIS_MIN_LEAGUE_MATCHES", 5))
     pattern_c_tolerance: float = field(default_factory=lambda: _env_float("PATTERN_C_TOLERANCE", 0.5))
+    over_25_threshold: float = field(default_factory=lambda: _env_float("OVER_25_THRESHOLD", 55.0))
+    btts_threshold: float = field(default_factory=lambda: _env_float("BTTS_THRESHOLD", 55.0))
+    eval_min_matches: int = field(default_factory=lambda: _env_int("EVAL_MIN_MATCHES", 5))
 
 
 SCRAPER = ScraperConfig()

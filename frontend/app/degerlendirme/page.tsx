@@ -138,10 +138,11 @@ function PatternBadge({
   pat: PatternEvaluation;
   archiveLabel: string;
 }) {
+  const lowConfidence = pat.match_count < 10;
   return (
     <div
       className="flex flex-wrap items-center gap-1.5"
-      style={{ fontSize: "var(--nv-text-xs)" }}
+      style={{ fontSize: "var(--nv-text-xs)", opacity: lowConfidence ? 0.6 : 1.0 }}
     >
       <span
         style={{
