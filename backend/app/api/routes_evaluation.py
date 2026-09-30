@@ -79,12 +79,12 @@ def _evaluate_pattern(
 
     over_pct = pattern_data.get("ust_25_pct", 0) or 0
     over_adjusted = over_pct * (1 - shrink) + ANALYSIS.over_25_base_rate * shrink
-    over_pick = over_adjusted > 50.0
+    over_pick = over_adjusted > ANALYSIS.over_25_base_rate
     over_hit = over_pick == actual_over_25
 
     btts_pct = pattern_data.get("kg_var_pct", 0) or 0
     btts_adjusted = btts_pct * (1 - shrink) + ANALYSIS.btts_base_rate * shrink
-    btts_pick = btts_adjusted > 50.0
+    btts_pick = btts_adjusted > ANALYSIS.btts_base_rate
     btts_hit = btts_pick == actual_btts
 
     return PatternEvaluation(

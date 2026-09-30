@@ -405,10 +405,11 @@ class TestCalibratedThresholds:
         assert result is not None
         assert result.btts_pick == "KG Yok"
 
-    def test_btts_pattern_56_still_predicts_yes(self, monkeypatch):
+    def test_btts_above_base_rate_predicts_yes(self, monkeypatch):
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
-            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0),
+            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0,
+                           btts_base_rate=56.0),
         )
         data = {
             "match_count": 30,
@@ -416,7 +417,7 @@ class TestCalibratedThresholds:
             "result_x_pct": 30.0,
             "result_2_pct": 30.0,
             "ust_25_pct": 50.0,
-            "kg_var_pct": 56.0,
+            "kg_var_pct": 65.0,
         }
         result = _evaluate_pattern(data, "1", False, True)
         assert result is not None
@@ -424,7 +425,7 @@ class TestCalibratedThresholds:
         assert result.btts_hit is True
 
     def test_base_rate_override_via_config(self, monkeypatch):
-        # Düşük baz oran (40%) ayarlandığında 45% gözlem → adjusted ~43.9% < 50 → "Alt"
+        # Düşük baz oran (40%) — pattern 35% → adjusted < 40 → "Alt"
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
             AnalysisConfig(over_25_base_rate=40.0, btts_base_rate=40.0,
@@ -435,8 +436,8 @@ class TestCalibratedThresholds:
             "result_1_pct": 40.0,
             "result_x_pct": 30.0,
             "result_2_pct": 30.0,
-            "ust_25_pct": 45.0,
-            "kg_var_pct": 45.0,
+            "ust_25_pct": 35.0,
+            "kg_var_pct": 35.0,
         }
         result = _evaluate_pattern(data, "1", False, False)
         assert result is not None
