@@ -154,10 +154,24 @@ function PatternBadge({
         {archiveLabel}
       </span>
       <HitBadge hit={pat.result_hit} label={`${pat.result_pick} %${pat.result_pct.toFixed(0)}`} />
+      {pat.is_confident && (
+        <span
+          style={{
+            fontSize: "var(--nv-text-xs)",
+            fontWeight: 700,
+            padding: "1px 5px",
+            borderRadius: "var(--nv-radius-sm)",
+            backgroundColor: "var(--nv-accent-blue-dim)",
+            color: "var(--nv-accent-blue)",
+          }}
+        >
+          Guvenli
+        </span>
+      )}
       <HitBadge hit={pat.over_25_hit} label={`${pat.over_25_pick} %${pat.over_25_pct.toFixed(0)}`} />
       <HitBadge hit={pat.btts_hit} label={`${pat.btts_pick} %${pat.btts_pct.toFixed(0)}`} />
       <span style={{ color: "var(--nv-text-tertiary)" }}>
-        ({pat.match_count} maç)
+        ({pat.match_count} mac)
       </span>
     </div>
   );
@@ -379,10 +393,11 @@ async function EvalList({ date }: { date: string }) {
           A1 — Arşiv 1
         </span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-[var(--nv-page-gutter)] pb-3">
-        <SummaryCard label="Sonuç İsabeti" hit={s.result_hit} total={s.evaluated} pct={s.result_hit_pct} />
-        <SummaryCard label="2.5 Üst/Alt" hit={s.over_25_hit} total={s.evaluated} pct={s.over_25_hit_pct} />
-        <SummaryCard label="KG İsabeti" hit={s.btts_hit} total={s.evaluated} pct={s.btts_hit_pct} />
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 px-[var(--nv-page-gutter)] pb-3">
+        <SummaryCard label="Sonuc Isabeti" hit={s.result_hit} total={s.evaluated} pct={s.result_hit_pct} />
+        <SummaryCard label="Guvenli Sonuc" hit={s.confident_result_hit} total={s.confident_evaluated} pct={s.confident_result_hit_pct} />
+        <SummaryCard label="2.5 Ust/Alt" hit={s.over_25_hit} total={s.evaluated} pct={s.over_25_hit_pct} />
+        <SummaryCard label="KG Isabeti" hit={s.btts_hit} total={s.evaluated} pct={s.btts_hit_pct} />
         <SummaryCard label="Skor Listesi" hit={s.score_list_hit} total={s.total_matches} pct={s.score_list_hit_pct} />
       </div>
 

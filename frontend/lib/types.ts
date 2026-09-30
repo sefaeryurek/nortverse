@@ -285,6 +285,8 @@ export interface PatternEvaluation {
   result_pick: string;
   result_pct: number;
   result_hit: boolean;
+  result_margin: number;
+  is_confident: boolean;
   over_25_pick: string;
   over_25_pct: number;
   over_25_hit: boolean;
@@ -329,6 +331,9 @@ export interface EvaluationSummary {
   c_over_25_hit_pct: number;
   c_btts_hit: number;
   c_btts_hit_pct: number;
+  confident_evaluated: number;
+  confident_result_hit: number;
+  confident_result_hit_pct: number;
 }
 
 export interface DailyEvaluation {
