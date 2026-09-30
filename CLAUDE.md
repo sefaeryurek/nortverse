@@ -1081,21 +1081,25 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - Tüm Türkçe karakterler düzeltildi (Degerlendirme→Değerlendirme, bitmis→bitmiş, mac→maç vb.)
   - `loading.tsx` skeleton fallback, `Sidebar.tsx`'e navigasyon linki eklendi
   - `lib/types.ts`'e değerlendirme interface'leri (A1+A2 ayrı alanlar), `lib/api.ts`'e `getEvaluation()` fonksiyonu
-- **İstatistiksel kalibrasyon (`fd21b56`):**
-  - **Backtest sonuçları (7,949 bitmiş maç):**
-    - Pattern B MS: %44.4 (= baseline), Pattern C MS: %41.6 (baseline altı)
-    - Üst/Alt 2.5: B %51.7, C %51.6 (baseline %55.4 altı)
-    - KG: B %52.5, C %50.3 (baseline %55.4 altı)
-    - **B+C uyum (dual confirmation):** MS %46.8 (+6 puan, TEK doğrulanmış sinyal)
-  - **Eşik kalibrasyonu:** Üst/Alt ve KG eşikleri %50 → %55'e yükseltildi (popülasyon baz oranına eşitlendi)
-    - `config.py`'e `over_25_threshold` (default 55.0, `OVER_25_THRESHOLD` env var) ve `btts_threshold` (default 55.0, `BTTS_THRESHOLD` env var) eklendi
-  - **Bayesian shrinkage (draw regresyonu):** Küçük örneklemlerde aşırı güvenli tahminleri baz orana doğru çeker
-    - `BASE_RESULT = {"1": 44.4, "X": 24.6, "2": 30.9}`, `SHRINKAGE = 0.3`
-    - Formül: `adjusted = raw × (1 - shrink) + base × shrink` where `shrink = SHRINKAGE / (1 + mc/20)`
-    - **Not:** Draw underprediction sorunu tam çözülmedi — X baz oranı (%24.6) en düşük olduğu için shrinkage formülü X'i artıramaz; gelecekte X-specific boost gerekli
-  - **Değerlendirme minimum eşleşme:** `eval_min_matches` (default 5, `EVAL_MIN_MATCHES` env var) — <5 eşleşmeli pattern değerlendirilmez
-  - **Dual bonus güçlendirildi:** `confidence.ts` `DUAL_BONUS` 1.15 → 1.25 (backtest'te B+C uyum %46.8 vs uyumsuz %40.9)
-- **Sonuç:** 678 backend + 277 frontend + 28 E2E = **983 toplam test**
+- **İstatistiksel kalibrasyon v1 (`fd21b56`):**
+  - Üst/Alt ve KG eşikleri %50 → %55'e yükseltildi, Bayesian shrinkage (0.3), eval_min_matches=5, DUAL_BONUS 1.15 → 1.25
+- **İstatistiksel kalibrasyon v2 (`8e4256d` + `22222e5`):**
+  - **Backtest sonuçları (4,667 değerlendirilen maç, yeni kalibrasyon):**
+    - MS Sonuç: %44.5 (eski %44.4, +0.1pp)
+    - Üst/Alt 2.5: %52.3 (eski %51.2, **+1.1pp**)
+    - KG: %52.6 (eski %50.7, **+1.9pp**)
+    - Güvenli MS (margin ≥8pp): %46.1 (3,515 maç)
+    - Güvensiz MS: %39.8 (1,152 maç) — **6.3pp fark**
+    - Dual + Güvenli: **%48.4** (1,102 maç, sistemin en güçlü sinyali)
+  - **Logaritmik shrinkage:** `shrink = 0.45 / (1 + log(mc+2) / 3.0)` — eski lineer formülden daha güçlü
+  - **Lig bazlı taban oranları:** 7 lig için gerçek ev/beraberlik/deplasman dağılımı (Bundesliga %50.1 ev vs Ligue 1 %42.1)
+  - **Baz oran farkındalıklı O/U ve KG:** `adjusted = raw × (1-shrink) + base_rate × shrink`, karar `adjusted > 50%`
+  - **Margin gate:** `result_margin = top - runner_up`, `is_confident = margin >= 8.0` — PatternEvaluation'a eklendi
+  - **Confident metrikleri:** EvaluationSummary'e `confident_evaluated/hit/pct` eklendi
+  - **Frontend B/C anlaşmazlık cezası:** `DISAGREE_PENALTY = 0.70` — iki arşiv farklı kazanan seçerse güven düşer
+  - **Pazar-bazlı minPctOverride:** `ou_25` ve `kg` pazarlarına 62% minimum eşik (baseline altı performans)
+  - **Değerlendirme sayfası güncellendi:** 5 özet kartı (Güvenli Sonuç eklendi), PatternBadge'e "Güvenli" rozeti
+- **Sonuç:** 682 backend + 277 frontend + 28 E2E = **987 toplam test**
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -1360,18 +1364,18 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 678 | ✅ Yeşil |
+| **Backend** | pytest | 682 | ✅ Yeşil |
 | **Frontend birim** | vitest | 277 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 983 | — |
+| **Toplam** | — | 987 | — |
 
 ### Sıradaki Adımlar
 
 Bekleyen konular kullanıcı kararı gerektirir:
 
-- **Pattern recompute:** 9,293 maç tolerance=0.5 ile yeniden hesaplanacak — Docker başlatıldığında (`python -m app.cli.main recompute-patterns --batch-size 500`)
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
-- **Draw underprediction:** Sistem X'i %8.1 tahmin ediyor vs gerçek %24.6. Mevcut Bayesian shrinkage X'i artıramaz (baz oran en düşük). X-specific boost mekanizması tasarlanmalı
+- **Draw underprediction:** Sistem X'i %5.8 tahmin ediyor vs gerçek %24.6. Lig bazlı shrinkage X oranını biraz iyileştirdi ama yapısal sorun devam ediyor — X-specific boost mekanizması tasarlanmalı
+- **Kalibrasyon (overconfidence):** Sistem %80 dediğinde gerçek isabet %53 — yüzdeler olasılık değil, görece güven skoru olarak sunulmalı veya Platt scaling uygulanmalı
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
 - **Canlı maç + WebSocket:** Real-time skor push (onay gerekir)
