@@ -25,13 +25,13 @@ BASE_RESULT = {"1": 44.4, "X": 24.6, "2": 30.9}
 
 # Lig bazlı taban oranları — 7,966 skorlu maçın backtest'inden hesaplandı.
 LEAGUE_BASE_RATES: dict[str, dict[str, float]] = {
-    "German Bundesliga": {"1": 50.1, "X": 22.6, "2": 27.3},
-    "Turkish Super Lig": {"1": 46.4, "X": 23.1, "2": 30.5},
-    "English Premier League": {"1": 45.8, "X": 24.6, "2": 29.6},
-    "Dutch Eredivisie": {"1": 47.8, "X": 22.1, "2": 30.1},
-    "Spanish La Liga": {"1": 43.7, "X": 25.5, "2": 30.8},
-    "Italy Serie A": {"1": 43.0, "X": 26.9, "2": 30.1},
-    "French Ligue 1": {"1": 42.1, "X": 27.2, "2": 30.7},
+    "German Bundesliga": {"1": 50.1, "X": 22.6, "2": 27.3, "ou25": 63.3, "btts": 60.8},
+    "Turkish Super Lig": {"1": 46.4, "X": 23.1, "2": 30.5, "ou25": 57.3, "btts": 56.2},
+    "English Premier League": {"1": 45.8, "X": 24.6, "2": 29.6, "ou25": 57.5, "btts": 55.8},
+    "Dutch Eredivisie": {"1": 47.8, "X": 22.1, "2": 30.1, "ou25": 61.3, "btts": 57.7},
+    "Spanish La Liga": {"1": 43.7, "X": 25.5, "2": 30.8, "ou25": 48.7, "btts": 53.2},
+    "Italy Serie A": {"1": 43.0, "X": 26.9, "2": 30.1, "ou25": 47.5, "btts": 49.5},
+    "French Ligue 1": {"1": 42.1, "X": 27.2, "2": 30.7, "ou25": 55.4, "btts": 55.6},
 }
 
 
@@ -82,14 +82,17 @@ def _evaluate_pattern(
     result_pick = max(adjusted_pcts, key=lambda k: adjusted_pcts[k])
     result_hit = result_pick == actual_result
 
+    ou_base = base_rates.get("ou25", ANALYSIS.over_25_base_rate)
+    btts_base = base_rates.get("btts", ANALYSIS.btts_base_rate)
+
     over_pct = pattern_data.get("ust_25_pct", 0) or 0
-    over_adjusted = over_pct * (1 - shrink) + ANALYSIS.over_25_base_rate * shrink
-    over_pick = over_adjusted > ANALYSIS.over_25_base_rate
+    over_adjusted = over_pct * (1 - shrink) + ou_base * shrink
+    over_pick = over_adjusted > ou_base
     over_hit = over_pick == actual_over_25
 
     btts_pct = pattern_data.get("kg_var_pct", 0) or 0
-    btts_adjusted = btts_pct * (1 - shrink) + ANALYSIS.btts_base_rate * shrink
-    btts_pick = btts_adjusted > ANALYSIS.btts_base_rate
+    btts_adjusted = btts_pct * (1 - shrink) + btts_base * shrink
+    btts_pick = btts_adjusted > btts_base
     btts_hit = btts_pick == actual_btts
 
     return PatternEvaluation(
