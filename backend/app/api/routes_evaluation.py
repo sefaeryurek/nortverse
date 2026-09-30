@@ -64,11 +64,16 @@ def _evaluate_pattern(
     }
 
     base_rates = _get_base_rates(league_name)
-    shrink = ANALYSIS.result_shrinkage / (1 + math.log(mc + 2) / ANALYSIS.shrinkage_decay_divisor)
-    adjusted_pcts = {
-        k: pcts[k] * (1 - shrink) + base_rates[k] * shrink
-        for k in ("1", "X", "2")
-    }
+    shrink = ANALYSIS.result_shrinkage / (1 + mc / ANALYSIS.shrinkage_half_life)
+
+    adjusted_pcts: dict[str, float] = {}
+    for k in ("1", "X", "2"):
+        raw_p = max(1.0, min(99.0, pcts[k])) / 100.0
+        base_p = base_rates[k] / 100.0
+        raw_logit = math.log(raw_p / (1 - raw_p))
+        base_logit = math.log(base_p / (1 - base_p))
+        adj_logit = raw_logit * (1 - shrink) + base_logit * shrink
+        adjusted_pcts[k] = 1 / (1 + math.exp(-adj_logit)) * 100
 
     sorted_vals = sorted(adjusted_pcts.values(), reverse=True)
     result_margin = sorted_vals[0] - sorted_vals[1]
