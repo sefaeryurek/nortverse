@@ -59,6 +59,20 @@ const TRENDS_BOOST_RULES: TrendsBoostRule[] = [
   { marketKey: "ou_25", selection: "Üst 2.5", get: (t) => t.home_form?.over_25_pct, threshold: 55, boost: 1.08 },
 ];
 
+interface TrendsPenaltyRule {
+  marketKey: string;
+  selection: string;
+  check: (t: TrendsData) => boolean;
+  penalty: number;
+}
+
+const TRENDS_PENALTY_RULES: TrendsPenaltyRule[] = [
+  { marketKey: "result", selection: "1", check: (t) => (t.home_form?.win_pct ?? 50) <= 30, penalty: 0.88 },
+  { marketKey: "result", selection: "2", check: (t) => (t.away_form?.win_pct ?? 50) <= 30, penalty: 0.88 },
+  { marketKey: "result", selection: "1", check: (t) => (t.home_form?.loss_pct ?? 25) >= 50, penalty: 0.85 },
+  { marketKey: "result", selection: "2", check: (t) => (t.away_form?.loss_pct ?? 25) >= 50, penalty: 0.85 },
+];
+
 /**
  * Belirli (marketKey, selectionLabel) için trend boost değeri (1.0 = boost yok).
  * trends null veya eşleşen kural yoksa 1.0 döner.
@@ -69,16 +83,27 @@ export function getTrendsBoost(
   trends: TrendsData | null,
 ): number {
   if (!trends) return 1.0;
+  let factor = 1.0;
+
   for (const rule of TRENDS_BOOST_RULES) {
     if (rule.marketKey === marketKey && rule.selection === selectionLabel) {
       const value = rule.get(trends);
       if (value !== undefined && value >= rule.threshold) {
-        return rule.boost;
+        factor *= rule.boost;
       }
-      return 1.0;
+      break;
     }
   }
-  return 1.0;
+
+  for (const rule of TRENDS_PENALTY_RULES) {
+    if (rule.marketKey === marketKey && rule.selection === selectionLabel) {
+      if (rule.check(trends)) {
+        factor *= rule.penalty;
+      }
+    }
+  }
+
+  return factor;
 }
 
 const CONFIDENCE_CAP = 0.95;
@@ -554,11 +579,11 @@ export function computeAlignmentCount(pat: PatternResult, resultPick: "1" | "X" 
   if (resultPick === "2" && depFark > evFark + pat.fark_ber_pct) count++;
 
   if (resultPick === "1" && pat.ev_ust_05_pct > pat.ev_alt_05_pct) count++;
-  if (resultPick === "X") count++;
+  if (resultPick === "X" && Math.abs(pat.ev_ust_05_pct - pat.dep_ust_05_pct) < 10) count++;
   if (resultPick === "2" && pat.dep_ust_05_pct > pat.dep_alt_05_pct) count++;
 
   if (resultPick === "1" && pat.dep_alt_05_pct >= pat.dep_ust_05_pct) count++;
-  if (resultPick === "X") count++;
+  if (resultPick === "X" && Math.abs(pat.ev_alt_05_pct - pat.dep_alt_05_pct) < 10) count++;
   if (resultPick === "2" && pat.ev_alt_05_pct >= pat.ev_ust_05_pct) count++;
 
   return count;

@@ -389,6 +389,22 @@ describe("getTrendsBoost", () => {
     expect(getTrendsBoost("result", "1", trends)).toBe(1.0);
     expect(getTrendsBoost("result", "X", trends)).toBe(1.0); // h2h null
   });
+
+  it("home_form.win_pct ≤ 30 → result_1 için 0.88 penaltı", () => {
+    const trends = makeTrends({ home_form: makeTrendBlock({ win_pct: 25 }) });
+    expect(getTrendsBoost("result", "1", trends)).toBeCloseTo(0.88, 2);
+  });
+
+  it("home_form.loss_pct ≥ 50 → result_1 için 0.85 penaltı", () => {
+    const trends = makeTrends({ home_form: makeTrendBlock({ win_pct: 20, loss_pct: 55 }) });
+    const factor = getTrendsBoost("result", "1", trends);
+    expect(factor).toBeCloseTo(0.88 * 0.85, 2);
+  });
+
+  it("away_form.win_pct ≤ 30 → result_2 için 0.88 penaltı", () => {
+    const trends = makeTrends({ away_form: makeTrendBlock({ win_pct: 20 }) });
+    expect(getTrendsBoost("result", "2", trends)).toBeCloseTo(0.88, 2);
+  });
 });
 
 describe("buildPicks with trends", () => {
