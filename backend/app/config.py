@@ -57,6 +57,11 @@ class AnalysisConfig:
     over_25_threshold: float = field(default_factory=lambda: _env_float("OVER_25_THRESHOLD", 55.0))
     btts_threshold: float = field(default_factory=lambda: _env_float("BTTS_THRESHOLD", 55.0))
     eval_min_matches: int = field(default_factory=lambda: _env_int("EVAL_MIN_MATCHES", 5))
+    result_shrinkage: float = field(default_factory=lambda: _env_float("RESULT_SHRINKAGE", 0.45))
+    shrinkage_decay_divisor: float = field(default_factory=lambda: _env_float("SHRINKAGE_DECAY_DIVISOR", 3.0))
+    over_25_base_rate: float = field(default_factory=lambda: _env_float("OVER_25_BASE_RATE", 55.0))
+    btts_base_rate: float = field(default_factory=lambda: _env_float("BTTS_BASE_RATE", 56.0))
+    result_min_margin: float = field(default_factory=lambda: _env_float("RESULT_MIN_MARGIN", 8.0))
 
 
 SCRAPER = ScraperConfig()

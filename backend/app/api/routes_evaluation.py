@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -20,13 +21,26 @@ from app.db.models import Match
 
 router = APIRouter()
 
-# Beraberlik (X) sistemde neredeyse hiç tahmin edilmiyor — %8.1 tahmin oranına
-# karşılık gerçek beraberlik oranı %24.6 (7,949 maçlık backtest). Pattern
-# matching çoğunluk sınıfını (ev sahibi galibiyeti %44.4) doğal olarak
-# kayırıyor. Bayesian shrinkage ile küçük örneklemli tahminler popülasyon
-# taban oranlarına doğru çekilir — örneklem büyüdükçe shrinkage azalır.
 BASE_RESULT = {"1": 44.4, "X": 24.6, "2": 30.9}
-SHRINKAGE = 0.3  # taban orana doğru maksimum %30 çekiş
+
+# Lig bazlı taban oranları — 7,966 skorlu maçın backtest'inden hesaplandı.
+LEAGUE_BASE_RATES: dict[str, dict[str, float]] = {
+    "German Bundesliga": {"1": 50.1, "X": 22.6, "2": 27.3},
+    "Turkish Super Lig": {"1": 46.4, "X": 23.1, "2": 30.5},
+    "English Premier League": {"1": 45.8, "X": 24.6, "2": 29.6},
+    "Dutch Eredivisie": {"1": 47.8, "X": 22.1, "2": 30.1},
+    "Spanish La Liga": {"1": 43.7, "X": 25.5, "2": 30.8},
+    "Italy Serie A": {"1": 43.0, "X": 26.9, "2": 30.1},
+    "French Ligue 1": {"1": 42.1, "X": 27.2, "2": 30.7},
+}
+
+
+def _get_base_rates(league_name: str | None) -> dict[str, float]:
+    if league_name:
+        for key, rates in LEAGUE_BASE_RATES.items():
+            if key.lower() in league_name.lower():
+                return rates
+    return BASE_RESULT
 
 
 def _evaluate_pattern(
@@ -35,6 +49,7 @@ def _evaluate_pattern(
     actual_over_25: bool,
     actual_btts: bool,
     min_matches: int = 1,
+    league_name: str | None = None,
 ) -> PatternEvaluation | None:
     if not pattern_data or not isinstance(pattern_data, dict):
         return None
@@ -48,22 +63,28 @@ def _evaluate_pattern(
         "2": pattern_data.get("result_2_pct", 0) or 0,
     }
 
-    # Shrinkage: pattern yüzdelerini taban oranlara doğru karıştır.
-    # Az veri (küçük mc) → daha fazla shrinkage; çok veri → ham argmax korunur.
-    shrink = SHRINKAGE / (1 + mc / 20)
+    base_rates = _get_base_rates(league_name)
+    shrink = ANALYSIS.result_shrinkage / (1 + math.log(mc + 2) / ANALYSIS.shrinkage_decay_divisor)
     adjusted_pcts = {
-        k: pcts[k] * (1 - shrink) + BASE_RESULT[k] * shrink
+        k: pcts[k] * (1 - shrink) + base_rates[k] * shrink
         for k in ("1", "X", "2")
     }
+
+    sorted_vals = sorted(adjusted_pcts.values(), reverse=True)
+    result_margin = sorted_vals[0] - sorted_vals[1]
+    is_confident = result_margin >= ANALYSIS.result_min_margin
+
     result_pick = max(adjusted_pcts, key=lambda k: adjusted_pcts[k])
     result_hit = result_pick == actual_result
 
     over_pct = pattern_data.get("ust_25_pct", 0) or 0
-    over_pick = over_pct > ANALYSIS.over_25_threshold
+    over_adjusted = over_pct * (1 - shrink) + ANALYSIS.over_25_base_rate * shrink
+    over_pick = over_adjusted > 50.0
     over_hit = over_pick == actual_over_25
 
     btts_pct = pattern_data.get("kg_var_pct", 0) or 0
-    btts_pick = btts_pct > ANALYSIS.btts_threshold
+    btts_adjusted = btts_pct * (1 - shrink) + ANALYSIS.btts_base_rate * shrink
+    btts_pick = btts_adjusted > 50.0
     btts_hit = btts_pick == actual_btts
 
     return PatternEvaluation(
@@ -71,6 +92,8 @@ def _evaluate_pattern(
         result_pick=result_pick,
         result_pct=round(pcts[result_pick], 1),
         result_hit=result_hit,
+        result_margin=round(result_margin, 1),
+        is_confident=is_confident,
         over_25_pick="Üst" if over_pick else "Alt",
         over_25_pct=round(over_pct if over_pick else (100 - over_pct), 1),
         over_25_hit=over_hit,
@@ -133,6 +156,8 @@ async def daily_evaluation(
     summary_c_result_hit = 0
     summary_c_over_hit = 0
     summary_c_btts_hit = 0
+    confident_evaluated = 0
+    confident_result_hit = 0
 
     for row in rows:
         ft_h, ft_a = row.actual_ft_home, row.actual_ft_away
@@ -157,10 +182,12 @@ async def daily_evaluation(
         pat_b = _evaluate_pattern(
             row.pattern_ft_b, actual_result, actual_over_25, actual_btts,
             min_matches=ANALYSIS.eval_min_matches,
+            league_name=row.league_name,
         )
         pat_c = _evaluate_pattern(
             row.pattern_ft_c, actual_result, actual_over_25, actual_btts,
             min_matches=ANALYSIS.eval_min_matches,
+            league_name=row.league_name,
         )
 
         if pat_b is not None:
@@ -171,6 +198,10 @@ async def daily_evaluation(
                 summary_over_hit += 1
             if pat_b.btts_hit:
                 summary_btts_hit += 1
+            if pat_b.is_confident:
+                confident_evaluated += 1
+                if pat_b.result_hit:
+                    confident_result_hit += 1
 
         if pat_c is not None:
             evaluated_c += 1
@@ -225,6 +256,9 @@ async def daily_evaluation(
         c_over_25_hit_pct=_pct(summary_c_over_hit, evaluated_c),
         c_btts_hit=summary_c_btts_hit,
         c_btts_hit_pct=_pct(summary_c_btts_hit, evaluated_c),
+        confident_evaluated=confident_evaluated,
+        confident_result_hit=confident_result_hit,
+        confident_result_hit_pct=_pct(confident_result_hit, confident_evaluated),
     )
 
     return DailyEvaluation(

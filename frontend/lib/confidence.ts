@@ -101,6 +101,7 @@ interface MarketSpec {
   ftOnly?: boolean;       // sadece FT periyodunda hesaplanır
   excludePeriods?: Period[]; // bu periyotlarda hiç gösterilme (iddaa'da 1.01 olan ya da açılmayan pazarlar)
   ftZeroCheck?: keyof PatternResult; // bu alan 0 ise pazarı atla (HT verisi yoksa)
+  minPctOverride?: number; // bu pazarda dynamicMinPct yerine sabit eşik (backtest bazlı kalibrasyon)
 }
 
 const MARKETS: MarketSpec[] = [
@@ -130,6 +131,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "2.5 Alt/Üst",
     weight: 1.0,
     excludePeriods: ["ht", "h2"], // IY/2Y'de iddaa açmaz (Alt 1.01, Üst yok)
+    minPctOverride: 62, // backtest: baseline %55 — daha sıkı eşik gerekli
     fields: [
       { field: "alt_25_pct", selection: "Alt 2.5" },
       { field: "ust_25_pct", selection: "Üst 2.5" },
@@ -139,6 +141,7 @@ const MARKETS: MarketSpec[] = [
     key: "kg",
     label: () => "Karşılıklı Gol",
     weight: 1.0,
+    minPctOverride: 62, // backtest: baseline %56 — daha sıkı eşik gerekli
     fields: [
       { field: "kg_var_pct", selection: "KG Var" },
       { field: "kg_yok_pct", selection: "KG Yok" },
@@ -503,9 +506,14 @@ function extractRaw(result: PatternResult, period: Period): RawSelection[] {
   return out;
 }
 
+// Backtest: B+C anlaşmazlığında isabet %35-40'a düşüyor. Tek arşivden
+// gelen seçime uyumsuzluk cezası uygulanır.
+const DISAGREE_PENALTY = 0.70;
+
 /**
  * İki arşivi (Pattern B = "A", Pattern C = "B") birleştirip Pick listesi üretir.
  * Aynı (marketKey, selectionLabel) kombinasyonu ikisinde de varsa archive="AB" olur ve dual_bonus uygulanır.
+ * İki arşiv aynı pazarda farklı kazanan seçerse, tek arşiv seçimine ceza uygulanır.
  */
 export function buildPicks(
   patternA: PatternResult | null,
@@ -526,6 +534,22 @@ export function buildPicks(
   const bMap = new Map<string, RawSelection>();
   for (const r of rawB) bMap.set(mapKey(r), r);
 
+  // Her pazarda her arşivin en yüksek seçimini bul — anlaşmazlık tespiti için
+  const aWinnerByMarket = new Map<string, string>();
+  const bWinnerByMarket = new Map<string, string>();
+  for (const r of rawA) {
+    const cur = aWinnerByMarket.get(r.marketKey);
+    if (!cur) { aWinnerByMarket.set(r.marketKey, r.selectionLabel); continue; }
+    const curEntry = aMap.get(`${r.marketKey}|${cur}`);
+    if (curEntry && r.pct > curEntry.pct) aWinnerByMarket.set(r.marketKey, r.selectionLabel);
+  }
+  for (const r of rawB) {
+    const cur = bWinnerByMarket.get(r.marketKey);
+    if (!cur) { bWinnerByMarket.set(r.marketKey, r.selectionLabel); continue; }
+    const curEntry = bMap.get(`${r.marketKey}|${cur}`);
+    if (curEntry && r.pct > curEntry.pct) bWinnerByMarket.set(r.marketKey, r.selectionLabel);
+  }
+
   const allKeys = new Set<string>([...aMap.keys(), ...bMap.keys()]);
   const picks: Pick[] = [];
 
@@ -535,8 +559,6 @@ export function buildPicks(
     const ref = a ?? b!;
     const pctA = a?.pct ?? null;
     const pctB = b?.pct ?? null;
-    // Two archives only corroborate a selection when each clears the same
-    // minimum frequency. A contradictory archive cannot confer an AB badge.
     if (a && b && (pctA! < DUAL_THRESHOLD || pctB! < DUAL_THRESHOLD)) continue;
     const dual = a !== undefined && b !== undefined;
 
@@ -558,7 +580,16 @@ export function buildPicks(
     }
 
     const trendsBoost = getTrendsBoost(ref.marketKey, ref.selectionLabel, trends);
-    const confidence = computeConfidence(combinedPct, combinedMatchCount, ref.weight, dual, trendsBoost);
+    let confidence = computeConfidence(combinedPct, combinedMatchCount, ref.weight, dual, trendsBoost);
+
+    // Anlaşmazlık cezası: İki arşiv de veri vermiş ama farklı kazanan seçmişse
+    if (!dual && eligibleA && eligibleB) {
+      const aWinner = aWinnerByMarket.get(ref.marketKey);
+      const bWinner = bWinnerByMarket.get(ref.marketKey);
+      if (aWinner && bWinner && aWinner !== bWinner) {
+        confidence *= DISAGREE_PENALTY;
+      }
+    }
 
     picks.push({
       marketKey: ref.marketKey,
@@ -627,9 +658,17 @@ export function getTopPicks(picks: Pick[], opts: TopPicksOptions = {}): TopPicks
   const matchCount =
     opts.matchCount ?? picks.reduce((m, p) => Math.max(m, p.matchCountA, p.matchCountB), 0);
   const minPct = opts.minPct ?? dynamicMinPct(matchCount);
-  const eligible = picks.filter((p) => p.confidence >= minConf
-      && effectivePickSample(p) >= MIN_RECOMMENDATION_SAMPLE
-      && p.pct >= (opts.minPct ?? dynamicMinPct(effectivePickSample(p))));
+  const marketMinPctMap = new Map<string, number>();
+  for (const m of MARKETS) {
+    if (m.minPctOverride !== undefined) marketMinPctMap.set(m.key, m.minPctOverride);
+  }
+  const eligible = picks.filter((p) => {
+    if (p.confidence < minConf) return false;
+    if (effectivePickSample(p) < MIN_RECOMMENDATION_SAMPLE) return false;
+    const mktOverride = marketMinPctMap.get(p.marketKey);
+    const threshold = opts.minPct ?? mktOverride ?? dynamicMinPct(effectivePickSample(p));
+    return p.pct >= threshold;
+  });
   const filtered = resolveConflicts(eligible).slice(0, limit);
   return {
     picks: filtered,

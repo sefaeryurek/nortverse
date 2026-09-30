@@ -349,19 +349,19 @@ class TestCalibratedThresholds:
         assert cfg.over_25_threshold == 55.0
         assert cfg.btts_threshold == 55.0
 
-    def test_pattern_54_predicts_under_not_over(self, monkeypatch):
-        # Eski davranış (eşik=50): 54 > 50 → "Üst" tahmin ederdi.
-        # Yeni davranış (eşik=55): 54 <= 55 → "Alt" tahmin eder.
+    def test_low_ust_predicts_alt_after_shrinkage(self, monkeypatch):
+        # Shrinkage + baz oran (55%) ile 45% gözlem → adjusted ~46.9% < 50 → "Alt"
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
-            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0),
+            AnalysisConfig(over_25_base_rate=55.0, btts_base_rate=56.0,
+                           result_shrinkage=0.45, shrinkage_decay_divisor=3.0),
         )
         data = {
             "match_count": 30,
             "result_1_pct": 40.0,
             "result_x_pct": 30.0,
             "result_2_pct": 30.0,
-            "ust_25_pct": 54.0,
+            "ust_25_pct": 45.0,
             "kg_var_pct": 50.0,
         }
         result = _evaluate_pattern(data, "1", False, False)
@@ -386,12 +386,12 @@ class TestCalibratedThresholds:
         assert result.over_25_pick == "Üst"
         assert result.over_25_hit is True
 
-    def test_btts_pattern_54_predicts_no_not_yes(self, monkeypatch):
-        # Eski davranış (eşik=50): 54 > 50 → "KG Var" tahmin ederdi.
-        # Yeni davranış (eşik=55): 54 <= 55 → "KG Yok" tahmin eder.
+    def test_low_btts_predicts_no_after_shrinkage(self, monkeypatch):
+        # Shrinkage + baz oran (56%) ile 44% gözlem → adjusted ~46.5% < 50 → "KG Yok"
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
-            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0),
+            AnalysisConfig(over_25_base_rate=55.0, btts_base_rate=56.0,
+                           result_shrinkage=0.45, shrinkage_decay_divisor=3.0),
         )
         data = {
             "match_count": 30,
@@ -399,7 +399,7 @@ class TestCalibratedThresholds:
             "result_x_pct": 30.0,
             "result_2_pct": 30.0,
             "ust_25_pct": 50.0,
-            "kg_var_pct": 54.0,
+            "kg_var_pct": 44.0,
         }
         result = _evaluate_pattern(data, "1", False, False)
         assert result is not None
@@ -423,21 +423,85 @@ class TestCalibratedThresholds:
         assert result.btts_pick == "KG Var"
         assert result.btts_hit is True
 
-    def test_custom_threshold_override_via_config(self, monkeypatch):
-        # Eşik özelleştirilebilir olmalı — 60.0 eşikte 58.0 hâlâ "Alt" demeli.
+    def test_base_rate_override_via_config(self, monkeypatch):
+        # Düşük baz oran (40%) ayarlandığında 45% gözlem → adjusted ~43.9% < 50 → "Alt"
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
-            AnalysisConfig(over_25_threshold=60.0, btts_threshold=60.0),
+            AnalysisConfig(over_25_base_rate=40.0, btts_base_rate=40.0,
+                           result_shrinkage=0.45, shrinkage_decay_divisor=3.0),
         )
         data = {
             "match_count": 30,
             "result_1_pct": 40.0,
             "result_x_pct": 30.0,
             "result_2_pct": 30.0,
-            "ust_25_pct": 58.0,
-            "kg_var_pct": 58.0,
+            "ust_25_pct": 45.0,
+            "kg_var_pct": 45.0,
         }
         result = _evaluate_pattern(data, "1", False, False)
         assert result is not None
         assert result.over_25_pick == "Alt"
         assert result.btts_pick == "KG Yok"
+
+
+class TestMarginAndConfident:
+    def test_high_margin_is_confident(self):
+        data = {
+            "match_count": 50,
+            "result_1_pct": 60.0,
+            "result_x_pct": 20.0,
+            "result_2_pct": 20.0,
+            "ust_25_pct": 55.0,
+            "kg_var_pct": 55.0,
+        }
+        result = _evaluate_pattern(data, "1", True, True)
+        assert result is not None
+        assert result.result_margin > 0
+        assert result.is_confident is True
+
+    def test_low_margin_not_confident(self):
+        data = {
+            "match_count": 50,
+            "result_1_pct": 35.0,
+            "result_x_pct": 33.0,
+            "result_2_pct": 32.0,
+            "ust_25_pct": 55.0,
+            "kg_var_pct": 55.0,
+        }
+        result = _evaluate_pattern(data, "X", False, False)
+        assert result is not None
+        assert result.result_margin < 8.0
+        assert result.is_confident is False
+
+    def test_league_base_rates_german(self):
+        data = {
+            "match_count": 30,
+            "result_1_pct": 45.0,
+            "result_x_pct": 30.0,
+            "result_2_pct": 25.0,
+            "ust_25_pct": 55.0,
+            "kg_var_pct": 55.0,
+        }
+        result = _evaluate_pattern(
+            data, "1", True, True, league_name="German Bundesliga"
+        )
+        assert result is not None
+        assert result.result_pick == "1"
+
+    def test_league_base_rates_unknown_falls_back(self):
+        data = {
+            "match_count": 30,
+            "result_1_pct": 45.0,
+            "result_x_pct": 30.0,
+            "result_2_pct": 25.0,
+            "ust_25_pct": 55.0,
+            "kg_var_pct": 55.0,
+        }
+        result_known = _evaluate_pattern(
+            data, "1", True, True, league_name="German Bundesliga"
+        )
+        result_unknown = _evaluate_pattern(
+            data, "1", True, True, league_name="Unknown League"
+        )
+        assert result_known is not None
+        assert result_unknown is not None

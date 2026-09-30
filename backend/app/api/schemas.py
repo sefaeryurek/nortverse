@@ -190,6 +190,8 @@ class PatternEvaluation(BaseModel):
     result_pick: str
     result_pct: float
     result_hit: bool
+    result_margin: float = 0.0
+    is_confident: bool = False
     over_25_pick: str
     over_25_pct: float
     over_25_hit: bool
@@ -234,6 +236,9 @@ class EvaluationSummary(BaseModel):
     c_over_25_hit_pct: float = 0.0
     c_btts_hit: int = 0
     c_btts_hit_pct: float = 0.0
+    confident_evaluated: int = 0
+    confident_result_hit: int = 0
+    confident_result_hit_pct: float = 0.0
 
 
 class DailyEvaluation(BaseModel):
