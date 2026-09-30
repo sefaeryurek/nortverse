@@ -363,14 +363,11 @@ async def admin_quality() -> DataQuality:
         )).scalar() or 0
         soft_deleted = total - active
 
-        active_rows = (await session.execute(
-            select(Match.league_code, Match.league_name)
-            .where(Match.deleted_at.is_(None))
-        )).all()
-        non_league = sum(
-            1 for r in active_rows
-            if not is_supported_league(r.league_name, r.league_code)
+        non_league_q = select(func.count(Match.id)).where(
+            Match.deleted_at.is_(None),
+            Match.league_name.is_(None),
         )
+        non_league = (await session.execute(non_league_q)).scalar() or 0
 
         missing_pattern = (await session.execute(
             select(func.count(Match.id)).where(

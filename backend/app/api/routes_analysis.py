@@ -150,8 +150,8 @@ async def get_matched_matches(
     archive_b: list[dict] = []
     archive_c: list[dict] = []
 
-    if target.ft_scores_1 and target.ft_scores_x and target.ft_scores_2:
-        async with get_session() as session:
+    async with get_session() as session:
+        if target.ft_scores_1 and target.ft_scores_x and target.ft_scores_2:
             b_filters = [
                 *base_filters,
                 Match.ft_scores_1.cast(JSONB) == cast(target.ft_scores_1, JSONB),
@@ -161,8 +161,7 @@ async def get_matched_matches(
             rows = (await session.execute(select(*detail_cols).where(*b_filters).limit(50))).all()
             archive_b = [_row_to_dict(r) for r in rows]
 
-    if target.ft_all_ratios:
-        async with get_session() as session:
+        if target.ft_all_ratios:
             c_filters = [
                 *base_filters,
                 cast(Match.ft_all_ratios, JSONB) == cast(target.ft_all_ratios, JSONB),

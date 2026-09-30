@@ -40,6 +40,8 @@ _pool_size = int(os.environ.get("DB_POOL_SIZE", "5"))
 _max_overflow = int(os.environ.get("DB_MAX_OVERFLOW", "5"))
 _statement_cache_size = int(os.environ.get("DB_STATEMENT_CACHE_SIZE", "100"))
 
+_pool_recycle = int(os.environ.get("DB_POOL_RECYCLE", "3600"))
+
 _connect_args = {"statement_cache_size": _statement_cache_size}
 if _async_url and "sslmode=" in _async_url and "sslmode=disable" not in _async_url:
     _connect_args["ssl"] = _ssl.create_default_context()
@@ -49,6 +51,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=_pool_size,
     max_overflow=_max_overflow,
+    pool_recycle=_pool_recycle,
     connect_args=_connect_args,
 ) if _async_url else None
 sync_engine = create_engine(_sync_url, pool_pre_ping=True) if _sync_url else None
