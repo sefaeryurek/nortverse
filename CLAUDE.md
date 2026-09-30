@@ -1101,6 +1101,29 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - **Değerlendirme sayfası güncellendi:** 5 özet kartı (Güvenli Sonuç eklendi), PatternBadge'e "Güvenli" rozeti
 - **Sonuç:** 682 backend + 277 frontend + 28 E2E = **987 toplam test**
 
+### Sprint 38 — TAMAMLANDI ✅ (Bülten Filtreleme + Strateji İyileştirmeleri)
+- **Bülten filtreleme (`2c2cb8c`):** Bültende sadece analiz edilmiş maçlar gösteriliyor — "Bu maç için tahmin üretilemedi" sorunu çözüldü
+- **DUAL_BONUS pazar kısıtlaması (`7cabbd9`):** B+C uyum bonusu sadece sonuç-ilişkili pazarlara (result, dc, fark, hnd, iy_ms) uygulanır — O/U ve BTTS'de bonus kaldırıldı
+- **B_ONLY_BOOST / C_ONLY_PENALTY:** Pattern B (×1.03) vs Pattern C (×0.97) — backtest'te B tutarlı olarak 1.6-1.8pp daha isabetli
+- **Alignment scoring:** 4 destekleyici pazar (DC, fark, ev gol, dep gol) hizalandığında ×1.15 boost, ≤1 hizalanmada ×0.90 ceza
+- **DISAGREE_PENALTY = 0.70:** İki arşiv aynı pazarda farklı kazanan seçerse güven düşer
+- **Sonuç:** 682 backend + 278 frontend + 28 E2E = **988 toplam test**
+
+### Sprint 39 — TAMAMLANDI ✅ (İstatistiksel Kalibrasyon v3 + Güvenlik + Performans)
+- **O/U ve BTTS decision threshold (`59cd136`):** Karar eşiği %50 → lig bazlı base_rate ile karşılaştırma
+- **Log-odds shrinkage (`fc77e3a`):** Lineer shrinkage → logit/sigmoid dönüşümü; X (draw) artık matematiksel olarak argmax olabiliyor
+- **Inverse-linear decay:** `shrink = base / (1 + mc / half_life)` — logaritmik decay'den daha hızlı, `shrinkage_half_life=15` config
+- **Confidence cap 0.95 (`dba1593`):** Boost yığılması (DUAL×ALIGNMENT×TRENDS) 1.3'e çıkabiliyordu → 0.95 üst sınır
+- **Tier eşikleri sıkılaştırma:** high: 0.80→0.90, medium: 0.65→0.70 — kullanıcıya daha gerçekçi güven göstergeleri
+- **Alignment X düzeltme (`223e142`):** X beraberlikte otomatik +2 puan haksız avantajı kaldırıldı; ev/dep gol benzerliği kontrolü eklendi
+- **Trend penaltı:** Düşük galibiyet (≤%30) → ×0.88, yüksek mağlubiyet (≥%50) → ×0.85 çarpan
+- **DB index'leri (`6b33a67`):** `league_code` ve `actual_ft_home` kolonlarına index — sorgu performansı
+- **CORS güvenlik (`13450b2`):** `allow_origins=*` → bilinen frontend URL'ler (env var ile override), method kısıtlaması
+- **Lig-bazlı O/U ve BTTS oranları (`79c96f4`):** 7 lig için gerçek Üst/Alt ve KG baz oranları değerlendirmede kullanılıyor
+- **User-Agent rotasyonu (`9385b82`):** 5 farklı UA rastgele seçiliyor — fingerprint çeşitliliği
+- **Fixture cache sınırı:** Memory cache 30 entry LRU — eski tarihler otomatik temizlenir
+- **Sonuç:** 682 backend + 281 frontend + 28 E2E = **991 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1227,7 +1250,23 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - `btts_threshold` (default 55.0, `BTTS_THRESHOLD` env var): KG Var/Yok tahmini için minimum yüzde eşiği. Aynı mantık
   - `eval_min_matches` (default 5, `EVAL_MIN_MATCHES` env var): Değerlendirmede pattern'in anlamlı kabul edilmesi için minimum eşleşme sayısı. <5 eşleşmeli pattern değerlendirilmez, <10 eşleşmeli pattern frontend'de soluk gösterilir (low-confidence)
 
-- **Bayesian draw shrinkage (Sprint 37):** `routes_evaluation.py`'de result argmax hesaplanırken küçük örneklemlerde Bayesian regresyon uygulanır. `BASE_RESULT = {"1": 44.4, "X": 24.6, "2": 30.9}`, `SHRINKAGE = 0.3`. Formül: `adjusted = raw × (1 - s) + base × s` where `s = 0.3 / (1 + mc/20)`. Örneklem büyüdükçe shrinkage azalır (20 maçta ~%1, 100 maçta ~%0.05). **Bilinen kısıtlama:** X baz oranı (%24.6) 1'den (%44.4) küçük olduğu için shrinkage X'i artıramaz — draw underprediction sorunu farklı bir mekanizma gerektirir.
+- **Log-odds shrinkage (Sprint 39, öncesi lineer Sprint 37):** `routes_evaluation.py`'de result argmax hesaplanırken logit/sigmoid dönüşümü uygulanır. Formül: `raw_logit = log(p / (1-p))`, `adj_logit = raw_logit * (1-s) + base_logit * s`, `adjusted = sigmoid(adj_logit)`. Lineer shrinkage'dan farkı: X (draw) artık matematiksel olarak argmax olabiliyor — lineer shrinkage düşük baz oranlı sonuçları (X: %24.6) asla en yükseğe çıkaramıyordu. Inverse-linear decay: `shrink = base / (1 + mc / half_life)` — `shrinkage_half_life=15` config ile. Lig bazlı baz oranları: 7 lig için ayrı 1/X/2 + O/U 2.5 + BTTS oranları (`LEAGUE_BASE_RATES` dict).
+
+- **Confidence cap ve tier sıkılaştırma (Sprint 39):** `CONFIDENCE_CAP = 0.95` — boost yığılması (DUAL_BONUS × ALIGNMENT × TRENDS × B_ONLY) 1.3'e çıkabiliyordu. `computeConfidence` ve `buildPicks`'te `Math.min(CONFIDENCE_CAP, result)` ile sınırlandı. Tier eşikleri: high ≥0.90 (eskisi 0.80), medium ≥0.70 (eskisi 0.65), low ≥0.50, muted <0.50.
+
+- **Alignment X düzeltme (Sprint 39):** X seçildiğinde otomatik +2 alignment puanı haksız avantaj yaratıyordu (ev/dep gol kontrolü koşulsuz count++ idi). Düzeltme: `ev_ust_05_pct` ve `dep_ust_05_pct` farkı <10pp ise count++, aksi takdirde artmaz.
+
+- **Trend penaltı (Sprint 39):** `TRENDS_PENALTY_RULES` — düşük form (win_pct ≤ 30 → ×0.88, loss_pct ≥ 50 → ×0.85) ile confidence çarpanı. `getTrendsBoost` artık hem boost hem penalty uygular.
+
+- **CORS güvenlik (Sprint 39):** `allow_origins=["*"]` → `CORS_ORIGINS` env var ile whitelist (default: `http://localhost:3000,https://nortverse.vercel.app`). `allow_methods` `["GET","HEAD","POST","OPTIONS"]` ile sınırlandı.
+
+- **User-Agent rotasyonu (Sprint 39):** `browser.py`'de 5 farklı UA string, `random.choice()` ile her context'te rastgele seçilir — fingerprint çeşitliliği.
+
+- **Fixture cache LRU sınırı (Sprint 39):** `services.py`'de `_FIXTURE_CACHE_MAX = 30` entry — `fixture_cache_put()` helper en eski entry'yi çıkarır. Eski sınırsız dict yerine bellek koruması.
+
+- **DUAL_BONUS pazar kısıtlaması (Sprint 38):** B+C uyum bonusu sadece sonuç-ilişkili pazarlara (`result`, `dc`, `fark`, `hnd`, `iy_ms`) uygulanır — O/U ve BTTS'de bonus kaldırıldı (backtest'te bu pazarlarda bonus anlamsız çıktı).
+
+- **B_ONLY_BOOST / C_ONLY_PENALTY (Sprint 38):** Pattern B ×1.03, Pattern C ×0.97 — backtest'te B tutarlı olarak C'den 1.6-1.8pp daha isabetli.
 
 - **Lig filtresi `is_supported_league` (Sprint 8.9):** Hibrit yaklaşım — kara liste keyword (champions/europa/cup/friendly/qualifier/...) + beyaz liste override (`LEAGUE_ALIASES` içindeki ad zaten geçer). Çoklu parametre kabul eder (`is_supported_league(name, code)`); biri lig sayılırsa True.
 
@@ -1324,9 +1363,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-30 — Sprint 37 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-09-30 — Sprint 39 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 37 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 39 Tamamlandı
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1360,22 +1399,21 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | B+C uyum (MS) | %46.8 | — | %44.4 | TEK doğrulanmış sinyal (+6 puan) |
 | Bundesliga MS | %50.1 | %44.3 | — | En iyi lig |
 
-### Test Durumu (Sprint 37 sonrası)
+### Test Durumu (Sprint 39 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
 | **Backend** | pytest | 682 | ✅ Yeşil |
-| **Frontend birim** | vitest | 277 | ✅ Yeşil |
+| **Frontend birim** | vitest | 281 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 987 | — |
+| **Toplam** | — | 991 | — |
 
 ### Sıradaki Adımlar
 
 Bekleyen konular kullanıcı kararı gerektirir:
 
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
-- **Draw underprediction:** Sistem X'i %5.8 tahmin ediyor vs gerçek %24.6. Lig bazlı shrinkage X oranını biraz iyileştirdi ama yapısal sorun devam ediyor — X-specific boost mekanizması tasarlanmalı
-- **Kalibrasyon (overconfidence):** Sistem %80 dediğinde gerçek isabet %53 — yüzdeler olasılık değil, görece güven skoru olarak sunulmalı veya Platt scaling uygulanmalı
+- **Platt scaling:** Confidence skoru hâlâ olasılık olarak yorumlanmamalı — gelecekte Platt scaling veya isotonic regression ile gerçek olasılığa kalibre edilebilir
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
 - **Canlı maç + WebSocket:** Real-time skor push (onay gerekir)
