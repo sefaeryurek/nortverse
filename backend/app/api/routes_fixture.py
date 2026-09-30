@@ -29,10 +29,38 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _enrich_prediction_status(items: list[dict]) -> dict[str, bool]:
+    """Match ID'leri için DB'de analiz verisi olup olmadığını toplu sorgular."""
+    ids = [it.get("match_id") or it.get("match_id", "") for it in items]
+    ids = [mid for mid in ids if mid]
+    if not ids:
+        return {}
+
+    result: dict[str, bool] = {}
+    try:
+        async with get_session() as session:
+            stmt = (
+                select(Match.match_id)
+                .where(Match.match_id.in_(ids))
+                .where(Match.deleted_at.is_(None))
+                .where(Match.ft_scores_1.isnot(None))
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            for mid in rows:
+                result[mid] = True
+    except Exception as exc:
+        log.warning("Prediction status sorgusu başarısız: %s", exc)
+
+    return result
+
+
 async def _bulletin_items(items: list[dict], req_date: date) -> list[FixtureMatchOut]:
     now = datetime.now(timezone.utc)
     today = now.astimezone(timezone(timedelta(hours=3))).date()
     live_snapshot = await get_live_snapshot() if today - timedelta(days=1) <= req_date <= today else None
+
+    pred_status = await _enrich_prediction_status(items)
+
     visible: list[FixtureMatchOut] = []
     for item in items:
         match = FixtureMatchOut(**item)
@@ -44,8 +72,6 @@ async def _bulletin_items(items: list[dict], req_date: date) -> list[FixtureMatc
         )
         if state.status not in ("scheduled", "live"):
             continue
-        # A source can still say "scheduled" hours after kickoff. Without a
-        # verified live score, it no longer belongs to the bulletin.
         if state.status == "scheduled" and (
             (kickoff is not None and kickoff <= now)
             or (kickoff is None and req_date < today)
@@ -57,6 +83,7 @@ async def _bulletin_items(items: list[dict], req_date: date) -> list[FixtureMatc
             "live_away": state.live_away,
             "live_minute": state.live_minute,
             "score_checked_at": state.score_checked_at,
+            "has_prediction": pred_status.get(match.match_id, False),
         }))
     return visible
 

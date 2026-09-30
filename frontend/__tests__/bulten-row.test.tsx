@@ -24,6 +24,7 @@ function makeMatch(overrides: Partial<FixtureMatch> = {}): FixtureMatch {
     live_away: null,
     live_minute: null,
     score_checked_at: null,
+    has_prediction: true,
     ...overrides,
   };
 }

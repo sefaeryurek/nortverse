@@ -7,7 +7,7 @@ const fixture = {
   match_id: "1", home_team: "A", away_team: "B", league_code: "ENG PR",
   league_name: "English Premier League", kickoff_time: "2026-09-21T22:00:00Z",
   status: "scheduled", live_home: null, live_away: null, live_minute: null,
-  score_checked_at: null,
+  score_checked_at: null, has_prediction: true,
 } satisfies FixtureMatch;
 
 it("hides started fixtures without a verified live score", () => {

@@ -10,6 +10,7 @@ export interface FixtureMatch {
   live_away: number | null;
   live_minute: string | null;
   score_checked_at: string | null;
+  has_prediction: boolean;
 }
 
 export interface PeriodOut {

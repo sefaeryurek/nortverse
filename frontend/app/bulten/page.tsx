@@ -117,7 +117,9 @@ async function MatchList({ date }: { date: string }) {
   try {
     const now = new Date();
     const today = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
-    matches = (await getFixture(date)).filter((match) => showBulletinMatch(match, now.getTime(), today, date));
+    matches = (await getFixture(date))
+      .filter((match) => showBulletinMatch(match, now.getTime(), today, date))
+      .filter((match) => match.has_prediction);
     if (matches.length > 0) {
       try {
         patternStatus = await getPatternStatus(matches.map((m) => m.match_id));
@@ -225,7 +227,16 @@ async function MatchList({ date }: { date: string }) {
               marginBottom: "var(--nv-space-sm)",
             }}
           >
-            Bu tarihte bültende bekleyen maç yok.
+            Bu tarihte analiz edilmiş maç yok.
+          </p>
+          <p
+            style={{
+              fontSize: "var(--nv-text-xs)",
+              color: "var(--nv-text-tertiary)",
+              marginBottom: "var(--nv-space-md)",
+            }}
+          >
+            Günlük pipeline çalıştıktan sonra maçlar burada görünecektir.
           </p>
           <Link
             href={`/sonuclar?date=${date}`}

@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Path
-from sqlalchemy import and_, cast, func, select
+from sqlalchemy import cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.api.schemas import AnalyzeResponse, MatchSummary

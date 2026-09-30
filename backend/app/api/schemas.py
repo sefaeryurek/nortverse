@@ -125,6 +125,7 @@ class FixtureMatchOut(BaseModel):
     live_away: Optional[int] = None
     live_minute: Optional[str] = None
     score_checked_at: Optional[str] = None
+    has_prediction: bool = False
 
 
 class PeriodOut(BaseModel):
