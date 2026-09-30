@@ -81,11 +81,17 @@ describe("computeConfidence", () => {
   });
 
   it("dual bonus 1.25x uygulanır", () => {
-    // Backtest: Pattern B/C anlaştığında isabet %46.8 (anlaşmazlıkta %40.9)
-    // — sistemin tek doğrulanmış sinyali, bonus 1.15 → 1.25'e çıkarıldı.
-    const single = computeConfidence(70, 30, 1.0, false);
-    const dual = computeConfidence(70, 30, 1.0, true);
+    const single = computeConfidence(70, 30, 1.0, false, 1.0, "result");
+    const dual = computeConfidence(70, 30, 1.0, true, 1.0, "result");
     expect(dual / single).toBeCloseTo(1.25, 2);
+  });
+
+  it("dual bonus sadece result-ilişkili pazarlara uygulanır", () => {
+    const dualResult = computeConfidence(70, 30, 1.0, true, 1.0, "result");
+    const dualOu = computeConfidence(70, 30, 1.0, true, 1.0, "ou_25");
+    const single = computeConfidence(70, 30, 1.0, false, 1.0, "ou_25");
+    expect(dualResult / single).toBeCloseTo(1.25, 2);
+    expect(dualOu).toBeCloseTo(single, 5);
   });
 
   it("marketWeight çarpan olarak iner (0.7 → %70 confidence)", () => {
@@ -176,9 +182,9 @@ describe("buildPicks", () => {
     expect(result1!.pctA).toBe(70);
     expect(result1!.pctB).toBe(75);
 
-    // Dual bonus ile karşılaştır
-    const singleConf = computeConfidence(70, 20, 1.0, false);
-    const dualConf = computeConfidence(70, 20, 1.0, true);
+    // Dual bonus ile karşılaştır (marketKey="result", archiveSource="AB")
+    const singleConf = computeConfidence(70, 20, 1.0, false, 1.0, "result", "AB");
+    const dualConf = computeConfidence(70, 20, 1.0, true, 1.0, "result", "AB");
     expect(result1!.confidence).toBeCloseTo(dualConf, 2);
     expect(result1!.confidence).toBeGreaterThan(singleConf);
   });
@@ -420,8 +426,8 @@ describe("buildPicks with trends", () => {
     const picks = buildPicks(a, null, "ft", trends);
     const r1 = picks.find((p) => p.marketKey === "result" && p.selectionLabel === "1")!;
     const kg = picks.find((p) => p.marketKey === "kg" && p.selectionLabel === "KG Var")!;
-    const expectedR1 = computeConfidence(70, 20, 1.0, false, 1.1);
-    const expectedKg = computeConfidence(65, 20, 1.0, false, 1.0);
+    const expectedR1 = computeConfidence(70, 20, 1.0, false, 1.1, "result", "A");
+    const expectedKg = computeConfidence(65, 20, 1.0, false, 1.0, "kg", "A");
     expect(r1.confidence).toBeCloseTo(expectedR1, 3);
     expect(kg.confidence).toBeCloseTo(expectedKg, 3);
   });

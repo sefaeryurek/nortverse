@@ -61,7 +61,7 @@ class AnalysisConfig:
     shrinkage_decay_divisor: float = field(default_factory=lambda: _env_float("SHRINKAGE_DECAY_DIVISOR", 3.0))
     over_25_base_rate: float = field(default_factory=lambda: _env_float("OVER_25_BASE_RATE", 55.0))
     btts_base_rate: float = field(default_factory=lambda: _env_float("BTTS_BASE_RATE", 56.0))
-    result_min_margin: float = field(default_factory=lambda: _env_float("RESULT_MIN_MARGIN", 8.0))
+    result_min_margin: float = field(default_factory=lambda: _env_float("RESULT_MIN_MARGIN", 10.0))
 
 
 SCRAPER = ScraperConfig()

@@ -25,11 +25,15 @@ export function effectivePickSample(pick: Pick): number {
     : pick.archive === "A" ? pick.matchCountA : pick.matchCountB;
 }
 
-// Backtest: Pattern B ve Pattern C aynı sonuçta anlaşınca isabet %46.8'e
-// çıkıyor (anlaşmazlıkta %40.9) — sistemdeki tek doğrulanmış istatistiksel
-// sinyal. 1.15 → 1.25: bu sinyali daha belirgin şekilde öne çıkar.
+// Backtest: B+C uyumu sadece MS sonuç pazarında anlamlı sinyal veriyor
+// (+2pp). O/U ve BTTS'de uyum sıfır fayda sağlıyor (uyumsuz bile daha iyi).
 const DUAL_BONUS = 1.25;
+const DUAL_BONUS_MARKETS = new Set(["result", "dc", "fark", "hnd_a10", "hnd_h10", "hnd_a20", "hnd_h20", "iy_ms", "ht_result", "h2_result"]);
 const DUAL_THRESHOLD = 65;
+
+// Backtest: Pattern B her pazarda C'den %1.6-1.8pp daha isabetli.
+const B_ONLY_BOOST = 1.03;
+const C_ONLY_PENALTY = 0.97;
 
 function volumeWeight(matchCount: number): number {
   if (matchCount <= 0) return 0;
@@ -83,9 +87,22 @@ export function computeConfidence(
   marketWeight: number,
   isDual: boolean,
   trendsBoost = 1.0,
+  marketKey = "",
+  archiveSource: "A" | "B" | "AB" = "AB",
 ): number {
   const base = (pct / 100) * volumeWeight(matchCount) * marketWeight * trendsBoost;
-  return isDual ? base * DUAL_BONUS : base;
+  let result = base;
+
+  if (isDual && DUAL_BONUS_MARKETS.has(marketKey)) {
+    result *= DUAL_BONUS;
+  } else if (isDual) {
+    result *= 1.0;
+  }
+
+  if (archiveSource === "A") result *= B_ONLY_BOOST;
+  else if (archiveSource === "B") result *= C_ONLY_PENALTY;
+
+  return result;
 }
 
 interface FieldSpec {
@@ -510,6 +527,41 @@ function extractRaw(result: PatternResult, period: Period): RawSelection[] {
 // gelen seçime uyumsuzluk cezası uygulanır.
 const DISAGREE_PENALTY = 0.70;
 
+// Backtest: 4 destekleyici pazar hizalandığında %50.2 isabet (vs %37-41 hizalanmadığında).
+const ALIGNMENT_BOOST = 1.15;
+const ALIGNMENT_PENALTY = 0.90;
+const ALIGNMENT_THRESHOLD = 4;
+
+/**
+ * MS sonucu için destekleyici pazar sayısını hesaplar.
+ * DC, fark, ev gol, dep gol yönlerini kontrol eder.
+ */
+export function computeAlignmentCount(pat: PatternResult, resultPick: "1" | "X" | "2"): number {
+  let count = 0;
+
+  const dcVals = { "1x": pat.dc_1x_pct, "x2": pat.dc_x2_pct, "12": pat.dc_12_pct };
+  const dcMax = Math.max(dcVals["1x"], dcVals["x2"], dcVals["12"]);
+  if (resultPick === "1" && (dcMax === dcVals["1x"] || dcMax === dcVals["12"])) count++;
+  if (resultPick === "X" && (dcMax === dcVals["1x"] || dcMax === dcVals["x2"])) count++;
+  if (resultPick === "2" && (dcMax === dcVals["x2"] || dcMax === dcVals["12"])) count++;
+
+  const evFark = pat.fark_ev1_pct + pat.fark_ev2_pct + pat.fark_ev3p_pct;
+  const depFark = pat.fark_dep1_pct + pat.fark_dep2_pct + pat.fark_dep3p_pct;
+  if (resultPick === "1" && evFark > depFark + pat.fark_ber_pct) count++;
+  if (resultPick === "X" && pat.fark_ber_pct >= evFark && pat.fark_ber_pct >= depFark) count++;
+  if (resultPick === "2" && depFark > evFark + pat.fark_ber_pct) count++;
+
+  if (resultPick === "1" && pat.ev_ust_05_pct > pat.ev_alt_05_pct) count++;
+  if (resultPick === "X") count++;
+  if (resultPick === "2" && pat.dep_ust_05_pct > pat.dep_alt_05_pct) count++;
+
+  if (resultPick === "1" && pat.dep_alt_05_pct >= pat.dep_ust_05_pct) count++;
+  if (resultPick === "X") count++;
+  if (resultPick === "2" && pat.ev_alt_05_pct >= pat.ev_ust_05_pct) count++;
+
+  return count;
+}
+
 /**
  * İki arşivi (Pattern B = "A", Pattern C = "B") birleştirip Pick listesi üretir.
  * Aynı (marketKey, selectionLabel) kombinasyonu ikisinde de varsa archive="AB" olur ve dual_bonus uygulanır.
@@ -580,7 +632,7 @@ export function buildPicks(
     }
 
     const trendsBoost = getTrendsBoost(ref.marketKey, ref.selectionLabel, trends);
-    let confidence = computeConfidence(combinedPct, combinedMatchCount, ref.weight, dual, trendsBoost);
+    let confidence = computeConfidence(combinedPct, combinedMatchCount, ref.weight, dual, trendsBoost, ref.marketKey, archive);
 
     // Anlaşmazlık cezası: İki arşiv de veri vermiş ama farklı kazanan seçmişse
     if (!dual && eligibleA && eligibleB) {
@@ -588,6 +640,19 @@ export function buildPicks(
       const bWinner = bWinnerByMarket.get(ref.marketKey);
       if (aWinner && bWinner && aWinner !== bWinner) {
         confidence *= DISAGREE_PENALTY;
+      }
+    }
+
+    // Market alignment boost: MS sonuç pazarında destekleyici pazarlar hizalandığında
+    if (ref.marketKey === "result" && (ref.selectionLabel === "1" || ref.selectionLabel === "X" || ref.selectionLabel === "2")) {
+      const srcPattern = a ? eligibleA : eligibleB;
+      if (srcPattern) {
+        const alignment = computeAlignmentCount(srcPattern, ref.selectionLabel as "1" | "X" | "2");
+        if (alignment >= ALIGNMENT_THRESHOLD) {
+          confidence *= ALIGNMENT_BOOST;
+        } else if (alignment <= 1) {
+          confidence *= ALIGNMENT_PENALTY;
+        }
       }
     }
 
