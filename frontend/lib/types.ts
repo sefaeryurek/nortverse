@@ -322,6 +322,13 @@ export interface EvaluationSummary {
   btts_hit_pct: number;
   score_list_hit: number;
   score_list_hit_pct: number;
+  evaluated_c: number;
+  c_result_hit: number;
+  c_result_hit_pct: number;
+  c_over_25_hit: number;
+  c_over_25_hit_pct: number;
+  c_btts_hit: number;
+  c_btts_hit_pct: number;
 }
 
 export interface DailyEvaluation {

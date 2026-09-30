@@ -111,6 +111,10 @@ async def daily_evaluation(
     summary_btts_hit = 0
     summary_score_hit = 0
     evaluated = 0
+    evaluated_c = 0
+    summary_c_result_hit = 0
+    summary_c_over_hit = 0
+    summary_c_btts_hit = 0
 
     for row in rows:
         ft_h, ft_a = row.actual_ft_home, row.actual_ft_away
@@ -135,8 +139,7 @@ async def daily_evaluation(
         pat_b = _evaluate_pattern(row.pattern_ft_b, actual_result, actual_over_25, actual_btts)
         pat_c = _evaluate_pattern(row.pattern_ft_c, actual_result, actual_over_25, actual_btts)
 
-        has_prediction = pat_b is not None
-        if has_prediction:
+        if pat_b is not None:
             evaluated += 1
             if pat_b.result_hit:
                 summary_result_hit += 1
@@ -144,6 +147,15 @@ async def daily_evaluation(
                 summary_over_hit += 1
             if pat_b.btts_hit:
                 summary_btts_hit += 1
+
+        if pat_c is not None:
+            evaluated_c += 1
+            if pat_c.result_hit:
+                summary_c_result_hit += 1
+            if pat_c.over_25_hit:
+                summary_c_over_hit += 1
+            if pat_c.btts_hit:
+                summary_c_btts_hit += 1
 
         if score_hit:
             summary_score_hit += 1
@@ -182,6 +194,13 @@ async def daily_evaluation(
         btts_hit_pct=_pct(summary_btts_hit, evaluated),
         score_list_hit=summary_score_hit,
         score_list_hit_pct=_pct(summary_score_hit, total),
+        evaluated_c=evaluated_c,
+        c_result_hit=summary_c_result_hit,
+        c_result_hit_pct=_pct(summary_c_result_hit, evaluated_c),
+        c_over_25_hit=summary_c_over_hit,
+        c_over_25_hit_pct=_pct(summary_c_over_hit, evaluated_c),
+        c_btts_hit=summary_c_btts_hit,
+        c_btts_hit_pct=_pct(summary_c_btts_hit, evaluated_c),
     )
 
     return DailyEvaluation(

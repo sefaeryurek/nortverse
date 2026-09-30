@@ -227,6 +227,13 @@ class EvaluationSummary(BaseModel):
     btts_hit_pct: float = 0.0
     score_list_hit: int = 0
     score_list_hit_pct: float = 0.0
+    evaluated_c: int = 0
+    c_result_hit: int = 0
+    c_result_hit_pct: float = 0.0
+    c_over_25_hit: int = 0
+    c_over_25_hit_pct: float = 0.0
+    c_btts_hit: int = 0
+    c_btts_hit_pct: float = 0.0
 
 
 class DailyEvaluation(BaseModel):

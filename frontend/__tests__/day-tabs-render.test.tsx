@@ -39,7 +39,7 @@ describe("DayTabs render", () => {
 
   it("defaults results navigation to today and the previous seven days", () => {
     render(<DayTabs activeDate="2026-09-16" basePath="/sonuclar" referenceDate="2026-09-16" />);
-    expect(screen.getByRole("navigation", { name: "Sonuç tarihleri: bugün ve önceki 7 gün" })).toBeDefined();
+    expect(screen.getByRole("navigation", { name: "Geçmiş tarihler: bugün ve önceki 7 gün" })).toBeDefined();
     expect(screen.getByText("09/09")).toBeDefined();
     expect(screen.getByText("09/15")).toBeDefined();
     expect(screen.queryByText("09/17")).toBeNull();

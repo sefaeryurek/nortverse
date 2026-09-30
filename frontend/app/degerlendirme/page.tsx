@@ -10,8 +10,8 @@ import type { DailyEvaluation, MatchEvaluation, PatternEvaluation } from "@/lib/
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Degerlendirme",
-  description: "Gunluk tahmin isabeti degerlendirmesi",
+  title: "Değerlendirme",
+  description: "Günlük tahmin isabeti değerlendirmesi",
 };
 
 /* ------------------------------------------------------------------ */
@@ -156,7 +156,7 @@ function PatternBadge({
       <HitBadge hit={pat.over_25_hit} label={`${pat.over_25_pick} %${pat.over_25_pct.toFixed(0)}`} />
       <HitBadge hit={pat.btts_hit} label={`${pat.btts_pick} %${pat.btts_pct.toFixed(0)}`} />
       <span style={{ color: "var(--nv-text-tertiary)" }}>
-        ({pat.match_count} mac)
+        ({pat.match_count} maç)
       </span>
     </div>
   );
@@ -291,7 +291,7 @@ function EvalRow({ match }: { match: MatchEvaluation }) {
             </span>
             <HitBadge
               hit={match.score_list_hit}
-              label={match.score_list_hit ? `${match.actual_ft} listede` : `${match.actual_ft} listede degil`}
+              label={match.score_list_hit ? `${match.actual_ft} listede` : `${match.actual_ft} listede değil`}
             />
           </div>
         )}
@@ -327,7 +327,7 @@ async function EvalList({ date }: { date: string }) {
   try {
     data = await getEvaluation(date);
   } catch (e) {
-    error = e instanceof Error ? e.message : "Baglanti hatasi";
+    error = e instanceof Error ? e.message : "Bağlantı hatası";
   }
 
   if (error || !data) {
@@ -338,7 +338,7 @@ async function EvalList({ date }: { date: string }) {
             className="font-medium"
             style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}
           >
-            {error || "Veri alinamadi"}
+            {error || "Veri alınamadı"}
           </p>
           <RetryButton />
         </div>
@@ -354,14 +354,14 @@ async function EvalList({ date }: { date: string }) {
             className="font-medium"
             style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}
           >
-            Bu tarihte degerlendirilebilecek bitmis mac bulunamadi.
+            Bu tarihte değerlendirilebilecek bitmiş maç bulunamadı.
           </p>
           <Link
             href={`/sonuclar?date=${date}`}
             className="inline-block font-medium transition-colors"
             style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-blue)" }}
           >
-            Sonuclar sayfasina bak
+            Sonuçlar sayfasına bak
           </Link>
         </div>
       </div>
@@ -372,13 +372,34 @@ async function EvalList({ date }: { date: string }) {
 
   return (
     <div style={{ maxWidth: "var(--nv-max-content)" }}>
-      {/* Ozet kartlari */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-[var(--nv-page-gutter)] py-4">
-        <SummaryCard label="Sonuc Isabeti" hit={s.result_hit} total={s.evaluated} pct={s.result_hit_pct} />
-        <SummaryCard label="2.5 Ust/Alt" hit={s.over_25_hit} total={s.evaluated} pct={s.over_25_hit_pct} />
-        <SummaryCard label="KG Isabeti" hit={s.btts_hit} total={s.evaluated} pct={s.btts_hit_pct} />
+      {/* Özet kartları — Arşiv 1 (Pattern B) */}
+      <div className="px-[var(--nv-page-gutter)] pt-4 pb-1">
+        <span style={{ fontSize: "var(--nv-text-xs)", fontWeight: 700, color: "var(--nv-accent-blue)" }}>
+          A1 — Arşiv 1
+        </span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-[var(--nv-page-gutter)] pb-3">
+        <SummaryCard label="Sonuç İsabeti" hit={s.result_hit} total={s.evaluated} pct={s.result_hit_pct} />
+        <SummaryCard label="2.5 Üst/Alt" hit={s.over_25_hit} total={s.evaluated} pct={s.over_25_hit_pct} />
+        <SummaryCard label="KG İsabeti" hit={s.btts_hit} total={s.evaluated} pct={s.btts_hit_pct} />
         <SummaryCard label="Skor Listesi" hit={s.score_list_hit} total={s.total_matches} pct={s.score_list_hit_pct} />
       </div>
+
+      {/* Özet kartları — Arşiv 2 (Pattern C) */}
+      {s.evaluated_c > 0 && (
+        <>
+          <div className="px-[var(--nv-page-gutter)] pt-2 pb-1">
+            <span style={{ fontSize: "var(--nv-text-xs)", fontWeight: 700, color: "var(--nv-accent-green)" }}>
+              A2 — Arşiv 2
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-[var(--nv-page-gutter)] pb-3">
+            <SummaryCard label="Sonuç İsabeti" hit={s.c_result_hit} total={s.evaluated_c} pct={s.c_result_hit_pct} />
+            <SummaryCard label="2.5 Üst/Alt" hit={s.c_over_25_hit} total={s.evaluated_c} pct={s.c_over_25_hit_pct} />
+            <SummaryCard label="KG İsabeti" hit={s.c_btts_hit} total={s.evaluated_c} pct={s.c_btts_hit_pct} />
+          </div>
+        </>
+      )}
 
       {/* Ozet bilgi cubugu */}
       <div
@@ -398,12 +419,12 @@ async function EvalList({ date }: { date: string }) {
               backgroundColor: "var(--nv-accent-green)",
             }}
           />
-          {s.total_matches} bitmis mac
+          {s.total_matches} bitmiş maç
         </span>
         <span
           style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}
         >
-          {s.evaluated} tahminli
+          {s.evaluated} değerlendirilen
         </span>
       </div>
 
@@ -449,7 +470,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
               letterSpacing: "var(--nv-tracking-tight)",
             }}
           >
-            Degerlendirme
+            Değerlendirme
           </h1>
           <span
             className="nv-badge"

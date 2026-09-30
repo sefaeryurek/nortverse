@@ -24,7 +24,7 @@ export default function DayTabs({ activeDate, basePath = "/bulten", referenceDat
   const days = getRollingDates(undefined, referenceDate, effectiveRange);
 
   return (
-    <nav aria-label={effectiveRange === "past" ? "Sonuç tarihleri: bugün ve önceki 7 gün" : "Bülten tarihleri"}>
+    <nav aria-label={effectiveRange === "past" ? "Geçmiş tarihler: bugün ve önceki 7 gün" : "Bülten tarihleri"}>
       {effectiveRange === "past" && (
         <p
           className="px-4 pt-3 pb-1"
