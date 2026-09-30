@@ -109,12 +109,12 @@ describe("computeConfidence", () => {
 
 describe("confidenceTier", () => {
   it.each([
-    [0.85, "high"],
-    [0.8, "high"],
-    [0.79, "medium"],
-    [0.65, "medium"],
-    [0.64, "low"],
-    [0.5, "low"],
+    [0.95, "high"],
+    [0.90, "high"],
+    [0.89, "medium"],
+    [0.70, "medium"],
+    [0.69, "low"],
+    [0.50, "low"],
     [0.49, "muted"],
     [0, "muted"],
   ])("c=%s → %s", (input, expected) => {

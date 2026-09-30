@@ -81,6 +81,8 @@ export function getTrendsBoost(
   return 1.0;
 }
 
+const CONFIDENCE_CAP = 0.95;
+
 export function computeConfidence(
   pct: number,
   matchCount: number,
@@ -102,7 +104,7 @@ export function computeConfidence(
   if (archiveSource === "A") result *= B_ONLY_BOOST;
   else if (archiveSource === "B") result *= C_ONLY_PENALTY;
 
-  return result;
+  return Math.min(CONFIDENCE_CAP, result);
 }
 
 interface FieldSpec {
@@ -656,6 +658,8 @@ export function buildPicks(
       }
     }
 
+    confidence = Math.min(CONFIDENCE_CAP, confidence);
+
     picks.push({
       marketKey: ref.marketKey,
       field: ref.field,
@@ -813,8 +817,8 @@ export function getMarketSummary(
  */
 export type ConfidenceTier = "high" | "medium" | "low" | "muted";
 export function confidenceTier(c: number): ConfidenceTier {
-  if (c >= 0.8) return "high";
-  if (c >= 0.65) return "medium";
+  if (c >= 0.9) return "high";
+  if (c >= 0.7) return "medium";
   if (c >= 0.5) return "low";
   return "muted";
 }
