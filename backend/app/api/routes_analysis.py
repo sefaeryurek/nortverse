@@ -8,8 +8,10 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Path
-from sqlalchemy import cast, func, select
+from sqlalchemy import Float, cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
+
+from app.config import ANALYSIS
 
 from app.api.schemas import AnalyzeResponse, MatchSummary
 from app.api.services import (
@@ -162,10 +164,17 @@ async def get_matched_matches(
             archive_b = [_row_to_dict(r) for r in rows]
 
         if target.ft_all_ratios:
-            c_filters = [
-                *base_filters,
-                cast(Match.ft_all_ratios, JSONB) == cast(target.ft_all_ratios, JSONB),
-            ]
+            tol = ANALYSIS.pattern_c_tolerance
+            c_filters = list(base_filters)
+            if tol == 0.0:
+                c_filters.append(
+                    cast(Match.ft_all_ratios, JSONB) == cast(target.ft_all_ratios, JSONB),
+                )
+            else:
+                c_filters.append(Match.ft_all_ratios.isnot(None))
+                for key, target_val in target.ft_all_ratios.items():
+                    ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
+                    c_filters.append(ratio_expr.between(target_val - tol, target_val + tol))
             rows = (await session.execute(select(*detail_cols).where(*c_filters).limit(50))).all()
             archive_c = [_row_to_dict(r) for r in rows]
 
