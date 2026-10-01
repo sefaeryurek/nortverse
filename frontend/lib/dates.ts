@@ -19,3 +19,16 @@ export function isRecentScoreDate(value: string, today: string): boolean {
   const daysAgo = (Date.parse(`${today}T12:00:00Z`) - Date.parse(`${value}T12:00:00Z`)) / 86400000;
   return daysAgo === 0 || daysAgo === 1;
 }
+
+export function formatTime(iso: string | null): string {
+  if (!iso) return "--:--";
+  try {
+    return new Date(iso).toLocaleTimeString("tr-TR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Istanbul",
+    });
+  } catch {
+    return "--:--";
+  }
+}

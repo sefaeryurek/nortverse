@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { isRecentScoreDate, resolvePageDate } from "@/lib/dates";
+import { formatTime, isRecentScoreDate, resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import AutoRefresh from "@/components/AutoRefresh";
@@ -62,19 +62,6 @@ function ResultSkeleton() {
 
 interface Props {
   searchParams: Promise<{ date?: string | string[]; q?: string | string[] }>;
-}
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "--:--";
-  try {
-    return new Date(iso).toLocaleTimeString("tr-TR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "Europe/Istanbul",
-    });
-  } catch {
-    return "--:--";
-  }
 }
 
 /** Skor durumuna göre renk token'ı döner */

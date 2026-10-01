@@ -344,17 +344,17 @@ class TestCalibratedThresholds:
     ortalamasının üzerinde göstermedikçe "Üst"/"KG Var" tahmin edilmez.
     """
 
-    def test_default_threshold_is_55(self):
+    def test_default_base_rates(self):
         cfg = AnalysisConfig()
-        assert cfg.over_25_threshold == 55.0
-        assert cfg.btts_threshold == 55.0
+        assert cfg.over_25_base_rate == 55.0
+        assert cfg.btts_base_rate == 56.0
 
     def test_low_ust_predicts_alt_after_shrinkage(self, monkeypatch):
         # Shrinkage + baz oran (55%) ile 45% gözlem → adjusted ~46.9% < 50 → "Alt"
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
             AnalysisConfig(over_25_base_rate=55.0, btts_base_rate=56.0,
-                           result_shrinkage=0.45, shrinkage_decay_divisor=3.0),
+                           result_shrinkage=0.45),
         )
         data = {
             "match_count": 30,
@@ -371,7 +371,7 @@ class TestCalibratedThresholds:
     def test_pattern_56_still_predicts_over(self, monkeypatch):
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
-            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0),
+            AnalysisConfig(),
         )
         data = {
             "match_count": 30,
@@ -391,7 +391,7 @@ class TestCalibratedThresholds:
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
             AnalysisConfig(over_25_base_rate=55.0, btts_base_rate=56.0,
-                           result_shrinkage=0.45, shrinkage_decay_divisor=3.0),
+                           result_shrinkage=0.45),
         )
         data = {
             "match_count": 30,
@@ -408,8 +408,7 @@ class TestCalibratedThresholds:
     def test_btts_above_base_rate_predicts_yes(self, monkeypatch):
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
-            AnalysisConfig(over_25_threshold=55.0, btts_threshold=55.0,
-                           btts_base_rate=56.0),
+            AnalysisConfig(btts_base_rate=56.0),
         )
         data = {
             "match_count": 30,
@@ -429,7 +428,7 @@ class TestCalibratedThresholds:
         monkeypatch.setattr(
             "app.api.routes_evaluation.ANALYSIS",
             AnalysisConfig(over_25_base_rate=40.0, btts_base_rate=40.0,
-                           result_shrinkage=0.45, shrinkage_decay_divisor=3.0),
+                           result_shrinkage=0.45),
         )
         data = {
             "match_count": 30,
