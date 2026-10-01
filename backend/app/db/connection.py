@@ -4,7 +4,7 @@ DATABASE_URL ortam değişkeninden okunur (.env dosyası).
 Async engine (asyncpg) + sync engine (psycopg2, Alembic için).
 
 Pool/cache parametreleri env-driven:
-- Neon pooler / Supabase PgBouncer: DB_POOL_SIZE=2, DB_MAX_OVERFLOW=0, DB_STATEMENT_CACHE_SIZE=0
+- PgBouncer / pooler: DB_POOL_SIZE=2, DB_MAX_OVERFLOW=0, DB_STATEMENT_CACHE_SIZE=0
 - Direct PostgreSQL: DB_POOL_SIZE=5, DB_MAX_OVERFLOW=5, DB_STATEMENT_CACHE_SIZE=100 (defaultlar)
 """
 

@@ -49,7 +49,7 @@ async def _with_retry(
 ) -> T:
     """Geçici DB hatalarına karşı exponential backoff ile retry.
 
-    Supabase PgBouncer ara sıra connection drop yaşıyor; ilk denemede
+    PostgreSQL pooler ara sıra connection drop yaşayabiliyor; ilk denemede
     başarısız olan bir işlem 2-3 deneme içinde genelde tutar.
     Son deneme yine başarısız olursa exception yukarı fırlatılır.
     """
@@ -166,7 +166,7 @@ async def _upsert(
 ) -> list[dict]:
     """Analiz sonucunu (varsa pattern'lerle) DB'ye yaz; zaten varsa güncelle.
 
-    Geçici DB hatalarına karşı 3 denemeli retry (Supabase PgBouncer drop).
+    Geçici DB hatalarına karşı 3 denemeli retry (pooler connection drop).
     Sprint 8.9: pre-write validation — bozuk veri reddedilir.
     """
     row = _result_to_row(result, raw, patterns)
@@ -300,7 +300,7 @@ async def run_pipeline(
     only_hot: bool = False,
     incremental: bool = False,
 ) -> dict:
-    """Hot maçları çek, analiz et, Supabase'e yaz.
+    """Hot maçları çek, analiz et, PostgreSQL'e yaz.
 
     Dönüş: {"analyzed": N, "skipped": N, "errors": N}
     """

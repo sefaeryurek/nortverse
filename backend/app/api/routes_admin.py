@@ -11,7 +11,7 @@ from fastapi import APIRouter
 from sqlalchemy import case, func, or_, select, text
 
 from app.analysis.correlation import compute_poisson_correlations
-from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
+from app.analysis.league_filter import CUP_KEYWORDS
 from app.analysis.repair import compute_quality_score
 from app.analysis.snapshots import BASELINE_VERSION, RULE_VERSION
 from app.analysis.score_snapshots import SCORE_RULE_VERSION

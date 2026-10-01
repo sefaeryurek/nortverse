@@ -68,7 +68,7 @@ async def find_pattern_c_all_periods(
     Sprint 8.10 — Egress optimizasyonu:
     - tolerance == 0.0: DB-side JSONB equality WHERE filter (~50KB egress / çağrı)
       Eski yol: tüm 13K+ satır çekilir Python'da filter (~130MB egress / çağrı)
-      Etki: %99.96 azalma — Supabase Fair Use kotasını korur
+      Etki: %99.96 azalma — DB egress kotasını korur
     - tolerance > 0.0: eski yol (fuzzy match, fallback)
 
     Args:
