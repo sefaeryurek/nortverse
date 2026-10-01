@@ -321,7 +321,6 @@ nortverse/
 │   │   ├── list-validation.ts     # Liste veri doğrulama (Sprint 12 denetim)
 │   │   ├── match-context.tsx      # MatchProvider — match metadata paylaşımı (Sprint 8.7)
 │   │   ├── pattern-fields.ts      # Pattern alan isimleri (Sprint 12 denetim)
-│   │   ├── selection-compatibility.ts  # Seçim uyumluluk kontrolü (Sprint 12 denetim)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
 │   ├── __tests__/                 # 209 vitest test
 │   │   ├── fixtures.ts            # Test factory'leri
@@ -332,7 +331,6 @@ nortverse/
 │   │   ├── day-tabs.test.ts       # DayTabs
 │   │   ├── api.test.ts            # API çağrıları
 │   │   ├── analysis-validation.test.ts    # Analiz doğrulama
-│   │   ├── selection-compatibility.test.ts # Seçim uyumluluk
 │   │   ├── date-validation.test.ts        # Tarih doğrulama
 │   │   ├── market-regressions.test.ts     # Pazar regresyon
 │   │   ├── cart-display.test.tsx           # Sepet görüntüleme
@@ -1142,6 +1140,17 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - .env.example: Sprint 37-40 eklenen 12 env var dokümante edildi
 - **Sonuç:** 682 backend + 209 frontend + 28 E2E = **919 toplam test** (tümü yeşil, 72 dead test temizlendi)
 
+### Sprint 41 — TAMAMLANDI ✅ (Kod Kalitesi & Tutarsızlık Düzeltmeleri)
+- **Bağlam:** 3 bağımsız araştırma ajanı Sprint 40 sonrası codebase'i taradı. 6 plan halinde düzeltmeler uygulandı.
+- **Pattern C matched-matches fuzzy match (`routes_analysis.py`):** Endpoint exact JSONB equality kullanıyordu — gerçek Pattern C analizi `tolerance=0.5` fuzzy match kullanırken. Her oran anahtarı için `BETWEEN(target - 0.5, target + 0.5)` DB-side koşulu eklendi, `ANALYSIS.pattern_c_tolerance` config'den okunuyor.
+- **Türkçe karakter düzeltmeleri (`degerlendirme/page.tsx`):** 6 yerde ASCII → Türkçe karakter (Guvenli→Güvenli, mac→maç, Isabeti→İsabeti, Ust→Üst, Sonuc→Sonuç)
+- **Dead config temizliği (`config.py`):** Hiçbir uygulama kodunda kullanılmayan 3 alan silindi: `over_25_threshold`, `btts_threshold`, `shrinkage_decay_divisor`. İlgili test ve env var'lar güncellendi.
+- **CLAUDE.md margin gate düzeltmesi:** 8.0 → 10.0 (config.py default ile tutarlı)
+- **Dead frontend code temizliği:** `selection-compatibility.ts` + test silindi (sadece kendi testi import ediyordu), 4 dead interface (`AnalysisEvidence`, `MarketValidationV3`, `AnalysisValidation`, `ScoreValidation`) kaldırıldı, dead `validSummaries` export ve `makeMarketV3` factory kaldırıldı
+- **Stale referans temizliği:** 5 yerde eski "Supabase" referansı "PostgreSQL/pooler/DB egress" olarak güncellendi, `routes_admin.py` kullanılmayan `is_supported_league` import kaldırıldı
+- **formatTime DRY:** `bulten/page.tsx` ve `sonuclar/page.tsx`'te duplicate `formatTime` → `lib/dates.ts`'e taşındı
+- **Sonuç:** 678 backend + 201 frontend + 28 E2E = **907 toplam test** (tümü yeşil)
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1331,7 +1340,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **`conftest.py` test DB izolasyonu (Sprint 12 denetim):** `tests/conftest.py` test başlamadan önce `DATABASE_URL`'yi dummy değere override eder — testlerin yanlışlıkla production DB'ye bağlanması engellenir.
 
-- **Frontend doğrulama modülleri (Sprint 12 denetim):** `analysis-validation.ts` (analiz verisi şekil kontrolü), `list-validation.ts` (liste veri doğrulama), `selection-compatibility.ts` (seçim uyumluluk), `pattern-fields.ts` (pattern alan isimleri), `dates.ts` (tarih yardımcıları) — frontend'e gelen backend verisinin beklenen formatta olduğunu doğrular, bozuk veri UI crash'i önler.
+- **Frontend doğrulama modülleri (Sprint 12 denetim):** `analysis-validation.ts` (analiz verisi şekil kontrolü), `list-validation.ts` (liste veri doğrulama), `pattern-fields.ts` (pattern alan isimleri), `dates.ts` (tarih yardımcıları + `formatTime`) — frontend'e gelen backend verisinin beklenen formatta olduğunu doğrular, bozuk veri UI crash'i önler.
 
 - **Stale write koruması (Sprint 12 denetim):** `_upsert` fonksiyonu `analyzed_at` karşılaştırır — DB'deki kaydın daha yeni bir analizi varsa eski veriyle üzerine yazılmaz. `test_stale_writes.py` ile doğrulanır.
 
@@ -1381,9 +1390,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-01 — Sprint 40 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-10-01 — Sprint 41 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 40 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 41 Tamamlandı
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1421,10 +1430,10 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 682 | ✅ Yeşil |
-| **Frontend birim** | vitest | 209 | ✅ Yeşil (72 dead test temizlendi) |
+| **Backend** | pytest | 678 | ✅ Yeşil |
+| **Frontend birim** | vitest | 201 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 919 | — |
+| **Toplam** | — | 907 | — |
 
 ### Sıradaki Adımlar
 
