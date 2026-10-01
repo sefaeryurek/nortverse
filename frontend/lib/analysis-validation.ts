@@ -1,5 +1,5 @@
 import { PATTERN_PERCENT_FIELDS } from "./pattern-fields";
-import type { AnalyzeResponse, MatchSummary } from "./types";
+import type { AnalyzeResponse } from "./types";
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -90,14 +90,3 @@ export function validAnalysis(value: unknown, requestedId: string): value is Ana
       && ["home_form", "away_form", "h2h"].every((key) => trend((value.trends as Record<string, unknown>)[key])));
 }
 
-export function validSummaries(value: unknown): value is MatchSummary[] {
-  if (!Array.isArray(value)) return false;
-  const ids = new Set();
-  return value.every((row) => {
-    if (!identity(row) || ids.has(row.match_id) || !nullableText(row.league_code) || !nullableText(row.season)
-      || !["actual_ft_home", "actual_ft_away", "actual_ht_home", "actual_ht_away"].every((key) => score(row[key]))
-      || !["ft_scores_1", "ft_scores_x", "ft_scores_2"].every((key) => row[key] === null || scores(row[key]))) return false;
-    ids.add(row.match_id);
-    return true;
-  });
-}
