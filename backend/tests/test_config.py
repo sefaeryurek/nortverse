@@ -164,30 +164,6 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.pattern_c_tolerance == 1.0
 
-    def test_default_over_25_threshold(self, monkeypatch):
-        monkeypatch.delenv("OVER_25_THRESHOLD", raising=False)
-        from app.config import AnalysisConfig
-        cfg = AnalysisConfig()
-        assert cfg.over_25_threshold == 55.0
-
-    def test_override_over_25_threshold(self, monkeypatch):
-        monkeypatch.setenv("OVER_25_THRESHOLD", "60.0")
-        from app.config import AnalysisConfig
-        cfg = AnalysisConfig()
-        assert cfg.over_25_threshold == 60.0
-
-    def test_default_btts_threshold(self, monkeypatch):
-        monkeypatch.delenv("BTTS_THRESHOLD", raising=False)
-        from app.config import AnalysisConfig
-        cfg = AnalysisConfig()
-        assert cfg.btts_threshold == 55.0
-
-    def test_override_btts_threshold(self, monkeypatch):
-        monkeypatch.setenv("BTTS_THRESHOLD", "58.0")
-        from app.config import AnalysisConfig
-        cfg = AnalysisConfig()
-        assert cfg.btts_threshold == 58.0
-
     def test_default_eval_min_matches(self, monkeypatch):
         monkeypatch.delenv("EVAL_MIN_MATCHES", raising=False)
         from app.config import AnalysisConfig

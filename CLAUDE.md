@@ -1084,7 +1084,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - **Logaritmik shrinkage:** `shrink = 0.45 / (1 + log(mc+2) / 3.0)` — eski lineer formülden daha güçlü
   - **Lig bazlı taban oranları:** 7 lig için gerçek ev/beraberlik/deplasman dağılımı (Bundesliga %50.1 ev vs Ligue 1 %42.1)
   - **Baz oran farkındalıklı O/U ve KG:** `adjusted = raw × (1-shrink) + base_rate × shrink`, karar `adjusted > 50%`
-  - **Margin gate:** `result_margin = top - runner_up`, `is_confident = margin >= 8.0` — PatternEvaluation'a eklendi
+  - **Margin gate:** `result_margin = top - runner_up`, `is_confident = margin >= 10.0` (`RESULT_MIN_MARGIN` config, default 10.0) — PatternEvaluation'a eklendi
   - **Confident metrikleri:** EvaluationSummary'e `confident_evaluated/hit/pct` eklendi
   - **Frontend B/C anlaşmazlık cezası:** `DISAGREE_PENALTY = 0.70` — iki arşiv farklı kazanan seçerse güven düşer
   - **Pazar-bazlı minPctOverride:** `ou_25` ve `kg` pazarlarına 62% minimum eşik (baseline altı performans)
