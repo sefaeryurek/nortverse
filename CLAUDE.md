@@ -296,7 +296,6 @@ nortverse/
 │   │   ├── AddToCartButton.tsx    # "+" / "✓" sepet toggle butonu (Sprint 8.7)
 │   │   ├── BetCart.tsx            # Floating bahis sepeti — desktop panel + mobile sheet (Sprint 8.7)
 │   │   ├── BultenRow.tsx          # Maç satırı (link ?home=&away= param ile, lig bayrak)
-│   │   ├── ComboSuggestion.tsx    # 3 hazır kombo kartı (Sprint 8.5)
 │   │   ├── DayTabs.tsx            # 8 günlük kayan pencere, basePath prop ile
 │   │   ├── DetailedStats.tsx      # Tüm 137 alan, accordion (Sprint 8.4)
 │   │   ├── IddaaCoupon.tsx        # Arşiv istatistik kartları — orchestrator
@@ -304,12 +303,9 @@ nortverse/
 │   │   ├── RetryButton.tsx        # Yeniden deneme butonu (Sprint 12 denetim)
 │   │   ├── ScoreList.tsx          # Katman A 3.5+ skor listesi
 │   │   ├── Sidebar.tsx            # Sol menü (md altı gizli — mobile)
-│   │   ├── StatBadge.tsx          # Yeniden kullanılabilir yüzde rozeti
 │   │   ├── TopPicks.tsx           # Confidence sıralı en güçlü tahminler (Sprint 8.4)
 │   │   ├── TrendsPanel.tsx        # Form & H2H trend kartları (Sprint 8.8)
 │   │   ├── PowerScoreGauge.tsx    # Maç güç skoru gauge component (Sprint 33)
-│   │   ├── ValidationSection.tsx  # Analiz doğrulama bölümü (Sprint 30) — Sprint 36'da analiz sayfasından kaldırıldı
-│   │   ├── ScoreValidationSection.tsx  # Skor doğrulama bölümü (Sprint 30) — Sprint 36'da analiz sayfasından kaldırıldı
 │   │   ├── MatchedMatchesList.tsx # Eşleşen arşiv maçları accordion — İY/2Y/MS skorları (Sprint 36)
 │   │   ├── AutoRefresh.tsx        # Otomatik yenileme component
 │   │   └── LiveMatchBadge.tsx     # Canlı maç rozeti
@@ -317,10 +313,7 @@ nortverse/
 │   │   ├── analysis-validation.ts # Analiz verisi doğrulama (Sprint 12 denetim)
 │   │   ├── api.ts                 # Backend API çağrıları
 │   │   ├── cart.ts                # useCart hook — localStorage çok-maç sepet (Sprint 8.7)
-│   │   ├── combos.ts             # generateCombos — kombo üretimi + korelasyonlu jointProb (Sprint 8.5/19)
-│   │   ├── correlations.ts       # Poisson korelasyon tablosu + getCorrectionFactor (Sprint 19)
-│   │   ├── correlation-table.json # 299 korelasyon faktörü statik tablo (Sprint 19)
-│   │   ├── confidence.ts          # Confidence hesaplama + Top Picks (Sprint 8.4)
+│   │   ├── confidence.ts          # Confidence hesaplama + MarketSummary (Sprint 8.4, Sprint 40 dead code temizliği)
 │   │   ├── dates.ts               # Tarih yardımcıları (Sprint 12 denetim)
 │   │   ├── env.ts                 # getApiBase + getProxyTarget (Sprint 10)
 │   │   ├── labels.ts              # Periyot etiketleri (Sprint 8.4)
@@ -330,10 +323,9 @@ nortverse/
 │   │   ├── pattern-fields.ts      # Pattern alan isimleri (Sprint 12 denetim)
 │   │   ├── selection-compatibility.ts  # Seçim uyumluluk kontrolü (Sprint 12 denetim)
 │   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
-│   ├── __tests__/                 # 277 vitest test
+│   ├── __tests__/                 # 209 vitest test
 │   │   ├── fixtures.ts            # Test factory'leri
 │   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
-│   │   ├── combos.test.ts         # Kombo üretimi (~15 test)
 │   │   ├── cart.test.ts           # Sepet helper'ları (~14 test)
 │   │   ├── use-cart.test.tsx      # useCart hook (14 test)
 │   │   ├── env.test.ts            # URL fallback
@@ -349,13 +341,11 @@ nortverse/
 │   │   ├── bulten-row.test.tsx            # BultenRow component (8 test)
 │   │   ├── top-picks.test.tsx             # TopPicks component (9 test)
 │   │   ├── market-summary.test.tsx        # MarketSummary component (7 test)
-│   │   ├── combo-suggestion.test.tsx      # ComboSuggestion component (7 test)
 │   │   ├── add-to-cart-button.test.tsx    # AddToCartButton component (7 test)
 │   │   ├── day-tabs-render.test.tsx       # DayTabs render (7 test)
 │   │   ├── leagues.test.ts               # Lig eşleme (12 test)
 │   │   ├── trends-panel.test.tsx          # TrendsPanel component (13 test)
 │   │   ├── retry-button.test.tsx          # RetryButton component (4 test)
-│   │   ├── correlations.test.ts          # Korelasyon faktörleri (10 test, Sprint 19)
 │   │   ├── power-score-gauge.test.tsx    # PowerScoreGauge component (11 test, Sprint 33)
 │   │   ├── iddaa-coupon.test.tsx         # IddaaCoupon component testleri
 │   │   ├── analyze-client.test.tsx       # AnalyzeClient component testleri
@@ -1124,6 +1114,34 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Fixture cache sınırı:** Memory cache 30 entry LRU — eski tarihler otomatik temizlenir
 - **Sonuç:** 682 backend + 281 frontend + 28 E2E = **991 toplam test**
 
+### Sprint 40 — TAMAMLANDI ✅ (3 Ajan Raporu Sonrası Kapsamlı İyileştirme)
+- **Bağlam:** 3 bağımsız araştırma ajanı (Strateji, Frontend UX, Teknik Kalite) tüm codebase'i taradı. 8 plan halinde iyileştirmeler uygulandı.
+- **Memory leak fix (`services.py`):** `_snapshot_checked_at` ve `_snapshot_finalized` dict'lerine eviction eklendi — `cache_get` TTL expiry'de temizleniyor, sınırsız büyüme engellendi
+- **O/U ve BTTS log-odds shrinkage (`routes_evaluation.py`):** Lineer shrinkage → logit/sigmoid dönüşümü — result ile tutarlı hale getirildi
+- **Dead code temizliği (11 dosya silindi):**
+  - 4 dead component: ComboSuggestion, StatBadge, ValidationSection, ScoreValidationSection
+  - 3 dead lib: combos.ts, correlations.ts, correlation-table.json
+  - 4 dead test dosyası: combo-suggestion, stat-badge, combos, correlations testleri
+  - Dead fonksiyonlar: api.ts'ten 4, confidence.ts'ten 3 (buildPicks, resolveConflicts, getTopPicks + dynamicMinPct)
+  - Dead cache kuralları: main.py'den 3 ölü endpoint
+  - TopPicks.tsx duplicate `pctBarBg` fonksiyonu kaldırıldı
+- **Minor bug fix'ler:**
+  - Sidebar.tsx Türkçe karakterler (Bülten, Sonuçlar, Değerlendirme)
+  - MatchedMatchesList.tsx hata yutma düzeltildi (console.error)
+  - AnalyzeClient.tsx hardcoded "white" → `var(--nv-text-on-accent)`
+  - routes_fixture.py `_enrich_prediction_status` anlamsız or dalı kaldırıldı
+  - match-visibility.ts "pending" status desteği eklendi
+  - runner.py docstring "Supabase" → "PostgreSQL"
+- **Performans:**
+  - routes_admin.py: admin_quality 9,257 satır Python filtre → DB-side COUNT
+  - connection.py: `pool_recycle=3600` eklendi (`DB_POOL_RECYCLE` env var)
+  - routes_analysis.py: get_matched_matches çift session → tek session
+- **Güvenlik:**
+  - CORS `allow_headers=*` → `Content-Type/Accept/Authorization`
+  - User-Agent Chrome 128-130, Firefox 131, Safari 18.0 güncellendi
+  - .env.example: Sprint 37-40 eklenen 12 env var dokümante edildi
+- **Sonuç:** 682 backend + 209 frontend + 28 E2E = **919 toplam test** (tümü yeşil, 72 dead test temizlendi)
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1363,9 +1381,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-09-30 — Sprint 39 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-10-01 — Sprint 40 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 39 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 40 Tamamlandı
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1399,20 +1417,21 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | B+C uyum (MS) | %46.8 | — | %44.4 | TEK doğrulanmış sinyal (+6 puan) |
 | Bundesliga MS | %50.1 | %44.3 | — | En iyi lig |
 
-### Test Durumu (Sprint 39 sonrası)
+### Test Durumu (Sprint 40 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
 | **Backend** | pytest | 682 | ✅ Yeşil |
-| **Frontend birim** | vitest | 281 | ✅ Yeşil |
+| **Frontend birim** | vitest | 209 | ✅ Yeşil (72 dead test temizlendi) |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 991 | — |
+| **Toplam** | — | 919 | — |
 
 ### Sıradaki Adımlar
 
 Bekleyen konular kullanıcı kararı gerektirir:
 
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
+- **Frontend/Backend strateji birleştirme:** Frontend MarketSummary basit yüzde karşılaştırma, backend evaluation log-odds shrinkage + lig bazlı baz oranları — ikisi farklı sayfalarda ama uzun vadede birleştirilmeli
 - **Platt scaling:** Confidence skoru hâlâ olasılık olarak yorumlanmamalı — gelecekte Platt scaling veya isotonic regression ile gerçek olasılığa kalibre edilebilir
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
@@ -1424,4 +1443,4 @@ Bekleyen konular kullanıcı kararı gerektirir:
 - **Task Scheduler "missed run":** Kaçırılan görevlerin yeniden çalıştırılması ayarı etkinleştirilmeli
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
-- **`ComboSuggestion` ve `StatBadge` dead component'ler:** Hiçbir yerde render edilmiyor (sadece test), gelecekte kullanılacak mı karar verilmeli
+- **`ComboSuggestion` ve `StatBadge` dead component'ler:** Sprint 40'ta silindi ✅
