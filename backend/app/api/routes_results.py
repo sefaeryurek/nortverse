@@ -116,13 +116,15 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         league_name = item.get("league_name") or (row.league_name if row else None)
         if not is_supported_league(league_name, league_code):
             continue
+        if row is None:
+            continue
 
-        kickoff = _utc_datetime(item.get("kickoff_time") or (row.kickoff_time if row else None))
+        kickoff = _utc_datetime(item.get("kickoff_time") or row.kickoff_time)
         if kickoff is not None and kickoff > now_utc:
             continue
         observed = live_snapshot.scores.get(item["match_id"]) if live_snapshot else None
         state = resolve_match_state(
-            item, kickoff, row.actual_ft_home if row else None, row.actual_ft_away if row else None,
+            item, kickoff, row.actual_ft_home, row.actual_ft_away,
             observed, live_snapshot.checked_at if live_snapshot else None, now_utc,
         )
         if state.status != "finished":
@@ -137,26 +139,25 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
             result = "1" if h > a else ("2" if a > h else "X")
             kg_var = h > 0 and a > 0
             over_25 = (h + a) >= 3
-            if row is not None:
-                covered_list = (
-                    row.ft_scores_1 if result == "1"
-                    else row.ft_scores_2 if result == "2"
-                    else row.ft_scores_x
-                ) or []
-                katman_a_covered = f"{h}-{a}" in covered_list
+            covered_list = (
+                row.ft_scores_1 if result == "1"
+                else row.ft_scores_2 if result == "2"
+                else row.ft_scores_x
+            ) or []
+            katman_a_covered = f"{h}-{a}" in covered_list
 
         out.append(ResultOut(
             match_id=item["match_id"],
-            home_team=item.get("home_team") or (row.home_team if row else ""),
-            away_team=item.get("away_team") or (row.away_team if row else ""),
+            home_team=item.get("home_team") or row.home_team,
+            away_team=item.get("away_team") or row.away_team,
             league_code=league_code,
             league_name=league_name,
             kickoff_time=kickoff.isoformat() if kickoff else None,
             actual_ft_home=h,
             actual_ft_away=a,
-            actual_ht_home=(row.actual_ht_home if row and row.actual_ht_home is not None
+            actual_ht_home=(row.actual_ht_home if row.actual_ht_home is not None
                             else item.get("actual_ht_home")),
-            actual_ht_away=(row.actual_ht_away if row and row.actual_ht_away is not None
+            actual_ht_away=(row.actual_ht_away if row.actual_ht_away is not None
                             else item.get("actual_ht_away")),
             score_checked_at=state.score_checked_at,
             status="finished",
