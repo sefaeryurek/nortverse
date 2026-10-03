@@ -34,6 +34,17 @@ const NAV = [
       </svg>
     ),
   },
+  {
+    href: "/canli",
+    label: "Canlı",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" fill="var(--nv-accent-red)" stroke="none" />
+        <circle cx="12" cy="12" r="7" />
+        <circle cx="12" cy="12" r="11" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Sidebar() {
