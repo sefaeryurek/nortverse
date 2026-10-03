@@ -136,7 +136,7 @@ Excel'de çalışan mevcut analiz sistemini web tabanlı yapıyoruz. Sıfırdan 
 
 ## Sistemin Özü
 
-### 3 Katmanlı Analiz
+### 4 Katmanlı Analiz
 
 **Katman A — Klasik Skor Hesaplama (TAMAMLANDI ✅)**
 ```
@@ -160,6 +160,13 @@ oran(hg, ag, periyot) = (
 - **Kritik tasarım kararı:** FT oranlarıyla tek sorgu yapılır, aynı eşleşme seti İY/2Y/MS için kullanılır
   - Sebep: Bir maçın İY oran benzerliği varsa 2Y ve MS için de vardır. Periyot başına ayrı sorgu yapılsaydı "İY var, MS yok" gibi tutarsız sonuçlar çıkardı
 - `app/analysis/pattern_c.py` → `find_pattern_c_all_periods(ft_ratios)` → `(ht_result, h2_result, ft_result)`
+
+**Katman D — Cosine Similarity / Arşiv-3 (TAMAMLANDI ✅)**
+- Bülten maçının 35 boyutlu FT oran vektörünü tüm arşiv maçlarıyla cosine similarity ile karşılaştırır
+- Top-N en benzer maçları seçer (default N=20, min_similarity=0.85)
+- Her zaman sonuç döner (Pattern C'nin 0-eşleşme sorunu yok)
+- Pure Python, numpy gerekmez (<15ms 9,300+ vektör)
+- `app/analysis/pattern_d.py` → `find_pattern_d_all_periods(ft_ratios, top_n, min_similarity)`
 
 ### 35 Skor Listesi (Sıra Sabit)
 
@@ -213,6 +220,7 @@ nortverse/
 │   │   │   ├── league_filter.py   # is_supported_league + canonical_league_name (Sprint 8.9)
 │   │   │   ├── pattern_b.py       # find_pattern_b_matches — JSONB equality
 │   │   │   ├── pattern_c.py       # find_pattern_c_all_periods — FT oranları, TEK sorgu
+│   │   │   ├── pattern_d.py       # find_pattern_d_all_periods — cosine similarity Top-N (Sprint 46)
 │   │   │   ├── pattern_stats.py   # PatternResult model + compute_stats — ~130 istatistik alanı
 │   │   │   ├── persist.py         # compute_all_patterns + update_match_patterns (Sprint 8)
 │   │   │   ├── correlation.py      # Poisson korelasyon faktörleri — pazar çiftleri arası (Sprint 19)
@@ -230,6 +238,7 @@ nortverse/
 │   │   │   ├── routes_results.py  # /api/results, /api/matches endpoint'leri (Sprint 22)
 │   │   │   ├── routes_admin.py    # /api/health, /api/admin/quality, /api/correlations (Sprint 22)
 │   │   │   ├── routes_evaluation.py # /api/evaluation — günlük tahmin vs sonuç karşılaştırması (Sprint 37)
+│   │   │   ├── routes_live_ht.py  # /api/live-ht — canlı İY eşleşme endpoint'leri (Sprint 47)
 │   │   │   ├── score_state.py     # Skor durumu yönetimi
 │   │   │   └── live_snapshot.py   # Canlı snapshot endpoint
 │   │   ├── pipeline/
@@ -269,7 +278,9 @@ nortverse/
 │   │   ├── test_match_detail_parser.py  # H2H parser birim testleri (58 test, Sprint 23)
 │   │   ├── test_services.py             # API services birim testleri (26 test, Sprint 23)
 │   │   ├── test_config.py              # Config env override testleri (25+2 test, Sprint 23+37)
-│   │   └── test_evaluation.py          # Günlük değerlendirme testleri (19 test, Sprint 37)
+│   │   ├── test_evaluation.py          # Günlük değerlendirme testleri (19 test, Sprint 37)
+│   │   ├── test_pattern_d.py          # Cosine similarity testleri (18 test, Sprint 46)
+│   │   └── test_live_ht.py            # Canlı İY eşleşme testleri (17 test, Sprint 47)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
@@ -288,6 +299,9 @@ nortverse/
 │   │   ├── degerlendirme/
 │   │   │   ├── page.tsx           # Server component — günlük tahmin isabeti değerlendirmesi (Sprint 37)
 │   │   │   └── loading.tsx        # Skeleton fallback (Sprint 37)
+│   │   ├── canli/
+│   │   │   ├── page.tsx           # Client component — canlı devre arası maçlar + İY istatistikleri (Sprint 48)
+│   │   │   └── loading.tsx        # Skeleton fallback (Sprint 48)
 │   │   └── analyze/[match_id]/
 │   │       ├── page.tsx           # Client component — maç analiz sayfası
 │   │       ├── AnalyzeClient.tsx  # Analiz client component (Sprint 28)
@@ -1175,6 +1189,46 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **API type güncellendi (`api.ts`):** `PatternStatusMap` type'ına `agreement?: boolean` eklendi
 - **Sonuç:** 688 backend + 206 frontend + 28 E2E = **922 toplam test**
 
+### Sprint 46 — TAMAMLANDI ✅ (Arşiv-3 Cosine Similarity)
+- **Bağlam:** Pattern B sabit set eşleşmesi, Pattern C fuzzy match ama 0-eşleşme sorunu vardı. Cosine similarity her zaman Top-N sonuç döner.
+- **`app/analysis/pattern_d.py` (yeni modül):**
+  - `cosine_similarity(a, b)`: 35 boyutlu vektörler arası benzerlik (pure Python, numpy gerekmez)
+  - `find_pattern_d_all_periods(ft_ratios, top_n, min_similarity, exclude_match_id)`: tüm aktif maçlardan en benzer N tanesini seçer
+  - `_candidate_cache`: 1 saatlik TTL ile aday vektörleri cache'ler — 9,300+ maç için <15ms
+  - `compute_stats(rows, period)` mevcut fonksiyon yeniden kullanılır
+- **DB değişiklikleri:** 3 yeni JSONB kolon (`pattern_ht_d`, `pattern_h2_d`, `pattern_ft_d`), Alembic migration `fcefb39a3642`
+- **Config:** `PATTERN_D_TOP_N` (default 20), `PATTERN_D_MIN_SIMILARITY` (default 0.85)
+- **Entegrasyon:** `persist.py` 6→9 anahtar, `services.py` pattern_d okuma, `routes_fixture.py` has_d badge, `schemas.py` 3 alan
+- **Frontend:** `types.ts` ht_d/h2_d/ft_d, `BultenRow.tsx` A3 badge (amber), `IddaaCoupon.tsx` + `DetailedStats.tsx` Arşiv 3 kartı
+- **Testler:** 18 yeni test (`test_pattern_d.py`), 4 config test, pattern_failure_handling güncellendi
+- **Sonuç:** 711 backend + 206 frontend + 28 E2E = **945 toplam test**
+
+### Sprint 47 — TAMAMLANDI ✅ (Canlı İY Eşleşme Backend)
+- **Bağlam:** Devre arasındaki maçların İY skorunu arşivdeki geçmiş maçlarla karşılaştırıp MS ve 2Y tahminleri üretmek
+- **`app/api/routes_live_ht.py` (yeni modül):**
+  - `GET /api/live-ht`: Bugünün devre arasındaki (HT veya dakika 46-60) maçlarını döndürür
+  - `GET /api/live-ht/{ht_home}-{ht_away}/stats`: Verilen İY skoruna sahip arşiv maçlarından MS/2Y istatistikleri
+  - `_ht_observed` dict: HT skor hafızası — devre arasında yakalanan skor 2. yarıda da hatırlanır
+  - `_stats_cache`: 1 saatlik TTL ile İY skor istatistikleri cache'i
+  - `_is_ht_window(minute)`: HT veya 46-60 dakika kontrolü
+- **DB index:** `ix_matches_ht_score` — `(actual_ht_home, actual_ht_away)` partial composite index
+- **Testler:** 17 yeni test (`test_live_ht.py`) — _is_ht_window, model, cleanup, endpoint validasyon
+- **Sonuç:** 728 backend + 206 frontend + 28 E2E = **962 toplam test**
+
+### Sprint 48 — TAMAMLANDI ✅ (Canlı Sayfası Frontend)
+- **Bağlam:** Sprint 47 backend endpoint'leri için frontend `/canli` route
+- **`app/canli/page.tsx` (yeni):** Client component, 45sn polling ile devre arasındaki maçları gösterir
+  - Maç kartları: lig bayrak, saat, takımlar, İY skoru (büyük font, mavi vurgu), canlı badge (kırmızı pulsing)
+  - Tıklayınca inline genişleyen istatistik paneli: MS 1/X/2 + 2Y 1/X/2 yüzde çubukları, Üst/Alt 2.5, KG, en sık MS skorları
+  - Analiz sayfasına link
+  - Boş durum: "Şu anda devre arasında maç yok" + otomatik güncelleme açıklaması
+  - Hata durumu: "Tekrar Dene" butonu
+- **`app/canli/loading.tsx` (yeni):** Skeleton fallback
+- **`components/Sidebar.tsx` güncellendi:** "Canlı" nav item, pulsing dot SVG ikonu
+- **`lib/api.ts` güncellendi:** `LiveHTMatch`, `TopFTScore`, `LiveHTStats` interface'leri + `getLiveHTMatches()`, `getLiveHTStats()` fonksiyonları
+- **Design system uyumu:** Mevcut `--nv-` token'ları, `nv-pct-bar`, `nv-live-pulse`, `nv-fade-in` CSS sınıfları
+- **Sonuç:** 728 backend + 206 frontend + 28 E2E = **962 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1354,6 +1408,10 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Birleşik güven rozeti (Sprint 45):** `/api/fixture/pattern-status` endpoint'inde `agreement` alanı — B ve C arşivlerinin MS `result_1/x/2_pct` argmax'ı karşılaştırılır. Aynı kazanan = uyum. `BultenRow.tsx`'de uyumlu maçlara altın gradient "A1+A2" rozet, uyumsuzda ayrı A1/A2 badge'leri.
 
+- **Cosine Similarity / Pattern D (Sprint 46):** `app/analysis/pattern_d.py` — 35 boyutlu FT oran vektörü üzerinde cosine similarity. `_candidate_cache` (1 saat TTL) ile tüm aktif maçların vektörleri bellekte tutulur. İlk çağrıda ~2.6 MB veri çekilir, sonraki çağrılar <1ms. Top-N (default 20) en benzer maçlar seçilir, min_similarity (default 0.85) altı filtrelenir. `compute_stats(rows, period)` ile 3 periyot istatistik üretilir. 9 anahtar persist: `pattern_ht/h2/ft_b/c/d`. Config: `PATTERN_D_TOP_N`, `PATTERN_D_MIN_SIMILARITY`.
+
+- **Canlı İY Eşleşme (Sprint 47-48):** `app/api/routes_live_ht.py` — devre arasındaki maçların İY skorunu arşivle karşılaştırır. `_ht_observed` dict ile HT skor hafızası (2. yarıda İY skoru kaybolur, bu dict hatırlar). `_stats_cache` 1 saat TTL. `_is_ht_window(minute)` HT veya 46-60 dakika kontrolü. Frontend `/canli` route: client component, 45sn polling, maç kartları, tıklayınca inline stats paneli (MS/2Y 1/X/2 çubukları, Üst 2.5, KG, en sık skorlar).
+
 - **Kanonik lig adı (Sprint 8.9+20):** `LEAGUE_ALIASES` 50+ alias → kanonik ad. `_result_to_row` `canonical_league_name(r.league_code)` uygular → yeni maçlar tutarlı. Eski maçlar için `normalize-leagues --apply` CLI komutu (Sprint 20) toplu normalize yapar. `repair.py:needs_normalization()` ile `audit-db` normalize edilmemiş kayıt sayısını gösterir.
 
 - **Audit & quality görünürlük (Sprint 8.9 → 8.10 değiştirildi):** Quality skoru artık `/api/admin/quality` endpoint'inde. Sprint 8.9'da `/api/health` içine konmuştu ama UptimeRobot pinglerinde tüm matches taraması = ~187 MB/gün egress → Sprint 8.10'da ayrı endpoint'e taşındı. UptimeRobot artık hafif `/api/health` pingler. CLI `audit-db` aynı bilgiyi Rich tabloyla verir.
@@ -1422,9 +1480,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-03 — Sprint 45 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-10-03 — Sprint 48 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 45 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 48 Tamamlandı
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1458,27 +1516,27 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | B+C uyum (MS) | %46.8 | — | %44.4 | TEK doğrulanmış sinyal (+6 puan) |
 | Bundesliga MS | %50.1 | %44.3 | — | En iyi lig |
 
-### Test Durumu (Sprint 45 sonrası)
+### Test Durumu (Sprint 48 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 688 | ✅ Yeşil |
+| **Backend** | pytest | 728 | ✅ Yeşil |
 | **Frontend birim** | vitest | 206 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 922 | — |
+| **Toplam** | — | 962 | — |
 
 ### Sıradaki Adımlar
 
 Bekleyen konular kullanıcı kararı gerektirir:
 
-- **Pattern recompute gerekli:** Sprint 44 adaptive tolerance sonrası `recompute-patterns` çalıştırılmalı — 2,764 maçta 0 olan Pattern C eşleşmeleri artık bulunacak
-- **Arşiv-3 Cosine Similarity (Faz 2):** Sprint 46+'da ayrı onay gerektirir — potansiyel numpy bağımlılığı, yeni DB kolonu, backtest
+- **Pattern D recompute gerekli:** Sprint 46 sonrası `recompute-patterns` çalıştırılmalı — tüm 9,490 maç için pattern_d hesaplanacak
+- **Pattern C recompute gerekli:** Sprint 44 adaptive tolerance sonrası `recompute-patterns` çalıştırılmalı — 2,764 maçta 0 olan Pattern C eşleşmeleri artık bulunacak
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
 - **Frontend/Backend strateji birleştirme:** Frontend MarketSummary basit yüzde karşılaştırma, backend evaluation log-odds shrinkage + lig bazlı baz oranları — ikisi farklı sayfalarda ama uzun vadede birleştirilmeli
 - **Platt scaling:** Confidence skoru hâlâ olasılık olarak yorumlanmamalı — gelecekte Platt scaling veya isotonic regression ile gerçek olasılığa kalibre edilebilir
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
-- **Canlı maç + WebSocket:** Real-time skor push (onay gerekir)
+- **Canlı maç WebSocket:** Şu an polling (45sn), real-time push için WebSocket gerekir (onay gerekir)
 
 ### Bilinen Açık Konular
 
@@ -1488,3 +1546,4 @@ Bekleyen konular kullanıcı kararı gerektirir:
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
 - **`ComboSuggestion` ve `StatBadge` dead component'ler:** Sprint 40'ta silindi ✅
 - **Pattern C adaptive tolerance recompute:** Sprint 44 sonrası mevcut pattern'lar eski tolerance ile hesaplanmış — `recompute-patterns` çalıştırılmalı
+- **Pattern D ilk recompute:** Sprint 46 sonrası tüm maçlar için pattern_d hesaplanmalı — `recompute-patterns` çalıştırılmalı
