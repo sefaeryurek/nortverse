@@ -175,6 +175,8 @@ def build_ft_recommendations(patterns: dict | None) -> list[dict]:
         if chosen is None:
             continue
         archive = "both" if first and second else "archive_1" if first else "archive_2"
+        if market in ("over_25", "btts") and archive != "both":
+            continue
         frequency = min(first["frequency_pct"], second["frequency_pct"]) if first and second else chosen["frequency_pct"]
         count = min(first["match_count"], second["match_count"]) if first and second else chosen["match_count"]
         picks.append({

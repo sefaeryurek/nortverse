@@ -51,11 +51,11 @@ describe("computeConfidence", () => {
   });
 
   it("dual bonus sadece result-ilişkili pazarlara uygulanır", () => {
+    const singleResult = computeConfidence(70, 30, 1.0, false, 1.0, "result");
     const dualResult = computeConfidence(70, 30, 1.0, true, 1.0, "result");
+    expect(dualResult / singleResult).toBeCloseTo(1.25, 2);
     const dualOu = computeConfidence(70, 30, 1.0, true, 1.0, "ou_25");
-    const single = computeConfidence(70, 30, 1.0, false, 1.0, "ou_25");
-    expect(dualResult / single).toBeCloseTo(1.25, 2);
-    expect(dualOu).toBeCloseTo(single, 5);
+    expect(dualOu).toBeCloseTo(0.7, 2);
   });
 
   it("marketWeight çarpan olarak iner (0.7 → %70 confidence)", () => {
@@ -68,6 +68,33 @@ describe("computeConfidence", () => {
     const small = computeConfidence(80, 5, 1.0, false);
     const big = computeConfidence(80, 30, 1.0, false);
     expect(small).toBeLessThan(big);
+  });
+
+  it("100+ eşleşmede volumeWeight azalmaya başlar (diminishing returns)", () => {
+    const c100 = computeConfidence(80, 100, 1.0, false);
+    const c200 = computeConfidence(80, 200, 1.0, false);
+    const c300 = computeConfidence(80, 300, 1.0, false);
+    expect(c200).toBeLessThan(c100);
+    expect(c300).toBeLessThan(c200);
+    expect(c300).toBeGreaterThan(0);
+  });
+
+  it("tekli arşivde O/U confidence %50 düşer", () => {
+    const dual = computeConfidence(80, 30, 1.0, true, 1.0, "ou_25");
+    const single = computeConfidence(80, 30, 1.0, false, 1.0, "ou_25", "A");
+    expect(single).toBeLessThan(dual * 0.6);
+  });
+
+  it("tekli arşivde KG confidence %50 düşer", () => {
+    const dual = computeConfidence(80, 30, 1.0, true, 1.0, "kg");
+    const single = computeConfidence(80, 30, 1.0, false, 1.0, "kg", "A");
+    expect(single).toBeLessThan(dual * 0.6);
+  });
+
+  it("tekli arşivde result pazarına O/U cezası uygulanmaz", () => {
+    const withPenalty = computeConfidence(80, 30, 1.0, false, 1.0, "result", "A");
+    const base = (80 / 100) * 1.0 * 1.0 * 1.03;
+    expect(withPenalty).toBeCloseTo(base, 2);
   });
 });
 

@@ -50,10 +50,32 @@ def test_fixed_rule_captures_only_qualifying_market_choices():
     assert RULE_VERSION == "ft-display-v3"
     assert [(p["archive"], p["market"], p["selection"]) for p in picks] == [
         ("archive_1", "result", "1"),
-        ("archive_1", "over_25", "over"),
-        ("archive_1", "btts", "yes"),
     ]
     assert all(p["match_count"] == 30 for p in picks)
+
+
+def test_ou_btts_single_archive_filtered():
+    """Tekli arşivde O/U ve BTTS sinyal verilmez."""
+    picks = build_ft_recommendations({
+        "pattern_ft_b": _pattern(count=30, over=80, btts=80),
+    })
+    markets = [p["market"] for p in picks]
+    assert "result" in markets
+    assert "over_25" not in markets
+    assert "btts" not in markets
+
+
+def test_ou_btts_dual_archive_allowed():
+    """Her iki arşiv uyumluysa O/U ve BTTS sinyal verilir."""
+    picks = build_ft_recommendations({
+        "pattern_ft_b": _pattern(count=30, over=80, btts=80),
+        "pattern_ft_c": _pattern(count=25, over=75, btts=70),
+    })
+    markets = [p["market"] for p in picks]
+    assert "result" in markets
+    assert "over_25" in markets
+    assert "btts" in markets
+    assert all(p["archive"] == "both" for p in picks if p["market"] in ("over_25", "btts"))
 
 
 def test_ineligible_analysis_never_creates_a_snapshot():
@@ -341,7 +363,7 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
     monkeypatch.setattr("app.analysis.snapshots.load_market_baselines", load_baselines)
     picks = await services._frozen_recommendations(row, {"pattern_ft_b": _pattern()})
 
-    assert [pick["market"] for pick in picks] == ["result", "over_25", "btts"]
+    assert [pick["market"] for pick in picks] == ["result"]
     statement = session.execute.await_args_list[1].args[0]
     assert "INSERT INTO analysis_snapshots" in str(statement.compile(dialect=postgresql.dialect()))
     assert statement.compile(dialect=postgresql.dialect()).params["analyzed_at"] == V3_ACTIVATION_CUTOFF

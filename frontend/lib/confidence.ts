@@ -37,6 +37,11 @@ const C_ONLY_PENALTY = 0.97;
 
 function volumeWeight(matchCount: number): number {
   if (matchCount <= 0) return 0;
+  if (matchCount > 100) {
+    const peak = Math.min(1.0, Math.log(101) / Math.log(30));
+    const decay = Math.max(0.7, 1.0 - (matchCount - 100) / 500);
+    return peak * decay;
+  }
   return Math.min(1.0, Math.log(matchCount + 1) / Math.log(30));
 }
 
@@ -128,6 +133,10 @@ export function computeConfidence(
 
   if (archiveSource === "A") result *= B_ONLY_BOOST;
   else if (archiveSource === "B") result *= C_ONLY_PENALTY;
+
+  if (!isDual && (marketKey === "ou_25" || marketKey === "kg")) {
+    result *= 0.5;
+  }
 
   return Math.min(CONFIDENCE_CAP, result);
 }
