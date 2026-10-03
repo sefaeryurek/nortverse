@@ -38,7 +38,7 @@ async def test_failed_component_cannot_be_returned_as_empty_pattern(monkeypatch,
         return None, None, None
 
     monkeypatch.setattr(persist, "find_pattern_b_matches", find_b)
-    monkeypatch.setattr(persist, "find_pattern_c_all_periods", find_c)
+    monkeypatch.setattr(persist, "find_pattern_c_adaptive", find_c)
     with pytest.raises(persist.PatternComputationError):
         await compute()
     assert set(completed) == {"ht", "h2", "ft", "c"}
@@ -47,7 +47,7 @@ async def test_failed_component_cannot_be_returned_as_empty_pattern(monkeypatch,
 @pytest.mark.asyncio
 async def test_successful_empty_result_remains_distinct_from_failure(monkeypatch):
     monkeypatch.setattr(persist, "find_pattern_b_matches", AsyncMock(return_value=None))
-    monkeypatch.setattr(persist, "find_pattern_c_all_periods", AsyncMock(return_value=(None, None, None)))
+    monkeypatch.setattr(persist, "find_pattern_c_adaptive", AsyncMock(return_value=(None, None, None)))
     result = await compute()
     assert len(result) == 6
     assert all(value is None for value in result.values())

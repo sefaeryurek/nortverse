@@ -15,7 +15,7 @@ from typing import Optional
 from sqlalchemy import update as sa_update
 
 from app.analysis.pattern_b import find_pattern_b_matches
-from app.analysis.pattern_c import find_pattern_c_all_periods
+from app.analysis.pattern_c import find_pattern_c_adaptive, find_pattern_c_all_periods
 from app.config import ANALYSIS
 from app.db.connection import get_session
 from app.db.models import Match
@@ -73,8 +73,12 @@ async def compute_all_patterns(
         if not ft_ratios:
             return None, None, None
         try:
-            ht_c, h2_c, ft_c = await find_pattern_c_all_periods(
-                ft_ratios, tolerance=ANALYSIS.pattern_c_tolerance,
+            ht_c, h2_c, ft_c = await find_pattern_c_adaptive(
+                ft_ratios,
+                min_matches=ANALYSIS.pattern_c_adaptive_min,
+                base_tolerance=ANALYSIS.pattern_c_tolerance,
+                max_tolerance=ANALYSIS.pattern_c_max_tolerance,
+                tolerance_step=ANALYSIS.pattern_c_tolerance_step,
                 exclude_match_id=match_id, as_of=as_of,
             )
             return (

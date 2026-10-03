@@ -157,3 +157,49 @@ async def find_pattern_c_all_periods(
     results = [compute_stats(matched, period) for period in ("ht", "h2", "ft")]
     return tuple(result if result is not None and result.match_count >= min_matches else None
                  for result in results)
+
+
+async def find_pattern_c_adaptive(
+    ft_ratios: dict[str, float],
+    min_matches: int = 3,
+    base_tolerance: float = 0.5,
+    max_tolerance: float = 1.0,
+    tolerance_step: float = 0.25,
+    exclude_match_id: str | None = None,
+    as_of: datetime | None = None,
+) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
+    """Adım adım tolerance artırarak yeterli eşleşme bulmaya çalışır.
+
+    base_tolerance ile başlar; eşleşme sayısı min_matches'ın altındaysa
+    tolerance_step kadar artırıp tekrar dener. max_tolerance'a ulaşınca durur.
+    """
+    tol = base_tolerance
+    while tol <= max_tolerance + 1e-9:
+        result = await find_pattern_c_all_periods(
+            ft_ratios,
+            min_matches=1,
+            tolerance=round(tol, 4),
+            exclude_match_id=exclude_match_id,
+            as_of=as_of,
+        )
+        ft_result = result[2]
+        if ft_result is not None and ft_result.match_count >= min_matches:
+            if tol > base_tolerance:
+                log.info(
+                    "Katman C adaptive: tolerance=%.2f ile %d eşleşme bulundu",
+                    tol, ft_result.match_count,
+                )
+            return result
+        tol += tolerance_step
+
+    log.info(
+        "Katman C adaptive: max_tolerance=%.2f'ye kadar yeterli eşleşme bulunamadı",
+        max_tolerance,
+    )
+    return await find_pattern_c_all_periods(
+        ft_ratios,
+        min_matches=1,
+        tolerance=round(max_tolerance, 4),
+        exclude_match_id=exclude_match_id,
+        as_of=as_of,
+    )

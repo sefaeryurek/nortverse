@@ -164,6 +164,36 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.pattern_c_tolerance == 1.0
 
+    def test_default_pattern_c_max_tolerance(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_C_MAX_TOLERANCE", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_c_max_tolerance == 1.0
+
+    def test_override_pattern_c_max_tolerance(self, monkeypatch):
+        monkeypatch.setenv("PATTERN_C_MAX_TOLERANCE", "1.5")
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_c_max_tolerance == 1.5
+
+    def test_default_pattern_c_tolerance_step(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_C_TOLERANCE_STEP", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_c_tolerance_step == 0.25
+
+    def test_default_pattern_c_adaptive_min(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_C_ADAPTIVE_MIN", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_c_adaptive_min == 3
+
+    def test_override_pattern_c_adaptive_min(self, monkeypatch):
+        monkeypatch.setenv("PATTERN_C_ADAPTIVE_MIN", "5")
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_c_adaptive_min == 5
+
     def test_default_eval_min_matches(self, monkeypatch):
         monkeypatch.delenv("EVAL_MIN_MATCHES", raising=False)
         from app.config import AnalysisConfig
