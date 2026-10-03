@@ -7,6 +7,7 @@ import { type Period, periodLabels } from "@/lib/labels";
 interface Props {
   patternB: PatternResult | null;
   patternC: PatternResult | null;
+  patternD?: PatternResult | null;
   period: Period;
 }
 
@@ -457,7 +458,7 @@ function ArchiveDetailCard({
   );
 }
 
-export default function DetailedStats({ patternB, patternC, period }: Props) {
+export default function DetailedStats({ patternB, patternC, patternD, period }: Props) {
   const [override, setOpen] = useState<boolean | null>(null);
   const savedOpen = useSyncExternalStore(subscribeDetails, readDetails, () => false);
   const open = override ?? savedOpen;
@@ -511,7 +512,7 @@ export default function DetailedStats({ patternB, patternC, period }: Props) {
       </button>
 
       {open && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 nv-fade-in">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 nv-fade-in">
           {patternB ? (
             <ArchiveDetailCard result={patternB} title="Arşiv 1 — Skor Seti" accentColor="var(--nv-accent-blue)" badgeClass="nv-badge nv-badge-blue" period={period} />
           ) : (
@@ -536,6 +537,19 @@ export default function DetailedStats({ patternB, patternC, period }: Props) {
               }}
             >
               <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>Arşiv 2: Yeterli veri yok</p>
+            </div>
+          )}
+          {patternD ? (
+            <ArchiveDetailCard result={patternD} title="Arşiv 3 — Cosine Similarity" accentColor="var(--nv-accent-amber)" badgeClass="nv-badge nv-badge-amber" period={period} />
+          ) : (
+            <div
+              className="nv-card flex items-center justify-center"
+              style={{
+                borderRadius: "var(--nv-radius-lg)",
+                padding: "var(--nv-space-2xl)",
+              }}
+            >
+              <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>Arşiv 3: Yeterli veri yok</p>
             </div>
           )}
         </div>

@@ -19,7 +19,7 @@ async def compute():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["ht", "h2", "ft", "c"])
+@pytest.mark.parametrize("failure", ["ht", "h2", "ft", "c", "d"])
 async def test_failed_component_cannot_be_returned_as_empty_pattern(monkeypatch, failure):
     completed = []
 
@@ -37,19 +37,28 @@ async def test_failed_component_cannot_be_returned_as_empty_pattern(monkeypatch,
             raise RuntimeError("connection lost")
         return None, None, None
 
+    async def find_d(*args, **kwargs):
+        await asyncio.sleep(0)
+        completed.append("d")
+        if failure == "d":
+            raise RuntimeError("connection lost")
+        return None, None, None
+
     monkeypatch.setattr(persist, "find_pattern_b_matches", find_b)
     monkeypatch.setattr(persist, "find_pattern_c_adaptive", find_c)
+    monkeypatch.setattr(persist, "find_pattern_d_all_periods", find_d)
     with pytest.raises(persist.PatternComputationError):
         await compute()
-    assert set(completed) == {"ht", "h2", "ft", "c"}
+    assert set(completed) == {"ht", "h2", "ft", "c", "d"}
 
 
 @pytest.mark.asyncio
 async def test_successful_empty_result_remains_distinct_from_failure(monkeypatch):
     monkeypatch.setattr(persist, "find_pattern_b_matches", AsyncMock(return_value=None))
     monkeypatch.setattr(persist, "find_pattern_c_adaptive", AsyncMock(return_value=(None, None, None)))
+    monkeypatch.setattr(persist, "find_pattern_d_all_periods", AsyncMock(return_value=(None, None, None)))
     result = await compute()
-    assert len(result) == 6
+    assert len(result) == 9
     assert all(value is None for value in result.values())
 
 

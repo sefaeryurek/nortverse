@@ -254,10 +254,13 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         ht_b, ht_c = _pat(row.pattern_ht_b), _pat(row.pattern_ht_c)
         h2_b, h2_c = _pat(row.pattern_h2_b), _pat(row.pattern_h2_c)
         ft_b, ft_c = _pat(row.pattern_ft_b), _pat(row.pattern_ft_c)
+        ht_d, h2_d, ft_d = _pat(row.pattern_ht_d), _pat(row.pattern_h2_d), _pat(row.pattern_ft_d)
         patterns = {
             "pattern_ht_b": row.pattern_ht_b, "pattern_ht_c": row.pattern_ht_c,
             "pattern_h2_b": row.pattern_h2_b, "pattern_h2_c": row.pattern_h2_c,
             "pattern_ft_b": row.pattern_ft_b, "pattern_ft_c": row.pattern_ft_c,
+            "pattern_ht_d": row.pattern_ht_d, "pattern_h2_d": row.pattern_h2_d,
+            "pattern_ft_d": row.pattern_ft_d,
         }
     else:
         log.info("Yavaş yol — pattern durumu bilinmiyor, hesaplanıyor: %s", mid)
@@ -279,6 +282,7 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         ht_b, ht_c = _pat(patterns["pattern_ht_b"]), _pat(patterns["pattern_ht_c"])
         h2_b, h2_c = _pat(patterns["pattern_h2_b"]), _pat(patterns["pattern_h2_c"])
         ft_b, ft_c = _pat(patterns["pattern_ft_b"]), _pat(patterns["pattern_ft_c"])
+        ht_d, h2_d, ft_d = _pat(patterns["pattern_ht_d"]), _pat(patterns["pattern_h2_d"]), _pat(patterns["pattern_ft_d"])
 
     recommendations = await _frozen_recommendations(row, patterns)
     return AnalyzeResponse(
@@ -293,6 +297,7 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         ht_b=ht_b, ht_c=ht_c,
         h2_b=h2_b, h2_c=h2_c,
         ft_b=ft_b, ft_c=ft_c,
+        ht_d=ht_d, h2_d=h2_d, ft_d=ft_d,
         trends=_trends_parse(row.trends),
         recommendation_rule_version=RULE_VERSION,
         ft_recommendations=recommendations,
@@ -465,6 +470,8 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
         ht_b=_pat(patterns["pattern_ht_b"]), ht_c=_pat(patterns["pattern_ht_c"]),
         h2_b=_pat(patterns["pattern_h2_b"]), h2_c=_pat(patterns["pattern_h2_c"]),
         ft_b=_pat(patterns["pattern_ft_b"]), ft_c=_pat(patterns["pattern_ft_c"]),
+        ht_d=_pat(patterns.get("pattern_ht_d")), h2_d=_pat(patterns.get("pattern_h2_d")),
+        ft_d=_pat(patterns.get("pattern_ft_d")),
         trends=trends_data,
         recommendation_rule_version=RULE_VERSION,
         ft_recommendations=frozen_recommendations,

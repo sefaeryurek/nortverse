@@ -162,6 +162,9 @@ class AnalyzeResponse(BaseModel):
     h2_c: Optional[PatternResult] = None
     ft_b: Optional[PatternResult] = None
     ft_c: Optional[PatternResult] = None
+    ht_d: Optional[PatternResult] = None
+    h2_d: Optional[PatternResult] = None
+    ft_d: Optional[PatternResult] = None
     trends: Optional[TrendsData] = None
     recommendation_rule_version: str = "ft-display-v3"
     ft_recommendations: list[RecommendationOut] = Field(default_factory=list)

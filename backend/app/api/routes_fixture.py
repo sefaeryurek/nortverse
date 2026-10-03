@@ -213,6 +213,7 @@ async def get_pattern_status(
                 Match.match_id,
                 Match.pattern_ft_b,
                 Match.pattern_ft_c,
+                Match.pattern_ft_d,
             )
             .where(Match.match_id.in_(ids))
             .where(Match.deleted_at.is_(None))
@@ -223,9 +224,11 @@ async def get_pattern_status(
     for row in rows:
         b_data = row[1]
         c_data = row[2]
+        d_data = row[3]
         has_b = bool(b_data and isinstance(b_data, dict) and b_data.get("match_count", 0) >= 5)
         has_c = bool(c_data and isinstance(c_data, dict) and c_data.get("match_count", 0) >= 1)
-        if has_b or has_c:
+        has_d = bool(d_data and isinstance(d_data, dict) and d_data.get("match_count", 0) >= 1)
+        if has_b or has_c or has_d:
             agreement = False
             if has_b and has_c:
                 b_winner = max(
@@ -237,5 +240,5 @@ async def get_pattern_status(
                     key=lambda k: c_data.get(f"result_{k}_pct", 0),
                 )
                 agreement = b_winner == c_winner
-            result[row[0]] = {"has_b": has_b, "has_c": has_c, "agreement": agreement}
+            result[row[0]] = {"has_b": has_b, "has_c": has_c, "has_d": has_d, "agreement": agreement}
     return result

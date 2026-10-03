@@ -22,8 +22,8 @@ describe("AnalyzeClient", () => {
       match_id: "3003889", home_team: "Home", away_team: "Away",
       league_code: "ENG PR", season: "2026/2027",
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
-      ht_b: null, ht_c: null, h2_b: null, h2_c: null,
-      ft_b: null, ft_c: makePatternResult({ match_count: 12, result_1_pct: 75 }),
+      ht_b: null, ht_c: null, ht_d: null, h2_b: null, h2_c: null, h2_d: null,
+      ft_b: null, ft_c: makePatternResult({ match_count: 12, result_1_pct: 75 }), ft_d: null,
       trends: null, recommendation_rule_version: "ft-display-v3", ft_recommendations: [],
       skipped: false, skip_reason: null,
     };
@@ -39,8 +39,8 @@ describe("AnalyzeClient", () => {
       match_id: "3013703", home_team: "Home", away_team: "Away",
       league_code: "SPA D1", season: "2026/2027",
       ht: emptyPeriod, half2: emptyPeriod, ft: emptyPeriod,
-      ht_b: null, ht_c: null, h2_b: null, h2_c: null,
-      ft_b: makePatternResult({ match_count: 7 }), ft_c: null,
+      ht_b: null, ht_c: null, ht_d: null, h2_b: null, h2_c: null, h2_d: null,
+      ft_b: makePatternResult({ match_count: 7 }), ft_c: null, ft_d: null,
       trends: null, recommendation_rule_version: "ft-display-v3", ft_recommendations: [],
       skipped: false, skip_reason: null,
     };

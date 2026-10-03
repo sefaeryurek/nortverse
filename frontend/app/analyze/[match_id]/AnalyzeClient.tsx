@@ -33,6 +33,7 @@ function patternFor(data: AnalyzeResponse, period: Period) {
   return {
     b: period === "ht" ? data.ht_b : period === "h2" ? data.h2_b : data.ft_b,
     c: period === "ht" ? data.ht_c : period === "h2" ? data.h2_c : data.ft_c,
+    d: period === "ht" ? data.ht_d : period === "h2" ? data.h2_d : data.ft_d,
   };
 }
 
@@ -82,9 +83,9 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
     setAttempt((n) => n + 1);
   };
 
-  const { b: patternB, c: patternC } = data
+  const { b: patternB, c: patternC, d: patternD } = data
     ? patternFor(data, activePeriod)
-    : { b: null, c: null };
+    : { b: null, c: null, d: null };
   const scores = data ? scoresFor(data, activePeriod) : null;
 
   return (
@@ -392,6 +393,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                   <IddaaCoupon
                     patternB={patternB}
                     patternC={patternC}
+                    patternD={patternD}
                     period={activePeriod}
                     recommendations={data.ft_recommendations}
                   />

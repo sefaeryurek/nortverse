@@ -185,10 +185,13 @@ export interface AnalyzeResponse {
   ft: PeriodOut;
   ht_b: PatternResult | null;
   ht_c: PatternResult | null;
+  ht_d: PatternResult | null;
   h2_b: PatternResult | null;
   h2_c: PatternResult | null;
+  h2_d: PatternResult | null;
   ft_b: PatternResult | null;
   ft_c: PatternResult | null;
+  ft_d: PatternResult | null;
   trends: TrendsData | null;
   recommendation_rule_version: "ft-display-v2" | "ft-display-v3";
   ft_recommendations: FTRecommendation[];

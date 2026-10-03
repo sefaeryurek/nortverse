@@ -14,13 +14,13 @@ const recommendation: FTRecommendation = {
 
 describe("IddaaCoupon", () => {
   it("shows a frozen recommendation even when current patterns are empty", () => {
-    render(<IddaaCoupon patternB={null} patternC={null} period="ft" recommendations={[recommendation]} />);
+    render(<IddaaCoupon patternB={null} patternC={null} patternD={null} period="ft" recommendations={[recommendation]} />);
     expect(screen.getByText("Ev Sahibi")).toBeDefined();
     expect(screen.getByText(/yeterli arşiv verisi bulunamadı/)).toBeDefined();
   });
 
   it("explains an empty frozen recommendation set independently of patterns", () => {
-    render(<IddaaCoupon patternB={null} patternC={null} period="ft" recommendations={[]} />);
+    render(<IddaaCoupon patternB={null} patternC={null} patternD={null} period="ft" recommendations={[]} />);
     expect(screen.getByText(/kaydedilmiş seçim bulunmuyor/)).toBeDefined();
   });
 });

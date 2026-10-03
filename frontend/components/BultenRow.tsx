@@ -8,7 +8,7 @@ import LiveMatchBadge from "./LiveMatchBadge";
 interface Props {
   match: FixtureMatch;
   timeStr: string;
-  patternStatus?: { has_b: boolean; has_c: boolean; agreement?: boolean };
+  patternStatus?: { has_b: boolean; has_c: boolean; has_d?: boolean; agreement?: boolean };
 }
 
 export default memo(function BultenRow({ match, timeStr, patternStatus }: Props) {
@@ -181,6 +181,22 @@ export default memo(function BultenRow({ match, timeStr, patternStatus }: Props)
                     }}
                   >
                     A2
+                  </span>
+                )}
+                {patternStatus.has_d && (
+                  <span
+                    title="Arşiv 3 eşleşmesi var (cosine similarity)"
+                    style={{
+                      fontSize: "var(--nv-text-xs)",
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      padding: "2px 6px",
+                      borderRadius: "var(--nv-radius-sm)",
+                      backgroundColor: "color-mix(in srgb, var(--nv-accent-amber) 20%, transparent)",
+                      color: "var(--nv-accent-amber)",
+                    }}
+                  >
+                    A3
                   </span>
                 )}
               </>

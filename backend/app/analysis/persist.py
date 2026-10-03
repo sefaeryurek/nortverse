@@ -16,6 +16,7 @@ from sqlalchemy import update as sa_update
 
 from app.analysis.pattern_b import find_pattern_b_matches
 from app.analysis.pattern_c import find_pattern_c_adaptive, find_pattern_c_all_periods
+from app.analysis.pattern_d import find_pattern_d_all_periods
 from app.config import ANALYSIS
 from app.db.connection import get_session
 from app.db.models import Match
@@ -90,11 +91,31 @@ async def compute_all_patterns(
             log.warning("Pattern C hesaplanamadı [%s]: %s", match_id, exc)
             raise
 
+    async def _d_all() -> tuple[Optional[dict], Optional[dict], Optional[dict]]:
+        if not ft_ratios:
+            return None, None, None
+        try:
+            ht_d, h2_d, ft_d = await find_pattern_d_all_periods(
+                ft_ratios,
+                top_n=ANALYSIS.pattern_d_top_n,
+                min_similarity=ANALYSIS.pattern_d_min_similarity,
+                exclude_match_id=match_id, as_of=as_of,
+            )
+            return (
+                ht_d.model_dump() if ht_d else None,
+                h2_d.model_dump() if h2_d else None,
+                ft_d.model_dump() if ft_d else None,
+            )
+        except Exception as exc:
+            log.warning("Pattern D hesaplanamadı [%s]: %s", match_id, exc)
+            raise
+
     outcomes = await asyncio.gather(
         _b("ht", *ht_scores),
         _b("h2", *h2_scores),
         _b("ft", *ft_scores),
         _c_all(),
+        _d_all(),
         return_exceptions=True,
     )
     for outcome in outcomes:
@@ -102,7 +123,7 @@ async def compute_all_patterns(
             raise outcome
         if isinstance(outcome, Exception):
             raise PatternComputationError(f"Pattern computation failed for {match_id}") from outcome
-    ht_b, h2_b, ft_b, (ht_c, h2_c, ft_c) = outcomes
+    ht_b, h2_b, ft_b, (ht_c, h2_c, ft_c), (ht_d, h2_d, ft_d) = outcomes
 
     return {
         "pattern_ht_b": ht_b,
@@ -111,6 +132,9 @@ async def compute_all_patterns(
         "pattern_h2_c": h2_c,
         "pattern_ft_b": ft_b,
         "pattern_ft_c": ft_c,
+        "pattern_ht_d": ht_d,
+        "pattern_h2_d": h2_d,
+        "pattern_ft_d": ft_d,
     }
 
 

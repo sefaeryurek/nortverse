@@ -206,6 +206,30 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.eval_min_matches == 10
 
+    def test_default_pattern_d_top_n(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_D_TOP_N", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_d_top_n == 20
+
+    def test_override_pattern_d_top_n(self, monkeypatch):
+        monkeypatch.setenv("PATTERN_D_TOP_N", "50")
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_d_top_n == 50
+
+    def test_default_pattern_d_min_similarity(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_D_MIN_SIMILARITY", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_d_min_similarity == 0.85
+
+    def test_override_pattern_d_min_similarity(self, monkeypatch):
+        monkeypatch.setenv("PATTERN_D_MIN_SIMILARITY", "0.90")
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_d_min_similarity == 0.90
+
     def test_frozen_dataclass(self):
         from app.config import AnalysisConfig
         cfg = AnalysisConfig()

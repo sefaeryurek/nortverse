@@ -61,6 +61,9 @@ class Match(Base):
     pattern_h2_c: Mapped[dict | None] = mapped_column(JSONB)
     pattern_ft_b: Mapped[dict | None] = mapped_column(JSONB)
     pattern_ft_c: Mapped[dict | None] = mapped_column(JSONB)
+    pattern_ht_d: Mapped[dict | None] = mapped_column(JSONB)
+    pattern_h2_d: Mapped[dict | None] = mapped_column(JSONB)
+    pattern_ft_d: Mapped[dict | None] = mapped_column(JSONB)
 
     # Form & H2H trendleri (Sprint 8.8) — TrendsData JSON
     trends: Mapped[dict | None] = mapped_column(JSONB)

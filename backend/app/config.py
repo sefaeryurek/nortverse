@@ -63,6 +63,8 @@ class AnalysisConfig:
     over_25_base_rate: float = field(default_factory=lambda: _env_float("OVER_25_BASE_RATE", 55.0))
     btts_base_rate: float = field(default_factory=lambda: _env_float("BTTS_BASE_RATE", 56.0))
     result_min_margin: float = field(default_factory=lambda: _env_float("RESULT_MIN_MARGIN", 10.0))
+    pattern_d_top_n: int = field(default_factory=lambda: _env_int("PATTERN_D_TOP_N", 20))
+    pattern_d_min_similarity: float = field(default_factory=lambda: _env_float("PATTERN_D_MIN_SIMILARITY", 0.85))
 
 
 SCRAPER = ScraperConfig()
