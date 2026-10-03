@@ -25,6 +25,7 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_analysis import router as analysis_router
 from app.api.routes_evaluation import router as evaluation_router
 from app.api.routes_fixture import router as fixture_router
+from app.api.routes_live_ht import router as live_ht_router
 from app.api.routes_results import router as results_router
 from app.api.services import bg_worker, init_bg_queue, shutdown_bg_queue
 
@@ -126,4 +127,5 @@ app.include_router(fixture_router)
 app.include_router(analysis_router)
 app.include_router(results_router)
 app.include_router(evaluation_router)
+app.include_router(live_ht_router)
 app.include_router(admin_router)
