@@ -102,10 +102,18 @@ describe("BultenRow", () => {
     expect(screen.getByText("A2")).toBeDefined();
   });
 
-  it("shows both A1 and A2 badges when both patterns match", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: true }} />);
+  it("shows both A1 and A2 badges when both patterns match but disagree", () => {
+    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: true, agreement: false }} />);
     expect(screen.getByText("A1")).toBeDefined();
     expect(screen.getByText("A2")).toBeDefined();
+    expect(screen.queryByText("A1+A2")).toBeNull();
+  });
+
+  it("shows unified A1+A2 golden badge when both archives agree", () => {
+    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: true, agreement: true }} />);
+    expect(screen.getByText("A1+A2")).toBeDefined();
+    expect(screen.queryByText(/^A1$/)).toBeNull();
+    expect(screen.queryByText(/^A2$/)).toBeNull();
   });
 
   it("shows no badge when patternStatus is undefined", () => {

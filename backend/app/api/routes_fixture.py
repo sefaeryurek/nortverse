@@ -219,12 +219,23 @@ async def get_pattern_status(
         )
         rows = (await session.execute(stmt)).all()
 
-    result: dict[str, dict[str, bool]] = {}
+    result: dict[str, dict] = {}
     for row in rows:
         b_data = row[1]
         c_data = row[2]
         has_b = bool(b_data and isinstance(b_data, dict) and b_data.get("match_count", 0) >= 5)
         has_c = bool(c_data and isinstance(c_data, dict) and c_data.get("match_count", 0) >= 1)
         if has_b or has_c:
-            result[row[0]] = {"has_b": has_b, "has_c": has_c}
+            agreement = False
+            if has_b and has_c:
+                b_winner = max(
+                    ["1", "x", "2"],
+                    key=lambda k: b_data.get(f"result_{k}_pct", 0),
+                )
+                c_winner = max(
+                    ["1", "x", "2"],
+                    key=lambda k: c_data.get(f"result_{k}_pct", 0),
+                )
+                agreement = b_winner == c_winner
+            result[row[0]] = {"has_b": has_b, "has_c": has_c, "agreement": agreement}
     return result
