@@ -1151,6 +1151,30 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **formatTime DRY:** `bulten/page.tsx` ve `sonuclar/page.tsx`'te duplicate `formatTime` → `lib/dates.ts`'e taşındı
 - **Sonuç:** 678 backend + 201 frontend + 28 E2E = **907 toplam test** (tümü yeşil)
 
+### Sprint 42 — TAMAMLANDI ✅ (Pipeline Varsayılan Değişikliği)
+- **`run-pipeline` varsayılan `only_hot=False`:** Tüm lig maçları çekilecek (sadece popüler değil)
+
+### Sprint 43 — TAMAMLANDI ✅ (O/U ve KG Tekli Arşiv Filtresi + Pattern B Yüksek Hacim Cezası)
+- **Bağlam:** 3 araştırma ajanı + DB istatistikleri ile kapsamlı arşiv stratejisi değerlendirmesi yapıldı. O/U %51.7, KG %52.5 (baseline %55.4) — tekli arşivde sinyal yok. Pattern B 200+ eşleşmelerde popülasyon ortalamasına yakınsıyor.
+- **Backend O/U ve KG tekli arşiv filtresi (`snapshots.py`):** `build_ft_recommendations`'da `over_25` ve `btts` pazarları sadece B+C uyumlu (`archive == "both"`) ise gösteriliyor — tekli arşiv O/U/KG TopPicks'ten filtreleniyor
+- **Frontend O/U ve KG single penalty (`confidence.ts`):** `computeConfidence`'ta tekli arşiv O/U/KG confidence'ı ×0.5 çarpan — MarketSummary ve DetailedStats'ta muted
+- **Pattern B yüksek hacim cezası (`confidence.ts`):** `volumeWeight` fonksiyonuna diminishing returns eklendi — 100'de peak, 200'de ~0.85, 300+'da ~0.70 (sinyal popülasyon ortalamasına yakınsadığı için)
+- **Sonuç:** 688 backend + 206 frontend + 28 E2E = **922 toplam test**
+
+### Sprint 44 — TAMAMLANDI ✅ (Pattern C Adaptive Tolerance)
+- **Bağlam:** tolerance=0.5 ile 2,764 maçta 0 eşleşme → B+C uyum sinyali (%46.8 MS, en güçlü sinyal) üretilemiyordu
+- **`find_pattern_c_adaptive` fonksiyonu (`pattern_c.py`):** Adım adım tolerance artırır (0.5 → 0.75 → 1.0); `min_matches` (default 3) karşılanana kadar iterasyon; en kötü 3 × ~50ms = ~150ms ek süre
+- **`persist.py` entegrasyonu:** `_c_all()` artık `find_pattern_c_adaptive` çağırıyor — config'den `pattern_c_tolerance`, `pattern_c_max_tolerance`, `pattern_c_tolerance_step`, `pattern_c_adaptive_min` okuyor
+- **3 yeni config alanı (`config.py`):** `PATTERN_C_MAX_TOLERANCE` (default 1.0), `PATTERN_C_TOLERANCE_STEP` (default 0.25), `PATTERN_C_ADAPTIVE_MIN` (default 3)
+- **Sonuç:** 688 backend + 206 frontend + 28 E2E = **922 toplam test**
+
+### Sprint 45 — TAMAMLANDI ✅ (Birleşik Güven Rozeti)
+- **Bağlam:** A1/A2 ayrı badge'ler — kullanıcı hangi maçların en güçlü sinyale (B+C uyum = %46.8 MS) sahip olduğunu bilmiyordu
+- **Backend agreement hesabı (`routes_fixture.py`):** `/api/fixture/pattern-status` endpoint'ine `agreement` alanı eklendi — B ve C arşivlerinin MS argmax'ı karşılaştırılıyor (aynı kazanan = uyum)
+- **Frontend birleşik rozet (`BultenRow.tsx`):** `has_b && has_c && agreement` → altın gradient "A1+A2" rozet (`linear-gradient(135deg, accent-blue, accent-green)`); uyumsuzda eskisi gibi ayrı A1/A2 badge'leri
+- **API type güncellendi (`api.ts`):** `PatternStatusMap` type'ına `agreement?: boolean` eklendi
+- **Sonuç:** 688 backend + 206 frontend + 28 E2E = **922 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1322,6 +1346,14 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Pattern C tolerance=0.5 (Sprint 37, öncesi 0.0):** Sprint 8.9'da tolerance 0.5→0.0 yapılmıştı ama 35 boyutlu vektörde birebir eşleşme matematiksel olarak imkansız (~46 milyar kombinasyon vs ~9,300 maç = beklenen 0.21 eşleşme). Sprint 37'de 0.5'e geri yüklendi + DB-side fuzzy query (BETWEEN koşulları) ile egress koruması korundu. `min_matches: 1` çünkü tolerance=0.5 makul eşleşme üretir ama garanti değil. `config.py`'de `PATTERN_C_TOLERANCE` env var ile override edilebilir.
 
+- **Pattern C adaptive tolerance (Sprint 44):** `find_pattern_c_adaptive` fonksiyonu 0 eşleşmeli maçlarda tolerance'ı adım adım artırır (0.5 → 0.75 → 1.0). `pattern_c_adaptive_min` (default 3) eşleşme bulunana kadar iterasyon yapar. Bulamazsa en yüksek tolerance sonucunu döner. En kötü 3 DB sorgusu = ~150ms ek süre. Config: `PATTERN_C_MAX_TOLERANCE` (1.0), `PATTERN_C_TOLERANCE_STEP` (0.25), `PATTERN_C_ADAPTIVE_MIN` (3).
+
+- **O/U ve KG tekli arşiv filtresi (Sprint 43):** Backtest'te O/U %51.7, KG %52.5 (baseline %55.4) — tekli arşivde sinyal yok. Backend `snapshots.py`'de `over_25` ve `btts` pazarları sadece `archive == "both"` ise TopPicks'e girer. Frontend `confidence.ts`'de tekli arşiv O/U/KG ×0.5 penalty — MarketSummary/DetailedStats'ta muted.
+
+- **Pattern B yüksek hacim diminishing returns (Sprint 43):** `volumeWeight(matchCount)` 100+ eşleşmede decay uygular — `peak × max(0.7, 1 - (mc-100)/500)`. 200'de ~0.85, 300+'da ~0.70. Popülasyon ortalamasına yakınsayan büyük arşivlerde sinyal kaybını yansıtır.
+
+- **Birleşik güven rozeti (Sprint 45):** `/api/fixture/pattern-status` endpoint'inde `agreement` alanı — B ve C arşivlerinin MS `result_1/x/2_pct` argmax'ı karşılaştırılır. Aynı kazanan = uyum. `BultenRow.tsx`'de uyumlu maçlara altın gradient "A1+A2" rozet, uyumsuzda ayrı A1/A2 badge'leri.
+
 - **Kanonik lig adı (Sprint 8.9+20):** `LEAGUE_ALIASES` 50+ alias → kanonik ad. `_result_to_row` `canonical_league_name(r.league_code)` uygular → yeni maçlar tutarlı. Eski maçlar için `normalize-leagues --apply` CLI komutu (Sprint 20) toplu normalize yapar. `repair.py:needs_normalization()` ile `audit-db` normalize edilmemiş kayıt sayısını gösterir.
 
 - **Audit & quality görünürlük (Sprint 8.9 → 8.10 değiştirildi):** Quality skoru artık `/api/admin/quality` endpoint'inde. Sprint 8.9'da `/api/health` içine konmuştu ama UptimeRobot pinglerinde tüm matches taraması = ~187 MB/gün egress → Sprint 8.10'da ayrı endpoint'e taşındı. UptimeRobot artık hafif `/api/health` pingler. CLI `audit-db` aynı bilgiyi Rich tabloyla verir.
@@ -1390,9 +1422,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-01 — Sprint 41 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-10-03 — Sprint 45 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
 
-### ✅ Mevcut Durum — Local Development + Sprint 41 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 45 Tamamlandı
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1426,19 +1458,21 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | B+C uyum (MS) | %46.8 | — | %44.4 | TEK doğrulanmış sinyal (+6 puan) |
 | Bundesliga MS | %50.1 | %44.3 | — | En iyi lig |
 
-### Test Durumu (Sprint 40 sonrası)
+### Test Durumu (Sprint 45 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 678 | ✅ Yeşil |
-| **Frontend birim** | vitest | 201 | ✅ Yeşil |
+| **Backend** | pytest | 688 | ✅ Yeşil |
+| **Frontend birim** | vitest | 206 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 907 | — |
+| **Toplam** | — | 922 | — |
 
 ### Sıradaki Adımlar
 
 Bekleyen konular kullanıcı kararı gerektirir:
 
+- **Pattern recompute gerekli:** Sprint 44 adaptive tolerance sonrası `recompute-patterns` çalıştırılmalı — 2,764 maçta 0 olan Pattern C eşleşmeleri artık bulunacak
+- **Arşiv-3 Cosine Similarity (Faz 2):** Sprint 46+'da ayrı onay gerektirir — potansiyel numpy bağımlılığı, yeni DB kolonu, backtest
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
 - **Frontend/Backend strateji birleştirme:** Frontend MarketSummary basit yüzde karşılaştırma, backend evaluation log-odds shrinkage + lig bazlı baz oranları — ikisi farklı sayfalarda ama uzun vadede birleştirilmeli
 - **Platt scaling:** Confidence skoru hâlâ olasılık olarak yorumlanmamalı — gelecekte Platt scaling veya isotonic regression ile gerçek olasılığa kalibre edilebilir
@@ -1453,3 +1487,4 @@ Bekleyen konular kullanıcı kararı gerektirir:
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
 - **`ComboSuggestion` ve `StatBadge` dead component'ler:** Sprint 40'ta silindi ✅
+- **Pattern C adaptive tolerance recompute:** Sprint 44 sonrası mevcut pattern'lar eski tolerance ile hesaplanmış — `recompute-patterns` çalıştırılmalı
