@@ -601,10 +601,10 @@ export function computeAlignmentCount(pat: PatternResult, resultPick: "1" | "X" 
 export interface MarketSummaryRow {
   marketKey: string;
   marketLabel: string;
-  // Her arşivin kendi en yüksek seçimi
   winnerA: { selectionLabel: string; pct: number } | null;
   winnerB: { selectionLabel: string; pct: number } | null;
-  agreement: boolean; // ikisi de aynı seçimi öneriyor mu?
+  winnerC: { selectionLabel: string; pct: number } | null;
+  agreement: boolean;
 }
 
 const SUMMARY_MARKET_KEYS = [
@@ -626,6 +626,7 @@ export function getMarketSummary(
   patternA: PatternResult | null,
   patternB: PatternResult | null,
   period: Period,
+  patternC: PatternResult | null = null,
 ): MarketSummaryRow[] {
   const lbl = periodLabels(period);
   const rows: MarketSummaryRow[] = [];
@@ -633,7 +634,7 @@ export function getMarketSummary(
   for (const key of SUMMARY_MARKET_KEYS) {
     const market = MARKETS.find((m) => m.key === key);
     if (!market) continue;
-    if (![patternA, patternB].some((sample) => sample && isMarketActive(market, period, sample))) continue;
+    if (![patternA, patternB, patternC].some((sample) => sample && isMarketActive(market, period, sample))) continue;
 
     const pickWinner = (result: PatternResult | null) => {
       if (!result || !isMarketActive(market, period, result)) return null;
@@ -649,6 +650,7 @@ export function getMarketSummary(
 
     const winnerA = pickWinner(patternA);
     const winnerB = pickWinner(patternB);
+    const winnerC = pickWinner(patternC);
     const agreement = !!winnerA && !!winnerB && winnerA.selectionLabel === winnerB.selectionLabel;
 
     rows.push({
@@ -656,6 +658,7 @@ export function getMarketSummary(
       marketLabel: market.label(lbl),
       winnerA,
       winnerB,
+      winnerC,
       agreement,
     });
   }

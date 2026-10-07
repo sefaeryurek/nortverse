@@ -8,6 +8,7 @@ import { getMarketSummary } from "@/lib/confidence";
 interface Props {
   patternB: PatternResult | null;
   patternC: PatternResult | null;
+  patternD: PatternResult | null;
   period: Period;
 }
 
@@ -67,8 +68,8 @@ function Cell({
   );
 }
 
-export default function MarketSummary({ patternB, patternC, period }: Props) {
-  const rows = useMemo(() => getMarketSummary(patternB, patternC, period), [patternB, patternC, period]);
+export default function MarketSummary({ patternB, patternC, patternD, period }: Props) {
+  const rows = useMemo(() => getMarketSummary(patternB, patternC, period, patternD), [patternB, patternC, patternD, period]);
 
   if (rows.length === 0) return null;
 
@@ -98,7 +99,7 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
 
       {/* Sütun başlıkları */}
       <div
-        className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-1 pb-2 mb-2"
+        className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-1 pb-2 mb-2"
         style={{ borderBottom: "1px solid var(--nv-border)" }}
       >
         <div
@@ -111,13 +112,19 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
           className="text-[10px] uppercase text-right"
           style={{ color: "var(--nv-accent-blue)" }}
         >
-          Arşiv 1{patternB ? ` · ${patternB.match_count} maç` : ""}
+          A1{patternB ? ` · ${patternB.match_count}` : ""}
         </div>
         <div
           className="text-[10px] uppercase text-right"
           style={{ color: "var(--nv-accent-purple)" }}
         >
-          Arşiv 2{patternC ? ` · ${patternC.match_count} maç` : ""}
+          A2{patternC ? ` · ${patternC.match_count}` : ""}
+        </div>
+        <div
+          className="text-[10px] uppercase text-right"
+          style={{ color: "var(--nv-accent-amber)" }}
+        >
+          A3{patternD ? ` · ${patternD.match_count}` : ""}
         </div>
       </div>
 
@@ -126,7 +133,7 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
         {rows.map((row) => (
           <div
             key={row.marketKey}
-            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 items-center py-1 px-1 rounded-lg transition-colors"
+            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 items-center py-1 px-1 rounded-lg transition-colors"
             style={{
               backgroundColor: row.agreement ? "var(--nv-accent-amber-dim)" : "transparent",
             }}
@@ -156,6 +163,10 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
               value={row.winnerB}
               accent="var(--nv-accent-purple)"
             />
+            <Cell
+              value={row.winnerC}
+              accent="var(--nv-accent-amber)"
+            />
           </div>
         ))}
       </div>
@@ -167,7 +178,7 @@ export default function MarketSummary({ patternB, patternC, period }: Props) {
           borderTop: "1px solid var(--nv-border-subtle)",
         }}
       >
-        <span style={{ color: "var(--nv-accent-amber)" }}>✦</span> = iki arşivde aynı seçim en sık görüldü. Yüzdeler doğrulanmış maç olasılığı değildir.
+        <span style={{ color: "var(--nv-accent-amber)" }}>✦</span> = A1+A2 aynı seçimde uyuşuyor. Yüzdeler doğrulanmış maç olasılığı değildir.
       </p>
     </div>
   );

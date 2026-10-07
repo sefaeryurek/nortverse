@@ -56,7 +56,7 @@ export default function IddaaCoupon({ patternB, patternC, patternD, period, reco
       {recommendationPanel}
 
       {/* Katman 2: Ana Pazar Ozeti (varsayilan gorunur) */}
-      <MarketSummary patternB={safeB} patternC={safeC} period={period} />
+      <MarketSummary patternB={safeB} patternC={safeC} patternD={safeD} period={period} />
 
       {/* Katman 3: Detayli Analiz (varsayilan kapali, collapsible) */}
       <DetailedStats patternB={safeB} patternC={safeC} patternD={safeD} period={period} />

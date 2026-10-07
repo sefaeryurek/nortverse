@@ -20,7 +20,7 @@ function renderWithContext(ui: React.ReactElement) {
 describe("MarketSummary", () => {
   it("returns null when both patterns are null", () => {
     const { container } = renderWithContext(
-      <MarketSummary patternB={null} patternC={null} period="ft" />,
+      <MarketSummary patternB={null} patternC={null} patternD={null} period="ft" />,
     );
     expect(container.innerHTML).toBe("");
   });
@@ -28,7 +28,7 @@ describe("MarketSummary", () => {
   it("renders with zero-pct data without crashing", () => {
     const empty = makePatternResult({ match_count: 0 });
     renderWithContext(
-      <MarketSummary patternB={empty} patternC={null} period="ft" />,
+      <MarketSummary patternB={empty} patternC={null} patternD={null} period="ft" />,
     );
   });
 
@@ -43,10 +43,10 @@ describe("MarketSummary", () => {
       kg_var_pct: 55,
       kg_yok_pct: 45,
     });
-    renderWithContext(<MarketSummary patternB={b} patternC={null} period="ft" />);
+    renderWithContext(<MarketSummary patternB={b} patternC={null} patternD={null} period="ft" />);
     expect(screen.getByText("Ana Pazar Özeti")).toBeDefined();
-    expect(screen.getByText("Arşiv 1 · 30 maç")).toBeDefined();
-    expect(screen.getByText("Arşiv 2")).toBeDefined();
+    expect(screen.getByText("A1 · 30")).toBeDefined();
+    expect(screen.getByText("A2")).toBeDefined();
   });
 
   it("shows agreement marker when archives match", () => {
@@ -62,7 +62,7 @@ describe("MarketSummary", () => {
       result_x_pct: 22,
       result_2_pct: 10,
     });
-    renderWithContext(<MarketSummary patternB={b} patternC={c} period="ft" />);
+    renderWithContext(<MarketSummary patternB={b} patternC={c} patternD={null} period="ft" />);
     expect(screen.getAllByText("✦").length).toBeGreaterThan(0);
   });
 
@@ -73,8 +73,8 @@ describe("MarketSummary", () => {
       result_x_pct: 0,
       result_2_pct: 0,
     });
-    renderWithContext(<MarketSummary patternB={b} patternC={null} period="ft" />);
-    expect(screen.getByText("Arşiv 1 · 1 maç")).toBeDefined();
+    renderWithContext(<MarketSummary patternB={b} patternC={null} patternD={null} period="ft" />);
+    expect(screen.getByText("A1 · 1")).toBeDefined();
     expect(screen.queryAllByLabelText("Sepete ekle")).toHaveLength(0);
   });
 
@@ -85,7 +85,7 @@ describe("MarketSummary", () => {
       result_x_pct: 15,
       result_2_pct: 10,
     });
-    render(<MarketSummary patternB={b} patternC={null} period="ft" />);
+    render(<MarketSummary patternB={b} patternC={null} patternD={null} period="ft" />);
     expect(screen.getByText("Ana Pazar Özeti")).toBeDefined();
     expect(screen.queryAllByLabelText("Sepete ekle")).toHaveLength(0);
   });
