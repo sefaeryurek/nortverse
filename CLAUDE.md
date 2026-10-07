@@ -1229,6 +1229,34 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Design system uyumu:** Mevcut `--nv-` token'ları, `nv-pct-bar`, `nv-live-pulse`, `nv-fade-in` CSS sınıfları
 - **Sonuç:** 728 backend + 206 frontend + 28 E2E = **962 toplam test**
 
+### Sprint 49 — DEVAM EDİYOR 🔄 (Pattern D Tam Entegrasyon + Arşiv Genişletme)
+- **Bağlam:** 3 araştırma ajanı (Strateji, Arşiv, Frontend/Backend) tüm codebase'i taradı. Pattern D (Cosine Similarity) display-only idi, tüm karar mekanizmalarına entegre ediliyor. Arşiv 7 lig × 20+ yıl genişletme başlatıldı.
+- **A1: Pattern D değerlendirme entegrasyonu (`948173e`):**
+  - `routes_evaluation.py`: `Match.pattern_ft_d` SQL'e eklendi, `_evaluate_pattern()` ile D değerlendirmesi
+  - `schemas.py`: `MatchEvaluation.pattern_d`, `EvaluationSummary`'e 7 yeni `d_*` alanı
+  - `degerlendirme/page.tsx`: A3 özet kartları (amber renk), maç satırında A3 badge
+  - `types.ts`: `pattern_d` + değerlendirme alanları
+- **Sonuçlar filtreleme (`63e0c4c`):** `/sonuclar` sayfasında sadece analiz edilmiş maçlar gösteriliyor
+- **B1: MarketSummary Arşiv 3 kolonu (`06e95f1`):**
+  - `confidence.ts`: `getMarketSummary` 4. parametre (`patternC` → Pattern D), `winnerC` alanı
+  - `MarketSummary.tsx`: 4 sütunlu grid (Pazar / A1 / A2 / A3), amber A3 kolonu
+  - `IddaaCoupon.tsx`: `patternD` prop geçirimi
+- **B2: Bülten üçlü uyum rozeti (`d37cfe7`):**
+  - `routes_fixture.py`: `agreement_bcd` — B+C+D aynı MS argmax ise üçlü uyum
+  - `BultenRow.tsx`: `A1+A2+A3` altın/yeşil/amber gradient rozet (üçlü uyum), `A1+A2` (ikili), ayrı badge'ler
+  - `api.ts`: `PatternStatusMap`'e `agreement_bcd` alanı
+- **B3: Eşleşen arşiv maçları Pattern D (`9046091`):**
+  - `pattern_d.py`: `find_matched_ids()` — cosine similarity ile en benzer maçların (match_id, similarity) listesi
+  - `routes_analysis.py`: `/api/analyze/{id}/matched-matches`'a `archive_d` bölümü (similarity skoru ile)
+  - `MatchedMatchesList.tsx`: A3 bölümü + benzerlik yüzdesi badge'i (amber)
+  - `api.ts`: `MatchedMatch.similarity`, `MatchedMatchesResponse.archive_d`
+- **B5: Pattern D find_matched_ids testleri (`8273c31`):** 6 yeni test (mock candidates), toplam 24 Pattern D testi
+- **C3: Composite DB index'leri (`2dd11b0`):**
+  - `ix_matches_eval_lookup`: kickoff_time WHERE deleted_at IS NULL AND actual_ft_home IS NOT NULL
+  - `ix_matches_pattern_d_candidates`: analyzed_at WHERE ft_all_ratios IS NOT NULL AND deleted_at IS NULL
+- **Arşiv genişletme:** ENG PR 24 sezon çekimi başlatıldı (arka planda devam ediyor)
+- **Sonuç:** 734 backend + 206 frontend + 28 E2E = **968 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1480,9 +1508,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-03 — Sprint 48 TAMAMLANDI, Local Development + Veri Kalitesi 100/100)
+## Kaldığımız Yer (2026-10-07 — Sprint 49 DEVAM EDİYOR, Local Development + Arşiv Genişletme)
 
-### ✅ Mevcut Durum — Local Development + Sprint 48 Tamamlandı
+### ✅ Mevcut Durum — Local Development + Sprint 49 Devam Ediyor
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1490,7 +1518,7 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 |---|---|---|
 | **Frontend** | Local Next.js dev | `http://localhost:3000` |
 | **Backend** | Local FastAPI | `http://localhost:8000` |
-| **Veritabanı** | Docker PostgreSQL | Port 5433, 9,257+ aktif maç |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 9,533+ aktif maç (genişliyor) |
 | **Otomasyon** | Windows Task Scheduler | 4 bat script (pipeline + skor + yedekleme) |
 | **CI/CD** | GitHub Actions | `quality.yml` aktif (push/PR), cron'lar devre dışı |
 
@@ -1500,11 +1528,11 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 | Metrik | Değer |
 |---|---|
-| Aktif maç | 9,257+ |
+| Aktif maç | 9,533+ (genişliyor) |
 | Pattern eksik | 0 |
 | Pattern tutarsızlık | 0 |
 | Quality score | 100 / 100 |
-| Arşiv | 7 lig × 5 sezon |
+| Arşiv | 7 lig × 5 sezon + ek sezonlar çekiliyor |
 
 ### Backtest Sonuçları (Sprint 37 — 7,949 bitmiş maç)
 
@@ -1516,21 +1544,23 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | B+C uyum (MS) | %46.8 | — | %44.4 | TEK doğrulanmış sinyal (+6 puan) |
 | Bundesliga MS | %50.1 | %44.3 | — | En iyi lig |
 
-### Test Durumu (Sprint 48 sonrası)
+### Test Durumu (Sprint 49 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 728 | ✅ Yeşil |
+| **Backend** | pytest | 734 | ✅ Yeşil |
 | **Frontend birim** | vitest | 206 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 962 | — |
+| **Toplam** | — | 968 | — |
 
 ### Sıradaki Adımlar
 
-Bekleyen konular kullanıcı kararı gerektirir:
+**Sprint 49 devam eden işler:**
+- **Arşiv genişletme:** ENG PR 24 sezon çekimi devam ediyor. Kalan ligler: SPA D1, ITA D1, GER D1, FRA D1, TUR D1, HOL D1 (her biri ~23 sezon) — kullanıcı manuel tetikleyecek
+- **A3: Pattern D confidence scoring entegrasyonu:** A1 backtest sonuçlarına göre D'yi `computeConfidence`'a ve `build_ft_recommendations`'a eklemek
+- **Pattern D + C recompute:** Arşiv genişlemesi bitince `recompute-patterns` çalıştırılmalı
 
-- **Pattern D recompute gerekli:** Sprint 46 sonrası `recompute-patterns` çalıştırılmalı — tüm 9,490 maç için pattern_d hesaplanacak
-- **Pattern C recompute gerekli:** Sprint 44 adaptive tolerance sonrası `recompute-patterns` çalıştırılmalı — 2,764 maçta 0 olan Pattern C eşleşmeleri artık bulunacak
+**Bekleyen konular (kullanıcı kararı gerektirir):**
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
 - **Frontend/Backend strateji birleştirme:** Frontend MarketSummary basit yüzde karşılaştırma, backend evaluation log-odds shrinkage + lig bazlı baz oranları — ikisi farklı sayfalarda ama uzun vadede birleştirilmeli
 - **Platt scaling:** Confidence skoru hâlâ olasılık olarak yorumlanmamalı — gelecekte Platt scaling veya isotonic regression ile gerçek olasılığa kalibre edilebilir
@@ -1545,5 +1575,4 @@ Bekleyen konular kullanıcı kararı gerektirir:
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
 - **`ComboSuggestion` ve `StatBadge` dead component'ler:** Sprint 40'ta silindi ✅
-- **Pattern C adaptive tolerance recompute:** Sprint 44 sonrası mevcut pattern'lar eski tolerance ile hesaplanmış — `recompute-patterns` çalıştırılmalı
-- **Pattern D ilk recompute:** Sprint 46 sonrası tüm maçlar için pattern_d hesaplanmalı — `recompute-patterns` çalıştırılmalı
+- **Pattern C + D recompute:** Arşiv genişlemesi bitince `recompute-patterns` çalıştırılmalı — hem adaptive tolerance hem pattern_d tüm maçlara uygulanacak
