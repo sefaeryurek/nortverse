@@ -86,11 +86,13 @@ export interface MatchedMatch {
   h2: string | null;
   ft: string | null;
   kickoff_time: string | null;
+  similarity?: number;
 }
 
 export interface MatchedMatchesResponse {
   archive_b: MatchedMatch[];
   archive_c: MatchedMatch[];
+  archive_d?: MatchedMatch[];
 }
 
 export async function getMatchedMatches(matchId: string): Promise<MatchedMatchesResponse> {

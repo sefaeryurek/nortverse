@@ -403,6 +403,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                   matchId={data.match_id}
                   hasPatternB={!!patternB && patternB.match_count >= 5}
                   hasPatternC={!!patternC && patternC.match_count >= 1}
+                  hasPatternD={!!patternD && patternD.match_count >= 1}
                 />
                 </div>
               </>

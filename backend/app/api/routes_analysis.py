@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Path
 from sqlalchemy import Float, cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 
+from app.analysis.pattern_d import find_matched_ids
 from app.config import ANALYSIS
 
 from app.api.schemas import AnalyzeResponse, MatchSummary
@@ -151,6 +152,7 @@ async def get_matched_matches(
 
     archive_b: list[dict] = []
     archive_c: list[dict] = []
+    archive_d: list[dict] = []
 
     async with get_session() as session:
         if target.ft_scores_1 and target.ft_scores_x and target.ft_scores_2:
@@ -178,4 +180,26 @@ async def get_matched_matches(
             rows = (await session.execute(select(*detail_cols).where(*c_filters).limit(50))).all()
             archive_c = [_row_to_dict(r) for r in rows]
 
-    return {"archive_b": archive_b, "archive_c": archive_c}
+        if target.ft_all_ratios:
+            d_matched = await find_matched_ids(
+                target.ft_all_ratios,
+                top_n=ANALYSIS.pattern_d_top_n,
+                min_similarity=ANALYSIS.pattern_d_min_similarity,
+                exclude_match_id=match_id,
+            )
+            if d_matched:
+                d_ids = [mid for mid, _ in d_matched]
+                sim_map = {mid: sim for mid, sim in d_matched}
+                d_rows = (await session.execute(
+                    select(*detail_cols).where(
+                        Match.match_id.in_(d_ids),
+                        Match.deleted_at.is_(None),
+                    )
+                )).all()
+                for r in d_rows:
+                    d = _row_to_dict(r)
+                    d["similarity"] = round(sim_map.get(r.match_id, 0), 4)
+                    archive_d.append(d)
+                archive_d.sort(key=lambda x: x.get("similarity", 0), reverse=True)
+
+    return {"archive_b": archive_b, "archive_c": archive_c, "archive_d": archive_d}

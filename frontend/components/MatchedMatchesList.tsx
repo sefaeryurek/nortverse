@@ -8,6 +8,7 @@ interface Props {
   matchId: string;
   hasPatternB: boolean;
   hasPatternC: boolean;
+  hasPatternD?: boolean;
 }
 
 function ScoreBadge({ label, score }: { label: string; score: string | null }) {
@@ -30,7 +31,7 @@ function ScoreBadge({ label, score }: { label: string; score: string | null }) {
   );
 }
 
-function MatchRow({ match }: { match: MatchedMatch }) {
+function MatchRow({ match, showSimilarity }: { match: MatchedMatch; showSimilarity?: boolean }) {
   return (
     <div
       className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 py-2 px-2"
@@ -45,6 +46,21 @@ function MatchRow({ match }: { match: MatchedMatch }) {
         </span>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
+        {showSimilarity && match.similarity != null && (
+          <span
+            style={{
+              fontSize: "var(--nv-text-xs)",
+              fontFamily: "var(--nv-font-mono)",
+              fontWeight: 600,
+              padding: "1px 5px",
+              borderRadius: "var(--nv-radius-sm)",
+              backgroundColor: "color-mix(in srgb, var(--nv-accent-amber) 15%, transparent)",
+              color: "var(--nv-accent-amber)",
+            }}
+          >
+            {(match.similarity * 100).toFixed(1)}%
+          </span>
+        )}
         <ScoreBadge label="IY" score={match.ht} />
         <ScoreBadge label="2Y" score={match.h2} />
         <ScoreBadge label="MS" score={match.ft} />
@@ -53,7 +69,7 @@ function MatchRow({ match }: { match: MatchedMatch }) {
   );
 }
 
-export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC }: Props) {
+export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, hasPatternD }: Props) {
   const [data, setData] = useState<MatchedMatchesResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -69,7 +85,7 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC }
     return () => { cancelled = true; };
   }, [open, matchId, data]);
 
-  if (!hasPatternB && !hasPatternC) return null;
+  if (!hasPatternB && !hasPatternC && !hasPatternD) return null;
 
   return (
     <div
@@ -105,6 +121,11 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC }
           {hasPatternC && (
             <span className="nv-badge" style={{ backgroundColor: "var(--nv-accent-green-dim)", color: "var(--nv-accent-green)" }}>
               A2
+            </span>
+          )}
+          {hasPatternD && (
+            <span className="nv-badge" style={{ backgroundColor: "color-mix(in srgb, var(--nv-accent-amber) 20%, transparent)", color: "var(--nv-accent-amber)" }}>
+              A3
             </span>
           )}
         </div>
@@ -158,7 +179,26 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC }
                 </div>
               )}
 
-              {data.archive_b.length === 0 && data.archive_c.length === 0 && (
+              {data.archive_d && data.archive_d.length > 0 && (
+                <div style={{ marginTop: data.archive_b.length > 0 || data.archive_c.length > 0 ? "var(--nv-space-lg)" : 0 }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className="text-[10px] font-bold uppercase"
+                      style={{ color: "var(--nv-accent-amber)", letterSpacing: "var(--nv-tracking-wide)" }}
+                    >
+                      Arşiv 3 (Cosine Similarity)
+                    </span>
+                    <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
+                      {data.archive_d.length} maç
+                    </span>
+                  </div>
+                  {data.archive_d.map((m) => (
+                    <MatchRow key={`d-${m.match_id}`} match={m} showSimilarity />
+                  ))}
+                </div>
+              )}
+
+              {data.archive_b.length === 0 && data.archive_c.length === 0 && (!data.archive_d || data.archive_d.length === 0) && (
                 <div className="text-xs" style={{ color: "var(--nv-text-tertiary)", padding: "var(--nv-space-md) 0" }}>
                   Eşleşen maç bulunamadı
                 </div>

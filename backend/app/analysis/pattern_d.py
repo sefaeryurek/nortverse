@@ -165,6 +165,34 @@ async def find_pattern_d_all_periods(
     return tuple(results)
 
 
+async def find_matched_ids(
+    ft_ratios: dict[str, float],
+    top_n: int = 20,
+    min_similarity: float = 0.85,
+    exclude_match_id: str | None = None,
+) -> list[tuple[str, float]]:
+    """En benzer maçların (match_id, similarity) listesini döndürür."""
+    if not ft_ratios:
+        return []
+
+    target_vec = _to_vector(ft_ratios)
+    if all(v == 0.0 for v in target_vec):
+        return []
+
+    candidates = await _load_candidates(exclude_match_id)
+    scored: list[tuple[float, str]] = []
+    for row in candidates:
+        cand_ratios = row[1]
+        if not isinstance(cand_ratios, dict):
+            continue
+        sim = cosine_similarity(target_vec, _to_vector(cand_ratios))
+        if sim >= min_similarity:
+            scored.append((sim, row[0]))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [(mid, sim) for sim, mid in scored[:top_n]]
+
+
 def invalidate_cache() -> None:
     global _candidate_cache, _candidate_cache_at
     _candidate_cache = None
