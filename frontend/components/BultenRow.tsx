@@ -8,7 +8,7 @@ import LiveMatchBadge from "./LiveMatchBadge";
 interface Props {
   match: FixtureMatch;
   timeStr: string;
-  patternStatus?: { has_b: boolean; has_c: boolean; has_d?: boolean; agreement?: boolean };
+  patternStatus?: { has_b: boolean; has_c: boolean; has_d?: boolean; agreement?: boolean; agreement_bcd?: boolean };
 }
 
 export default memo(function BultenRow({ match, timeStr, patternStatus }: Props) {
@@ -134,9 +134,24 @@ export default memo(function BultenRow({ match, timeStr, patternStatus }: Props)
         {/* Arsiv eslesmesi gostergesi */}
         {patternStatus && (
           <div className="flex items-center gap-1 flex-shrink-0">
-            {patternStatus.has_b && patternStatus.has_c && patternStatus.agreement ? (
+            {patternStatus.agreement_bcd ? (
               <span
-                title="Arşiv 1+2 uyumlu — en güçlü sinyal"
+                title="Arşiv 1+2+3 uyumlu — en güçlü sinyal"
+                style={{
+                  fontSize: "var(--nv-text-xs)",
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  padding: "2px 8px",
+                  borderRadius: "var(--nv-radius-sm)",
+                  background: "linear-gradient(135deg, var(--nv-accent-blue), var(--nv-accent-green), var(--nv-accent-amber))",
+                  color: "var(--nv-text-on-accent)",
+                }}
+              >
+                A1+A2+A3
+              </span>
+            ) : patternStatus.has_b && patternStatus.has_c && patternStatus.agreement ? (
+              <span
+                title="Arşiv 1+2 uyumlu"
                 style={{
                   fontSize: "var(--nv-text-xs)",
                   fontWeight: 700,

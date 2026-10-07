@@ -67,7 +67,7 @@ export async function analyzeMatch(matchId: string, signal?: AbortSignal): Promi
   return data;
 }
 
-export type PatternStatusMap = Record<string, { has_b: boolean; has_c: boolean; has_d?: boolean; agreement?: boolean }>;
+export type PatternStatusMap = Record<string, { has_b: boolean; has_c: boolean; has_d?: boolean; agreement?: boolean; agreement_bcd?: boolean }>;
 
 export async function getPatternStatus(matchIds: string[]): Promise<PatternStatusMap> {
   if (matchIds.length === 0) return {};

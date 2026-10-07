@@ -230,15 +230,17 @@ async def get_pattern_status(
         has_d = bool(d_data and isinstance(d_data, dict) and d_data.get("match_count", 0) >= 1)
         if has_b or has_c or has_d:
             agreement = False
-            if has_b and has_c:
-                b_winner = max(
-                    ["1", "x", "2"],
-                    key=lambda k: b_data.get(f"result_{k}_pct", 0),
-                )
-                c_winner = max(
-                    ["1", "x", "2"],
-                    key=lambda k: c_data.get(f"result_{k}_pct", 0),
-                )
-                agreement = b_winner == c_winner
-            result[row[0]] = {"has_b": has_b, "has_c": has_c, "has_d": has_d, "agreement": agreement}
+            agreement_bcd = False
+            winners: dict[str, str] = {}
+            for label, data, active in [("b", b_data, has_b), ("c", c_data, has_c), ("d", d_data, has_d)]:
+                if active:
+                    winners[label] = max(
+                        ["1", "x", "2"],
+                        key=lambda k, d=data: d.get(f"result_{k}_pct", 0),
+                    )
+            if "b" in winners and "c" in winners:
+                agreement = winners["b"] == winners["c"]
+            if "b" in winners and "c" in winners and "d" in winners:
+                agreement_bcd = len(set(winners.values())) == 1
+            result[row[0]] = {"has_b": has_b, "has_c": has_c, "has_d": has_d, "agreement": agreement, "agreement_bcd": agreement_bcd}
     return result
