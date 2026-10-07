@@ -249,6 +249,7 @@ export interface MatchEvaluation {
   btts: boolean;
   pattern_b: PatternEvaluation | null;
   pattern_c: PatternEvaluation | null;
+  pattern_d: PatternEvaluation | null;
   score_list: string[];
   score_list_hit: boolean;
 }
@@ -271,6 +272,13 @@ export interface EvaluationSummary {
   c_over_25_hit_pct: number;
   c_btts_hit: number;
   c_btts_hit_pct: number;
+  evaluated_d: number;
+  d_result_hit: number;
+  d_result_hit_pct: number;
+  d_over_25_hit: number;
+  d_over_25_hit_pct: number;
+  d_btts_hit: number;
+  d_btts_hit_pct: number;
   confident_evaluated: number;
   confident_result_hit: number;
   confident_result_hit_pct: number;

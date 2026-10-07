@@ -218,6 +218,7 @@ class MatchEvaluation(BaseModel):
     btts: bool
     pattern_b: Optional[PatternEvaluation] = None
     pattern_c: Optional[PatternEvaluation] = None
+    pattern_d: Optional[PatternEvaluation] = None
     score_list: list[str] = Field(default_factory=list)
     score_list_hit: bool = False
 
@@ -240,6 +241,13 @@ class EvaluationSummary(BaseModel):
     c_over_25_hit_pct: float = 0.0
     c_btts_hit: int = 0
     c_btts_hit_pct: float = 0.0
+    evaluated_d: int = 0
+    d_result_hit: int = 0
+    d_result_hit_pct: float = 0.0
+    d_over_25_hit: int = 0
+    d_over_25_hit_pct: float = 0.0
+    d_btts_hit: int = 0
+    d_btts_hit_pct: float = 0.0
     confident_evaluated: int = 0
     confident_result_hit: int = 0
     confident_result_hit_pct: float = 0.0

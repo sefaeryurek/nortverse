@@ -287,7 +287,10 @@ function EvalRow({ match }: { match: MatchEvaluation }) {
         {match.pattern_c && (
           <PatternBadge pat={match.pattern_c} archiveLabel="A2" />
         )}
-        {!match.pattern_b && !match.pattern_c && (
+        {match.pattern_d && (
+          <PatternBadge pat={match.pattern_d} archiveLabel="A3" />
+        )}
+        {!match.pattern_b && !match.pattern_c && !match.pattern_d && (
           <span
             style={{
               fontSize: "var(--nv-text-xs)",
@@ -413,6 +416,22 @@ async function EvalList({ date }: { date: string }) {
             <SummaryCard label="Sonuç İsabeti" hit={s.c_result_hit} total={s.evaluated_c} pct={s.c_result_hit_pct} />
             <SummaryCard label="2.5 Üst/Alt" hit={s.c_over_25_hit} total={s.evaluated_c} pct={s.c_over_25_hit_pct} />
             <SummaryCard label="KG İsabeti" hit={s.c_btts_hit} total={s.evaluated_c} pct={s.c_btts_hit_pct} />
+          </div>
+        </>
+      )}
+
+      {/* Özet kartları — Arşiv 3 (Pattern D) */}
+      {s.evaluated_d > 0 && (
+        <>
+          <div className="px-[var(--nv-page-gutter)] pt-2 pb-1">
+            <span style={{ fontSize: "var(--nv-text-xs)", fontWeight: 700, color: "var(--nv-accent-amber)" }}>
+              A3 — Arşiv 3
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-[var(--nv-page-gutter)] pb-3">
+            <SummaryCard label="Sonuç İsabeti" hit={s.d_result_hit} total={s.evaluated_d} pct={s.d_result_hit_pct} />
+            <SummaryCard label="2.5 Üst/Alt" hit={s.d_over_25_hit} total={s.evaluated_d} pct={s.d_over_25_hit_pct} />
+            <SummaryCard label="KG İsabeti" hit={s.d_btts_hit} total={s.evaluated_d} pct={s.d_btts_hit_pct} />
           </div>
         </>
       )}

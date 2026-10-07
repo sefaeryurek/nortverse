@@ -152,7 +152,7 @@ async def daily_evaluation(
                 Match.league_code, Match.league_name, Match.kickoff_time,
                 Match.actual_ft_home, Match.actual_ft_away,
                 Match.actual_ht_home, Match.actual_ht_away,
-                Match.pattern_ft_b, Match.pattern_ft_c,
+                Match.pattern_ft_b, Match.pattern_ft_c, Match.pattern_ft_d,
                 Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
             )
             .where(
@@ -176,6 +176,10 @@ async def daily_evaluation(
     summary_c_result_hit = 0
     summary_c_over_hit = 0
     summary_c_btts_hit = 0
+    evaluated_d = 0
+    summary_d_result_hit = 0
+    summary_d_over_hit = 0
+    summary_d_btts_hit = 0
     confident_evaluated = 0
     confident_result_hit = 0
 
@@ -209,6 +213,11 @@ async def daily_evaluation(
             min_matches=ANALYSIS.eval_min_matches,
             league_name=row.league_name,
         )
+        pat_d = _evaluate_pattern(
+            row.pattern_ft_d, actual_result, actual_over_25, actual_btts,
+            min_matches=ANALYSIS.eval_min_matches,
+            league_name=row.league_name,
+        )
 
         if pat_b is not None:
             evaluated += 1
@@ -232,6 +241,15 @@ async def daily_evaluation(
             if pat_c.btts_hit:
                 summary_c_btts_hit += 1
 
+        if pat_d is not None:
+            evaluated_d += 1
+            if pat_d.result_hit:
+                summary_d_result_hit += 1
+            if pat_d.over_25_hit:
+                summary_d_over_hit += 1
+            if pat_d.btts_hit:
+                summary_d_btts_hit += 1
+
         if score_hit:
             summary_score_hit += 1
 
@@ -253,6 +271,7 @@ async def daily_evaluation(
             btts=actual_btts,
             pattern_b=pat_b,
             pattern_c=pat_c,
+            pattern_d=pat_d,
             score_list=all_scores,
             score_list_hit=score_hit,
         ))
@@ -276,6 +295,13 @@ async def daily_evaluation(
         c_over_25_hit_pct=_pct(summary_c_over_hit, evaluated_c),
         c_btts_hit=summary_c_btts_hit,
         c_btts_hit_pct=_pct(summary_c_btts_hit, evaluated_c),
+        evaluated_d=evaluated_d,
+        d_result_hit=summary_d_result_hit,
+        d_result_hit_pct=_pct(summary_d_result_hit, evaluated_d),
+        d_over_25_hit=summary_d_over_hit,
+        d_over_25_hit_pct=_pct(summary_d_over_hit, evaluated_d),
+        d_btts_hit=summary_d_btts_hit,
+        d_btts_hit_pct=_pct(summary_d_btts_hit, evaluated_d),
         confident_evaluated=confident_evaluated,
         confident_result_hit=confident_result_hit,
         confident_result_hit_pct=_pct(confident_result_hit, confident_evaluated),
