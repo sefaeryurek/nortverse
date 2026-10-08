@@ -1284,11 +1284,23 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - `lambda: f(var)` → `lambda _v=var: f(_v)` (varsayılan argüman ile yakalama)
 - **Frontend type güncellemeleri (`types.ts`):**
   - `PatternEvaluation.brier_score`, `EvaluationSummary.brier_result_b/c/d`
+- **IntegrityError retry skip (`runner.py`):**
+  - `_with_retry` artık `IntegrityError` (duplicate key) yakalandığında retry yapmıyor — deterministic hata
+- **audit-db duplicate match_id tespiti (`audit_cmds.py`):**
+  - GROUP BY + HAVING COUNT > 1 sorgusu ile aynı match_id'ye sahip duplike kayıtları tespit ediyor
+- **Canlı sayfa Türkçe karakter + hata yönetimi (`canli/page.tsx`):**
+  - Tüm ASCII Türkçe karakterler düzeltildi (arsiv→arşiv, mac→maç, Canli→Canlı, vb.)
+  - Stats fetch hatası artık kullanıcıya gösteriliyor (sessiz yutma yerine "Tekrar dene" butonu)
+  - Poll hatası mevcut veriyi silmiyor (sadece boş state'te hata gösterilir)
+  - Çift nv-live-pulse animasyonu düzeltildi, toggle butonuna aria-expanded eklendi
+- **Frontend dead code temizliği (`confidence.ts`):**
+  - Kullanılmayan: extractRaw, RawSelection, computeAlignmentCount, DUAL_THRESHOLD, DISAGREE_PENALTY, ALIGNMENT_BOOST/PENALTY/THRESHOLD kaldırıldı
 - **Testler:**
   - 9 yeni Pattern D testi: IDF ağırlıkları (4), weighted cosine (2), weighted stats (3)
   - 5 yeni engine testi: _normalize_distribution
   - 4 pattern_stats regresyon testi düzeltmesi (fark_ctr KeyError)
-- **Sonuç:** 748 backend + 206 frontend + 28 E2E = **982 toplam test**
+  - 1 yeni runner testi: IntegrityError retry skip
+- **Sonuç:** 749 backend + 206 frontend + 28 E2E = **983 toplam test**
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -1581,10 +1593,10 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 748 | ✅ Yeşil |
+| **Backend** | pytest | 749 | ✅ Yeşil |
 | **Frontend birim** | vitest | 206 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 982 | — |
+| **Toplam** | — | 983 | — |
 
 ### Sıradaki Adımlar
 
