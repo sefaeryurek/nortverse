@@ -233,6 +233,7 @@ export interface PatternEvaluation {
   btts_pick: string;
   btts_pct: number;
   btts_hit: boolean;
+  brier_score: number;
 }
 
 export interface MatchEvaluation {
@@ -282,6 +283,9 @@ export interface EvaluationSummary {
   confident_evaluated: number;
   confident_result_hit: number;
   confident_result_hit_pct: number;
+  brier_result_b: number | null;
+  brier_result_c: number | null;
+  brier_result_d: number | null;
 }
 
 export interface DailyEvaluation {

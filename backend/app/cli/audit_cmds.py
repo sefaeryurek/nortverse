@@ -455,7 +455,7 @@ def recompute_patterns_cmd(
                         as_of=row.analyzed_at,
                     )
                     await _with_retry(
-                        lambda: update_match_patterns(mid, patterns, expected_analyzed_at=row.analyzed_at),
+                        lambda _m=mid, _p=patterns, _a=row.analyzed_at: update_match_patterns(_m, _p, expected_analyzed_at=_a),
                         label=f"recompute {mid}",
                     )
                     processed += 1

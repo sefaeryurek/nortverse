@@ -202,6 +202,7 @@ class PatternEvaluation(BaseModel):
     btts_pick: str
     btts_pct: float
     btts_hit: bool
+    brier_score: float = 0.0
 
 
 class MatchEvaluation(BaseModel):
@@ -251,6 +252,9 @@ class EvaluationSummary(BaseModel):
     confident_evaluated: int = 0
     confident_result_hit: int = 0
     confident_result_hit_pct: float = 0.0
+    brier_result_b: float | None = None
+    brier_result_c: float | None = None
+    brier_result_d: float | None = None
 
 
 class DailyEvaluation(BaseModel):

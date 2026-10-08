@@ -3,10 +3,8 @@
 Bülten maçının FT ham oran vektörünü (35 boyut) DB'deki tüm geçmiş maçlarla
 cosine similarity ile karşılaştırır ve en benzer Top-N maçı bulur.
 
-Avantajları:
-    - Pattern B gibi çok eşleşmez (sabit N sonuç)
-    - Pattern C'nin 0-eşleşme sorunu yok (her zaman N kadar sonuç döner)
-    - Benzerlik skoru ağırlık olarak kullanılabilir (ileride)
+IDF ağırlıklı: nadir skor oranlarındaki benzerlik daha fazla ayırt edici
+bilgi taşıdığından, her boyut IDF (Inverse Document Frequency) ile ağırlıklandırılır.
 
 Performans:
     - 9,300+ vektör × 35 boyut = <15ms pure Python (numpy gerekmez)
@@ -16,6 +14,7 @@ Performans:
 from __future__ import annotations
 
 import logging
+import math
 import time
 from datetime import datetime
 
@@ -30,6 +29,7 @@ log = logging.getLogger(__name__)
 
 _candidate_cache: list[tuple] | None = None
 _candidate_cache_at: float = 0.0
+_idf_weights: list[float] | None = None
 _CACHE_TTL = 3600.0
 
 
@@ -37,7 +37,36 @@ def _to_vector(ratios: dict[str, float]) -> list[float]:
     return [ratios.get(score_key(h, a), 0.0) for h, a in ALL_SCORES]
 
 
-def cosine_similarity(a: list[float], b: list[float]) -> float:
+def _compute_idf_weights(candidates: list[tuple]) -> list[float]:
+    """Her skor boyutu için IDF ağırlığı hesaplar.
+
+    IDF = log(N / (1 + df_i)) burada df_i = o boyutta sıfırdan farklı değere
+    sahip maç sayısı. Nadir skorlar yüksek ağırlık alır.
+    """
+    n = len(candidates)
+    if n == 0:
+        return [1.0] * len(ALL_SCORES)
+
+    df = [0] * len(ALL_SCORES)
+    for row in candidates:
+        ratios = row[1]
+        if not isinstance(ratios, dict):
+            continue
+        for i, (h, a) in enumerate(ALL_SCORES):
+            if ratios.get(score_key(h, a), 0.0) > 0.0:
+                df[i] += 1
+
+    weights = [math.log(1.0 + n / (1.0 + d)) for d in df]
+    max_w = max(weights) if weights else 1.0
+    if max_w > 0:
+        weights = [w / max_w for w in weights]
+    return weights
+
+
+def cosine_similarity(a: list[float], b: list[float], weights: list[float] | None = None) -> float:
+    if weights:
+        a = [x * w for x, w in zip(a, weights)]
+        b = [y * w for y, w in zip(b, weights)]
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = sum(x * x for x in a) ** 0.5
     norm_b = sum(x * x for x in b) ** 0.5
@@ -50,7 +79,7 @@ async def _load_candidates(
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
 ) -> list[tuple]:
-    global _candidate_cache, _candidate_cache_at
+    global _candidate_cache, _candidate_cache_at, _idf_weights
 
     now = time.monotonic()
     if _candidate_cache is not None and (now - _candidate_cache_at) < _CACHE_TTL:
@@ -82,7 +111,8 @@ async def _load_candidates(
             rows = list((await session.execute(stmt)).all())
         _candidate_cache = rows
         _candidate_cache_at = now
-        log.info("Pattern D candidate cache yüklendi: %d maç", len(rows))
+        _idf_weights = _compute_idf_weights(rows)
+        log.info("Pattern D candidate cache yüklendi: %d maç, IDF ağırlıkları hesaplandı", len(rows))
 
     if exclude_match_id:
         rows = [r for r in rows if r[0] != exclude_match_id]
@@ -121,13 +151,15 @@ async def find_pattern_d_all_periods(
     if not candidates:
         return None, None, None
 
+    weights = _idf_weights
+
     scored: list[tuple[float, tuple]] = []
     for row in candidates:
         cand_ratios = row[1]
         if not isinstance(cand_ratios, dict):
             continue
         cand_vec = _to_vector(cand_ratios)
-        sim = cosine_similarity(target_vec, cand_vec)
+        sim = cosine_similarity(target_vec, cand_vec, weights)
         if sim >= min_similarity:
             scored.append((sim, row))
 
@@ -153,6 +185,7 @@ async def find_pattern_d_all_periods(
             self.actual_h2_away = r[7]
 
     matched_rows = [_Row(r) for _, r in top]
+    sim_weights = [s for s, _ in top]
 
     log.info(
         "Pattern D: %d eşleşme (top sim=%.3f, min sim=%.3f)",
@@ -161,7 +194,7 @@ async def find_pattern_d_all_periods(
         top[-1][0] if top else 0,
     )
 
-    results = [compute_stats(matched_rows, period) for period in ("ht", "h2", "ft")]
+    results = [compute_stats(matched_rows, period, weights=sim_weights) for period in ("ht", "h2", "ft")]
     return tuple(results)
 
 
@@ -180,12 +213,13 @@ async def find_matched_ids(
         return []
 
     candidates = await _load_candidates(exclude_match_id)
+    weights = _idf_weights
     scored: list[tuple[float, str]] = []
     for row in candidates:
         cand_ratios = row[1]
         if not isinstance(cand_ratios, dict):
             continue
-        sim = cosine_similarity(target_vec, _to_vector(cand_ratios))
+        sim = cosine_similarity(target_vec, _to_vector(cand_ratios), weights)
         if sim >= min_similarity:
             scored.append((sim, row[0]))
 
@@ -194,6 +228,7 @@ async def find_matched_ids(
 
 
 def invalidate_cache() -> None:
-    global _candidate_cache, _candidate_cache_at
+    global _candidate_cache, _candidate_cache_at, _idf_weights
     _candidate_cache = None
     _candidate_cache_at = 0.0
+    _idf_weights = None

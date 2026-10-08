@@ -204,69 +204,73 @@ def _period_scores(row, period: str) -> tuple[Optional[int], Optional[int]]:
     return pair
 
 
-def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
+def compute_stats(rows: list, period: str, *, weights: list[float] | None = None) -> Optional[PatternResult]:
     if period not in {"ft", "ht", "h2"}:
         raise ValueError(f"Invalid period: {period}")
     valid: list[tuple] = []
-    for row in rows:
+    valid_weights: list[float] = []
+    for idx, row in enumerate(rows):
         h, a = _period_scores(row, period)
         if h is not None and a is not None:
             valid.append((row, h, a))
+            valid_weights.append(weights[idx] if weights else 1.0)
 
-    total = len(valid)
-    if total == 0:
+    n_valid = len(valid)
+    if n_valid == 0:
         return None
 
-    r1 = rx = r2 = 0
-    alt15 = ust15 = alt25 = ust25 = alt35 = ust35 = 0
-    kg_var = kg_yok = 0
-    hnd_h20 = {"1": 0, "x": 0, "2": 0}
-    hnd_h10 = {"1": 0, "x": 0, "2": 0}
-    hnd_a10 = {"1": 0, "x": 0, "2": 0}
-    hnd_a20 = {"1": 0, "x": 0, "2": 0}
-    ms_15: dict[str, int] = {}
-    ms_25: dict[str, int] = {}
-    ms_kg: dict[str, int] = {}
-    score_ctr: Counter = Counter()
-    fark_ctr: Counter = Counter()
-    ev_ust_05 = ev_ust_15 = ev_ust_25 = 0
-    dep_ust_05 = dep_ust_15 = dep_ust_25 = 0
-    gol_01 = gol_23 = gol_45 = gol_6p = 0
+    total = sum(valid_weights)
 
-    ht_pairs: list[tuple[int, int]] = []
-    h2_pairs: list[tuple[int, int]] = []
-    # (ft_h, ft_a, ht_h, ht_a, h2_h, h2_a) — hem HT hem H2 verisi olan FT maçları
-    ft_full: list[tuple[int, int, int, int, int, int]] = []
+    r1 = rx = r2 = 0.0
+    alt15 = ust15 = alt25 = ust25 = alt35 = ust35 = 0.0
+    kg_var = kg_yok = 0.0
+    hnd_h20: dict[str, float] = {"1": 0.0, "x": 0.0, "2": 0.0}
+    hnd_h10: dict[str, float] = {"1": 0.0, "x": 0.0, "2": 0.0}
+    hnd_a10: dict[str, float] = {"1": 0.0, "x": 0.0, "2": 0.0}
+    hnd_a20: dict[str, float] = {"1": 0.0, "x": 0.0, "2": 0.0}
+    ms_15: dict[str, float] = {}
+    ms_25: dict[str, float] = {}
+    ms_kg: dict[str, float] = {}
+    score_ctr: dict[str, float] = {}
+    fark_ctr: dict[str, float] = {}
+    ev_ust_05 = ev_ust_15 = ev_ust_25 = 0.0
+    dep_ust_05 = dep_ust_15 = dep_ust_25 = 0.0
+    gol_01 = gol_23 = gol_45 = gol_6p = 0.0
 
-    for row, h, a in valid:
+    ht_pairs: list[tuple[int, int, float]] = []
+    h2_pairs: list[tuple[int, int, float]] = []
+    ft_full: list[tuple[int, int, int, int, int, int, float]] = []
+
+    for i, (row, h, a) in enumerate(valid):
+        w = valid_weights[i]
         total_goals = h + a
 
         if h > a:
-            r1 += 1
+            r1 += w
             res = "1"
         elif h == a:
-            rx += 1
+            rx += w
             res = "x"
         else:
-            r2 += 1
+            r2 += w
             res = "2"
 
-        alt15 += 1 if total_goals < 2 else 0
-        ust15 += 1 if total_goals >= 2 else 0
-        alt25 += 1 if total_goals < 3 else 0
-        ust25 += 1 if total_goals >= 3 else 0
-        alt35 += 1 if total_goals < 4 else 0
-        ust35 += 1 if total_goals >= 4 else 0
+        alt15 += w if total_goals < 2 else 0
+        ust15 += w if total_goals >= 2 else 0
+        alt25 += w if total_goals < 3 else 0
+        ust25 += w if total_goals >= 3 else 0
+        alt35 += w if total_goals < 4 else 0
+        ust35 += w if total_goals >= 4 else 0
 
         if h > 0 and a > 0:
-            kg_var += 1
+            kg_var += w
         else:
-            kg_yok += 1
+            kg_yok += w
 
-        hnd_h20[_hnd_result(h, a, 2, 0)] += 1
-        hnd_h10[_hnd_result(h, a, 1, 0)] += 1
-        hnd_a10[_hnd_result(h, a, 0, 1)] += 1
-        hnd_a20[_hnd_result(h, a, 0, 2)] += 1
+        hnd_h20[_hnd_result(h, a, 2, 0)] += w
+        hnd_h10[_hnd_result(h, a, 1, 0)] += w
+        hnd_a10[_hnd_result(h, a, 0, 1)] += w
+        hnd_a20[_hnd_result(h, a, 0, 2)] += w
 
         is_ust15 = total_goals >= 2
         is_ust25 = total_goals >= 3
@@ -274,62 +278,63 @@ def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
         k15 = f"{res}_{'ust' if is_ust15 else 'alt'}"
         k25 = f"{res}_{'ust' if is_ust25 else 'alt'}"
         kkg = f"{res}_{'var' if is_kg else 'yok'}"
-        ms_15[k15] = ms_15.get(k15, 0) + 1
-        ms_25[k25] = ms_25.get(k25, 0) + 1
-        ms_kg[kkg] = ms_kg.get(kkg, 0) + 1
+        ms_15[k15] = ms_15.get(k15, 0.0) + w
+        ms_25[k25] = ms_25.get(k25, 0.0) + w
+        ms_kg[kkg] = ms_kg.get(kkg, 0.0) + w
 
-        score_ctr[f"{h}-{a}"] += 1
+        sk = f"{h}-{a}"
+        score_ctr[sk] = score_ctr.get(sk, 0.0) + w
 
         diff = h - a
         if diff > 0:
             if diff == 1:
-                fark_ctr["ev1"] += 1
+                fark_ctr["ev1"] = fark_ctr.get("ev1", 0.0) + w
             elif diff == 2:
-                fark_ctr["ev2"] += 1
+                fark_ctr["ev2"] = fark_ctr.get("ev2", 0.0) + w
             else:
-                fark_ctr["ev3p"] += 1
+                fark_ctr["ev3p"] = fark_ctr.get("ev3p", 0.0) + w
         elif diff == 0:
-            fark_ctr["ber"] += 1
+            fark_ctr["ber"] = fark_ctr.get("ber", 0.0) + w
         else:
             adiff = -diff
             if adiff == 1:
-                fark_ctr["dep1"] += 1
+                fark_ctr["dep1"] = fark_ctr.get("dep1", 0.0) + w
             elif adiff == 2:
-                fark_ctr["dep2"] += 1
+                fark_ctr["dep2"] = fark_ctr.get("dep2", 0.0) + w
             else:
-                fark_ctr["dep3p"] += 1
+                fark_ctr["dep3p"] = fark_ctr.get("dep3p", 0.0) + w
 
-        ev_ust_05 += 1 if h >= 1 else 0
-        ev_ust_15 += 1 if h >= 2 else 0
-        ev_ust_25 += 1 if h >= 3 else 0
-        dep_ust_05 += 1 if a >= 1 else 0
-        dep_ust_15 += 1 if a >= 2 else 0
-        dep_ust_25 += 1 if a >= 3 else 0
+        ev_ust_05 += w if h >= 1 else 0
+        ev_ust_15 += w if h >= 2 else 0
+        ev_ust_25 += w if h >= 3 else 0
+        dep_ust_05 += w if a >= 1 else 0
+        dep_ust_15 += w if a >= 2 else 0
+        dep_ust_25 += w if a >= 3 else 0
 
         if total_goals <= 1:
-            gol_01 += 1
+            gol_01 += w
         elif total_goals <= 3:
-            gol_23 += 1
+            gol_23 += w
         elif total_goals <= 5:
-            gol_45 += 1
+            gol_45 += w
         else:
-            gol_6p += 1
+            gol_6p += w
 
         if period == "ft":
             ht_h, ht_a = _period_scores(row, "ht")
             h2_h, h2_a = _period_scores(row, "h2")
             if ht_h is not None and ht_a is not None:
-                ht_pairs.append((ht_h, ht_a))
+                ht_pairs.append((ht_h, ht_a, w))
             if h2_h is not None and h2_a is not None:
-                h2_pairs.append((h2_h, h2_a))
+                h2_pairs.append((h2_h, h2_a, w))
             if all(v is not None for v in [ht_h, ht_a, h2_h, h2_a]):
-                ft_full.append((h, a, ht_h, ht_a, h2_h, h2_a))
+                ft_full.append((h, a, ht_h, ht_a, h2_h, h2_a, w))
 
-    def pct(n: int) -> float:
+    def pct(n: float) -> float:
         return round(n / total * 100, 1)
 
     result = PatternResult(
-        match_count=total,
+        match_count=n_valid,
         result_1_pct=pct(r1),
         result_x_pct=pct(rx),
         result_2_pct=pct(r2),
@@ -374,13 +379,13 @@ def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
         msx_kg_yok_pct=pct(ms_kg.get("x_yok", 0)),
         ms2_kg_var_pct=pct(ms_kg.get("2_var", 0)),
         ms2_kg_yok_pct=pct(ms_kg.get("2_yok", 0)),
-        fark_ev1_pct=pct(fark_ctr["ev1"]),
-        fark_ev2_pct=pct(fark_ctr["ev2"]),
-        fark_ev3p_pct=pct(fark_ctr["ev3p"]),
-        fark_ber_pct=pct(fark_ctr["ber"]),
-        fark_dep1_pct=pct(fark_ctr["dep1"]),
-        fark_dep2_pct=pct(fark_ctr["dep2"]),
-        fark_dep3p_pct=pct(fark_ctr["dep3p"]),
+        fark_ev1_pct=pct(fark_ctr.get("ev1", 0.0)),
+        fark_ev2_pct=pct(fark_ctr.get("ev2", 0.0)),
+        fark_ev3p_pct=pct(fark_ctr.get("ev3p", 0.0)),
+        fark_ber_pct=pct(fark_ctr.get("ber", 0.0)),
+        fark_dep1_pct=pct(fark_ctr.get("dep1", 0.0)),
+        fark_dep2_pct=pct(fark_ctr.get("dep2", 0.0)),
+        fark_dep3p_pct=pct(fark_ctr.get("dep3p", 0.0)),
         ev_alt_05_pct=pct(total - ev_ust_05),
         ev_ust_05_pct=pct(ev_ust_05),
         ev_alt_15_pct=pct(total - ev_ust_15),
@@ -397,20 +402,20 @@ def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
         gol_23_pct=pct(gol_23),
         gol_45_pct=pct(gol_45),
         gol_6p_pct=pct(gol_6p),
-        score_freq=dict(score_ctr.most_common(12)),
+        score_freq=dict(sorted(score_ctr.items(), key=lambda x: x[1], reverse=True)[:12]),
     )
 
     # HT alt istatistikleri
     if ht_pairs:
-        n = len(ht_pairs)
-        ht_r1 = sum(1 for h, a in ht_pairs if h > a)
-        ht_rx = sum(1 for h, a in ht_pairs if h == a)
-        ht_r2 = sum(1 for h, a in ht_pairs if h < a)
-        ht_alt = sum(1 for h, a in ht_pairs if h + a < 2)
-        ht_kgv = sum(1 for h, a in ht_pairs if h > 0 and a > 0)
+        ht_total = sum(w for _, _, w in ht_pairs)
+        ht_r1 = sum(w for h, a, w in ht_pairs if h > a)
+        ht_rx = sum(w for h, a, w in ht_pairs if h == a)
+        ht_r2 = sum(w for h, a, w in ht_pairs if h < a)
+        ht_alt = sum(w for h, a, w in ht_pairs if h + a < 2)
+        ht_kgv = sum(w for h, a, w in ht_pairs if h > 0 and a > 0)
 
-        def hp(v: int) -> float:
-            return round(v / n * 100, 1)
+        def hp(v: float) -> float:
+            return round(v / ht_total * 100, 1)
 
         result.ht_result_1_pct = hp(ht_r1)
         result.ht_result_x_pct = hp(ht_rx)
@@ -419,90 +424,91 @@ def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
         result.ht_dc_x2_pct = hp(ht_rx + ht_r2)
         result.ht_dc_12_pct = hp(ht_r1 + ht_r2)
         result.ht_alt_15_pct = hp(ht_alt)
-        result.ht_ust_15_pct = hp(n - ht_alt)
+        result.ht_ust_15_pct = hp(ht_total - ht_alt)
         result.ht_kg_var_pct = hp(ht_kgv)
-        result.ht_kg_yok_pct = hp(n - ht_kgv)
+        result.ht_kg_yok_pct = hp(ht_total - ht_kgv)
 
-        iy_ust_05 = sum(1 for h, a in ht_pairs if h + a >= 1)
-        iy_ust_15 = sum(1 for h, a in ht_pairs if h + a >= 2)
-        iy_ust_25 = sum(1 for h, a in ht_pairs if h + a >= 3)
-        result.iy_alt_05_pct = hp(n - iy_ust_05)
+        iy_ust_05 = sum(w for h, a, w in ht_pairs if h + a >= 1)
+        iy_ust_15 = sum(w for h, a, w in ht_pairs if h + a >= 2)
+        iy_ust_25 = sum(w for h, a, w in ht_pairs if h + a >= 3)
+        result.iy_alt_05_pct = hp(ht_total - iy_ust_05)
         result.iy_ust_05_pct = hp(iy_ust_05)
-        result.iy_alt_15_pct = hp(n - iy_ust_15)
+        result.iy_alt_15_pct = hp(ht_total - iy_ust_15)
         result.iy_ust_15_pct = hp(iy_ust_15)
-        result.iy_alt_25_pct = hp(n - iy_ust_25)
+        result.iy_alt_25_pct = hp(ht_total - iy_ust_25)
         result.iy_ust_25_pct = hp(iy_ust_25)
 
-        ev_ht_ust = sum(1 for h, a in ht_pairs if h >= 1)
-        dep_ht_ust = sum(1 for h, a in ht_pairs if a >= 1)
-        result.ev_ht_alt_05_pct = hp(n - ev_ht_ust)
+        ev_ht_ust = sum(w for h, a, w in ht_pairs if h >= 1)
+        dep_ht_ust = sum(w for h, a, w in ht_pairs if a >= 1)
+        result.ev_ht_alt_05_pct = hp(ht_total - ev_ht_ust)
         result.ev_ht_ust_05_pct = hp(ev_ht_ust)
-        result.dep_ht_alt_05_pct = hp(n - dep_ht_ust)
+        result.dep_ht_alt_05_pct = hp(ht_total - dep_ht_ust)
         result.dep_ht_ust_05_pct = hp(dep_ht_ust)
 
     # H2 alt istatistikleri
     if h2_pairs:
-        n = len(h2_pairs)
-        h2_r1 = sum(1 for h, a in h2_pairs if h > a)
-        h2_rx = sum(1 for h, a in h2_pairs if h == a)
-        h2_r2 = sum(1 for h, a in h2_pairs if h < a)
-        h2_kgv = sum(1 for h, a in h2_pairs if h > 0 and a > 0)
+        h2_total = sum(w for _, _, w in h2_pairs)
+        h2_r1 = sum(w for h, a, w in h2_pairs if h > a)
+        h2_rx = sum(w for h, a, w in h2_pairs if h == a)
+        h2_r2 = sum(w for h, a, w in h2_pairs if h < a)
+        h2_kgv = sum(w for h, a, w in h2_pairs if h > 0 and a > 0)
 
-        def h2p(v: int) -> float:
-            return round(v / n * 100, 1)
+        def h2p(v: float) -> float:
+            return round(v / h2_total * 100, 1)
 
         result.h2_result_1_pct = h2p(h2_r1)
         result.h2_result_x_pct = h2p(h2_rx)
         result.h2_result_2_pct = h2p(h2_r2)
         result.h2_kg_var_pct = h2p(h2_kgv)
-        result.h2_kg_yok_pct = h2p(n - h2_kgv)
+        result.h2_kg_yok_pct = h2p(h2_total - h2_kgv)
 
     # FT tam veri istatistikleri (hem HT hem H2 skoru olan maçlar)
     if ft_full:
-        n = len(ft_full)
+        ff_total = sum(w for *_, w in ft_full)
 
-        def fp(v: int) -> float:
-            return round(v / n * 100, 1)
+        def fp(v: float) -> float:
+            return round(v / ff_total * 100, 1)
 
         iki_yari_alt15 = sum(
-            1 for ft_h, ft_a, ht_h, ht_a, h2_h, h2_a in ft_full
+            w for ft_h, ft_a, ht_h, ht_a, h2_h, h2_a, w in ft_full
             if (ht_h + ht_a) < 2 and (h2_h + h2_a) < 2
         )
         iki_yari_ust15 = sum(
-            1 for ft_h, ft_a, ht_h, ht_a, h2_h, h2_a in ft_full
+            w for ft_h, ft_a, ht_h, ht_a, h2_h, h2_a, w in ft_full
             if (ht_h + ht_a) >= 2 and (h2_h + h2_a) >= 2
         )
         result.iki_yari_alt15_pct = fp(iki_yari_alt15)
         result.iki_yari_ust15_pct = fp(iki_yari_ust15)
 
-        encok_1y   = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if (ht_h + ht_a) > (h2_h + h2_a))
-        encok_esit = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if (ht_h + ht_a) == (h2_h + h2_a))
-        encok_2y   = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if (ht_h + ht_a) < (h2_h + h2_a))
+        encok_1y   = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if (ht_h + ht_a) > (h2_h + h2_a))
+        encok_esit = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if (ht_h + ht_a) == (h2_h + h2_a))
+        encok_2y   = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if (ht_h + ht_a) < (h2_h + h2_a))
         result.encok_gol_1y_pct    = fp(encok_1y)
         result.encok_gol_esit_pct  = fp(encok_esit)
         result.encok_gol_2y_pct    = fp(encok_2y)
 
-        iy_h2_kg: Counter = Counter()
-        for _, _, ht_h, ht_a, h2_h, h2_a in ft_full:
+        iy_h2_kg: dict[str, float] = {}
+        for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full:
             iy_kg = "v" if (ht_h > 0 and ht_a > 0) else "y"
             h2_kg = "v" if (h2_h > 0 and h2_a > 0) else "y"
-            iy_h2_kg[f"{iy_kg}{h2_kg}"] += 1
-        result.iy_h2_kg_vv_pct = fp(iy_h2_kg["vv"])
-        result.iy_h2_kg_vy_pct = fp(iy_h2_kg["vy"])
-        result.iy_h2_kg_yv_pct = fp(iy_h2_kg["yv"])
-        result.iy_h2_kg_yy_pct = fp(iy_h2_kg["yy"])
+            k = f"{iy_kg}{h2_kg}"
+            iy_h2_kg[k] = iy_h2_kg.get(k, 0.0) + w
+        result.iy_h2_kg_vv_pct = fp(iy_h2_kg.get("vv", 0.0))
+        result.iy_h2_kg_vy_pct = fp(iy_h2_kg.get("vy", 0.0))
+        result.iy_h2_kg_yv_pct = fp(iy_h2_kg.get("yv", 0.0))
+        result.iy_h2_kg_yy_pct = fp(iy_h2_kg.get("yy", 0.0))
 
-        ev_iki  = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if ht_h > 0 and h2_h > 0)
-        dep_iki = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if ht_a > 0 and h2_a > 0)
+        ev_iki  = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if ht_h > 0 and h2_h > 0)
+        dep_iki = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if ht_a > 0 and h2_a > 0)
         result.ev_iki_yari_gol_pct  = fp(ev_iki)
         result.dep_iki_yari_gol_pct = fp(dep_iki)
 
-        ev_e1  = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if ht_h > h2_h)
-        ev_ee  = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if ht_h == h2_h)
-        ev_e2  = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if ht_h < h2_h)
-        dep_e1 = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if ht_a > h2_a)
-        dep_ee = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if ht_a == h2_a)
-        dep_e2 = sum(1 for _, _, ht_h, ht_a, h2_h, h2_a in ft_full if ht_a < h2_a)
+        ev_e1  = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if ht_h > h2_h)
+        ev_ee  = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if ht_h == h2_h)
+        ev_e2  = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if ht_h < h2_h)
+        dep_e1 = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if ht_a > h2_a)
+        dep_ee = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if ht_a == h2_a)
+        dep_e2 = sum(w for _, _, ht_h, ht_a, h2_h, h2_a, w in ft_full if ht_a < h2_a)
         result.ev_encok_1y_pct    = fp(ev_e1)
         result.ev_encok_esit_pct  = fp(ev_ee)
         result.ev_encok_2y_pct    = fp(ev_e2)
@@ -510,19 +516,20 @@ def compute_stats(rows: list, period: str) -> Optional[PatternResult]:
         result.dep_encok_esit_pct = fp(dep_ee)
         result.dep_encok_2y_pct   = fp(dep_e2)
 
-        iy_ms_ctr: Counter = Counter()
-        for ft_h, ft_a, ht_h, ht_a, h2_h, h2_a in ft_full:
+        iy_ms_ctr: dict[str, float] = {}
+        for ft_h, ft_a, ht_h, ht_a, h2_h, h2_a, w in ft_full:
             ht_res = "1" if ht_h > ht_a else ("x" if ht_h == ht_a else "2")
             ft_res = "1" if ft_h > ft_a else ("x" if ft_h == ft_a else "2")
-            iy_ms_ctr[f"{ht_res}{ft_res}"] += 1
-        result.iy_ms_11_pct = fp(iy_ms_ctr["11"])
-        result.iy_ms_1x_pct = fp(iy_ms_ctr["1x"])
-        result.iy_ms_12_pct = fp(iy_ms_ctr["12"])
-        result.iy_ms_x1_pct = fp(iy_ms_ctr["x1"])
-        result.iy_ms_xx_pct = fp(iy_ms_ctr["xx"])
-        result.iy_ms_x2_pct = fp(iy_ms_ctr["x2"])
-        result.iy_ms_21_pct = fp(iy_ms_ctr["21"])
-        result.iy_ms_2x_pct = fp(iy_ms_ctr["2x"])
-        result.iy_ms_22_pct = fp(iy_ms_ctr["22"])
+            k = f"{ht_res}{ft_res}"
+            iy_ms_ctr[k] = iy_ms_ctr.get(k, 0.0) + w
+        result.iy_ms_11_pct = fp(iy_ms_ctr.get("11", 0.0))
+        result.iy_ms_1x_pct = fp(iy_ms_ctr.get("1x", 0.0))
+        result.iy_ms_12_pct = fp(iy_ms_ctr.get("12", 0.0))
+        result.iy_ms_x1_pct = fp(iy_ms_ctr.get("x1", 0.0))
+        result.iy_ms_xx_pct = fp(iy_ms_ctr.get("xx", 0.0))
+        result.iy_ms_x2_pct = fp(iy_ms_ctr.get("x2", 0.0))
+        result.iy_ms_21_pct = fp(iy_ms_ctr.get("21", 0.0))
+        result.iy_ms_2x_pct = fp(iy_ms_ctr.get("2x", 0.0))
+        result.iy_ms_22_pct = fp(iy_ms_ctr.get("22", 0.0))
 
     return result

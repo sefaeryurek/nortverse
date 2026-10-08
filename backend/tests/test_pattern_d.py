@@ -6,10 +6,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.analysis.pattern_d import (
+    _compute_idf_weights,
     _to_vector,
     cosine_similarity,
     find_matched_ids,
 )
+from app.analysis.pattern_stats import compute_stats
 from app.analysis.scores import ALL_SCORES, score_key
 
 
@@ -204,3 +206,85 @@ class TestFindMatchedIds:
         mid, sim = result[0]
         assert mid == "100"
         assert 0.99 < sim <= 1.0
+
+
+# ─── IDF ağırlıkları ────────────────────────────────────────────────────────
+
+
+class TestIDFWeights:
+    def test_empty_candidates_returns_ones(self):
+        weights = _compute_idf_weights([])
+        assert len(weights) == len(ALL_SCORES)
+        assert all(w == 1.0 for w in weights)
+
+    def test_all_nonzero_dimensions_get_low_weight(self):
+        ratios = {score_key(h, a): 1.0 for h, a in ALL_SCORES}
+        candidates = [(str(i), ratios, 1, 0, 0, 0, 1, 0) for i in range(100)]
+        weights = _compute_idf_weights(candidates)
+        assert all(0.0 <= w <= 1.0 for w in weights)
+
+    def test_rare_dimension_gets_higher_weight(self):
+        common = {score_key(h, a): 1.0 for h, a in ALL_SCORES}
+        rare = {score_key(h, a): (1.0 if i == 0 else 0.0) for i, (h, a) in enumerate(ALL_SCORES)}
+        candidates = [(str(i), common, 1, 0, 0, 0, 1, 0) for i in range(99)]
+        candidates.append(("99", rare, 1, 0, 0, 0, 1, 0))
+        weights = _compute_idf_weights(candidates)
+        assert weights[0] < weights[1]
+
+    def test_normalized_to_max_one(self):
+        ratios = {score_key(h, a): float(i % 5) for i, (h, a) in enumerate(ALL_SCORES)}
+        candidates = [(str(i), ratios, 1, 0, 0, 0, 1, 0) for i in range(50)]
+        weights = _compute_idf_weights(candidates)
+        assert max(weights) == pytest.approx(1.0)
+
+
+# ─── Weighted cosine similarity ─────────────────────────────────────────────
+
+
+class TestWeightedCosineSimilarity:
+    def test_weights_change_result(self):
+        a = [1.0, 0.0, 3.0]
+        b = [1.0, 5.0, 3.0]
+        sim_unweighted = cosine_similarity(a, b)
+        sim_weighted = cosine_similarity(a, b, weights=[1.0, 0.0, 1.0])
+        assert sim_weighted > sim_unweighted
+
+    def test_none_weights_same_as_unweighted(self):
+        a = [1.0, 2.0, 3.0]
+        b = [4.0, 5.0, 6.0]
+        assert cosine_similarity(a, b, None) == cosine_similarity(a, b)
+
+
+# ─── Similarity-weighted stats ──────────────────────────────────────────────
+
+
+class TestWeightedStats:
+    def _make_row(self, ft_h, ft_a, ht_h=0, ht_a=0):
+        class R:
+            pass
+        r = R()
+        r.actual_ft_home = ft_h
+        r.actual_ft_away = ft_a
+        r.actual_ht_home = ht_h
+        r.actual_ht_away = ht_a
+        r.actual_h2_home = ft_h - ht_h
+        r.actual_h2_away = ft_a - ht_a
+        return r
+
+    def test_equal_weights_same_as_unweighted(self):
+        rows = [self._make_row(2, 1), self._make_row(0, 0), self._make_row(1, 2)]
+        unweighted = compute_stats(rows, "ft")
+        weighted = compute_stats(rows, "ft", weights=[1.0, 1.0, 1.0])
+        assert unweighted.result_1_pct == weighted.result_1_pct
+        assert unweighted.result_x_pct == weighted.result_x_pct
+
+    def test_high_weight_shifts_result(self):
+        rows = [self._make_row(2, 0), self._make_row(0, 1)]
+        even = compute_stats(rows, "ft", weights=[1.0, 1.0])
+        biased = compute_stats(rows, "ft", weights=[10.0, 1.0])
+        assert biased.result_1_pct > even.result_1_pct
+
+    def test_match_count_is_actual_count_not_weight_sum(self):
+        rows = [self._make_row(1, 0), self._make_row(0, 1)]
+        result = compute_stats(rows, "ft", weights=[5.0, 5.0])
+        assert result.match_count == 2

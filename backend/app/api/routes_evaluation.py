@@ -107,6 +107,11 @@ def _evaluate_pattern(
     btts_pick = btts_adjusted > btts_base
     btts_hit = btts_pick == actual_btts
 
+    brier = sum(
+        (adjusted_pcts[k] / 100.0 - (1.0 if k == actual_result else 0.0)) ** 2
+        for k in ("1", "X", "2")
+    )
+
     return PatternEvaluation(
         match_count=mc,
         result_pick=result_pick,
@@ -120,6 +125,7 @@ def _evaluate_pattern(
         btts_pick="KG Var" if btts_pick else "KG Yok",
         btts_pct=round(btts_pct if btts_pick else (100 - btts_pct), 1),
         btts_hit=btts_hit,
+        brier_score=round(brier, 4),
     )
 
 
@@ -182,6 +188,9 @@ async def daily_evaluation(
     summary_d_btts_hit = 0
     confident_evaluated = 0
     confident_result_hit = 0
+    brier_sum_b = 0.0
+    brier_sum_c = 0.0
+    brier_sum_d = 0.0
 
     for row in rows:
         ft_h, ft_a = row.actual_ft_home, row.actual_ft_away
@@ -221,6 +230,7 @@ async def daily_evaluation(
 
         if pat_b is not None:
             evaluated += 1
+            brier_sum_b += pat_b.brier_score
             if pat_b.result_hit:
                 summary_result_hit += 1
             if pat_b.over_25_hit:
@@ -234,6 +244,7 @@ async def daily_evaluation(
 
         if pat_c is not None:
             evaluated_c += 1
+            brier_sum_c += pat_c.brier_score
             if pat_c.result_hit:
                 summary_c_result_hit += 1
             if pat_c.over_25_hit:
@@ -243,6 +254,7 @@ async def daily_evaluation(
 
         if pat_d is not None:
             evaluated_d += 1
+            brier_sum_d += pat_d.brier_score
             if pat_d.result_hit:
                 summary_d_result_hit += 1
             if pat_d.over_25_hit:
@@ -305,6 +317,9 @@ async def daily_evaluation(
         confident_evaluated=confident_evaluated,
         confident_result_hit=confident_result_hit,
         confident_result_hit_pct=_pct(confident_result_hit, confident_evaluated),
+        brier_result_b=round(brier_sum_b / evaluated, 4) if evaluated > 0 else None,
+        brier_result_c=round(brier_sum_c / evaluated_c, 4) if evaluated_c > 0 else None,
+        brier_result_d=round(brier_sum_d / evaluated_d, 4) if evaluated_d > 0 else None,
     )
 
     return DailyEvaluation(
