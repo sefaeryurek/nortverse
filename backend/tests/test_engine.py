@@ -14,6 +14,7 @@ from app.analysis.engine import (
     _current_season,
     _get_goals_in_period,
     _goal_count_distribution,
+    _normalize_distribution,
     analyze_match,
     is_match_analyzable,
 )
@@ -155,6 +156,39 @@ class TestGoalCountDistribution:
         matches = [_m("T1", "B", 0, 3, 0, 1) for _ in range(3)]
         dist = _goal_count_distribution(matches, "B", Period.FT, 3)
         assert dist[3] == 3
+
+
+# ─── _normalize_distribution ────────────────────────────────────────────────
+
+
+class TestNormalizeDistribution:
+    def test_equal_sample_no_change(self):
+        dist = {0: 1, 1: 3, 2: 1, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0}
+        norm = _normalize_distribution(dist, 5)
+        assert norm == {0: 1.0, 1: 3.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 0.0, 6: 0.0, 7: 0.0}
+
+    def test_smaller_sample_scales_up(self):
+        dist = {0: 0, 1: 1, 2: 1, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0}
+        norm = _normalize_distribution(dist, 5)
+        assert norm[1] == pytest.approx(2.5)
+        assert norm[2] == pytest.approx(2.5)
+        assert sum(norm.values()) == pytest.approx(5.0)
+
+    def test_empty_distribution(self):
+        dist = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0}
+        norm = _normalize_distribution(dist, 5)
+        assert all(v == 0.0 for v in norm.values())
+
+    def test_larger_sample_scales_down(self):
+        dist = {0: 0, 1: 5, 2: 5, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0}
+        norm = _normalize_distribution(dist, 5)
+        assert norm[1] == pytest.approx(2.5)
+        assert sum(norm.values()) == pytest.approx(5.0)
+
+    def test_preserves_proportions(self):
+        dist = {0: 1, 1: 2, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0}
+        norm = _normalize_distribution(dist, 6)
+        assert norm[0] / norm[1] == pytest.approx(0.5)
 
 
 # ─── _current_season ─────────────────────────────────────────────────────────

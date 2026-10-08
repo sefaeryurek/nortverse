@@ -436,7 +436,7 @@ async function EvalList({ date }: { date: string }) {
         </>
       )}
 
-      {/* Ozet bilgi cubugu */}
+      {/* Brier score + özet bilgi çubuğu */}
       <div
         className="flex flex-wrap items-center gap-3 px-[var(--nv-page-gutter)] py-3"
         style={{ borderBottom: "1px solid var(--nv-border)" }}
@@ -461,6 +461,24 @@ async function EvalList({ date }: { date: string }) {
         >
           {s.evaluated} değerlendirilen
         </span>
+        {(s.brier_result_b != null || s.brier_result_c != null || s.brier_result_d != null) && (
+          <span
+            className="flex items-center gap-2 ml-auto"
+            style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}
+            title="Brier Skoru — düşük = daha iyi kalibre (0 = mükemmel, 0.667 = rastgele)"
+          >
+            Brier:
+            {s.brier_result_b != null && (
+              <span style={{ color: "var(--nv-accent-blue)" }}>A1 {s.brier_result_b.toFixed(3)}</span>
+            )}
+            {s.brier_result_c != null && (
+              <span style={{ color: "var(--nv-accent-green)" }}>A2 {s.brier_result_c.toFixed(3)}</span>
+            )}
+            {s.brier_result_d != null && (
+              <span style={{ color: "var(--nv-accent-amber)" }}>A3 {s.brier_result_d.toFixed(3)}</span>
+            )}
+          </span>
+        )}
       </div>
 
       {/* Mac kartlari */}

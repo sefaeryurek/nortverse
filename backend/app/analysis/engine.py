@@ -96,6 +96,18 @@ def _goal_count_distribution(
     return distribution
 
 
+def _normalize_distribution(
+    dist: dict[int, int], target_n: int
+) -> dict[int, float]:
+    """Dağılımı target_n'e normalize et — farklı örneklem boyutlarını eşitle."""
+    total = sum(dist.values())
+    if total == 0:
+        return {k: 0.0 for k in dist}
+    if total == target_n:
+        return {k: float(v) for k, v in dist.items()}
+    scale = target_n / total
+    return {k: v * scale for k, v in dist.items()}
+
 
 def _analyze_period(data: MatchRawData, period: Period, cfg_n: int, cfg_threshold: float) -> PeriodAnalysis:
     """Tek bir periyot için 35 skoru hesapla."""
@@ -110,6 +122,12 @@ def _analyze_period(data: MatchRawData, period: Period, cfg_n: int, cfg_threshol
     h2h_home_dist = _goal_count_distribution(h2h_league, data.home_team, period, cfg_n)
     h2h_away_dist = _goal_count_distribution(h2h_league, data.away_team, period, cfg_n)
 
+    # Normalize: H2H 2 maç, form 5 maç olsa bile eşit ağırlık
+    form_home_norm = _normalize_distribution(form_home_dist, cfg_n)
+    form_away_norm = _normalize_distribution(form_away_dist, cfg_n)
+    h2h_home_norm = _normalize_distribution(h2h_home_dist, cfg_n)
+    h2h_away_norm = _normalize_distribution(h2h_away_dist, cfg_n)
+
     # Her skor için oran hesapla
     all_ratios: dict[str, float] = {}
     scores_1: list[str] = []
@@ -118,8 +136,8 @@ def _analyze_period(data: MatchRawData, period: Period, cfg_n: int, cfg_threshol
 
     for hg, ag in ALL_SCORES:
         ratio = (
-            (h2h_home_dist.get(hg, 0) + form_home_dist.get(hg, 0))
-            + (h2h_away_dist.get(ag, 0) + form_away_dist.get(ag, 0))
+            (h2h_home_norm.get(hg, 0.0) + form_home_norm.get(hg, 0.0))
+            + (h2h_away_norm.get(ag, 0.0) + form_away_norm.get(ag, 0.0))
         ) / 2
 
         key = score_key(hg, ag)
