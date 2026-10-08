@@ -1,7 +1,7 @@
 """Arşiv oluşturma, onarım ve normalize komutları."""
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import typer
@@ -50,11 +50,15 @@ def build_archive_cmd(
             console.print(f"\n[bold]{total} maç arşivlenecek (concurrency={concurrency})...[/bold]\n")
 
             sem = asyncio.Semaphore(concurrency)
+            now = datetime.now(timezone.utc)
 
             async def _process(mid: str, s: str | None) -> None:
                 async with sem:
                     try:
                         raw = await fetch_match_detail(mid, ctx=ctx)
+                        if raw.kickoff_time and raw.kickoff_time > now and raw.actual_ft_home is None:
+                            stats["skipped"] += 1
+                            return
                         check = check_match_filters(raw)
                         if not check.passed:
                             stats["skipped"] += 1
@@ -151,10 +155,15 @@ def build_multi_archive_cmd(
                     )
                     stats = {"analyzed": 0, "skipped": 0, "errors": 0, "done": 0}
 
+                    now = datetime.now(timezone.utc)
+
                     async def _process(mid: str, _season: str = season) -> None:
                         async with sem:
                             try:
                                 raw = await _fetch_detail(mid, ctx=ctx)
+                                if raw.kickoff_time and raw.kickoff_time > now and raw.actual_ft_home is None:
+                                    stats["skipped"] += 1
+                                    return
                                 check = check_match_filters(raw)
                                 if not check.passed:
                                     stats["skipped"] += 1
