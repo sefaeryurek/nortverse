@@ -86,6 +86,14 @@ class TestWithRetry:
             await _with_retry(op, "test", attempts=3, base_delay=0.001)
         assert op.await_count == 1
 
+    @pytest.mark.asyncio
+    async def test_integrity_error_not_retried(self):
+        from sqlalchemy.exc import IntegrityError
+        op = AsyncMock(side_effect=IntegrityError("INSERT", {}, Exception("dup")))
+        with pytest.raises(IntegrityError):
+            await _with_retry(op, "test", attempts=3, base_delay=0.001)
+        assert op.await_count == 1
+
 
 # ─── _result_to_row ─────────────────────────────────────────────────────────
 

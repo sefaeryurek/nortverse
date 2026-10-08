@@ -53,12 +53,13 @@ async def _with_retry(
     başarısız olan bir işlem 2-3 deneme içinde genelde tutar.
     Son deneme yine başarısız olursa exception yukarı fırlatılır.
     """
+    from sqlalchemy.exc import IntegrityError
     last_exc: Exception | None = None
     for i in range(attempts):
         try:
             return await op()
-        except ValueError:
-            raise  # Invalid data will not be repaired by retrying the same operation.
+        except (ValueError, IntegrityError):
+            raise  # Duplicate key or invalid data — retry will not help.
         except Exception as exc:
             last_exc = exc
             if i == attempts - 1:

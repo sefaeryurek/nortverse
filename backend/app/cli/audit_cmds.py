@@ -230,6 +230,15 @@ def audit_db_cmd(
                 or (r.league_name and canonical_league_name(r.league_name) != r.league_name)
             )
 
+            dup_stmt = (
+                select(Match.match_id, func.count(Match.id).label("cnt"))
+                .where(Match.deleted_at.is_(None))
+                .group_by(Match.match_id)
+                .having(func.count(Match.id) > 1)
+            )
+            dup_rows = (await session.execute(dup_stmt)).all()
+            duplicate_count = len(dup_rows)
+
             ftb_rows = (await session.execute(
                 select(Match.match_id, Match.pattern_ft_b)
                 .where(Match.deleted_at.is_(None), Match.pattern_ft_b.isnot(None))
@@ -282,6 +291,7 @@ def audit_db_cmd(
         _row("Trends NULL (Sprint 8.8 öncesi)", missing_trends, ok_if_zero=False)
         _row("Skor eksik (kickoff +130dk)", missing_actual, ok_if_zero=False)
         _row("Pattern tutarsızlık (1+X+2 ≠ 100)", len(pattern_anomalies))
+        _row("Duplicate match_id", duplicate_count)
         console.print(t)
 
         t2 = Table(title="Aktivite", show_header=False)
@@ -318,6 +328,12 @@ def audit_db_cmd(
                 f"[cyan]python -m app.cli.main normalize-leagues --apply[/cyan] "
                 f"ile {unnormalized} lig adını normalize et."
             )
+        if duplicate_count > 0:
+            console.print(
+                f"\n[red]Duplicate match_id tespit edildi ({duplicate_count} adet):[/red]"
+            )
+            for dr in dup_rows[:5]:
+                console.print(f"  [dim]{dr.match_id}: {dr.cnt} kayıt[/dim]")
         if pattern_anomalies:
             console.print(
                 f"\n[yellow]Pattern anomalisi tespit edildi ({len(pattern_anomalies)} maç):[/yellow]"
