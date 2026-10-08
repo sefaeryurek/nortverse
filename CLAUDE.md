@@ -215,7 +215,7 @@ nortverse/
 │   │   ├── analysis/
 │   │   │   ├── scores.py          # ALL_SCORES sabiti
 │   │   │   ├── filtering.py       # check_match_filters (lig, min maç, H2H kontrolleri)
-│   │   │   ├── engine.py          # analyze_match (Katman A)
+│   │   │   ├── engine.py          # analyze_match (Katman A) — normalize edilmiş dağılımlarla
 │   │   │   ├── history.py         # select_history — merkezi veri seçimi (Sprint 12 denetim)
 │   │   │   ├── league_filter.py   # is_supported_league + canonical_league_name (Sprint 8.9)
 │   │   │   ├── pattern_b.py       # find_pattern_b_matches — JSONB equality
@@ -1229,7 +1229,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Design system uyumu:** Mevcut `--nv-` token'ları, `nv-pct-bar`, `nv-live-pulse`, `nv-fade-in` CSS sınıfları
 - **Sonuç:** 728 backend + 206 frontend + 28 E2E = **962 toplam test**
 
-### Sprint 49 — DEVAM EDİYOR 🔄 (Pattern D Tam Entegrasyon + Arşiv Genişletme)
+### Sprint 49 — TAMAMLANDI ✅ (Pattern D Tam Entegrasyon + Arşiv Genişletme)
 - **Bağlam:** 3 araştırma ajanı (Strateji, Arşiv, Frontend/Backend) tüm codebase'i taradı. Pattern D (Cosine Similarity) display-only idi, tüm karar mekanizmalarına entegre ediliyor. Arşiv 7 lig × 20+ yıl genişletme başlatıldı.
 - **A1: Pattern D değerlendirme entegrasyonu (`948173e`):**
   - `routes_evaluation.py`: `Match.pattern_ft_d` SQL'e eklendi, `_evaluate_pattern()` ile D değerlendirmesi
@@ -1256,6 +1256,39 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - `ix_matches_pattern_d_candidates`: analyzed_at WHERE ft_all_ratios IS NOT NULL AND deleted_at IS NULL
 - **Arşiv genişletme:** ENG PR 24 sezon çekimi başlatıldı (arka planda devam ediyor)
 - **Sonuç:** 734 backend + 206 frontend + 28 E2E = **968 toplam test**
+
+### Sprint 50 — TAMAMLANDI ✅ (IDF-Weighted Cosine Similarity + Kalibrasyon Metrikleri + Katman A Normalizasyonu)
+- **Bağlam:** 3 araştırma ajanı (Strateji, DB/Veri Kalitesi, Frontend UX) tüm codebase'i taradı. Pattern D sinyal kalitesi artırılıyor, Katman A formülü normalize ediliyor.
+- **IDF-weighted cosine similarity (`pattern_d.py`):**
+  - `_compute_idf_weights(candidates)`: Her skor boyutu için IDF ağırlığı — nadir skorlar daha yüksek ağırlık
+  - `cosine_similarity(a, b, weights=None)`: Opsiyonel ağırlık desteği, element-wise çarpma
+  - Cache yenilenirken IDF ağırlıkları otomatik hesaplanır
+  - `find_pattern_d_all_periods` ve `find_matched_ids` IDF ağırlıklı
+- **Similarity-weighted stats (`pattern_stats.py`):**
+  - `compute_stats(rows, period, *, weights=None)`: Opsiyonel ağırlık parametresi
+  - Pattern D'de daha benzer maçlar istatistiklere daha çok katkı yapar
+  - Tüm sayaçlar float, `total = sum(weights)`, `match_count` gerçek sayı
+  - `fark_ctr` KeyError düzeltmesi (Counter → dict + `.get()`)
+- **Brier score kalibrasyon metriği (`routes_evaluation.py`):**
+  - `_evaluate_pattern()` her maç için Brier skoru hesaplıyor: `BS = Σ(p - I(actual))²`
+  - `EvaluationSummary`'e `brier_result_b/c/d` alanları (günlük ortalama Brier)
+  - Düşük = daha iyi kalibre (0 = mükemmel, 0.667 = rastgele)
+- **Değerlendirme sayfası Brier gösterimi (`degerlendirme/page.tsx`):**
+  - Özet çubuğunda A1/A2/A3 Brier skorları (renkli, hover tooltip ile açıklama)
+- **Katman A dağılım normalizasyonu (`engine.py`):**
+  - `_normalize_distribution(dist, target_n)`: H2H/form dağılımlarını eşit ağırlığa normalize eder
+  - H2H 2 maç, form 5 maç olsa bile formüle eşit katkı — örneklem boyutu farkı düzeltildi
+  - Threshold (3.5) ve çıktı ölçeği değişmez (eşit örneklemde no-op)
+- **Lambda closure bug düzeltmesi (`audit_cmds.py`):**
+  - `recompute-patterns` komutundaki Python late-binding closure hatası düzeltildi
+  - `lambda: f(var)` → `lambda _v=var: f(_v)` (varsayılan argüman ile yakalama)
+- **Frontend type güncellemeleri (`types.ts`):**
+  - `PatternEvaluation.brier_score`, `EvaluationSummary.brier_result_b/c/d`
+- **Testler:**
+  - 9 yeni Pattern D testi: IDF ağırlıkları (4), weighted cosine (2), weighted stats (3)
+  - 5 yeni engine testi: _normalize_distribution
+  - 4 pattern_stats regresyon testi düzeltmesi (fark_ctr KeyError)
+- **Sonuç:** 748 backend + 206 frontend + 28 E2E = **982 toplam test**
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -1508,9 +1541,9 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-07 — Sprint 49 DEVAM EDİYOR, Local Development + Arşiv Genişletme)
+## Kaldığımız Yer (2026-10-08 — Sprint 50 TAMAMLANDI, Local Development + Arşiv Genişletme)
 
-### ✅ Mevcut Durum — Local Development + Sprint 49 Devam Ediyor
+### ✅ Mevcut Durum — Local Development
 
 Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
 
@@ -1544,21 +1577,22 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | B+C uyum (MS) | %46.8 | — | %44.4 | TEK doğrulanmış sinyal (+6 puan) |
 | Bundesliga MS | %50.1 | %44.3 | — | En iyi lig |
 
-### Test Durumu (Sprint 49 sonrası)
+### Test Durumu (Sprint 50 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 734 | ✅ Yeşil |
+| **Backend** | pytest | 748 | ✅ Yeşil |
 | **Frontend birim** | vitest | 206 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 968 | — |
+| **Toplam** | — | 982 | — |
 
 ### Sıradaki Adımlar
 
-**Sprint 49 devam eden işler:**
+**Devam eden işler:**
 - **Arşiv genişletme:** ENG PR 24 sezon çekimi devam ediyor. Kalan ligler: SPA D1, ITA D1, GER D1, FRA D1, TUR D1, HOL D1 (her biri ~23 sezon) — kullanıcı manuel tetikleyecek
-- **A3: Pattern D confidence scoring entegrasyonu:** A1 backtest sonuçlarına göre D'yi `computeConfidence`'a ve `build_ft_recommendations`'a eklemek
+- **Pattern D confidence scoring entegrasyonu:** D'yi `computeConfidence`'a ve `build_ft_recommendations`'a eklemek
 - **Pattern D + C recompute:** Arşiv genişlemesi bitince `recompute-patterns` çalıştırılmalı
+- **Ensemble stacking B+C+D:** Logistic regression meta-model (scikit-learn gerektirir — onay gerekir)
 
 **Bekleyen konular (kullanıcı kararı gerektirir):**
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
