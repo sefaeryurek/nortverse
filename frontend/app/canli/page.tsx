@@ -70,7 +70,7 @@ function StatsPanel({ stats }: { stats: LiveHTStats }) {
             color: "var(--nv-accent-blue)",
           }}
         >
-          {stats.archive_count} arsiv maci
+          {stats.archive_count} arşiv maçı
         </span>
         <span
           style={{
@@ -78,7 +78,7 @@ function StatsPanel({ stats }: { stats: LiveHTStats }) {
             color: "var(--nv-text-tertiary)",
           }}
         >
-          IY {stats.ht_score} ile devreyi kapatan maclar
+          İY {stats.ht_score} ile devreyi kapatan maçlar
         </span>
       </div>
 
@@ -88,7 +88,7 @@ function StatsPanel({ stats }: { stats: LiveHTStats }) {
           className="font-semibold mb-2"
           style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}
         >
-          Mac Sonucu
+          Maç Sonucu
         </h4>
         <div className="space-y-1.5">
           <PctBar label="MS1" pct={stats.ft_result_1_pct} color="var(--nv-win)" />
@@ -103,7 +103,7 @@ function StatsPanel({ stats }: { stats: LiveHTStats }) {
           className="font-semibold mb-2"
           style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}
         >
-          2. Yari Sonucu
+          2. Yarı Sonucu
         </h4>
         <div className="space-y-1.5">
           <PctBar label="2Y1" pct={stats.h2_result_1_pct} color="var(--nv-win)" />
@@ -119,7 +119,7 @@ function StatsPanel({ stats }: { stats: LiveHTStats }) {
             className="block font-semibold mb-1"
             style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}
           >
-            Ust 2.5
+            Üst 2.5
           </span>
           <span
             className="block font-bold"
@@ -163,7 +163,7 @@ function StatsPanel({ stats }: { stats: LiveHTStats }) {
             className="font-semibold mb-2"
             style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}
           >
-            En Sik MS Skorlari
+            En Sık MS Skorları
           </h4>
           <div className="flex flex-wrap gap-1.5">
             {stats.top_ft_scores.slice(0, 8).map((s, i) => (
@@ -194,18 +194,20 @@ function StatsPanel({ stats }: { stats: LiveHTStats }) {
 function MatchCard({ match }: { match: LiveHTMatch }) {
   const [expanded, setExpanded] = useState(false);
   const [stats, setStats] = useState<LiveHTStats | null>(null);
+  const [statsError, setStatsError] = useState(false);
   const [loading, setLoading] = useState(false);
   const fetchedRef = useRef(false);
 
   const toggle = useCallback(async () => {
     if (!expanded && !fetchedRef.current) {
       setLoading(true);
+      setStatsError(false);
       try {
         const data = await getLiveHTStats(match.ht_home, match.ht_away);
         setStats(data);
         fetchedRef.current = true;
       } catch {
-        /* stats gosterilmez */
+        setStatsError(true);
       } finally {
         setLoading(false);
       }
@@ -215,7 +217,7 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
 
   const { flag, short } = leagueDisplay(null, match.league_name);
   const minuteLabel = match.live_minute === "HT"
-    ? "Devre Arasi"
+    ? "Devre Arası"
     : match.live_minute
       ? `${match.live_minute}'`
       : "";
@@ -259,7 +261,7 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
 
         {/* Canli badge */}
         <span
-          className="nv-badge nv-badge-red nv-live-pulse flex items-center gap-1 flex-shrink-0"
+          className="nv-badge nv-badge-red flex items-center gap-1 flex-shrink-0"
           style={{ padding: "2px 8px" }}
         >
           <span
@@ -320,6 +322,7 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
         {/* Istatistikler toggle */}
         <button
           onClick={toggle}
+          aria-expanded={expanded}
           className="flex-shrink-0 flex items-center justify-center min-h-[36px] px-3 py-1.5 font-medium transition-colors"
           style={{
             fontSize: "var(--nv-text-xs)",
@@ -332,7 +335,7 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
             borderRadius: "var(--nv-radius-md)",
           }}
         >
-          {loading ? "..." : expanded ? "Gizle" : "Istatistik"}
+          {loading ? "..." : expanded ? "Gizle" : "İstatistik"}
         </button>
 
         {/* Analiz linki */}
@@ -362,7 +365,26 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
             color: "var(--nv-text-tertiary)",
           }}
         >
-          Bu IY skoru icin arsivde yeterli veri yok.
+          Bu İY skoru için arşivde yeterli veri yok.
+        </div>
+      )}
+      {expanded && statsError && !stats && (
+        <div
+          className="mt-3 pt-3 text-center"
+          style={{
+            borderTop: "1px solid var(--nv-border)",
+            fontSize: "var(--nv-text-xs)",
+            color: "var(--nv-accent-red)",
+          }}
+        >
+          İstatistik alınamadı.{" "}
+          <button
+            onClick={() => { fetchedRef.current = false; toggle(); }}
+            className="underline font-medium"
+            style={{ color: "var(--nv-accent-blue)" }}
+          >
+            Tekrar dene
+          </button>
         </div>
       )}
     </div>
@@ -382,7 +404,10 @@ export default function CanliPage() {
       setError("");
       setLastUpdate(new Date());
     } catch {
-      setError("Canli veri alinamadi.");
+      setMatches((prev) => {
+        if (prev.length === 0) setError("Canlı veri alınamadı.");
+        return prev;
+      });
     } finally {
       setLoading(false);
     }
@@ -411,7 +436,7 @@ export default function CanliPage() {
                 letterSpacing: "var(--nv-tracking-tight)",
               }}
             >
-              Canli
+              Canlı
             </h1>
             {matches.length > 0 && (
               <span
@@ -427,7 +452,7 @@ export default function CanliPage() {
                     boxShadow: "0 0 6px var(--nv-live-glow)",
                   }}
                 />
-                {matches.length} mac
+                {matches.length} maç
               </span>
             )}
           </div>
@@ -454,7 +479,7 @@ export default function CanliPage() {
             color: "var(--nv-text-tertiary)",
           }}
         >
-          Devre arasindaki maclar ve arsiv IY istatistikleri
+          Devre arasındaki maçlar ve arşiv İY istatistikleri
         </p>
       </div>
 
@@ -545,19 +570,19 @@ export default function CanliPage() {
                 className="font-medium"
                 style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}
               >
-                Su anda devre arasinda mac yok.
+                Şu anda devre arasında maç yok.
               </p>
               <p
                 style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}
               >
-                Maclar devre arasina girdiginde burada gorunecek. Sayfa her 45 saniyede otomatik guncellenir.
+                Maçlar devre arasına girdiğinde burada görünecek. Sayfa her 45 saniyede otomatik güncellenir.
               </p>
               <Link
                 href="/bulten"
                 className="inline-block font-medium transition-colors"
                 style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-blue)" }}
               >
-                Bultendeki maclara bak
+                Bültendeki maçlara bak
               </Link>
             </div>
           </div>
