@@ -98,6 +98,33 @@ function computeStats(
   };
 }
 
+async function checkHTMatch(
+  matchId: string,
+  htHome: number,
+  htAway: number,
+): Promise<HTFilteredStats[] | null> {
+  try {
+    const data: MatchedMatchesResponse = await getMatchedMatches(matchId);
+    const results: HTFilteredStats[] = [];
+
+    const bFiltered = filterByHT(data.archive_b || [], htHome, htAway);
+    const bStats = computeStats(bFiltered, "A1", "var(--nv-accent-blue)", "var(--nv-accent-blue-dim)");
+    if (bStats) results.push(bStats);
+
+    const cFiltered = filterByHT(data.archive_c || [], htHome, htAway);
+    const cStats = computeStats(cFiltered, "A2", "var(--nv-accent-green)", "var(--nv-accent-green-dim)");
+    if (cStats) results.push(cStats);
+
+    const dFiltered = filterByHT(data.archive_d || [], htHome, htAway);
+    const dStats = computeStats(dFiltered, "A3", "var(--nv-accent-amber)", "color-mix(in srgb, var(--nv-accent-amber) 15%, transparent)");
+    if (dStats) results.push(dStats);
+
+    return results.length > 0 ? results : null;
+  } catch {
+    return null;
+  }
+}
+
 function PctBar({
   label,
   pct,
@@ -315,126 +342,26 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
   );
 }
 
-function StatsPanel({
-  matchId,
-  htHome,
-  htAway,
-}: {
-  matchId: string;
-  htHome: number;
-  htAway: number;
-}) {
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [archiveStats, setArchiveStats] = useState<HTFilteredStats[]>([]);
-  const [noData, setNoData] = useState(false);
-  const fetchedRef = useRef(false);
-
-  const doFetch = useCallback(async () => {
-    setLoading(true);
-    setErrorMsg("");
-    try {
-      const data: MatchedMatchesResponse = await getMatchedMatches(matchId);
-
-      const results: HTFilteredStats[] = [];
-
-      const bFiltered = filterByHT(data.archive_b || [], htHome, htAway);
-      const bStats = computeStats(bFiltered, "A1", "var(--nv-accent-blue)", "var(--nv-accent-blue-dim)");
-      if (bStats) results.push(bStats);
-
-      const cFiltered = filterByHT(data.archive_c || [], htHome, htAway);
-      const cStats = computeStats(cFiltered, "A2", "var(--nv-accent-green)", "var(--nv-accent-green-dim)");
-      if (cStats) results.push(cStats);
-
-      const dFiltered = filterByHT(data.archive_d || [], htHome, htAway);
-      const dStats = computeStats(dFiltered, "A3", "var(--nv-accent-amber)", "color-mix(in srgb, var(--nv-accent-amber) 15%, transparent)");
-      if (dStats) results.push(dStats);
-
-      setArchiveStats(results);
-      setNoData(results.length === 0);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        setErrorMsg("Bu maç için analiz verisi bulunamadı. Yeterli istatistik olmayabilir.");
-      } else {
-        setErrorMsg("Arşiv verileri alınamadı.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [matchId, htHome, htAway]);
-
-  useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-    doFetch();
-  }, [doFetch]);
-
-  if (loading) {
-    return (
-      <div className="px-3 pb-3 sm:px-4 sm:pb-4" style={{ borderTop: "1px solid var(--nv-border)" }}>
-        <div className="py-6 text-center space-y-2">
-          <div className="nv-skeleton h-4 w-32 mx-auto" style={{ borderRadius: 4 }} />
-          <div className="nv-skeleton h-4 w-24 mx-auto" style={{ borderRadius: 4 }} />
-        </div>
-      </div>
-    );
-  }
-
-  if (errorMsg) {
-    return (
-      <div className="px-3 pb-3 sm:px-4 sm:pb-4 text-center py-4" style={{ borderTop: "1px solid var(--nv-border)" }}>
-        <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-          {errorMsg}
-        </p>
-        <button
-          onClick={() => { fetchedRef.current = false; doFetch(); }}
-          className="mt-2 underline font-medium"
-          style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-accent-blue)" }}
-        >
-          Tekrar dene
-        </button>
-      </div>
-    );
-  }
-
-  if (noData) {
-    return (
-      <div className="px-3 pb-3 sm:px-4 sm:pb-4 text-center py-4" style={{ borderTop: "1px solid var(--nv-border)" }}>
-        <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-          A1/A2/A3 eşleşen maçlarda İY {htHome}-{htAway} skoru bulunamadı.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="px-3 pb-3 sm:px-4 sm:pb-4 space-y-2 nv-fade-in"
-      style={{ borderTop: "1px solid var(--nv-border)", paddingTop: 12 }}
-    >
-      <p className="font-semibold mb-2" style={{ fontSize: 10, color: "var(--nv-text-tertiary)", letterSpacing: "0.05em" }}>
-        İY {htHome}-{htAway} ile biten eşleşen arşiv maçlarının MS sonuçları:
-      </p>
-      {archiveStats.map((s) => (
-        <ArchiveSection key={s.archive} stats={s} />
-      ))}
-    </div>
-  );
+interface ValidatedMatch {
+  match: LiveHTMatch;
+  stats: HTFilteredStats[];
 }
 
-function MatchCard({ match }: { match: LiveHTMatch }) {
+function MatchCard({ vm }: { vm: ValidatedMatch }) {
   const [expanded, setExpanded] = useState(false);
+  const { match, stats } = vm;
 
   const { flag, short } = leagueDisplay(null, match.league_name);
-  const minuteLabel =
-    match.live_minute === "HT"
-      ? "Devre Arası"
-      : match.live_minute
-        ? `${match.live_minute}'`
-        : "";
 
-  const homeName = match.home_team || "Bilinmiyor";
-  const awayName = match.away_team || "Bilinmiyor";
+  const isHT = match.live_minute === "HT";
+  const isSecondHalf = !isHT && match.live_minute != null;
+  const minuteLabel = isHT ? "Devre Arası" : match.live_minute ? `${match.live_minute}'` : "";
+
+  const homeName = match.home_team || "?";
+  const awayName = match.away_team || "?";
+
+  const hasLiveScore = match.live_home != null && match.live_away != null;
+  const liveChanged = hasLiveScore && (match.live_home !== match.ht_home || match.live_away !== match.ht_away);
 
   return (
     <div className="nv-card nv-fade-in" style={{ borderRadius: "var(--nv-radius-lg)", overflow: "hidden" }}>
@@ -473,9 +400,10 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
         </span>
       </div>
 
-      {/* Ana icerik: takimlar + skor */}
+      {/* Ana icerik: takimlar + skorlar */}
       <div className="px-3 py-3 sm:px-4">
         <div className="flex items-center gap-3">
+          {/* Takım adları */}
           <div className="flex-1 min-w-0">
             <div className="mb-1">
               <span className="font-bold truncate block" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)", lineHeight: 1.3 }}>
@@ -489,27 +417,57 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
             </div>
           </div>
 
-          <div className="flex-shrink-0 flex flex-col items-center gap-0.5">
-            <span
-              className="font-bold"
-              style={{
-                fontFamily: "var(--nv-font-mono)",
-                fontSize: 28,
-                lineHeight: 1,
-                color: "var(--nv-text-on-accent)",
-                backgroundColor: "var(--nv-accent-blue)",
-                borderRadius: "var(--nv-radius-md)",
-                padding: "6px 14px",
-                letterSpacing: "0.05em",
-                minWidth: 72,
-                textAlign: "center",
-              }}
-            >
-              {match.ht_home} - {match.ht_away}
-            </span>
-            <span style={{ fontSize: 9, color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
-              İY Skor
-            </span>
+          {/* Skor bölümü */}
+          <div className="flex-shrink-0 flex items-center gap-2">
+            {/* İY skoru */}
+            <div className="flex flex-col items-center gap-0.5">
+              <span
+                className="font-bold"
+                style={{
+                  fontFamily: "var(--nv-font-mono)",
+                  fontSize: isSecondHalf ? 18 : 28,
+                  lineHeight: 1,
+                  color: "var(--nv-text-on-accent)",
+                  backgroundColor: "var(--nv-accent-blue)",
+                  borderRadius: "var(--nv-radius-md)",
+                  padding: isSecondHalf ? "4px 10px" : "6px 14px",
+                  letterSpacing: "0.05em",
+                  minWidth: isSecondHalf ? 52 : 72,
+                  textAlign: "center",
+                }}
+              >
+                {match.ht_home} - {match.ht_away}
+              </span>
+              <span style={{ fontSize: 9, color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
+                İY
+              </span>
+            </div>
+
+            {/* Güncel skor (2. yarıda değiştiyse göster) */}
+            {isSecondHalf && hasLiveScore && (
+              <div className="flex flex-col items-center gap-0.5">
+                <span
+                  className="font-bold"
+                  style={{
+                    fontFamily: "var(--nv-font-mono)",
+                    fontSize: 28,
+                    lineHeight: 1,
+                    color: liveChanged ? "var(--nv-text-on-accent)" : "var(--nv-text-primary)",
+                    backgroundColor: liveChanged ? "var(--nv-live)" : "var(--nv-bg-elevated)",
+                    borderRadius: "var(--nv-radius-md)",
+                    padding: "6px 14px",
+                    letterSpacing: "0.05em",
+                    minWidth: 72,
+                    textAlign: "center",
+                  }}
+                >
+                  {match.live_home} - {match.live_away}
+                </span>
+                <span style={{ fontSize: 9, color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
+                  Güncel
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -552,14 +510,24 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
       </div>
 
       {expanded && (
-        <StatsPanel matchId={match.match_id} htHome={match.ht_home} htAway={match.ht_away} />
+        <div
+          className="px-3 pb-3 sm:px-4 sm:pb-4 space-y-2 nv-fade-in"
+          style={{ borderTop: "1px solid var(--nv-border)", paddingTop: 12 }}
+        >
+          <p className="font-semibold mb-2" style={{ fontSize: 10, color: "var(--nv-text-tertiary)", letterSpacing: "0.05em" }}>
+            İY {match.ht_home}-{match.ht_away} ile biten eşleşen arşiv maçlarının MS sonuçları:
+          </p>
+          {stats.map((s) => (
+            <ArchiveSection key={s.archive} stats={s} />
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
 export default function CanliPage() {
-  const [matches, setMatches] = useState<LiveHTMatch[]>([]);
+  const [validatedMatches, setValidatedMatches] = useState<ValidatedMatch[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -567,11 +535,25 @@ export default function CanliPage() {
   const fetchMatches = useCallback(async () => {
     try {
       const data = await getLiveHTMatches();
-      setMatches(data);
+
+      const validated: ValidatedMatch[] = [];
+      const checks = data.map(async (m) => {
+        const stats = await checkHTMatch(m.match_id, m.ht_home, m.ht_away);
+        if (stats) validated.push({ match: m, stats });
+      });
+      await Promise.all(checks);
+
+      validated.sort((a, b) => {
+        const aMin = a.match.live_minute || "";
+        const bMin = b.match.live_minute || "";
+        return aMin.localeCompare(bMin);
+      });
+
+      setValidatedMatches(validated);
       setError("");
       setLastUpdate(new Date());
     } catch {
-      setMatches((prev) => {
+      setValidatedMatches((prev) => {
         if (prev.length === 0) setError("Canlı veri alınamadı.");
         return prev;
       });
@@ -594,13 +576,13 @@ export default function CanliPage() {
             <h1 className="font-bold" style={{ fontSize: "var(--nv-text-xl)", color: "var(--nv-text-primary)", letterSpacing: "var(--nv-tracking-tight)" }}>
               Canlı
             </h1>
-            {matches.length > 0 && (
+            {validatedMatches.length > 0 && (
               <span
                 className="inline-flex items-center gap-1 px-2 py-0.5 font-semibold"
                 style={{ fontSize: 11, borderRadius: "var(--nv-radius-full)", backgroundColor: "color-mix(in srgb, var(--nv-live) 15%, transparent)", color: "var(--nv-live)" }}
               >
                 <span className="nv-live-pulse" style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--nv-live)" }} />
-                {matches.length} maç
+                {validatedMatches.length} maç
               </span>
             )}
           </div>
@@ -611,7 +593,7 @@ export default function CanliPage() {
           )}
         </div>
         <p className="mt-1" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-          Devre arasındaki maçların A1/A2/A3 arşiv eşleşmelerine göre İY filtreli MS tahminleri
+          Devre arası ve 2. yarıdaki maçların A1/A2/A3 arşiv eşleşmelerine göre İY filtreli MS tahminleri
         </p>
       </div>
 
@@ -659,7 +641,7 @@ export default function CanliPage() {
           </div>
         )}
 
-        {!loading && !error && matches.length === 0 && (
+        {!loading && !error && validatedMatches.length === 0 && (
           <div className="flex items-center justify-center py-24 px-[var(--nv-page-gutter)]">
             <div className="nv-card p-8 text-center space-y-4 max-w-sm w-full" style={{ borderRadius: "var(--nv-radius-lg)" }}>
               <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center" style={{ backgroundColor: "var(--nv-bg-elevated)" }}>
@@ -669,10 +651,10 @@ export default function CanliPage() {
                 </svg>
               </div>
               <p className="font-medium" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}>
-                Şu anda devre arasında maç yok.
+                Şu anda arşiv eşleşmesi olan canlı maç yok.
               </p>
               <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-                Maçlar devre arasına girdiğinde burada A1/A2/A3 arşiv eşleşmelerine göre İY filtreli MS tahminleri görünecek.
+                Maçlar devre arasına girdiğinde, İY skoruyla eşleşen arşiv maçları varsa burada MS tahminleri görünecek.
               </p>
               <Link href="/bulten" className="inline-block font-medium transition-colors" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-blue)" }}>
                 Bültendeki maçlara bak
@@ -681,10 +663,10 @@ export default function CanliPage() {
           </div>
         )}
 
-        {!loading && !error && matches.length > 0 && (
+        {!loading && !error && validatedMatches.length > 0 && (
           <div className="grid gap-3 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
-            {matches.map((m) => (
-              <MatchCard key={m.match_id} match={m} />
+            {validatedMatches.map((vm) => (
+              <MatchCard key={vm.match.match_id} vm={vm} />
             ))}
           </div>
         )}

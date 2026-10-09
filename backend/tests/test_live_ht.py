@@ -5,47 +5,75 @@ from __future__ import annotations
 import pytest
 
 from app.api.routes_live_ht import (
+    LiveHTMatch,
     LiveHTStats,
-    _is_ht_window,
+    _is_second_half_or_later,
     _cleanup_observed,
     _ht_observed,
     _ht_observed_day,
 )
 
 
-class TestIsHTWindow:
+class TestIsSecondHalfOrLater:
     def test_ht_string(self):
-        assert _is_ht_window("HT") is True
+        assert _is_second_half_or_later("HT") is True
+
+    def test_minute_45(self):
+        assert _is_second_half_or_later("45") is True
 
     def test_minute_46(self):
-        assert _is_ht_window("46") is True
+        assert _is_second_half_or_later("46") is True
 
     def test_minute_55(self):
-        assert _is_ht_window("55") is True
+        assert _is_second_half_or_later("55") is True
 
     def test_minute_60(self):
-        assert _is_ht_window("60") is True
+        assert _is_second_half_or_later("60") is True
 
-    def test_minute_61(self):
-        assert _is_ht_window("61") is False
+    def test_minute_75(self):
+        assert _is_second_half_or_later("75") is True
+
+    def test_minute_90(self):
+        assert _is_second_half_or_later("90") is True
+
+    def test_minute_90_plus(self):
+        assert _is_second_half_or_later("90+3") is True
 
     def test_minute_45_plus(self):
-        assert _is_ht_window("45+2") is False
+        assert _is_second_half_or_later("45+2") is True
 
     def test_minute_46_plus(self):
-        assert _is_ht_window("46+1") is True
+        assert _is_second_half_or_later("46+1") is True
 
     def test_first_half(self):
-        assert _is_ht_window("30") is False
+        assert _is_second_half_or_later("30") is False
+
+    def test_first_half_early(self):
+        assert _is_second_half_or_later("1") is False
+
+    def test_minute_44(self):
+        assert _is_second_half_or_later("44") is False
 
     def test_none(self):
-        assert _is_ht_window(None) is False
+        assert _is_second_half_or_later(None) is False
 
     def test_empty(self):
-        assert _is_ht_window("") is False
+        assert _is_second_half_or_later("") is False
 
     def test_non_numeric(self):
-        assert _is_ht_window("abc") is False
+        assert _is_second_half_or_later("abc") is False
+
+
+class TestLiveHTMatchModel:
+    def test_live_score_fields(self):
+        m = LiveHTMatch(match_id="123", ht_home=1, ht_away=0, live_home=2, live_away=1)
+        assert m.live_home == 2
+        assert m.live_away == 1
+
+    def test_live_score_defaults_none(self):
+        m = LiveHTMatch(match_id="123", ht_home=1, ht_away=0)
+        assert m.live_home is None
+        assert m.live_away is None
 
 
 class TestLiveHTStatsModel:

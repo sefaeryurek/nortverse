@@ -1,7 +1,7 @@
-"""Canlı İY Eşleşme — devre arasındaki maçlar için arşiv istatistikleri.
+"""Canlı İY Eşleşme — devre arası ve 2. yarı maçları için arşiv istatistikleri.
 
-Sprint 47: Devre arasında (veya 2. yarı ilk 15dk) olan maçların İY skorunu
-arşivdeki geçmiş maçlarla karşılaştırıp MS ve 2Y tahminleri üretir.
+Sprint 47+52: Devre arasında İY skoru yakalanan maçlar, maç bitene kadar
+bu listede kalır. Hem İY skoru hem güncel canlı skor gösterilir.
 """
 
 from __future__ import annotations
@@ -34,6 +34,8 @@ class LiveHTMatch(BaseModel):
     away_team: str | None = None
     ht_home: int
     ht_away: int
+    live_home: int | None = None
+    live_away: int | None = None
     live_minute: str | None = None
     league_name: str | None = None
     kickoff_time: str | None = None
@@ -59,14 +61,15 @@ class LiveHTStats(BaseModel):
     top_ft_scores: list[TopFTScore] = []
 
 
-def _is_ht_window(minute: str | None) -> bool:
+def _is_second_half_or_later(minute: str | None) -> bool:
+    """HT, 2. yarı veya uzatma dakikası mı?"""
     if not minute:
         return False
     if minute == "HT":
         return True
     try:
         base = int(minute.split("+")[0])
-        return 46 <= base <= 60
+        return base >= 45
     except (ValueError, IndexError):
         return False
 
@@ -88,20 +91,28 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
 
     result: list[LiveHTMatch] = []
     for mid, fs in snap.scores.items():
+        if fs.status == "finished":
+            _ht_observed.pop(mid, None)
+            continue
+
         if fs.minute == "HT" and fs.home is not None and fs.away is not None:
             _ht_observed[mid] = (fs.home, fs.away)
             result.append(LiveHTMatch(
                 match_id=mid,
                 ht_home=fs.home,
                 ht_away=fs.away,
+                live_home=fs.home,
+                live_away=fs.away,
                 live_minute=fs.minute,
             ))
-        elif _is_ht_window(fs.minute) and mid in _ht_observed:
+        elif _is_second_half_or_later(fs.minute) and mid in _ht_observed:
             ht_h, ht_a = _ht_observed[mid]
             result.append(LiveHTMatch(
                 match_id=mid,
                 ht_home=ht_h,
                 ht_away=ht_a,
+                live_home=fs.home,
+                live_away=fs.away,
                 live_minute=fs.minute,
             ))
 

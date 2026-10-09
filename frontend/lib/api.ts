@@ -121,6 +121,8 @@ export interface LiveHTMatch {
   away_team: string | null;
   ht_home: number;
   ht_away: number;
+  live_home: number | null;
+  live_away: number | null;
   live_minute: string | null;
   league_name: string | null;
   kickoff_time: string | null;
