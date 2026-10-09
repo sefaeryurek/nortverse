@@ -16,7 +16,7 @@ from sqlalchemy import Integer, func, select
 
 from app.api.live_snapshot import get_live_snapshot
 from app.db.connection import get_session
-from app.db.models import Match
+from app.db.models import FixtureCache, Match
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -113,7 +113,27 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
                 Match.league_name, Match.kickoff_time,
             ).where(Match.match_id.in_(ids), Match.deleted_at.is_(None))
             rows = (await session.execute(stmt)).all()
-            info = {r[0]: r for r in rows}
+            info: dict[str, tuple] = {r[0]: r for r in rows}
+
+            missing_ids = [mid for mid in ids if mid not in info]
+            if missing_ids:
+                today = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
+                for date_str in (today,):
+                    fc = (await session.execute(
+                        select(FixtureCache.matches_json).where(FixtureCache.date == date_str)
+                    )).scalar_one_or_none()
+                    if fc and isinstance(fc, list):
+                        for raw in fc:
+                            mid = str(raw.get("match_id", ""))
+                            if mid in missing_ids and mid not in info:
+                                info[mid] = (
+                                    mid,
+                                    raw.get("home_team"),
+                                    raw.get("away_team"),
+                                    raw.get("league_name"),
+                                    None,
+                                )
+
         for m in result:
             r = info.get(m.match_id)
             if r:

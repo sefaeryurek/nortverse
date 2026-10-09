@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { getLiveHTMatches, getMatchedMatches } from "@/lib/api";
+import { ApiError, getLiveHTMatches, getMatchedMatches } from "@/lib/api";
 import type { LiveHTMatch, MatchedMatch, MatchedMatchesResponse } from "@/lib/api";
 import { leagueDisplay } from "@/lib/leagues";
 
@@ -325,14 +325,14 @@ function StatsPanel({
   htAway: number;
 }) {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const [archiveStats, setArchiveStats] = useState<HTFilteredStats[]>([]);
   const [noData, setNoData] = useState(false);
   const fetchedRef = useRef(false);
 
   const doFetch = useCallback(async () => {
     setLoading(true);
-    setError(false);
+    setErrorMsg("");
     try {
       const data: MatchedMatchesResponse = await getMatchedMatches(matchId);
 
@@ -352,8 +352,12 @@ function StatsPanel({
 
       setArchiveStats(results);
       setNoData(results.length === 0);
-    } catch {
-      setError(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setErrorMsg("Bu maç henüz analiz edilmedi. Pipeline çalıştırıldığında veriler hazır olacak.");
+      } else {
+        setErrorMsg("Arşiv verileri alınamadı.");
+      }
     } finally {
       setLoading(false);
     }
@@ -376,11 +380,11 @@ function StatsPanel({
     );
   }
 
-  if (error) {
+  if (errorMsg) {
     return (
       <div className="px-3 pb-3 sm:px-4 sm:pb-4 text-center py-4" style={{ borderTop: "1px solid var(--nv-border)" }}>
-        <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-accent-red)" }}>
-          Arşiv verileri alınamadı.
+        <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
+          {errorMsg}
         </p>
         <button
           onClick={() => { fetchedRef.current = false; doFetch(); }}
