@@ -105,16 +105,23 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
                 live_away=fs.away,
                 live_minute=fs.minute,
             ))
-        elif _is_second_half_or_later(fs.minute) and mid in _ht_observed:
-            ht_h, ht_a = _ht_observed[mid]
-            result.append(LiveHTMatch(
-                match_id=mid,
-                ht_home=ht_h,
-                ht_away=ht_a,
-                live_home=fs.home,
-                live_away=fs.away,
-                live_minute=fs.minute,
-            ))
+        elif _is_second_half_or_later(fs.minute):
+            ht_h: int | None = None
+            ht_a: int | None = None
+            if mid in _ht_observed:
+                ht_h, ht_a = _ht_observed[mid]
+            elif fs.ht_home is not None and fs.ht_away is not None:
+                ht_h, ht_a = fs.ht_home, fs.ht_away
+                _ht_observed[mid] = (ht_h, ht_a)
+            if ht_h is not None and ht_a is not None:
+                result.append(LiveHTMatch(
+                    match_id=mid,
+                    ht_home=ht_h,
+                    ht_away=ht_a,
+                    live_home=fs.home,
+                    live_away=fs.away,
+                    live_minute=fs.minute,
+                ))
 
     if result:
         ids = [m.match_id for m in result]
