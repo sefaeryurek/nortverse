@@ -134,13 +134,17 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
                                     None,
                                 )
 
+        enriched: list[LiveHTMatch] = []
         for m in result:
             r = info.get(m.match_id)
-            if r:
-                m.home_team = r[1]
-                m.away_team = r[2]
-                m.league_name = r[3]
-                m.kickoff_time = r[4].isoformat() if r[4] else None
+            if not r:
+                continue
+            m.home_team = r[1]
+            m.away_team = r[2]
+            m.league_name = r[3]
+            m.kickoff_time = r[4].isoformat() if r[4] else None
+            enriched.append(m)
+        result = enriched
     return result
 
 
