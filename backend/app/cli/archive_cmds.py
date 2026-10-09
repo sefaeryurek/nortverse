@@ -46,8 +46,32 @@ def build_archive_cmd(
                 console.print("[yellow]Hiç maç ID'si bulunamadı. Debug HTML'ini inceleyin.[/yellow]")
                 return
 
-            total = len(total_ids)
-            console.print(f"\n[bold]{total} maç arşivlenecek (concurrency={concurrency})...[/bold]\n")
+            # DB'de zaten analiz edilmiş maçları atla
+            from app.db.connection import get_session as _get_session
+            from app.db.models import Match as _Match
+            from sqlalchemy import select as _select
+            all_mids = [mid for mid, _ in total_ids]
+            existing_ids: set[str] = set()
+            try:
+                async with _get_session() as _s:
+                    _rows = (await _s.execute(
+                        _select(_Match.match_id)
+                        .where(_Match.match_id.in_(all_mids))
+                        .where(_Match.deleted_at.is_(None))
+                        .where(_Match.ft_scores_1.isnot(None))
+                    )).scalars().all()
+                    existing_ids = set(_rows)
+            except Exception:
+                pass
+            new_ids = [(mid, s) for mid, s in total_ids if mid not in existing_ids]
+            total = len(new_ids)
+            console.print(
+                f"\n[bold]{len(total_ids)} maç, [dim]{len(existing_ids)} zaten DB'de[/dim] → "
+                f"{total} yeni maç arşivlenecek (concurrency={concurrency})[/bold]\n"
+            )
+            if total == 0:
+                console.print("[green]Tüm maçlar zaten DB'de — atlandı[/green]")
+                return
 
             sem = asyncio.Semaphore(concurrency)
             now = datetime.now(timezone.utc)
@@ -80,7 +104,7 @@ def build_archive_cmd(
                                 f"[red]{stats['errors']} hata[/red]"
                             )
 
-            tasks = [_process(mid, s) for mid, s in total_ids]
+            tasks = [_process(mid, s) for mid, s in new_ids]
             await asyncio.gather(*tasks)
 
         console.print(
@@ -149,10 +173,32 @@ def build_multi_archive_cmd(
                         console.print(f"  [yellow]{season}: maç ID bulunamadı — atlandı[/yellow]")
                         continue
 
-                    total = len(match_ids)
+                    # DB'de zaten analiz edilmiş maçları atla
+                    from app.db.connection import get_session as _get_session
+                    from app.db.models import Match as _Match
+                    from sqlalchemy import select as _select
+                    existing_ids: set[str] = set()
+                    try:
+                        async with _get_session() as _s:
+                            _rows = (await _s.execute(
+                                _select(_Match.match_id)
+                                .where(_Match.match_id.in_(match_ids))
+                                .where(_Match.deleted_at.is_(None))
+                                .where(_Match.ft_scores_1.isnot(None))
+                            )).scalars().all()
+                            existing_ids = set(_rows)
+                    except Exception:
+                        pass
+                    new_ids = [mid for mid in match_ids if mid not in existing_ids]
+                    total = len(new_ids)
                     console.print(
-                        f"  [cyan]{season}[/cyan]: {total} maç işlenecek (concurrency={concurrency})"
+                        f"  [cyan]{season}[/cyan]: {len(match_ids)} maç, "
+                        f"[dim]{len(existing_ids)} zaten DB'de[/dim] → "
+                        f"[bold]{total} yeni maç[/bold] işlenecek (concurrency={concurrency})"
                     )
+                    if total == 0:
+                        console.print(f"  [green]{season} zaten tamamlanmış — atlandı[/green]")
+                        continue
                     stats = {"analyzed": 0, "skipped": 0, "errors": 0, "done": 0}
 
                     now = datetime.now(timezone.utc)
@@ -185,7 +231,7 @@ def build_multi_archive_cmd(
                                         f"[yellow]{stats['skipped']} atlandı[/yellow]"
                                     )
 
-                    tasks = [_process(mid) for mid in match_ids]
+                    tasks = [_process(mid) for mid in new_ids]
                     await asyncio.gather(*tasks)
 
                     console.print(
