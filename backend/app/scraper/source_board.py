@@ -52,7 +52,12 @@ def parse_source_board(payload: bytes) -> dict[str, FixtureScore]:
                 continue
         else:
             home = away = None
-        scores[match_id] = FixtureScore(match_id, status, home, away)
+        ht_home = ht_away = None
+        if len(fields) > 11 and status in ("finished", "live"):
+            ht_h, ht_a = fields[10], fields[11]
+            if isinstance(ht_h, int) and isinstance(ht_a, int) and 0 <= ht_h <= 30 and 0 <= ht_a <= 30:
+                ht_home, ht_away = ht_h, ht_a
+        scores[match_id] = FixtureScore(match_id, status, home, away, ht_home, ht_away)
     if not scores:
         raise ValueError("Empty fixture score response")
     return scores

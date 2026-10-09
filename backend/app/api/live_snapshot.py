@@ -78,6 +78,16 @@ async def _refresh() -> LiveSnapshot | None:
                 base = scores.get(match_id)
                 if base is None or base.status != "finished":
                     if base is None or observed.status != "scheduled":
+                        if base is not None and base.ht_home is not None and observed.ht_home is None:
+                            observed = FixtureScore(
+                                match_id=observed.match_id,
+                                status=observed.status,
+                                home=observed.home,
+                                away=observed.away,
+                                ht_home=base.ht_home,
+                                ht_away=base.ht_away,
+                                minute=observed.minute,
+                            )
                         scores[match_id] = observed
         if not scores:
             raise ValueError("Empty livescore board")
