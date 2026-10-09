@@ -183,17 +183,19 @@ async def _upsert(
         for key in ("kickoff_time", "actual_ft_home", "actual_ft_away", "actual_ht_home",
                     "actual_ht_away", "actual_h2_home", "actual_h2_away"):
             updates[key] = func.coalesce(row[key], getattr(Match, key))
+        updates["deleted_at"] = None
+        updates["deleted_reason"] = None
         stmt = (
             insert(Match)
             .values(**row)
             .on_conflict_do_update(index_elements=["match_id"], set_=updates,
-                                  where=(Match.deleted_at.is_(None) & or_(
-                                      Match.analyzed_at.is_(None), Match.analyzed_at <= result.analyzed_at)))
+                                  where=or_(
+                                      Match.analyzed_at.is_(None), Match.analyzed_at <= result.analyzed_at))
         )
         async with get_session() as session:
             written = await session.execute(stmt)
             if written.rowcount == 0:
-                raise StaleAnalysisWrite(f"Newer or deleted analysis exists: {result.match_id}")
+                raise StaleAnalysisWrite(f"Newer analysis exists: {result.match_id}")
             picks: list[dict] | None = None
             if raw is not None:
                 picks, _ = await capture_v3_recommendations(
