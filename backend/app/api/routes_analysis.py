@@ -167,17 +167,23 @@ async def get_matched_matches(
 
         if target.ft_all_ratios:
             tol = ANALYSIS.pattern_c_tolerance
-            c_filters = list(base_filters)
-            if tol == 0.0:
-                c_filters.append(
-                    cast(Match.ft_all_ratios, JSONB) == cast(target.ft_all_ratios, JSONB),
-                )
-            else:
-                c_filters.append(Match.ft_all_ratios.isnot(None))
-                for key, target_val in target.ft_all_ratios.items():
-                    ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
-                    c_filters.append(ratio_expr.between(target_val - tol, target_val + tol))
-            rows = (await session.execute(select(*detail_cols).where(*c_filters).limit(50))).all()
+            max_tol = ANALYSIS.pattern_c_max_tolerance
+            tol_step = ANALYSIS.pattern_c_tolerance_step
+            while tol <= max_tol + 1e-9:
+                c_filters = list(base_filters)
+                if tol == 0.0:
+                    c_filters.append(
+                        cast(Match.ft_all_ratios, JSONB) == cast(target.ft_all_ratios, JSONB),
+                    )
+                else:
+                    c_filters.append(Match.ft_all_ratios.isnot(None))
+                    for key, target_val in target.ft_all_ratios.items():
+                        ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
+                        c_filters.append(ratio_expr.between(target_val - tol, target_val + tol))
+                rows = (await session.execute(select(*detail_cols).where(*c_filters).limit(50))).all()
+                if len(rows) >= ANALYSIS.pattern_c_adaptive_min:
+                    break
+                tol += tol_step
             archive_c = [_row_to_dict(r) for r in rows]
 
         if target.ft_all_ratios:

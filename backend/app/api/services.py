@@ -22,6 +22,8 @@ from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
 from app.analysis.snapshots import RULE_VERSION, capture_v3_recommendations
+from app.config import ANALYSIS
+from app.analysis.pattern_d import find_pattern_d_all_periods
 from app.analysis.persist import (
     StalePatternWrite,
     compute_all_patterns,
@@ -254,13 +256,29 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         ht_b, ht_c = _pat(row.pattern_ht_b), _pat(row.pattern_ht_c)
         h2_b, h2_c = _pat(row.pattern_h2_b), _pat(row.pattern_h2_c)
         ft_b, ft_c = _pat(row.pattern_ft_b), _pat(row.pattern_ft_c)
-        ht_d, h2_d, ft_d = _pat(row.pattern_ht_d), _pat(row.pattern_h2_d), _pat(row.pattern_ft_d)
+        if ft_ratios:
+            try:
+                d_ht, d_h2, d_ft = await find_pattern_d_all_periods(
+                    ft_ratios,
+                    top_n=ANALYSIS.pattern_d_top_n,
+                    min_similarity=ANALYSIS.pattern_d_min_similarity,
+                    exclude_match_id=mid, as_of=row.analyzed_at,
+                )
+                ht_d = d_ht
+                h2_d = d_h2
+                ft_d = d_ft
+            except Exception as exc:
+                log.warning("Pattern D canlı hesaplanamadı [%s]: %s", mid, exc)
+                ht_d, h2_d, ft_d = _pat(row.pattern_ht_d), _pat(row.pattern_h2_d), _pat(row.pattern_ft_d)
+        else:
+            ht_d, h2_d, ft_d = _pat(row.pattern_ht_d), _pat(row.pattern_h2_d), _pat(row.pattern_ft_d)
         patterns = {
             "pattern_ht_b": row.pattern_ht_b, "pattern_ht_c": row.pattern_ht_c,
             "pattern_h2_b": row.pattern_h2_b, "pattern_h2_c": row.pattern_h2_c,
             "pattern_ft_b": row.pattern_ft_b, "pattern_ft_c": row.pattern_ft_c,
-            "pattern_ht_d": row.pattern_ht_d, "pattern_h2_d": row.pattern_h2_d,
-            "pattern_ft_d": row.pattern_ft_d,
+            "pattern_ht_d": ht_d.model_dump() if ht_d else None,
+            "pattern_h2_d": h2_d.model_dump() if h2_d else None,
+            "pattern_ft_d": ft_d.model_dump() if ft_d else None,
         }
     else:
         log.info("Yavaş yol — pattern durumu bilinmiyor, hesaplanıyor: %s", mid)
