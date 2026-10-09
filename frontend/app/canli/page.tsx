@@ -354,7 +354,7 @@ function StatsPanel({
       setNoData(results.length === 0);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
-        setErrorMsg("Bu maç henüz analiz edilmedi. Pipeline çalıştırıldığında veriler hazır olacak.");
+        setErrorMsg("Bu maç için analiz verisi bulunamadı. Yeterli istatistik olmayabilir.");
       } else {
         setErrorMsg("Arşiv verileri alınamadı.");
       }
