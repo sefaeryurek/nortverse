@@ -206,6 +206,30 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.eval_min_matches == 10
 
+    def test_default_pattern_b_match_cap(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_B_MATCH_CAP", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_b_match_cap == 150
+
+    def test_override_pattern_b_match_cap(self, monkeypatch):
+        monkeypatch.setenv("PATTERN_B_MATCH_CAP", "200")
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_b_match_cap == 200
+
+    def test_default_pattern_c_match_cap(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_C_MATCH_CAP", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_c_match_cap == 150
+
+    def test_override_pattern_c_match_cap(self, monkeypatch):
+        monkeypatch.setenv("PATTERN_C_MATCH_CAP", "100")
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.pattern_c_match_cap == 100
+
     def test_default_pattern_d_top_n(self, monkeypatch):
         monkeypatch.delenv("PATTERN_D_TOP_N", raising=False)
         from app.config import AnalysisConfig

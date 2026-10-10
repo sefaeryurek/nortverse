@@ -57,6 +57,7 @@ async def find_pattern_c_all_periods(
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
     league_name: str | None = None,
+    match_cap: int | None = None,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """FT oranlarıyla eşleşen geçmiş maçlar için IY, 2Y ve FT istatistiklerini döndür.
 
@@ -65,6 +66,7 @@ async def find_pattern_c_all_periods(
     Args:
         exclude_match_id: Bu match_id'yi sonuçlardan çıkar (analiz edilen maçın kendisi)
         league_name: Lig filtresi — önce aynı lig, yetersizse tüm liglere fallback
+        match_cap: Maksimum eşleşme sayısı (en yakın N maç, sinyal seyrelmesini önler)
 
     Returns:
         (ht_result, h2_result, ft_result) — eşleşme yetersizse hepsi None
@@ -105,7 +107,9 @@ async def find_pattern_c_all_periods(
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.actual_ht_home, Match.actual_ht_away,
                     Match.actual_h2_home, Match.actual_h2_away,
-                ).where(*filters)
+                ).where(*filters).order_by(Match.kickoff_time.desc())
+                if match_cap and match_cap > 0:
+                    stmt = stmt.limit(match_cap)
                 return list((await session.execute(stmt)).all())
         else:
             async with get_session() as session:
@@ -134,7 +138,9 @@ async def find_pattern_c_all_periods(
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.actual_ht_home, Match.actual_ht_away,
                     Match.actual_h2_home, Match.actual_h2_away,
-                ).where(*filters)
+                ).where(*filters).order_by(Match.kickoff_time.desc())
+                if match_cap and match_cap > 0:
+                    stmt = stmt.limit(match_cap)
                 return list((await session.execute(stmt)).all())
 
     matched = await _query(use_league=True)
@@ -169,6 +175,7 @@ async def find_pattern_c_adaptive(
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
     league_name: str | None = None,
+    match_cap: int | None = None,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """Adım adım tolerance artırarak yeterli eşleşme bulmaya çalışır.
 
@@ -184,6 +191,7 @@ async def find_pattern_c_adaptive(
             exclude_match_id=exclude_match_id,
             as_of=as_of,
             league_name=league_name,
+            match_cap=match_cap,
         )
         ft_result = result[2]
         if ft_result is not None and ft_result.match_count >= min_matches:
@@ -206,4 +214,5 @@ async def find_pattern_c_adaptive(
         exclude_match_id=exclude_match_id,
         as_of=as_of,
         league_name=league_name,
+        match_cap=match_cap,
     )

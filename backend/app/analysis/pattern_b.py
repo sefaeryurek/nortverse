@@ -28,6 +28,7 @@ async def find_pattern_b_matches(
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
     league_name: str | None = None,
+    match_cap: int | None = None,
 ) -> PatternResult | None:
     """Aynı periyot skor setine sahip geçmiş maçları bul ve istatistik üret.
 
@@ -37,6 +38,7 @@ async def find_pattern_b_matches(
         min_matches: Minimum eşleşme sayısı
         exclude_match_id: Bu match_id'yi sonuçlardan çıkar (analiz edilen maçın kendisi)
         league_name: Lig filtresi — önce aynı lig, yetersizse tüm liglere fallback
+        match_cap: Maksimum eşleşme sayısı (en yakın N maç, sinyal seyrelmesini önler)
 
     Returns:
         PatternResult veya None (eşleşme < min_matches ise)
@@ -82,7 +84,9 @@ async def find_pattern_b_matches(
                 Match.actual_ft_home, Match.actual_ft_away,
                 Match.actual_ht_home, Match.actual_ht_away,
                 Match.actual_h2_home, Match.actual_h2_away,
-            ).where(*filters)
+            ).where(*filters).order_by(Match.kickoff_time.desc())
+            if match_cap and match_cap > 0:
+                stmt = stmt.limit(match_cap)
             return list((await session.execute(stmt)).all())
 
     rows = await _query(use_league=True)

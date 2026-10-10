@@ -67,6 +67,7 @@ async def compute_all_patterns(
             res = await find_pattern_b_matches(
                 period, s1, sx, s2, exclude_match_id=match_id, as_of=as_of,
                 league_name=league_name,
+                match_cap=ANALYSIS.pattern_b_match_cap,
             )
             return res.model_dump() if res else None
         except Exception as exc:
@@ -85,6 +86,7 @@ async def compute_all_patterns(
                 tolerance_step=ANALYSIS.pattern_c_tolerance_step,
                 exclude_match_id=match_id, as_of=as_of,
                 league_name=league_name,
+                match_cap=ANALYSIS.pattern_c_match_cap,
             )
             return (
                 ht_c.model_dump() if ht_c else None,

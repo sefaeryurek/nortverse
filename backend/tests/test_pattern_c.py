@@ -65,7 +65,8 @@ async def test_adaptive_returns_first_sufficient_tolerance():
     as_of = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
     async def mock_find(ft_ratios, min_matches=1, tolerance=0.0,
-                        exclude_match_id=None, as_of=None, league_name=None):
+                        exclude_match_id=None, as_of=None, league_name=None,
+                        match_cap=None):
         nonlocal call_count
         call_count += 1
         if tolerance >= 0.75:
@@ -90,7 +91,8 @@ async def test_adaptive_returns_max_tolerance_result_when_never_sufficient():
     as_of = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
     async def mock_find(ft_ratios, min_matches=1, tolerance=0.0,
-                        exclude_match_id=None, as_of=None, league_name=None):
+                        exclude_match_id=None, as_of=None, league_name=None,
+                        match_cap=None):
         r = _make_pattern_result(1)
         return (r, r, r)
 
@@ -111,7 +113,8 @@ async def test_adaptive_base_tolerance_sufficient_no_escalation():
     as_of = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
     async def mock_find(ft_ratios, min_matches=1, tolerance=0.0,
-                        exclude_match_id=None, as_of=None, league_name=None):
+                        exclude_match_id=None, as_of=None, league_name=None,
+                        match_cap=None):
         nonlocal call_count
         call_count += 1
         r = _make_pattern_result(10)
