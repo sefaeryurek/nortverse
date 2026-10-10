@@ -280,7 +280,8 @@ nortverse/
 │   │   ├── test_config.py              # Config env override testleri (25+2 test, Sprint 23+37)
 │   │   ├── test_evaluation.py          # Günlük değerlendirme testleri (19 test, Sprint 37)
 │   │   ├── test_pattern_d.py          # Cosine similarity testleri (18 test, Sprint 46)
-│   │   └── test_live_ht.py            # Canlı İY eşleşme testleri (17 test, Sprint 47)
+│   │   ├── test_live_ht.py            # Canlı İY eşleşme testleri (17 test, Sprint 47)
+│   │   └── test_temporal_weights.py   # Temporal weighting testleri (Sprint 53)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
@@ -1314,10 +1315,10 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - Pattern B/C SQL'e `ORDER BY Match.kickoff_time DESC LIMIT :cap` eklendi
   - Config: `PATTERN_B_MATCH_CAP` (default 150), `PATTERN_C_MATCH_CAP` (default 150)
   - En yakın N maç seçilir → güncellik korunur, popülasyon ortalamasına kayma engellenir
-- **53c — Pattern D recommendation entegrasyonu (`snapshots.py`, `confidence.ts`):**
+- **53c — Pattern D recommendation entegrasyonu (`snapshots.py`):**
   - `build_ft_recommendations`'a `("archive_3", "pattern_ft_d")` eklendi — D artık tahmin kararına katılıyor
-  - 3 arşiv çoğunluk oylama: B+C+D'den 2/3 aynı yönde ise `MAJORITY_BOOST = 1.12`
-  - Frontend `computeConfidence`'ta çoğunluk boostu uygulanıyor
+  - 3 arşiv çoğunluk oylama: B+C+D'den 2/3 aynı yönde ise pick kabul edilir (gate/filtre, boost çarpanı değil)
+  - O/U ve KG pazarlarında da en az 2 arşiv uyumu gerekli
   - `PowerScoreGauge.tsx`'e Pattern D hacmi eklendi
 - **53d — Temporal weighting (`pattern_b/c.py`, `pattern_stats.py`):**
   - `weight = 0.5^(age_in_years / half_life)` — yakın maçlara daha fazla ağırlık (default half_life=3.0 yıl)
@@ -1423,7 +1424,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **`/api/fixture` hard timeout (Sprint 7 acil):** Playwright scrape `asyncio.wait_for(timeout=20)` ile sarmalı. Vercel SSR ~25sn'de düşer, biz 20sn'de 503 dönüyoruz — backend ölmez, kullanıcı "fetch failed" görür ama sistem ayakta kalır.
 
-- **Pattern saklama (Sprint 8):** `matches` tablosunda 6 JSONB kolon (`pattern_ht/h2/ft_b/c`). `exclude_match_id=match_id` ile hesaplanıp saklanır → okuma sırasında ek filtre gerekmez. Pattern eksikse `_build_from_db` runtime hesabı yapıp **write-through** ile DB'ye yazar (lazy backfill). Storage tahmini ~450MB Neon free tier 500MB sınırına yakın — aşılırsa arşiv prune.
+- **Pattern saklama (Sprint 8):** `matches` tablosunda 9 JSONB kolon (`pattern_ht/h2/ft_b/c/d`). `exclude_match_id=match_id` ile hesaplanıp saklanır → okuma sırasında ek filtre gerekmez. Pattern eksikse `_build_from_db` runtime hesabı yapıp **write-through** ile DB'ye yazar (lazy backfill).
 
 - **`compute_all_patterns` (Sprint 8):** `app/analysis/persist.py` — pipeline ve API tek bir kanaldan pattern üretir. 3 paralel pattern_b çağrısı + 1 pattern_c (3 periyot döner) `asyncio.gather` ile aynı anda hesaplanır.
 
@@ -1521,7 +1522,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Temporal weighting (Sprint 53d):** `weight = 0.5^(age_in_years / half_life)` — yakın maçlar daha ağırlıklı. Config: `TEMPORAL_DECAY_HALF_LIFE` (default 3.0 yıl). Pattern B/C kickoff_time çekip compute_stats'a weight geçirir. Pattern D'de similarity × temporal çarpımsal.
 
-- **3-arşiv çoğunluk oylama (Sprint 53c):** `build_ft_recommendations`'a Pattern D eklendi. B+C+D'den 2/3 aynı MS argmax'ta ise `MAJORITY_BOOST = 1.12`. Frontend `computeConfidence`'ta çoğunluk boostu uygulanır.
+- **3-arşiv çoğunluk oylama (Sprint 53c):** `build_ft_recommendations`'a Pattern D eklendi. B+C+D'den 2/3 aynı yönde ise pick kabul edilir (gate/filtre mekanizması, boost çarpanı değil). O/U ve KG pazarlarında da en az 2 arşiv uyumu gerekli.
 
 - **Pattern D cache temporal leakage fix (Sprint 53f):** `_candidate_cache_as_of` — backtest'te `as_of` parametresi değişince cache yenilenir, gelecek veri sızıntısı önlenir.
 
@@ -1563,7 +1564,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Python 3.11+** / FastAPI / SQLAlchemy 2.x async / Pydantic 2
 - **Playwright** (nowgoal Cloudflare/dinamik JS render — BS4 yetersiz)
-- **PostgreSQL** (Neon free tier — sınırsız egress, 0.5 GB depo) — 30K+ maç hedefi için JSONB şart
+- **PostgreSQL** (Local Docker, port 5433) — 28K+ maç, JSONB şart. Eski cloud: Neon free tier (Sprint 13-25), Supabase (Sprint 2-12)
 - **Next.js App Router + TailwindCSS** frontend
 - **GitHub Actions** cron (günlük `run-pipeline` + gece `update-scores`)
 - **Render.com** backend (Docker, `mcr.microsoft.com/playwright/python:v1.47.0-jammy`, free tier — 15dk uyku + cold start)
@@ -1609,21 +1610,21 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 |---|---|---|
 | **Frontend** | Local Next.js dev | `http://localhost:3000` |
 | **Backend** | Local FastAPI | `http://localhost:8000` |
-| **Veritabanı** | Docker PostgreSQL | Port 5433, 25,068 aktif maç |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 30,294+ aktif maç |
 | **Otomasyon** | Windows Task Scheduler | 4 bat script (pipeline + skor + yedekleme) |
 | **CI/CD** | GitHub Actions | `quality.yml` aktif (push/PR), cron'lar devre dışı |
 
 **Eski cloud deployment (Render + Vercel + Neon):** Konfigürasyon korunuyor ama aktif değil.
 
-### Veri Kalitesi (Sprint 53 sonrası)
+### Veri Kalitesi (Sprint 54 — recompute devam ediyor)
 
 | Metrik | Değer |
 |---|---|
-| Aktif maç | 25,068 |
-| Pattern eksik | 15,840 (eski sezon maçları — ft_all_ratios yok) |
+| Aktif maç | 30,294+ (arşiv genişleme devam ediyor) |
+| Pattern eksik | ~18,800 (recompute devam ediyor — migration `pattern_computed_at` sıfırlamıştı) |
 | Pattern tutarsızlık | 0 |
-| Quality score | 86.9 / 100 |
-| Arşiv | 7 lig × 24 sezon (ENG PR 6536, SPA D1 6018, ITA D1 5632, FRA D1 1270, GER D1 1203, HOL D1 1190, TUR D1 1059) |
+| Quality score | Recompute tamamlanınca 100/100 olacak |
+| Arşiv | 7 lig × 24+ sezon |
 | Duplicate | 0 |
 | Mantıksal duplicate | 0 |
 
@@ -1639,7 +1640,7 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 ### Sıradaki Adımlar
 
 **Tamamlanan (Sprint 53'te):**
-- ✅ Arşiv genişletme: 7 lig × 24 sezon tamamlandı (25,068 aktif maç)
+- ✅ Arşiv genişletme: 7 lig × 24+ sezon (30,294+ aktif maç, genişleme devam ediyor)
 - ✅ Pattern D recommendation entegrasyonu: 3-arşiv çoğunluk oylama sistemi
 - ✅ Pattern recompute: ft_all_ratios olan tüm maçlar için B/C/D hesaplandı
 - ✅ Lig filtresi + Match cap + Temporal weighting

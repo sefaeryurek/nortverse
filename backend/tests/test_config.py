@@ -234,7 +234,7 @@ class TestAnalysisConfigDefaults:
         monkeypatch.delenv("PATTERN_D_TOP_N", raising=False)
         from app.config import AnalysisConfig
         cfg = AnalysisConfig()
-        assert cfg.pattern_d_top_n == 20
+        assert cfg.pattern_d_top_n == 30
 
     def test_override_pattern_d_top_n(self, monkeypatch):
         monkeypatch.setenv("PATTERN_D_TOP_N", "50")
@@ -246,7 +246,7 @@ class TestAnalysisConfigDefaults:
         monkeypatch.delenv("PATTERN_D_MIN_SIMILARITY", raising=False)
         from app.config import AnalysisConfig
         cfg = AnalysisConfig()
-        assert cfg.pattern_d_min_similarity == 0.85
+        assert cfg.pattern_d_min_similarity == 0.80
 
     def test_override_pattern_d_min_similarity(self, monkeypatch):
         monkeypatch.setenv("PATTERN_D_MIN_SIMILARITY", "0.90")

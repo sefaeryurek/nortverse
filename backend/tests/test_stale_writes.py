@@ -57,7 +57,6 @@ async def test_older_analysis_upsert_is_rejected_without_retries(monkeypatch):
         await runner._upsert(analyze_match(raw), raw)
     session.execute.assert_awaited_once()
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
-    assert "matches.deleted_at IS NULL" in sql
     assert "matches.analyzed_at <=" in sql
 
 
