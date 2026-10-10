@@ -285,6 +285,12 @@ export interface EvaluationSummary {
   confident_evaluated: number;
   confident_result_hit: number;
   confident_result_hit_pct: number;
+  confident_c_evaluated: number;
+  confident_c_result_hit: number;
+  confident_c_result_hit_pct: number;
+  confident_d_evaluated: number;
+  confident_d_result_hit: number;
+  confident_d_result_hit_pct: number;
   brier_result_b: number | null;
   brier_result_c: number | null;
   brier_result_d: number | null;

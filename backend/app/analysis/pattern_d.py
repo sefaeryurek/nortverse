@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 
 _candidate_cache: list[tuple] | None = None
 _candidate_cache_at: float = 0.0
+_candidate_cache_as_of: datetime | None = None
 _idf_weights: list[float] | None = None
 _CACHE_TTL = 3600.0
 
@@ -79,10 +80,15 @@ async def _load_candidates(
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
 ) -> list[tuple]:
-    global _candidate_cache, _candidate_cache_at, _idf_weights
+    global _candidate_cache, _candidate_cache_at, _candidate_cache_as_of, _idf_weights
 
     now = time.monotonic()
-    if _candidate_cache is not None and (now - _candidate_cache_at) < _CACHE_TTL:
+    cache_valid = (
+        _candidate_cache is not None
+        and (now - _candidate_cache_at) < _CACHE_TTL
+        and _candidate_cache_as_of == as_of
+    )
+    if cache_valid:
         rows = _candidate_cache
     else:
         async with get_session() as session:
@@ -112,6 +118,7 @@ async def _load_candidates(
             rows = list((await session.execute(stmt)).all())
         _candidate_cache = rows
         _candidate_cache_at = now
+        _candidate_cache_as_of = as_of
         _idf_weights = _compute_idf_weights(rows)
         log.info("Pattern D candidate cache yüklendi: %d maç, IDF ağırlıkları hesaplandı", len(rows))
 
@@ -246,7 +253,8 @@ async def find_matched_ids(
 
 
 def invalidate_cache() -> None:
-    global _candidate_cache, _candidate_cache_at, _idf_weights
+    global _candidate_cache, _candidate_cache_at, _candidate_cache_as_of, _idf_weights
     _candidate_cache = None
     _candidate_cache_at = 0.0
+    _candidate_cache_as_of = None
     _idf_weights = None

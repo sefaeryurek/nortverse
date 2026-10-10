@@ -188,6 +188,10 @@ async def daily_evaluation(
     summary_d_btts_hit = 0
     confident_evaluated = 0
     confident_result_hit = 0
+    confident_c_evaluated = 0
+    confident_c_result_hit = 0
+    confident_d_evaluated = 0
+    confident_d_result_hit = 0
     brier_sum_b = 0.0
     brier_sum_c = 0.0
     brier_sum_d = 0.0
@@ -251,6 +255,10 @@ async def daily_evaluation(
                 summary_c_over_hit += 1
             if pat_c.btts_hit:
                 summary_c_btts_hit += 1
+            if pat_c.is_confident:
+                confident_c_evaluated += 1
+                if pat_c.result_hit:
+                    confident_c_result_hit += 1
 
         if pat_d is not None:
             evaluated_d += 1
@@ -261,6 +269,10 @@ async def daily_evaluation(
                 summary_d_over_hit += 1
             if pat_d.btts_hit:
                 summary_d_btts_hit += 1
+            if pat_d.is_confident:
+                confident_d_evaluated += 1
+                if pat_d.result_hit:
+                    confident_d_result_hit += 1
 
         if score_hit:
             summary_score_hit += 1
@@ -317,6 +329,12 @@ async def daily_evaluation(
         confident_evaluated=confident_evaluated,
         confident_result_hit=confident_result_hit,
         confident_result_hit_pct=_pct(confident_result_hit, confident_evaluated),
+        confident_c_evaluated=confident_c_evaluated,
+        confident_c_result_hit=confident_c_result_hit,
+        confident_c_result_hit_pct=_pct(confident_c_result_hit, confident_c_evaluated),
+        confident_d_evaluated=confident_d_evaluated,
+        confident_d_result_hit=confident_d_result_hit,
+        confident_d_result_hit_pct=_pct(confident_d_result_hit, confident_d_evaluated),
         brier_result_b=round(brier_sum_b / evaluated, 4) if evaluated > 0 else None,
         brier_result_c=round(brier_sum_c / evaluated_c, 4) if evaluated_c > 0 else None,
         brier_result_d=round(brier_sum_d / evaluated_d, 4) if evaluated_d > 0 else None,

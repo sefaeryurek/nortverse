@@ -254,6 +254,12 @@ class EvaluationSummary(BaseModel):
     confident_evaluated: int = 0
     confident_result_hit: int = 0
     confident_result_hit_pct: float = 0.0
+    confident_c_evaluated: int = 0
+    confident_c_result_hit: int = 0
+    confident_c_result_hit_pct: float = 0.0
+    confident_d_evaluated: int = 0
+    confident_d_result_hit: int = 0
+    confident_d_result_hit_pct: float = 0.0
     brier_result_b: float | None = None
     brier_result_c: float | None = None
     brier_result_d: float | None = None

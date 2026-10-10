@@ -414,6 +414,7 @@ async function EvalList({ date }: { date: string }) {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-[var(--nv-page-gutter)] pb-3">
             <SummaryCard label="Sonuç İsabeti" hit={s.c_result_hit} total={s.evaluated_c} pct={s.c_result_hit_pct} />
+            <SummaryCard label="Güvenli Sonuç" hit={s.confident_c_result_hit} total={s.confident_c_evaluated} pct={s.confident_c_result_hit_pct} />
             <SummaryCard label="2.5 Üst/Alt" hit={s.c_over_25_hit} total={s.evaluated_c} pct={s.c_over_25_hit_pct} />
             <SummaryCard label="KG İsabeti" hit={s.c_btts_hit} total={s.evaluated_c} pct={s.c_btts_hit_pct} />
           </div>
@@ -430,6 +431,7 @@ async function EvalList({ date }: { date: string }) {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-[var(--nv-page-gutter)] pb-3">
             <SummaryCard label="Sonuç İsabeti" hit={s.d_result_hit} total={s.evaluated_d} pct={s.d_result_hit_pct} />
+            <SummaryCard label="Güvenli Sonuç" hit={s.confident_d_result_hit} total={s.confident_d_evaluated} pct={s.confident_d_result_hit_pct} />
             <SummaryCard label="2.5 Üst/Alt" hit={s.d_over_25_hit} total={s.evaluated_d} pct={s.d_over_25_hit_pct} />
             <SummaryCard label="KG İsabeti" hit={s.d_btts_hit} total={s.evaluated_d} pct={s.d_btts_hit_pct} />
           </div>
