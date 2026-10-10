@@ -123,7 +123,8 @@ def _result_to_row(
     # A completed calculation may legitimately find no matches in any pattern.
     # Keep that state separate from the nullable pattern result columns.
     for key in ("pattern_ht_b", "pattern_ht_c", "pattern_h2_b", "pattern_h2_c",
-                "pattern_ft_b", "pattern_ft_c"):
+                "pattern_ft_b", "pattern_ft_c",
+                "pattern_ht_d", "pattern_h2_d", "pattern_ft_d"):
         row[key] = patterns.get(key) if patterns is not None else None
     row["pattern_computed_at"] = r.analyzed_at if patterns is not None else None
     if raw is not None:

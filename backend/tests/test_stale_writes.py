@@ -122,4 +122,5 @@ def test_full_reanalysis_invalidates_patterns_without_new_computation():
     assert all(refreshed[key] is None for key in (
         "pattern_ht_b", "pattern_ht_c", "pattern_h2_b", "pattern_h2_c",
         "pattern_ft_b", "pattern_ft_c",
+        "pattern_ht_d", "pattern_h2_d", "pattern_ft_d",
     ))

@@ -14,7 +14,7 @@ export interface CartItem {
   selectionLabel: string;
   marketLabel: string;
   pct: number;
-  archive: "A" | "B" | "AB";
+  archive: string;
   period: Period;
   addedAt: number;
 }
@@ -52,7 +52,7 @@ export function readStorage(): CartItem[] {
         [x.matchId, x.marketKey, x.homeTeam, x.awayTeam, x.selectionLabel, x.marketLabel]
           .every((value) => typeof value === "string" && value.trim().length > 0) &&
         typeof x.pct === "number" && Number.isFinite(x.pct) && x.pct >= 0 && x.pct <= 100 &&
-        ["A", "B", "AB"].includes(x.archive) && ["ht", "h2", "ft"].includes(x.period) &&
+        typeof x.archive === "string" && x.archive.trim().length > 0 && ["ht", "h2", "ft"].includes(x.period) &&
         typeof x.addedAt === "number" && Number.isFinite(x.addedAt),
     );
   } catch {

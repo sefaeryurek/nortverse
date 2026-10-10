@@ -78,6 +78,7 @@ export function validAnalysis(value: unknown, requestedId: string): value is Ana
       === value.ft_recommendations.length
     && ["ht", "half2", "ft"].every((key) => period(value[key]))
     && ["ht_b", "ht_c", "h2_b", "h2_c", "ft_b", "ft_c"].every((key) => pattern(value[key]))
+    && ["ht_d", "h2_d", "ft_d"].every((key) => value[key] === undefined || pattern(value[key]))
     && (value.trends === null || record(value.trends)
       && ["home_form", "away_form", "h2h"].every((key) => trend((value.trends as Record<string, unknown>)[key])));
 }
