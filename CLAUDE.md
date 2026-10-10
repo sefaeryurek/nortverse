@@ -1302,6 +1302,42 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - 1 yeni runner testi: IntegrityError retry skip
 - **Sonuç:** 749 backend + 206 frontend + 28 E2E = **983 toplam test**
 
+### Sprint 53 — TAMAMLANDI ✅ (Strateji İyileştirme — Lig Filtresi + Match Cap + Temporal Weighting + 3-Arşiv Oylama)
+- **Bağlam:** 3 araştırma ajanı tüm codebase'i taradı. Arşiv 9K → 25K+ maça genişledi ama pattern matching'te kritik eksiklikler tespit edildi (cross-league kirlilik, sinyal seyrelmesi, temporal leakage). 11 maddelik plan 6 sub-sprint'te uygulandı.
+- **53a — Lig filtresi (`pattern_b/c/d.py`, `persist.py`):**
+  - Pattern B/C/D'ye `league_name` parametresi eklendi — önce aynı lig, eşleşme < min ise tüm liglere fallback
+  - Pattern B: SQL'e `Match.league_name == league_name` filtresi
+  - Pattern C: `find_pattern_c_all_periods` ve `find_pattern_c_adaptive`'e league filtresi
+  - Pattern D: `_load_candidates`'a league filtresi, cache lig-bağımsız tutulup post-load filtreleme
+  - `persist.py` → `compute_all_patterns`'a league_name parametresi, pipeline/API'den geçiriliyor
+- **53b — Match cap (`pattern_b/c.py`, `config.py`):**
+  - Pattern B/C SQL'e `ORDER BY Match.kickoff_time DESC LIMIT :cap` eklendi
+  - Config: `PATTERN_B_MATCH_CAP` (default 150), `PATTERN_C_MATCH_CAP` (default 150)
+  - En yakın N maç seçilir → güncellik korunur, popülasyon ortalamasına kayma engellenir
+- **53c — Pattern D recommendation entegrasyonu (`snapshots.py`, `confidence.ts`):**
+  - `build_ft_recommendations`'a `("archive_3", "pattern_ft_d")` eklendi — D artık tahmin kararına katılıyor
+  - 3 arşiv çoğunluk oylama: B+C+D'den 2/3 aynı yönde ise `MAJORITY_BOOST = 1.12`
+  - Frontend `computeConfidence`'ta çoğunluk boostu uygulanıyor
+  - `PowerScoreGauge.tsx`'e Pattern D hacmi eklendi
+- **53d — Temporal weighting (`pattern_b/c.py`, `pattern_stats.py`):**
+  - `weight = 0.5^(age_in_years / half_life)` — yakın maçlara daha fazla ağırlık (default half_life=3.0 yıl)
+  - Pattern B/C `kickoff_time` çekip `compute_stats`'a weight olarak geçiriyor
+  - Config: `TEMPORAL_DECAY_HALF_LIFE` (default 3.0)
+  - Pattern D zaten similarity-weighted — temporal decay de eklendi (çarpımsal)
+- **53e — volumeWeight sadeleştirme (`confidence.ts`):**
+  - 100+ maçta decay kaldırıldı — match cap (150) sinyal seyrelmesini zaten önlediği için plateau yeterli
+  - `volumeWeight = Math.min(1.0, Math.log(matchCount + 1) / Math.log(30))` — 30+ maçta 1.0
+- **53f — Cache fix + fine tuning:**
+  - Pattern D `_candidate_cache_as_of` — `as_of` parametresi değiştiğinde cache yenilenir (temporal leakage fix)
+  - Confident metrikleri Pattern C ve D'ye genişletildi (`confident_c/d_evaluated/hit/pct`)
+  - `LEAGUE_BASE_RATES` 21,954 maçtan yeniden hesaplandı
+  - `audit-db`'ye mantıksal duplicate tespiti eklendi (`home_team + away_team + kickoff_time`)
+  - vitest timeout 5s → 15s (CPU yükü altında timeout sorunu)
+- **Arşiv genişletme (7 lig × 24 sezon):**
+  - ENG PR (6,536), SPA D1 (6,018), ITA D1 (5,632), FRA D1 (1,270), GER D1 (1,203), HOL D1 (1,190), TUR D1 (1,059) = **25,068 aktif maç**
+  - Pattern recompute: `ft_all_ratios` olan ~9,200 maç için tamamlandı; eski sezon maçları (20+ yıl) yeterli veri olmadığından analiz edilemiyor
+- **Sonuç:** 749 backend + 206 frontend + 28 E2E = **983 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1477,7 +1513,17 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **O/U ve KG tekli arşiv filtresi (Sprint 43):** Backtest'te O/U %51.7, KG %52.5 (baseline %55.4) — tekli arşivde sinyal yok. Backend `snapshots.py`'de `over_25` ve `btts` pazarları sadece `archive == "both"` ise TopPicks'e girer. Frontend `confidence.ts`'de tekli arşiv O/U/KG ×0.5 penalty — MarketSummary/DetailedStats'ta muted.
 
-- **Pattern B yüksek hacim diminishing returns (Sprint 43):** `volumeWeight(matchCount)` 100+ eşleşmede decay uygular — `peak × max(0.7, 1 - (mc-100)/500)`. 200'de ~0.85, 300+'da ~0.70. Popülasyon ortalamasına yakınsayan büyük arşivlerde sinyal kaybını yansıtır.
+- **volumeWeight sadeleştirme (Sprint 53e, öncesi Sprint 43):** 100+ decay kaldırıldı — match cap (150) ve lig filtresi sinyal seyrelmesini zaten önlediği için. `volumeWeight = Math.min(1.0, Math.log(matchCount + 1) / Math.log(30))` — 30+ maçta 1.0 plateau.
+
+- **Lig filtresi Pattern B/C/D (Sprint 53a):** Tüm pattern matching fonksiyonları `league_name` parametresi alır. Önce aynı lig aranır; eşleşme < min_matches ise tüm liglere fallback. Cross-league kirlilik (Premier League ↔ Egyptian Premier League) engellenir.
+
+- **Match cap Pattern B/C (Sprint 53b):** SQL'e `ORDER BY Match.kickoff_time DESC LIMIT :cap` eklendi. Config: `PATTERN_B_MATCH_CAP` (default 150), `PATTERN_C_MATCH_CAP` (default 150). En yakın N maç seçilir → güncellik korunur, popülasyon ortalamasına kayma engellenir.
+
+- **Temporal weighting (Sprint 53d):** `weight = 0.5^(age_in_years / half_life)` — yakın maçlar daha ağırlıklı. Config: `TEMPORAL_DECAY_HALF_LIFE` (default 3.0 yıl). Pattern B/C kickoff_time çekip compute_stats'a weight geçirir. Pattern D'de similarity × temporal çarpımsal.
+
+- **3-arşiv çoğunluk oylama (Sprint 53c):** `build_ft_recommendations`'a Pattern D eklendi. B+C+D'den 2/3 aynı MS argmax'ta ise `MAJORITY_BOOST = 1.12`. Frontend `computeConfidence`'ta çoğunluk boostu uygulanır.
+
+- **Pattern D cache temporal leakage fix (Sprint 53f):** `_candidate_cache_as_of` — backtest'te `as_of` parametresi değişince cache yenilenir, gelecek veri sızıntısı önlenir.
 
 - **Birleşik güven rozeti (Sprint 45):** `/api/fixture/pattern-status` endpoint'inde `agreement` alanı — B ve C arşivlerinin MS `result_1/x/2_pct` argmax'ı karşılaştırılır. Aynı kazanan = uyum. `BultenRow.tsx`'de uyumlu maçlara altın gradient "A1+A2" rozet, uyumsuzda ayrı A1/A2 badge'leri.
 
@@ -1553,7 +1599,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-08 — Sprint 50 TAMAMLANDI, Local Development + Arşiv Genişletme)
+## Kaldığımız Yer (2026-10-10 — Sprint 53 TAMAMLANDI, Local Development)
 
 ### ✅ Mevcut Durum — Local Development
 
@@ -1563,33 +1609,25 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 |---|---|---|
 | **Frontend** | Local Next.js dev | `http://localhost:3000` |
 | **Backend** | Local FastAPI | `http://localhost:8000` |
-| **Veritabanı** | Docker PostgreSQL | Port 5433, 9,533+ aktif maç (genişliyor) |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 25,068 aktif maç |
 | **Otomasyon** | Windows Task Scheduler | 4 bat script (pipeline + skor + yedekleme) |
 | **CI/CD** | GitHub Actions | `quality.yml` aktif (push/PR), cron'lar devre dışı |
 
 **Eski cloud deployment (Render + Vercel + Neon):** Konfigürasyon korunuyor ama aktif değil.
 
-### Veri Kalitesi (Sprint 26 sonrası)
+### Veri Kalitesi (Sprint 53 sonrası)
 
 | Metrik | Değer |
 |---|---|
-| Aktif maç | 9,533+ (genişliyor) |
-| Pattern eksik | 0 |
+| Aktif maç | 25,068 |
+| Pattern eksik | 15,840 (eski sezon maçları — ft_all_ratios yok) |
 | Pattern tutarsızlık | 0 |
-| Quality score | 100 / 100 |
-| Arşiv | 7 lig × 5 sezon + ek sezonlar çekiliyor |
+| Quality score | 86.9 / 100 |
+| Arşiv | 7 lig × 24 sezon (ENG PR 6536, SPA D1 6018, ITA D1 5632, FRA D1 1270, GER D1 1203, HOL D1 1190, TUR D1 1059) |
+| Duplicate | 0 |
+| Mantıksal duplicate | 0 |
 
-### Backtest Sonuçları (Sprint 37 — 7,949 bitmiş maç)
-
-| Pazar | Pattern B | Pattern C | Baseline | Not |
-|---|---|---|---|---|
-| MS (1/X/2) | %44.4 | %41.6 | %44.4 | B = baseline |
-| Üst/Alt 2.5 | %51.7 | %51.6 | %55.4 | İkisi de baseline altı |
-| KG | %52.5 | %50.3 | %55.4 | İkisi de baseline altı |
-| B+C uyum (MS) | %46.8 | — | %44.4 | TEK doğrulanmış sinyal (+6 puan) |
-| Bundesliga MS | %50.1 | %44.3 | — | En iyi lig |
-
-### Test Durumu (Sprint 50 sonrası)
+### Test Durumu (Sprint 53 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
@@ -1600,16 +1638,17 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 ### Sıradaki Adımlar
 
-**Devam eden işler:**
-- **Arşiv genişletme:** ENG PR 24 sezon çekimi devam ediyor. Kalan ligler: SPA D1, ITA D1, GER D1, FRA D1, TUR D1, HOL D1 (her biri ~23 sezon) — kullanıcı manuel tetikleyecek
-- **Pattern D confidence scoring entegrasyonu:** D'yi `computeConfidence`'a ve `build_ft_recommendations`'a eklemek
-- **Pattern D + C recompute:** Arşiv genişlemesi bitince `recompute-patterns` çalıştırılmalı
-- **Ensemble stacking B+C+D:** Logistic regression meta-model (scikit-learn gerektirir — onay gerekir)
+**Tamamlanan (Sprint 53'te):**
+- ✅ Arşiv genişletme: 7 lig × 24 sezon tamamlandı (25,068 aktif maç)
+- ✅ Pattern D recommendation entegrasyonu: 3-arşiv çoğunluk oylama sistemi
+- ✅ Pattern recompute: ft_all_ratios olan tüm maçlar için B/C/D hesaplandı
+- ✅ Lig filtresi + Match cap + Temporal weighting
 
 **Bekleyen konular (kullanıcı kararı gerektirir):**
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
 - **Frontend/Backend strateji birleştirme:** Frontend MarketSummary basit yüzde karşılaştırma, backend evaluation log-odds shrinkage + lig bazlı baz oranları — ikisi farklı sayfalarda ama uzun vadede birleştirilmeli
 - **Platt scaling:** Confidence skoru hâlâ olasılık olarak yorumlanmamalı — gelecekte Platt scaling veya isotonic regression ile gerçek olasılığa kalibre edilebilir
+- **Ensemble stacking B+C+D:** Logistic regression meta-model (scikit-learn gerektirir — onay gerekir)
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
 - **Canlı maç WebSocket:** Şu an polling (45sn), real-time push için WebSocket gerekir (onay gerekir)
@@ -1620,5 +1659,4 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 - **Task Scheduler "missed run":** Kaçırılan görevlerin yeniden çalıştırılması ayarı etkinleştirilmeli
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
-- **`ComboSuggestion` ve `StatBadge` dead component'ler:** Sprint 40'ta silindi ✅
-- **Pattern C + D recompute:** Arşiv genişlemesi bitince `recompute-patterns` çalıştırılmalı — hem adaptive tolerance hem pattern_d tüm maçlara uygulanacak
+- **Pattern eksik 15,840 maç:** Eski sezon arşiv maçları (20+ yıl öncesi) ft_all_ratios verisi olmadığı için pattern hesaplanamıyor — beklenen durum, çözüm gerektirmiyor
