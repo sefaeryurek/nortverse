@@ -1339,6 +1339,25 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   - Pattern recompute: `ft_all_ratios` olan ~9,200 maç için tamamlandı; eski sezon maçları (20+ yıl) yeterli veri olmadığından analiz edilemiyor
 - **Sonuç:** 749 backend + 206 frontend + 28 E2E = **983 toplam test**
 
+### Sprint 54 — TAMAMLANDI ✅ (Pattern Recompute + CLAUDE.md Tutarlılık + Pattern D Kapsam)
+- **Bağlam:** Migration `m7a1d9e4c256` tüm `pattern_computed_at` değerlerini NULL'a sıfırlamıştı → audit-db "eksik" sayıyordu. 3 araştırma ajanı CLAUDE.md'de yanlış iddialar tespit etti.
+- **Pattern recompute (`recompute-patterns --only-missing`):**
+  - 18,807 maç güncellendi, 0 hata — 95 batch × 200 maç
+  - Quality score: 86.8 → **97.5/100**
+  - Kalan 3,789 eksik: recompute sırasında başka seanslarda eklenen yeni arşiv maçları
+- **CLAUDE.md tutarsızlık düzeltmeleri (`3cef49d`):**
+  - `MAJORITY_BOOST = 1.12` yanlış iddiası 3 yerden kaldırıldı — gerçek mekanizma: backend `snapshots.py` 2/3 çoğunluk gate/filtresi (boost çarpanı değil)
+  - Eski Neon referansları → Local Docker PostgreSQL
+  - Aktif maç sayısı 25,068 → 33,707 güncellendi
+  - Pattern saklama "6 JSONB kolon" → "9 JSONB kolon"
+  - `test_temporal_weights.py` kod yapısı tree'ye eklendi
+- **Pattern D kapsam genişletme (`3cef49d`):**
+  - `config.py`: `pattern_d_top_n` 20→30, `pattern_d_min_similarity` 0.85→0.80
+  - Daha fazla maça Pattern D sonucu üretilir (en iyi Brier skoru 0.6392)
+- **test_stale_writes düzeltmesi (`3cef49d`):** `_upsert` artık WHERE'de `deleted_at IS NULL` kullanmıyor → assertion kaldırıldı
+- **Arşiv genişleme devam ediyor (başka seanslarda):** 30,294 → 33,707 aktif maç (+3,413)
+- **Sonuç:** 768 backend + 206 frontend + 28 E2E = **1002 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1600,7 +1619,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-10 — Sprint 53 TAMAMLANDI, Local Development)
+## Kaldığımız Yer (2026-10-11 — Sprint 54 TAMAMLANDI, Local Development)
 
 ### ✅ Mevcut Durum — Local Development
 
@@ -1610,40 +1629,40 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 |---|---|---|
 | **Frontend** | Local Next.js dev | `http://localhost:3000` |
 | **Backend** | Local FastAPI | `http://localhost:8000` |
-| **Veritabanı** | Docker PostgreSQL | Port 5433, 30,294+ aktif maç |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 33,707 aktif maç |
 | **Otomasyon** | Windows Task Scheduler | 4 bat script (pipeline + skor + yedekleme) |
 | **CI/CD** | GitHub Actions | `quality.yml` aktif (push/PR), cron'lar devre dışı |
 
 **Eski cloud deployment (Render + Vercel + Neon):** Konfigürasyon korunuyor ama aktif değil.
 
-### Veri Kalitesi (Sprint 54 — recompute devam ediyor)
+### Veri Kalitesi (Sprint 54 — recompute TAMAMLANDI)
 
 | Metrik | Değer |
 |---|---|
-| Aktif maç | 30,294+ (arşiv genişleme devam ediyor) |
-| Pattern eksik | ~18,800 (recompute devam ediyor — migration `pattern_computed_at` sıfırlamıştı) |
+| Aktif maç | 33,707 |
+| Pattern computed | 29,918 |
+| Pattern eksik | 3,789 (recompute sırasında eklenen yeni maçlar — ikinci pas ile tamamlanabilir) |
 | Pattern tutarsızlık | 0 |
-| Quality score | Recompute tamamlanınca 100/100 olacak |
-| Arşiv | 7 lig × 24+ sezon |
+| Quality score | 97.5/100 |
+| Arşiv | 7+ lig × 24+ sezon (arşiv genişleme devam ediyor) |
 | Duplicate | 0 |
 | Mantıksal duplicate | 0 |
 
-### Test Durumu (Sprint 53 sonrası)
+### Test Durumu (Sprint 54 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 749 | ✅ Yeşil |
+| **Backend** | pytest | 768 | ✅ Yeşil |
 | **Frontend birim** | vitest | 206 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 983 | — |
+| **Toplam** | — | 1002 | — |
 
 ### Sıradaki Adımlar
 
-**Tamamlanan (Sprint 53'te):**
-- ✅ Arşiv genişletme: 7 lig × 24+ sezon (30,294+ aktif maç, genişleme devam ediyor)
-- ✅ Pattern D recommendation entegrasyonu: 3-arşiv çoğunluk oylama sistemi
-- ✅ Pattern recompute: ft_all_ratios olan tüm maçlar için B/C/D hesaplandı
-- ✅ Lig filtresi + Match cap + Temporal weighting
+**Tamamlanan (Sprint 54'te):**
+- ✅ Pattern recompute: 18,807 maç güncellendi, 0 hata — quality 97.5/100
+- ✅ CLAUDE.md tutarsızlık düzeltmeleri (MAJORITY_BOOST yanlış iddiası, Neon referansları, aktif maç sayısı)
+- ✅ Pattern D config: top_n=20→30, min_similarity=0.85→0.80 (kapsam artırma)
 
 **Bekleyen konular (kullanıcı kararı gerektirir):**
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
@@ -1660,4 +1679,4 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 - **Task Scheduler "missed run":** Kaçırılan görevlerin yeniden çalıştırılması ayarı etkinleştirilmeli
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
-- **Pattern eksik 15,840 maç:** Eski sezon arşiv maçları (20+ yıl öncesi) ft_all_ratios verisi olmadığı için pattern hesaplanamıyor — beklenen durum, çözüm gerektirmiyor
+- **Pattern eksik 3,789 maç:** Recompute sırasında başka seanslarda eklenen yeni arşiv maçları — ikinci `recompute-patterns --only-missing` pası ile tamamlanabilir
