@@ -239,6 +239,23 @@ def audit_db_cmd(
             dup_rows = (await session.execute(dup_stmt)).all()
             duplicate_count = len(dup_rows)
 
+            logical_dup_stmt = (
+                select(
+                    Match.home_team, Match.away_team, Match.kickoff_time,
+                    func.count(Match.id).label("cnt"),
+                )
+                .where(
+                    Match.deleted_at.is_(None),
+                    Match.home_team.isnot(None),
+                    Match.away_team.isnot(None),
+                    Match.kickoff_time.isnot(None),
+                )
+                .group_by(Match.home_team, Match.away_team, Match.kickoff_time)
+                .having(func.count(Match.id) > 1)
+            )
+            logical_dup_rows = (await session.execute(logical_dup_stmt)).all()
+            logical_dup_count = len(logical_dup_rows)
+
             ftb_rows = (await session.execute(
                 select(Match.match_id, Match.pattern_ft_b)
                 .where(Match.deleted_at.is_(None), Match.pattern_ft_b.isnot(None))
@@ -292,6 +309,7 @@ def audit_db_cmd(
         _row("Skor eksik (kickoff +130dk)", missing_actual, ok_if_zero=False)
         _row("Pattern tutarsızlık (1+X+2 ≠ 100)", len(pattern_anomalies))
         _row("Duplicate match_id", duplicate_count)
+        _row("Mantıksal duplicate (aynı takım+saat)", logical_dup_count)
         console.print(t)
 
         t2 = Table(title="Aktivite", show_header=False)
@@ -334,6 +352,12 @@ def audit_db_cmd(
             )
             for dr in dup_rows[:5]:
                 console.print(f"  [dim]{dr.match_id}: {dr.cnt} kayıt[/dim]")
+        if logical_dup_count > 0:
+            console.print(
+                f"\n[yellow]Mantıksal duplicate tespit edildi ({logical_dup_count} adet):[/yellow]"
+            )
+            for dr in logical_dup_rows[:5]:
+                console.print(f"  [dim]{dr.home_team} vs {dr.away_team} ({dr.kickoff_time}): {dr.cnt} kayıt[/dim]")
         if pattern_anomalies:
             console.print(
                 f"\n[yellow]Pattern anomalisi tespit edildi ({len(pattern_anomalies)} maç):[/yellow]"

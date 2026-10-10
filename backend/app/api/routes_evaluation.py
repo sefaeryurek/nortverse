@@ -21,17 +21,17 @@ from app.db.models import Match
 
 router = APIRouter()
 
-BASE_RESULT = {"1": 45.1, "X": 24.8, "2": 30.0, "ou25": 53.0, "btts": 53.3}
+BASE_RESULT = {"1": 45.3, "X": 24.9, "2": 29.8, "ou25": 52.7, "btts": 53.2}
 
-# Lig bazlı taban oranları — 20,770 skorlu maçtan hesaplandı (2026-10-10).
+# Lig bazlı taban oranları — 21,954 skorlu maçtan hesaplandı (2026-10-10).
 LEAGUE_BASE_RATES: dict[str, dict[str, float]] = {
-    "German Bundesliga": {"1": 44.9, "X": 24.8, "2": 30.3, "ou25": 63.3, "btts": 60.8},
-    "Turkish Super Lig": {"1": 46.0, "X": 24.5, "2": 29.5, "ou25": 57.3, "btts": 56.2},
     "English Premier League": {"1": 45.2, "X": 24.6, "2": 30.3, "ou25": 52.9, "btts": 52.0},
-    "Dutch Eredivisie": {"1": 43.9, "X": 24.8, "2": 31.2, "ou25": 61.3, "btts": 57.7},
     "Spanish La Liga": {"1": 46.9, "X": 24.9, "2": 28.2, "ou25": 49.9, "btts": 51.9},
-    "Italy Serie A": {"1": 43.4, "X": 25.6, "2": 31.0, "ou25": 51.2, "btts": 53.2},
+    "Italy Serie A": {"1": 44.3, "X": 25.8, "2": 29.9, "ou25": 50.4, "btts": 52.9},
+    "German Bundesliga": {"1": 44.9, "X": 24.8, "2": 30.3, "ou25": 63.3, "btts": 60.8},
     "French Ligue 1": {"1": 44.4, "X": 23.3, "2": 32.3, "ou25": 55.4, "btts": 55.6},
+    "Turkish Super Lig": {"1": 46.0, "X": 24.5, "2": 29.5, "ou25": 57.3, "btts": 56.2},
+    "Dutch Eredivisie": {"1": 43.9, "X": 24.8, "2": 31.2, "ou25": 61.3, "btts": 57.7},
 }
 
 
