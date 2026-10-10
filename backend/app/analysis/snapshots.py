@@ -138,12 +138,23 @@ async def load_market_baselines(
     return baselines
 
 
+_ARCHIVE_KEYS = (
+    ("archive_1", "pattern_ft_b"),
+    ("archive_2", "pattern_ft_c"),
+    ("archive_3", "pattern_ft_d"),
+)
+
+
 def build_ft_recommendations(patterns: dict | None) -> list[dict]:
-    """Build the only FT selections that the product may display as tracked picks."""
+    """Build the only FT selections that the product may display as tracked picks.
+
+    3 arşiv (B/C/D) çoğunluk kuralı: en az 2/3 aynı yönde ise sinyal.
+    O/U ve BTTS için de en az 2 arşiv uyumu gerekli.
+    """
     if patterns is None:
         return []
     by_archive: dict[str, dict[str, dict]] = {}
-    for archive, key in (("archive_1", "pattern_ft_b"), ("archive_2", "pattern_ft_c")):
+    for archive, key in _ARCHIVE_KEYS:
         pattern = patterns.get(key)
         if not isinstance(pattern, dict):
             continue
@@ -169,27 +180,39 @@ def build_ft_recommendations(patterns: dict | None) -> list[dict]:
     for market in _MARKETS:
         first = by_archive.get("archive_1", {}).get(market)
         second = by_archive.get("archive_2", {}).get(market)
-        if first and second and first["selection"] != second["selection"]:
+        third = by_archive.get("archive_3", {}).get(market)
+        entries = [("archive_1", first), ("archive_2", second), ("archive_3", third)]
+        present = [(name, e) for name, e in entries if e is not None]
+        if not present:
             continue
-        chosen = first or second
-        if chosen is None:
+
+        votes: dict[str, list[str]] = {}
+        for name, e in present:
+            votes.setdefault(e["selection"], []).append(name)
+        best_selection, agreeing = max(votes.items(), key=lambda x: len(x[1]))
+
+        if len(present) >= 2 and len(agreeing) < 2:
             continue
-        archive = "both" if first and second else "archive_1" if first else "archive_2"
-        if market in ("over_25", "btts") and archive != "both":
+        if market in ("over_25", "btts") and len(agreeing) < 2:
             continue
-        frequency = min(first["frequency_pct"], second["frequency_pct"]) if first and second else chosen["frequency_pct"]
-        count = min(first["match_count"], second["match_count"]) if first and second else chosen["match_count"]
+
+        archive_label = "+".join(sorted(agreeing))
+        agreeing_entries = [e for name, e in present if name in agreeing]
+        frequency = min(e["frequency_pct"] for e in agreeing_entries)
+        count = min(e["match_count"] for e in agreeing_entries)
         picks.append({
-            "recommendation_id": f"{RULE_VERSION}:{market}:{chosen['selection']}",
-            "archive": archive,
+            "recommendation_id": f"{RULE_VERSION}:{market}:{best_selection}",
+            "archive": archive_label,
             "market": market,
-            "selection": chosen["selection"],
+            "selection": best_selection,
             "frequency_pct": frequency,
             "match_count": count,
             "archive_1_frequency_pct": first["frequency_pct"] if first else None,
             "archive_1_match_count": first["match_count"] if first else None,
             "archive_2_frequency_pct": second["frequency_pct"] if second else None,
             "archive_2_match_count": second["match_count"] if second else None,
+            "archive_3_frequency_pct": third["frequency_pct"] if third else None,
+            "archive_3_match_count": third["match_count"] if third else None,
         })
     return picks
 
@@ -202,7 +225,7 @@ def _market_abstain_reason(patterns: dict | None, market: str) -> str:
     qualified: list[str] = []
     saw_small_sample = False
     saw_below_threshold = False
-    for key in ("pattern_ft_b", "pattern_ft_c"):
+    for key in ("pattern_ft_b", "pattern_ft_c", "pattern_ft_d"):
         pattern = patterns.get(key)
         if not isinstance(pattern, dict):
             continue
@@ -284,7 +307,7 @@ def prekickoff_picks(
 
     has_ft_data = any(
         isinstance(patterns.get(k), dict)
-        for k in ("pattern_ft_b", "pattern_ft_c")
+        for k in ("pattern_ft_b", "pattern_ft_c", "pattern_ft_d")
     )
     if not has_ft_data:
         return None

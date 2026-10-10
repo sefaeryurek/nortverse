@@ -317,9 +317,10 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
 
                 {activePeriod === "ft" && (
                   <PowerScoreGauge
-                    score={computePowerScore(data, patternB, patternC)}
+                    score={computePowerScore(data, patternB, patternC, patternD)}
                     patternB={patternB}
                     patternC={patternC}
+                    patternD={patternD}
                     trendCount={data.trends ? [data.trends.home_form, data.trends.away_form, data.trends.h2h].filter(Boolean).length : 0}
                   />
                 )}

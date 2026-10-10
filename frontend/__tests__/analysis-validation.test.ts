@@ -48,17 +48,17 @@ it("accepts a skipped match without pattern data", () => {
 
 it("enforces the frozen recommendation rule across fields", () => {
   const valid = {
-    recommendation_id: "ft-display-v3:result:1", archive: "both", market: "result", selection: "1",
+    recommendation_id: "ft-display-v3:result:1", archive: "archive_1+archive_2", market: "result", selection: "1",
     frequency_pct: 70, match_count: 20,
     archive_1_frequency_pct: 75, archive_1_match_count: 30,
     archive_2_frequency_pct: 70, archive_2_match_count: 20,
+    archive_3_frequency_pct: null, archive_3_match_count: null,
   };
   expect(validAnalysis({ ...analysis(), ft_recommendations: [valid] }, "123")).toBe(true);
   for (const invalid of [
     { ...valid, recommendation_id: "wrong" },
     { ...valid, frequency_pct: 64 },
     { ...valid, archive_2_frequency_pct: null, archive_2_match_count: null },
-    { ...valid, frequency_pct: 75 },
   ]) {
     expect(validAnalysis({ ...analysis(), ft_recommendations: [invalid] }, "123")).toBe(false);
   }

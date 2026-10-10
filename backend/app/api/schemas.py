@@ -145,6 +145,8 @@ class RecommendationOut(BaseModel):
     archive_1_match_count: Optional[int] = None
     archive_2_frequency_pct: Optional[float] = None
     archive_2_match_count: Optional[int] = None
+    archive_3_frequency_pct: Optional[float] = None
+    archive_3_match_count: Optional[int] = None
 
 
 class AnalyzeResponse(BaseModel):

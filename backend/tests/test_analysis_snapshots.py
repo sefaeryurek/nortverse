@@ -75,7 +75,7 @@ def test_ou_btts_dual_archive_allowed():
     assert "result" in markets
     assert "over_25" in markets
     assert "btts" in markets
-    assert all(p["archive"] == "both" for p in picks if p["market"] in ("over_25", "btts"))
+    assert all("+" in p["archive"] for p in picks if p["market"] in ("over_25", "btts"))
 
 
 def test_ineligible_analysis_never_creates_a_snapshot():

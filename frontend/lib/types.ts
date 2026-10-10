@@ -163,7 +163,7 @@ export interface TrendsData {
 
 export interface FTRecommendation {
   recommendation_id: string;
-  archive: "archive_1" | "archive_2" | "both";
+  archive: string;
   market: "result" | "over_25" | "btts";
   selection: "1" | "X" | "2" | "under" | "over" | "yes" | "no";
   frequency_pct: number;
@@ -172,6 +172,8 @@ export interface FTRecommendation {
   archive_1_match_count: number | null;
   archive_2_frequency_pct: number | null;
   archive_2_match_count: number | null;
+  archive_3_frequency_pct: number | null;
+  archive_3_match_count: number | null;
 }
 
 export interface AnalyzeResponse {

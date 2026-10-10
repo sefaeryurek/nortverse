@@ -4,6 +4,7 @@ export function computePowerScore(
   data: AnalyzeResponse,
   patternB: PatternResult | null,
   patternC: PatternResult | null,
+  patternD: PatternResult | null = null,
 ): number {
   let score = 0;
   let factors = 0;
@@ -15,6 +16,11 @@ export function computePowerScore(
 
   if (patternC && patternC.match_count > 0) {
     score += Math.min(20, patternC.match_count * 2);
+    factors++;
+  }
+
+  if (patternD && patternD.match_count > 0) {
+    score += Math.min(15, patternD.match_count);
     factors++;
   }
 
@@ -38,7 +44,13 @@ export function computePowerScore(
     factors++;
   }
 
-  if (patternB && patternC && patternB.match_count >= 5 && patternC.match_count >= 1) {
+  const activeArchives = [patternB, patternC, patternD].filter(
+    (p) => p && p.match_count >= 1,
+  ).length;
+  if (activeArchives >= 3) {
+    score += 8;
+    factors++;
+  } else if (activeArchives >= 2) {
     score += 5;
     factors++;
   }
@@ -50,10 +62,11 @@ interface Props {
   score: number;
   patternB: PatternResult | null;
   patternC: PatternResult | null;
+  patternD?: PatternResult | null;
   trendCount: number;
 }
 
-export default function PowerScoreGauge({ score, patternB, patternC, trendCount }: Props) {
+export default function PowerScoreGauge({ score, patternB, patternC, patternD, trendCount }: Props) {
   if (score <= 0) return null;
 
   const gaugeColor =
@@ -141,6 +154,18 @@ export default function PowerScoreGauge({ score, patternB, patternC, trendCount 
                 Arşiv 2: {patternC.match_count} maç
               </span>
             )}
+            {patternD && patternD.match_count > 0 && (
+              <span
+                className="nv-badge"
+                style={{
+                  backgroundColor: "var(--nv-bg-elevated)",
+                  color: "var(--nv-text-secondary)",
+                  fontSize: "var(--nv-text-xs)",
+                }}
+              >
+                Arşiv 3: {patternD.match_count} maç
+              </span>
+            )}
             {trendCount > 0 && (
               <span
                 className="nv-badge"
@@ -153,18 +178,36 @@ export default function PowerScoreGauge({ score, patternB, patternC, trendCount 
                 Trend: {trendCount}/3
               </span>
             )}
-            {patternB && patternC && patternB.match_count >= 5 && patternC.match_count >= 1 && (
-              <span
-                className="nv-badge"
-                style={{
-                  backgroundColor: "var(--nv-accent-green-dim, rgba(34,197,94,0.1))",
-                  color: "var(--nv-accent-green)",
-                  fontSize: "var(--nv-text-xs)",
-                }}
-              >
-                Çift arşiv onayı
-              </span>
-            )}
+            {(() => {
+              const active = [patternB, patternC, patternD].filter(
+                (p) => p && p.match_count >= 1,
+              ).length;
+              if (active >= 3) return (
+                <span
+                  className="nv-badge"
+                  style={{
+                    backgroundColor: "var(--nv-accent-green-dim, rgba(34,197,94,0.1))",
+                    color: "var(--nv-accent-green)",
+                    fontSize: "var(--nv-text-xs)",
+                  }}
+                >
+                  Üçlü arşiv onayı
+                </span>
+              );
+              if (active >= 2) return (
+                <span
+                  className="nv-badge"
+                  style={{
+                    backgroundColor: "var(--nv-accent-green-dim, rgba(34,197,94,0.1))",
+                    color: "var(--nv-accent-green)",
+                    fontSize: "var(--nv-text-xs)",
+                  }}
+                >
+                  Çift arşiv onayı
+                </span>
+              );
+              return null;
+            })()}
           </div>
         </div>
       </div>

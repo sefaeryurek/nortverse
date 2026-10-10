@@ -21,9 +21,16 @@ const SELECTION_LABELS: Record<FTRecommendation["selection"], string> = {
   under: "2.5 Alt", over: "2.5 Üst", yes: "Var", no: "Yok",
 };
 
-const ARCHIVE_LABELS: Record<FTRecommendation["archive"], string> = {
-  archive_1: "Arşiv 1", archive_2: "Arşiv 2", both: "1+2",
+const ARCHIVE_NAME: Record<string, string> = {
+  archive_1: "A1", archive_2: "A2", archive_3: "A3",
 };
+
+function archiveLabel(archive: string): string {
+  if (archive.includes("+")) {
+    return archive.split("+").map((a) => ARCHIVE_NAME[a] ?? a).join("+");
+  }
+  return ARCHIVE_NAME[archive] ?? archive;
+}
 
 function pctColor(pct: number) {
   if (pct >= 80) return "var(--nv-accent-green)";
@@ -32,9 +39,10 @@ function pctColor(pct: number) {
   return "var(--nv-text-tertiary)";
 }
 
-function archiveBadgeClass(archive: FTRecommendation["archive"]) {
-  if (archive === "both") return "nv-badge nv-badge-purple";
+function archiveBadgeClass(archive: string) {
+  if (archive.includes("+")) return "nv-badge nv-badge-purple";
   if (archive === "archive_1") return "nv-badge nv-badge-blue";
+  if (archive === "archive_2") return "nv-badge nv-badge-green";
   return "nv-badge nv-badge-amber";
 }
 
@@ -42,8 +50,7 @@ function RecommendationRow({ recommendation }: { recommendation: FTRecommendatio
   const match = useMatchInfo();
   const pct = Math.round(recommendation.frequency_pct);
   const color = pctColor(pct);
-  const archive = recommendation.archive === "archive_1" ? "A"
-    : recommendation.archive === "archive_2" ? "B" : "AB";
+  const archive = archiveLabel(recommendation.archive);
 
   return (
     <div
@@ -78,7 +85,7 @@ function RecommendationRow({ recommendation }: { recommendation: FTRecommendatio
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-0.5">
           <span className={archiveBadgeClass(recommendation.archive)}>
-            {ARCHIVE_LABELS[recommendation.archive]}
+            {archiveLabel(recommendation.archive)}
           </span>
           <span
             className="text-[10px] uppercase"

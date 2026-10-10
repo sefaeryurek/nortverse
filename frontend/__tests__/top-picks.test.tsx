@@ -9,9 +9,10 @@ beforeEach(() => { window.localStorage.clear(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 const recommendation: FTRecommendation = {
-  recommendation_id: "ft-display-v3:result:1", archive: "both", market: "result", selection: "1",
+  recommendation_id: "ft-display-v3:result:1", archive: "archive_1+archive_2", market: "result", selection: "1",
   frequency_pct: 72, match_count: 30, archive_1_frequency_pct: 75, archive_1_match_count: 35,
   archive_2_frequency_pct: 72, archive_2_match_count: 30,
+  archive_3_frequency_pct: null, archive_3_match_count: null,
 };
 
 function renderWithContext(ui: React.ReactElement) {
@@ -24,7 +25,7 @@ describe("TopPicks", () => {
     expect(screen.getByText("İleri dönem deneysel seçimler")).toBeDefined();
     expect(screen.getByText("Ev Sahibi")).toBeDefined();
     expect(screen.getByText("%72")).toBeDefined();
-    expect(screen.getByText("1+2")).toBeDefined();
+    expect(screen.getByText("A1+A2")).toBeDefined();
   });
 
   it("does not present untracked recommendations for half periods", () => {

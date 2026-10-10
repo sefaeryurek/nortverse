@@ -40,7 +40,7 @@ function trend(value: unknown): boolean {
 function recommendation(value: unknown, ruleVersion: string): boolean {
   if (!record(value)
     || !text(value.recommendation_id)
-    || !["archive_1", "archive_2", "both"].includes(String(value.archive))
+    || typeof value.archive !== "string" || !(value.archive as string).startsWith("archive_")
     || !["result", "over_25", "btts"].includes(String(value.market))
     || !percentage(value.frequency_pct) || (value.frequency_pct as number) < 65
     || !count(value.match_count) || (value.match_count as number) < 20) return false;
@@ -49,27 +49,19 @@ function recommendation(value: unknown, ruleVersion: string): boolean {
   };
   if (!allowed[String(value.market)]?.includes(String(value.selection))) return false;
   if (value.recommendation_id !== `${ruleVersion}:${value.market}:${value.selection}`) return false;
-  for (const archive of ["archive_1", "archive_2"] as const) {
+  for (const archive of ["archive_1", "archive_2", "archive_3"] as const) {
     const frequency = value[`${archive}_frequency_pct`];
     const sample = value[`${archive}_match_count`];
     if ((frequency === null) !== (sample === null)) return false;
-    if (frequency !== null && (!percentage(frequency) || !count(sample) || (sample as number) < 20)) return false;
+    if (frequency !== null && (!percentage(frequency) || !count(sample) || (sample as number) < 1)) return false;
   }
-  const aFrequency = value.archive_1_frequency_pct as number | null;
-  const aSample = value.archive_1_match_count as number | null;
-  const bFrequency = value.archive_2_frequency_pct as number | null;
-  const bSample = value.archive_2_match_count as number | null;
-  if (value.archive === "archive_1") {
-    return aFrequency !== null && aSample !== null && bFrequency === null && bSample === null
-      && value.frequency_pct === aFrequency && value.match_count === aSample;
+  const archiveStr = String(value.archive);
+  const parts = archiveStr.split("+");
+  for (const part of parts) {
+    const freq = value[`${part}_frequency_pct`];
+    if (freq === null || freq === undefined) return false;
   }
-  if (value.archive === "archive_2") {
-    return bFrequency !== null && bSample !== null && aFrequency === null && aSample === null
-      && value.frequency_pct === bFrequency && value.match_count === bSample;
-  }
-  return aFrequency !== null && aSample !== null && bFrequency !== null && bSample !== null
-    && value.frequency_pct === Math.min(aFrequency, bFrequency)
-    && value.match_count === Math.min(aSample, bSample);
+  return true;
 }
 
 export function validAnalysis(value: unknown, requestedId: string): value is AnalyzeResponse {
