@@ -70,13 +70,13 @@ describe("computeConfidence", () => {
     expect(small).toBeLessThan(big);
   });
 
-  it("100+ eşleşmede volumeWeight azalmaya başlar (diminishing returns)", () => {
+  it("30+ eşleşmede volumeWeight plateau yapar (match cap sinyal seyrelmesini önler)", () => {
+    const c30 = computeConfidence(80, 30, 1.0, false);
     const c100 = computeConfidence(80, 100, 1.0, false);
     const c200 = computeConfidence(80, 200, 1.0, false);
-    const c300 = computeConfidence(80, 300, 1.0, false);
-    expect(c200).toBeLessThan(c100);
-    expect(c300).toBeLessThan(c200);
-    expect(c300).toBeGreaterThan(0);
+    expect(c100).toBeCloseTo(c30, 5);
+    expect(c200).toBeCloseTo(c100, 5);
+    expect(c200).toBeGreaterThan(0);
   });
 
   it("tekli arşivde O/U confidence %50 düşer", () => {
