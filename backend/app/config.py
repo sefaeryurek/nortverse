@@ -67,6 +67,7 @@ class AnalysisConfig:
     pattern_c_match_cap: int = field(default_factory=lambda: _env_int("PATTERN_C_MATCH_CAP", 150))
     pattern_d_top_n: int = field(default_factory=lambda: _env_int("PATTERN_D_TOP_N", 20))
     pattern_d_min_similarity: float = field(default_factory=lambda: _env_float("PATTERN_D_MIN_SIMILARITY", 0.85))
+    temporal_decay_half_life_years: float = field(default_factory=lambda: _env_float("TEMPORAL_DECAY_HALF_LIFE", 3.0))
 
 
 SCRAPER = ScraperConfig()

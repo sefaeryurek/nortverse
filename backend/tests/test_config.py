@@ -254,6 +254,18 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.pattern_d_min_similarity == 0.90
 
+    def test_default_temporal_decay_half_life(self, monkeypatch):
+        monkeypatch.delenv("TEMPORAL_DECAY_HALF_LIFE", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.temporal_decay_half_life_years == 3.0
+
+    def test_override_temporal_decay_half_life(self, monkeypatch):
+        monkeypatch.setenv("TEMPORAL_DECAY_HALF_LIFE", "5.0")
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.temporal_decay_half_life_years == 5.0
+
     def test_frozen_dataclass(self):
         from app.config import AnalysisConfig
         cfg = AnalysisConfig()

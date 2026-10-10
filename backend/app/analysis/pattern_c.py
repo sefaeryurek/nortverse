@@ -19,6 +19,7 @@ from datetime import datetime
 from sqlalchemy import Float, cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 
+from app.analysis.pattern_b import _temporal_weights
 from app.analysis.pattern_stats import PatternResult, compute_stats
 from app.db.connection import get_session
 from app.db.models import Match
@@ -58,6 +59,7 @@ async def find_pattern_c_all_periods(
     as_of: datetime | None = None,
     league_name: str | None = None,
     match_cap: int | None = None,
+    temporal_half_life: float = 0.0,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """FT oranlarıyla eşleşen geçmiş maçlar için IY, 2Y ve FT istatistiklerini döndür.
 
@@ -107,6 +109,7 @@ async def find_pattern_c_all_periods(
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.actual_ht_home, Match.actual_ht_away,
                     Match.actual_h2_home, Match.actual_h2_away,
+                    Match.kickoff_time,
                 ).where(*filters).order_by(Match.kickoff_time.desc())
                 if match_cap and match_cap > 0:
                     stmt = stmt.limit(match_cap)
@@ -138,6 +141,7 @@ async def find_pattern_c_all_periods(
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.actual_ht_home, Match.actual_ht_away,
                     Match.actual_h2_home, Match.actual_h2_away,
+                    Match.kickoff_time,
                 ).where(*filters).order_by(Match.kickoff_time.desc())
                 if match_cap and match_cap > 0:
                     stmt = stmt.limit(match_cap)
@@ -161,7 +165,8 @@ async def find_pattern_c_all_periods(
         return None, None, None
 
     log.info("Katman C: %d eşleşme bulundu (tolerance=%.1f)", len(matched), tolerance)
-    results = [compute_stats(matched, period) for period in ("ht", "h2", "ft")]
+    weights = _temporal_weights(matched, as_of, temporal_half_life) if temporal_half_life > 0 else None
+    results = [compute_stats(matched, period, weights=weights) for period in ("ht", "h2", "ft")]
     return tuple(result if result is not None and result.match_count >= min_matches else None
                  for result in results)
 
@@ -176,6 +181,7 @@ async def find_pattern_c_adaptive(
     as_of: datetime | None = None,
     league_name: str | None = None,
     match_cap: int | None = None,
+    temporal_half_life: float = 0.0,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """Adım adım tolerance artırarak yeterli eşleşme bulmaya çalışır.
 
@@ -192,6 +198,7 @@ async def find_pattern_c_adaptive(
             as_of=as_of,
             league_name=league_name,
             match_cap=match_cap,
+            temporal_half_life=temporal_half_life,
         )
         ft_result = result[2]
         if ft_result is not None and ft_result.match_count >= min_matches:
@@ -215,4 +222,5 @@ async def find_pattern_c_adaptive(
         as_of=as_of,
         league_name=league_name,
         match_cap=match_cap,
+        temporal_half_life=temporal_half_life,
     )
