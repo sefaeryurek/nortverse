@@ -56,23 +56,15 @@ async def find_pattern_c_all_periods(
     tolerance: float = 0.0,
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
+    league_name: str | None = None,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """FT oranlarıyla eşleşen geçmiş maçlar için IY, 2Y ve FT istatistiklerini döndür.
 
     Tüm periyotlar aynı eşleşme setini kullanır.
 
-    Sprint 8.9 değişiklikleri:
-    - tolerance 0.5 → 0.0 (tam eşleşme; oranlar 0.5 katı olduğundan birebir aynı)
-    - min_matches 5 → 1 (sıkı tolerance ile az eşleşme normal; UI 1-4 maçı "düşük güven" rozetiyle gösterir)
-
-    Sprint 8.10 — Egress optimizasyonu:
-    - tolerance == 0.0: DB-side JSONB equality WHERE filter (~50KB egress / çağrı)
-      Eski yol: tüm 13K+ satır çekilir Python'da filter (~130MB egress / çağrı)
-      Etki: %99.96 azalma — DB egress kotasını korur
-    - tolerance > 0.0: eski yol (fuzzy match, fallback)
-
     Args:
         exclude_match_id: Bu match_id'yi sonuçlardan çıkar (analiz edilen maçın kendisi)
+        league_name: Lig filtresi — önce aynı lig, yetersizse tüm liglere fallback
 
     Returns:
         (ht_result, h2_result, ft_result) — eşleşme yetersizse hepsi None
@@ -87,62 +79,71 @@ async def find_pattern_c_all_periods(
         return None, None, None
     if not _ratios_match(ft_ratios, ft_ratios, 0):
         raise ValueError("ratios must contain finite non-negative numbers")
-    if tolerance == 0.0:
-        # HIZLI YOL — DB-side JSONB equality (Sprint 8.10)
-        # PostgreSQL JSONB karşılaştırması kanoniktir (key sırası önemsiz; aynı içerik = aynı).
-        async with get_session() as session:
-            filters = [
-                cast(Match.ft_all_ratios, JSONB) == cast(ft_ratios, JSONB),
-                Match.actual_ft_home.isnot(None),
-                Match.actual_ft_away.isnot(None),
-                Match.deleted_at.is_(None),  # Sprint 8.9: soft-deleted (kupa) hariç
-            ]
-            if exclude_match_id:
-                filters.append(Match.match_id != exclude_match_id)
-            known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
-            filters.extend([
-                Match.kickoff_time < as_of,
-                known_at > Match.kickoff_time,
-                known_at <= as_of,
-                Match.analyzed_at.is_not(None),
-                Match.analyzed_at < Match.kickoff_time,
-            ])
-            stmt = select(
-                Match.actual_ft_home, Match.actual_ft_away,
-                Match.actual_ht_home, Match.actual_ht_away,
-                Match.actual_h2_home, Match.actual_h2_away,
-            ).where(*filters)
-            matched = list((await session.execute(stmt)).all())
-    else:
-        # DB-SIDE FUZZY YOL — her anahtar için ±tolerance BETWEEN (Sprint 37)
-        # Eski yol tüm satırları Python'a çekiyordu (~130MB egress).
-        # Yeni yol 35 BETWEEN koşuluyla sadece eşleşen satırları döndürür.
-        async with get_session() as session:
-            filters = [
-                Match.ft_all_ratios.isnot(None),
-                Match.actual_ft_home.isnot(None),
-                Match.actual_ft_away.isnot(None),
-                Match.deleted_at.is_(None),
-            ]
-            if exclude_match_id:
-                filters.append(Match.match_id != exclude_match_id)
-            known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
-            filters.extend([
-                Match.kickoff_time < as_of,
-                known_at > Match.kickoff_time,
-                known_at <= as_of,
-                Match.analyzed_at.is_not(None),
-                Match.analyzed_at < Match.kickoff_time,
-            ])
-            for key, target_val in ft_ratios.items():
-                ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
-                filters.append(ratio_expr.between(target_val - tolerance, target_val + tolerance))
-            stmt = select(
-                Match.actual_ft_home, Match.actual_ft_away,
-                Match.actual_ht_home, Match.actual_ht_away,
-                Match.actual_h2_home, Match.actual_h2_away,
-            ).where(*filters)
-            matched = list((await session.execute(stmt)).all())
+
+    async def _query(use_league: bool) -> list:
+        if tolerance == 0.0:
+            async with get_session() as session:
+                filters = [
+                    cast(Match.ft_all_ratios, JSONB) == cast(ft_ratios, JSONB),
+                    Match.actual_ft_home.isnot(None),
+                    Match.actual_ft_away.isnot(None),
+                    Match.deleted_at.is_(None),
+                ]
+                if use_league and league_name:
+                    filters.append(Match.league_name == league_name)
+                if exclude_match_id:
+                    filters.append(Match.match_id != exclude_match_id)
+                known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
+                filters.extend([
+                    Match.kickoff_time < as_of,
+                    known_at > Match.kickoff_time,
+                    known_at <= as_of,
+                    Match.analyzed_at.is_not(None),
+                    Match.analyzed_at < Match.kickoff_time,
+                ])
+                stmt = select(
+                    Match.actual_ft_home, Match.actual_ft_away,
+                    Match.actual_ht_home, Match.actual_ht_away,
+                    Match.actual_h2_home, Match.actual_h2_away,
+                ).where(*filters)
+                return list((await session.execute(stmt)).all())
+        else:
+            async with get_session() as session:
+                filters = [
+                    Match.ft_all_ratios.isnot(None),
+                    Match.actual_ft_home.isnot(None),
+                    Match.actual_ft_away.isnot(None),
+                    Match.deleted_at.is_(None),
+                ]
+                if use_league and league_name:
+                    filters.append(Match.league_name == league_name)
+                if exclude_match_id:
+                    filters.append(Match.match_id != exclude_match_id)
+                known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
+                filters.extend([
+                    Match.kickoff_time < as_of,
+                    known_at > Match.kickoff_time,
+                    known_at <= as_of,
+                    Match.analyzed_at.is_not(None),
+                    Match.analyzed_at < Match.kickoff_time,
+                ])
+                for key, target_val in ft_ratios.items():
+                    ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
+                    filters.append(ratio_expr.between(target_val - tolerance, target_val + tolerance))
+                stmt = select(
+                    Match.actual_ft_home, Match.actual_ft_away,
+                    Match.actual_ht_home, Match.actual_ht_away,
+                    Match.actual_h2_home, Match.actual_h2_away,
+                ).where(*filters)
+                return list((await session.execute(stmt)).all())
+
+    matched = await _query(use_league=True)
+    if len(matched) < min_matches and league_name:
+        log.info(
+            "Katman C: aynı lig %d eşleşme (min %d) — tüm liglere fallback",
+            len(matched), min_matches,
+        )
+        matched = await _query(use_league=False)
 
     if len(matched) < min_matches:
         log.info(
@@ -167,6 +168,7 @@ async def find_pattern_c_adaptive(
     tolerance_step: float = 0.25,
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
+    league_name: str | None = None,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """Adım adım tolerance artırarak yeterli eşleşme bulmaya çalışır.
 
@@ -181,6 +183,7 @@ async def find_pattern_c_adaptive(
             tolerance=round(tol, 4),
             exclude_match_id=exclude_match_id,
             as_of=as_of,
+            league_name=league_name,
         )
         ft_result = result[2]
         if ft_result is not None and ft_result.match_count >= min_matches:
@@ -202,4 +205,5 @@ async def find_pattern_c_adaptive(
         tolerance=round(max_tolerance, 4),
         exclude_match_id=exclude_match_id,
         as_of=as_of,
+        league_name=league_name,
     )

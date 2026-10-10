@@ -27,6 +27,7 @@ async def find_pattern_b_matches(
     min_matches: int = 5,
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
+    league_name: str | None = None,
 ) -> PatternResult | None:
     """Aynı periyot skor setine sahip geçmiş maçları bul ve istatistik üret.
 
@@ -35,6 +36,7 @@ async def find_pattern_b_matches(
         scores_1, scores_x, scores_2: Eşleştirilecek skor listeleri
         min_matches: Minimum eşleşme sayısı
         exclude_match_id: Bu match_id'yi sonuçlardan çıkar (analiz edilen maçın kendisi)
+        league_name: Lig filtresi — önce aynı lig, yetersizse tüm liglere fallback
 
     Returns:
         PatternResult veya None (eşleşme < min_matches ise)
@@ -55,30 +57,41 @@ async def find_pattern_b_matches(
     else:
         raise ValueError(f"Geçersiz periyot: {period}")
 
-    async with get_session() as session:
-        filters = [
-            col_1.cast(JSONB) == cast(scores_1, JSONB),
-            col_x.cast(JSONB) == cast(scores_x, JSONB),
-            col_2.cast(JSONB) == cast(scores_2, JSONB),
-            actual_check,
-            Match.deleted_at.is_(None),  # Sprint 8.9: soft-deleted (kupa) maçlar arşivde sayılmaz
-        ]
-        if exclude_match_id:
-            filters.append(Match.match_id != exclude_match_id)
-        known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
-        filters.extend([
-            Match.kickoff_time < as_of,
-            known_at > Match.kickoff_time,
-            known_at <= as_of,
-            Match.analyzed_at.is_not(None),
-            Match.analyzed_at < Match.kickoff_time,
-        ])
-        stmt = select(
-            Match.actual_ft_home, Match.actual_ft_away,
-            Match.actual_ht_home, Match.actual_ht_away,
-            Match.actual_h2_home, Match.actual_h2_away,
-        ).where(*filters)
-        rows = (await session.execute(stmt)).all()
+    async def _query(use_league: bool) -> list:
+        async with get_session() as session:
+            filters = [
+                col_1.cast(JSONB) == cast(scores_1, JSONB),
+                col_x.cast(JSONB) == cast(scores_x, JSONB),
+                col_2.cast(JSONB) == cast(scores_2, JSONB),
+                actual_check,
+                Match.deleted_at.is_(None),
+            ]
+            if use_league and league_name:
+                filters.append(Match.league_name == league_name)
+            if exclude_match_id:
+                filters.append(Match.match_id != exclude_match_id)
+            known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
+            filters.extend([
+                Match.kickoff_time < as_of,
+                known_at > Match.kickoff_time,
+                known_at <= as_of,
+                Match.analyzed_at.is_not(None),
+                Match.analyzed_at < Match.kickoff_time,
+            ])
+            stmt = select(
+                Match.actual_ft_home, Match.actual_ft_away,
+                Match.actual_ht_home, Match.actual_ht_away,
+                Match.actual_h2_home, Match.actual_h2_away,
+            ).where(*filters)
+            return list((await session.execute(stmt)).all())
+
+    rows = await _query(use_league=True)
+    if len(rows) < min_matches and league_name:
+        log.info(
+            "Katman B [%s]: aynı lig %d eşleşme (min %d) — tüm liglere fallback",
+            period, len(rows), min_matches,
+        )
+        rows = await _query(use_league=False)
 
     if len(rows) < min_matches:
         log.info(
@@ -90,5 +103,5 @@ async def find_pattern_b_matches(
         return None
 
     log.info("Katman B [%s]: %d eşleşme bulundu", period, len(rows))
-    result = compute_stats(list(rows), period)
+    result = compute_stats(rows, period)
     return result if result is not None and result.match_count >= min_matches else None

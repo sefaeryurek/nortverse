@@ -107,6 +107,7 @@ async def _load_candidates(
                 Match.actual_ft_home, Match.actual_ft_away,
                 Match.actual_ht_home, Match.actual_ht_away,
                 Match.actual_h2_home, Match.actual_h2_away,
+                Match.league_name,
             ).where(*filters)
             rows = list((await session.execute(stmt)).all())
         _candidate_cache = rows
@@ -125,6 +126,7 @@ async def find_pattern_d_all_periods(
     min_similarity: float = 0.85,
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
+    league_name: str | None = None,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """FT oran vektöründe cosine similarity ile en benzer Top-N maçı bulur.
 
@@ -134,6 +136,7 @@ async def find_pattern_d_all_periods(
         min_similarity: Minimum cosine similarity eşiği
         exclude_match_id: Analiz edilen maçın kendisi (self-exclusion)
         as_of: Temporal filtre
+        league_name: Lig filtresi — önce aynı lig, yetersizse tüm liglere fallback
 
     Returns:
         (ht_result, h2_result, ft_result) — yeterli benzer maç yoksa None
@@ -153,18 +156,30 @@ async def find_pattern_d_all_periods(
 
     weights = _idf_weights
 
-    scored: list[tuple[float, tuple]] = []
-    for row in candidates:
-        cand_ratios = row[1]
-        if not isinstance(cand_ratios, dict):
-            continue
-        cand_vec = _to_vector(cand_ratios)
-        sim = cosine_similarity(target_vec, cand_vec, weights)
-        if sim >= min_similarity:
-            scored.append((sim, row))
+    def _score_candidates(rows: list[tuple]) -> list[tuple[float, tuple]]:
+        scored: list[tuple[float, tuple]] = []
+        for row in rows:
+            cand_ratios = row[1]
+            if not isinstance(cand_ratios, dict):
+                continue
+            cand_vec = _to_vector(cand_ratios)
+            sim = cosine_similarity(target_vec, cand_vec, weights)
+            if sim >= min_similarity:
+                scored.append((sim, row))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return scored[:top_n]
 
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top = scored[:top_n]
+    if league_name:
+        league_candidates = [r for r in candidates if r[8] == league_name]
+        top = _score_candidates(league_candidates)
+        if len(top) < top_n:
+            log.info(
+                "Pattern D: aynı lig %d eşleşme (top_n %d) — tüm liglere fallback",
+                len(top), top_n,
+            )
+            top = _score_candidates(candidates)
+    else:
+        top = _score_candidates(candidates)
 
     if not top:
         log.info("Pattern D: min_similarity=%.2f üzerinde eşleşme yok", min_similarity)
@@ -203,6 +218,7 @@ async def find_matched_ids(
     top_n: int = 20,
     min_similarity: float = 0.85,
     exclude_match_id: str | None = None,
+    league_name: str | None = None,
 ) -> list[tuple[str, float]]:
     """En benzer maçların (match_id, similarity) listesini döndürür."""
     if not ft_ratios:
@@ -213,6 +229,8 @@ async def find_matched_ids(
         return []
 
     candidates = await _load_candidates(exclude_match_id)
+    if league_name:
+        candidates = [r for r in candidates if r[8] == league_name]
     weights = _idf_weights
     scored: list[tuple[float, str]] = []
     for row in candidates:

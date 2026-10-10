@@ -263,6 +263,7 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
                     top_n=ANALYSIS.pattern_d_top_n,
                     min_similarity=ANALYSIS.pattern_d_min_similarity,
                     exclude_match_id=mid, as_of=row.analyzed_at,
+                    league_name=row.league_name,
                 )
                 ht_d = d_ht
                 h2_d = d_h2
@@ -289,6 +290,7 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
             ft_scores=(ft_s1, ft_sx, ft_s2),
             ft_ratios=ft_ratios,
             as_of=row.analyzed_at,
+            league_name=row.league_name,
         )
         try:
             await update_match_patterns(mid, patterns, expected_analyzed_at=row.analyzed_at)
@@ -456,6 +458,7 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
         ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
         ft_ratios=result.ft.all_ratios,
         as_of=result.analyzed_at,
+        league_name=raw.league_name,
     )
 
     frozen_recommendations: list[dict] = []

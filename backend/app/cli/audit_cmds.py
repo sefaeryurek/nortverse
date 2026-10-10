@@ -469,6 +469,7 @@ def recompute_patterns_cmd(
                         ft_scores=(row.ft_scores_1 or [], row.ft_scores_x or [], row.ft_scores_2 or []),
                         ft_ratios=row.ft_all_ratios,
                         as_of=row.analyzed_at,
+                        league_name=row.league_name,
                     )
                     await _with_retry(
                         lambda _m=mid, _p=patterns, _a=row.analyzed_at: update_match_patterns(_m, _p, expected_analyzed_at=_a),
@@ -546,6 +547,7 @@ def self_test_cmd(
             ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
             ft_ratios=result.ft.all_ratios,
             as_of=result.analyzed_at,
+            league_name=raw.league_name,
         )
         ft_b_count = (patterns["pattern_ft_b"] or {}).get("match_count", 0)
         ft_c_count = (patterns["pattern_ft_c"] or {}).get("match_count", 0)

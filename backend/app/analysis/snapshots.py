@@ -389,6 +389,7 @@ async def capture_prepared_recommendations(target_date: date) -> int:
             h2_scores=(match.h2_scores_1 or [], match.h2_scores_x or [], match.h2_scores_2 or []),
             ft_scores=(match.ft_scores_1 or [], match.ft_scores_x or [], match.ft_scores_2 or []),
             ft_ratios=match.ft_all_ratios or {}, as_of=match.analyzed_at,
+            league_name=match.league_name,
         )
         captured_at = datetime.now(timezone.utc)
         async with get_session() as session:

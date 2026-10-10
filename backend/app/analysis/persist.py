@@ -39,6 +39,7 @@ async def compute_all_patterns(
     ft_scores: tuple[list, list, list],
     ft_ratios: dict | None,
     as_of: datetime,
+    league_name: str | None = None,
 ) -> dict[str, dict | None]:
     """6 pattern alanını tek seferde hesapla.
 
@@ -51,6 +52,7 @@ async def compute_all_patterns(
         h2_scores: aynı, 2. yarı için
         ft_scores: aynı, maç sonu için
         ft_ratios: FT tüm 35 skorun oranları (Pattern C için)
+        league_name: Lig filtresi — önce aynı lig, yetersizse tüm liglere fallback
 
     Returns:
         {"pattern_ht_b": dict|None, "pattern_ht_c": ..., ...} 6 anahtarlı dict.
@@ -64,6 +66,7 @@ async def compute_all_patterns(
         try:
             res = await find_pattern_b_matches(
                 period, s1, sx, s2, exclude_match_id=match_id, as_of=as_of,
+                league_name=league_name,
             )
             return res.model_dump() if res else None
         except Exception as exc:
@@ -81,6 +84,7 @@ async def compute_all_patterns(
                 max_tolerance=ANALYSIS.pattern_c_max_tolerance,
                 tolerance_step=ANALYSIS.pattern_c_tolerance_step,
                 exclude_match_id=match_id, as_of=as_of,
+                league_name=league_name,
             )
             return (
                 ht_c.model_dump() if ht_c else None,
@@ -100,6 +104,7 @@ async def compute_all_patterns(
                 top_n=ANALYSIS.pattern_d_top_n,
                 min_similarity=ANALYSIS.pattern_d_min_similarity,
                 exclude_match_id=match_id, as_of=as_of,
+                league_name=league_name,
             )
             return (
                 ht_d.model_dump() if ht_d else None,

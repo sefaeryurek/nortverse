@@ -358,7 +358,6 @@ async def run_pipeline(
                     continue
 
                 result = analyze_match(raw)
-                # Pattern B/C'leri hesapla (exclude_match_id=mid ile self-exclusion)
                 patterns = await compute_all_patterns(
                     match_id=mid,
                     ht_scores=(result.ht.scores_1, result.ht.scores_x, result.ht.scores_2),
@@ -366,6 +365,7 @@ async def run_pipeline(
                     ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
                     ft_ratios=result.ft.all_ratios,
                     as_of=result.analyzed_at,
+                    league_name=raw.league_name,
                 )
                 await _upsert(result, raw, patterns)
                 stats["analyzed"] += 1
