@@ -189,6 +189,7 @@ async def find_pattern_c_adaptive(
     tolerance_step kadar artırıp tekrar dener. max_tolerance'a ulaşınca durur.
     """
     tol = base_tolerance
+    last_result = (None, None, None)
     while tol <= max_tolerance + 1e-9:
         result = await find_pattern_c_all_periods(
             ft_ratios,
@@ -200,6 +201,7 @@ async def find_pattern_c_adaptive(
             match_cap=match_cap,
             temporal_half_life=temporal_half_life,
         )
+        last_result = result
         ft_result = result[2]
         if ft_result is not None and ft_result.match_count >= min_matches:
             if tol > base_tolerance:
@@ -214,13 +216,4 @@ async def find_pattern_c_adaptive(
         "Katman C adaptive: max_tolerance=%.2f'ye kadar yeterli eşleşme bulunamadı",
         max_tolerance,
     )
-    return await find_pattern_c_all_periods(
-        ft_ratios,
-        min_matches=1,
-        tolerance=round(max_tolerance, 4),
-        exclude_match_id=exclude_match_id,
-        as_of=as_of,
-        league_name=league_name,
-        match_cap=match_cap,
-        temporal_half_life=temporal_half_life,
-    )
+    return last_result

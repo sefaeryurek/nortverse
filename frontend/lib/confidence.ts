@@ -592,8 +592,8 @@ export function getMarketSummary(
 }
 
 /**
- * Confidence'a göre renk: ≥0.80 yüksek (yeşil dolu), 0.65-0.79 orta (yeşil çerçeve),
- * 0.50-0.64 düşük (gri çerçeve), <0.50 silik.
+ * Confidence'a göre renk: ≥0.90 yüksek, 0.70-0.89 orta,
+ * 0.50-0.69 düşük, <0.50 silik.
  */
 export type ConfidenceTier = "high" | "medium" | "low" | "muted";
 export function confidenceTier(c: number): ConfidenceTier {

@@ -37,8 +37,9 @@ LEAGUE_BASE_RATES: dict[str, dict[str, float]] = {
 
 def _get_base_rates(league_name: str | None) -> dict[str, float]:
     if league_name:
+        ln = league_name.lower()
         for key, rates in LEAGUE_BASE_RATES.items():
-            if key.lower() in league_name.lower():
+            if key.lower() == ln:
                 return rates
     return BASE_RESULT
 

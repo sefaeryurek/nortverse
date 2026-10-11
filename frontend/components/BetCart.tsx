@@ -82,8 +82,9 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
         <button
           ref={mobileTrigger}
           onClick={() => setOpen(true)}
-          className="fixed bottom-[60px] left-0 right-0 md:hidden flex items-center gap-3 px-4 py-3 nv-glass"
+          className="fixed left-0 right-0 md:hidden flex items-center gap-3 px-4 py-3 nv-glass"
           style={{
+            bottom: "var(--nv-bottom-bar-h)",
             zIndex: 45,
             borderTop: "1px solid var(--nv-accent-green)",
             boxShadow: "0 -4px 16px rgba(0,0,0,0.4)",

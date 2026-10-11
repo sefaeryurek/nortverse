@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const NAV = [
   {
@@ -49,7 +49,13 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => {
+    try { return localStorage.getItem("nv_sidebar") === "1"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("nv_sidebar", expanded ? "1" : "0"); } catch { /* ignore */ }
+  }, [expanded]);
 
   return (
     <>

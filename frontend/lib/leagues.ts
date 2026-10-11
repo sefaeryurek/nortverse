@@ -59,6 +59,7 @@ const LEAGUES: Record<string, LeagueDisplay> = {
   // Asya / Diğer
   "Saudi Pro League": { flag: "🇸🇦", short: "KSA" },
   "Japanese J1 League": { flag: "🇯🇵", short: "JPN" },
+  "J2 League": { flag: "🇯🇵", short: "JPN2" },
   "Korean K League 1": { flag: "🇰🇷", short: "KOR" },
   "Australian A-League": { flag: "🇦🇺", short: "AUS" },
 };
@@ -90,9 +91,6 @@ export function leagueDisplay(code: string | null | undefined, name?: string | n
   const known = LEAGUES[primary] ?? LEAGUES[ALIASES[primary]]
     ?? LEAGUES[secondary] ?? LEAGUES[ALIASES[secondary]];
   if (known) return known;
-  if (primary === "J2 League" || secondary === "J2 League") {
-    return { flag: "🇯🇵", short: "JPN2" };
-  }
   const label = (name || code || "").trim().split(/\s+/).slice(0, 2).join(" ");
   return { flag: FALLBACK.flag, short: label.length > 11 ? `${label.slice(0, 10)}…` : label };
 }

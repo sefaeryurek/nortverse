@@ -97,6 +97,7 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, 
     >
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className="flex items-center gap-2 w-full text-left"
         style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
       >
