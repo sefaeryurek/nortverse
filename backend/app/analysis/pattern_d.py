@@ -16,12 +16,13 @@ from __future__ import annotations
 import logging
 import math
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
 from app.analysis.pattern_stats import PatternResult, compute_stats
 from app.analysis.scores import ALL_SCORES, score_key
+from app.config import ANALYSIS
 from app.db.connection import get_session
 from app.db.models import Match
 
@@ -114,6 +115,7 @@ async def _load_candidates(
                 Match.actual_ht_home, Match.actual_ht_away,
                 Match.actual_h2_home, Match.actual_h2_away,
                 Match.league_name,
+                Match.kickoff_time,
             ).where(*filters)
             rows = list((await session.execute(stmt)).all())
         _candidate_cache = rows
@@ -161,7 +163,19 @@ async def find_pattern_d_all_periods(
     if not candidates:
         return None, None, None
 
-    weights = _idf_weights
+    idf = _idf_weights
+    half_life = ANALYSIS.temporal_decay_half_life_years
+    ref_time = as_of or datetime.now(timezone.utc)
+    _MIN_LEAGUE_MATCHES = 5
+
+    def _temporal_weight(kickoff: datetime | None) -> float:
+        if kickoff is None or half_life <= 0:
+            return 1.0
+        kt = kickoff if kickoff.tzinfo else kickoff.replace(tzinfo=timezone.utc)
+        age_years = (ref_time - kt).total_seconds() / (365.25 * 86400)
+        if age_years <= 0:
+            return 1.0
+        return 0.5 ** (age_years / half_life)
 
     def _score_candidates(rows: list[tuple]) -> list[tuple[float, tuple]]:
         scored: list[tuple[float, tuple]] = []
@@ -170,19 +184,20 @@ async def find_pattern_d_all_periods(
             if not isinstance(cand_ratios, dict):
                 continue
             cand_vec = _to_vector(cand_ratios)
-            sim = cosine_similarity(target_vec, cand_vec, weights)
+            sim = cosine_similarity(target_vec, cand_vec, idf)
             if sim >= min_similarity:
-                scored.append((sim, row))
+                tw = _temporal_weight(row[9])
+                scored.append((sim * tw, row))
         scored.sort(key=lambda x: x[0], reverse=True)
         return scored[:top_n]
 
     if league_name:
         league_candidates = [r for r in candidates if r[8] == league_name]
         top = _score_candidates(league_candidates)
-        if len(top) < top_n:
+        if len(top) < _MIN_LEAGUE_MATCHES:
             log.info(
-                "Pattern D: aynı lig %d eşleşme (top_n %d) — tüm liglere fallback",
-                len(top), top_n,
+                "Pattern D: aynı lig %d eşleşme (min %d) — tüm liglere fallback",
+                len(top), _MIN_LEAGUE_MATCHES,
             )
             top = _score_candidates(candidates)
     else:
