@@ -520,7 +520,9 @@ async def update_results(target_date: Optional[date] = None) -> dict:
         snapshots.update({mid: score for mid, score in (await fetch_fixture_scores(d + timedelta(days=1))).items()
                           if mid in missing_ids})
     if not snapshots:
-        raise RuntimeError(f"Kaynak bültende {d} için kayıtlı maç bulunamadı")
+        log.warning("Kaynak bültende %s için kayıtlı maç bulunamadı — atlanıyor", d)
+        stats["skipped"] = len(wanted_ids)
+        return stats
     checked_at = datetime.now(timezone.utc)
     stats["updated"] = sum(score.status == "finished" for score in snapshots.values())
     stats["not_finished"] = len(wanted_ids) - stats["updated"]

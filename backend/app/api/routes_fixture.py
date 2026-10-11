@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -203,7 +204,8 @@ async def get_pattern_status(
     match_ids: str = Query(..., description="Virgülle ayrılmış match_id listesi"),
 ) -> dict[str, dict[str, bool]]:
     """Bülten maçlarının arşiv eşleşme durumunu toplu sorgular."""
-    ids = [mid.strip() for mid in match_ids.split(",") if mid.strip()]
+    ids = [mid.strip() for mid in match_ids.split(",")
+           if mid.strip() and re.fullmatch(r"\d{1,12}", mid.strip())]
     if not ids or len(ids) > 500:
         return {}
 

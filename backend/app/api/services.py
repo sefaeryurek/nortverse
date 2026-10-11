@@ -66,6 +66,7 @@ def fixture_cache_put(key: str, data: list) -> None:
 
 bg_queue: asyncio.Queue[str] | None = None
 _bg_queued: set[str] = set()
+_BG_QUEUED_MAX = 500
 
 
 def _snapshot_cache_key(match_id: str) -> str:
@@ -520,6 +521,8 @@ def enqueue_bg_analysis(matches: list) -> None:
     """Arka plan analiz kuyruğuna maçları ekler."""
     if bg_queue is None:
         return
+    if len(_bg_queued) >= _BG_QUEUED_MAX:
+        _bg_queued.clear()
     for m in matches:
         if cache_get(m.match_id) is None and m.match_id not in _bg_queued:
             _bg_queued.add(m.match_id)
