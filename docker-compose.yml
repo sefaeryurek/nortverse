@@ -8,6 +8,14 @@ services:
       POSTGRES_DB: nortverse
       POSTGRES_USER: nortverse
       POSTGRES_PASSWORD: nortverse_local
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "effective_cache_size=512MB"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

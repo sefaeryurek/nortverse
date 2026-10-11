@@ -9,4 +9,7 @@ tests/
 .env*
 debug/
 debug_html/
+docs/
+backups/
+scripts/
 *.md

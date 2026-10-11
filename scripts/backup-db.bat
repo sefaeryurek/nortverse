@@ -22,12 +22,12 @@ REM Tarih formatini olustur (YYYY-MM-DD)
 for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set datetime=%%I
 set DATESTAMP=%datetime:~0,4%-%datetime:~4,2%-%datetime:~6,2%
 
-set BACKUP_FILE=%BACKUP_DIR%\nortverse_%DATESTAMP%.sql
+set BACKUP_FILE=%BACKUP_DIR%\nortverse_%DATESTAMP%.dump
 
 echo [%date% %time%] Yedekleme basliyor... >> "%LOGFILE%"
 
-REM pg_dump ile yedek al (Docker container icindeki pg_dump kullanilir)
-docker exec nortverse-db-1 pg_dump -U nortverse -d nortverse > "%BACKUP_FILE%" 2>> "%LOGFILE%"
+REM pg_dump ile yedek al (custom format + sikistirma — hizli restore icin)
+docker exec nortverse-db-1 pg_dump -U nortverse -d nortverse --format=custom --compress=9 > "%BACKUP_FILE%" 2>> "%LOGFILE%"
 
 if %errorlevel% equ 0 (
     echo [%date% %time%] Yedekleme basarili: %BACKUP_FILE% >> "%LOGFILE%"
@@ -37,5 +37,5 @@ if %errorlevel% equ 0 (
 )
 
 REM 7 gunden eski yedekleri sil
-forfiles /p "%BACKUP_DIR%" /m "nortverse_*.sql" /d -7 /c "cmd /c del @path" 2>nul
+forfiles /p "%BACKUP_DIR%" /m "nortverse_*.dump" /d -7 /c "cmd /c del @path" 2>nul
 echo [%date% %time%] Eski yedekler temizlendi >> "%LOGFILE%"
