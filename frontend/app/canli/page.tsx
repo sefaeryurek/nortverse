@@ -6,7 +6,7 @@ import { ApiError, getLiveHTMatches, getMatchedMatches } from "@/lib/api";
 import type { LiveHTMatch, MatchedMatch, MatchedMatchesResponse } from "@/lib/api";
 import { leagueDisplay } from "@/lib/leagues";
 
-const POLL_INTERVAL = 45_000;
+const POLL_INTERVAL = 20_000;
 
 function formatKickoff(iso: string | null): string {
   if (!iso) return "";

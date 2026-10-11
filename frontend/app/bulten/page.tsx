@@ -10,6 +10,7 @@ import { getFixture, getPatternStatus } from "@/lib/api";
 import type { PatternStatusMap } from "@/lib/api";
 import { showBulletinMatch } from "@/lib/match-visibility";
 import type { FixtureMatch } from "@/lib/types";
+import { leagueDisplay } from "@/lib/leagues";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -277,16 +278,53 @@ async function MatchList({ date }: { date: string }) {
         )}
       </div>
 
-      {/* Mac listesi */}
+      {/* Mac listesi — lig bazli gruplama */}
       <div style={{ padding: "var(--nv-space-sm) var(--nv-page-gutter)" }}>
-        {sorted.map(({ match, timeStr }) => (
-          <BultenRow
-            key={match.match_id}
-            match={match}
-            timeStr={timeStr}
-            patternStatus={patternStatus[match.match_id]}
-          />
-        ))}
+        {(() => {
+          const groups: { league: string; flag: string; short: string; items: typeof sorted }[] = [];
+          const seen = new Map<string, number>();
+          for (const entry of sorted) {
+            const key = entry.match.league_code || "other";
+            let idx = seen.get(key);
+            if (idx === undefined) {
+              const ld = leagueDisplay(key, entry.match.league_name);
+              idx = groups.length;
+              seen.set(key, idx);
+              groups.push({ league: entry.match.league_name || key, flag: ld.flag, short: ld.short, items: [] });
+            }
+            groups[idx].items.push(entry);
+          }
+          return groups.map((g) => (
+            <div key={g.league} style={{ marginBottom: "var(--nv-space-md)" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "var(--nv-space-xs) 0",
+                  fontSize: "var(--nv-text-xs)",
+                  fontWeight: 600,
+                  color: "var(--nv-text-secondary)",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                <span>{g.flag}</span>
+                <span>{g.league}</span>
+                <span style={{ color: "var(--nv-text-tertiary)", fontWeight: 400 }}>
+                  ({g.items.length})
+                </span>
+              </div>
+              {g.items.map(({ match, timeStr }) => (
+                <BultenRow
+                  key={match.match_id}
+                  match={match}
+                  timeStr={timeStr}
+                  patternStatus={patternStatus[match.match_id]}
+                />
+              ))}
+            </div>
+          ));
+        })()}
       </div>
     </>
   );
