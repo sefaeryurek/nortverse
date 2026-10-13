@@ -78,7 +78,7 @@ export default function DayTabs({ activeDate, basePath = "/bulten", referenceDat
               <span>{label}</span>
               <span
                 style={{
-                  fontSize: "10px",
+                  fontSize: "var(--nv-text-2xs)",
                   fontWeight: 400,
                   opacity: active ? 0.85 : 0.6,
                 }}

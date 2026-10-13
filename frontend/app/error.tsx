@@ -37,7 +37,7 @@ export default function GlobalError({ error, reset }: Props) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: "24px",
+            fontSize: "var(--nv-text-xl)",
           }}
         >
           !
@@ -67,7 +67,7 @@ export default function GlobalError({ error, reset }: Props) {
         {error.digest && (
           <p
             style={{
-              fontSize: "10px",
+              fontSize: "var(--nv-text-2xs)",
               fontFamily: "var(--nv-font-mono)",
               color: "var(--nv-text-tertiary)",
               marginBottom: "var(--nv-space-lg)",

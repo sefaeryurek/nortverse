@@ -54,7 +54,7 @@ function MatchRow({ match, showSimilarity }: { match: MatchedMatch; showSimilari
               fontWeight: 600,
               padding: "1px 5px",
               borderRadius: "var(--nv-radius-sm)",
-              backgroundColor: "color-mix(in srgb, var(--nv-accent-amber) 15%, transparent)",
+              backgroundColor: "var(--nv-accent-amber-glow)",
               color: "var(--nv-accent-amber)",
             }}
           >
@@ -125,7 +125,7 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, 
             </span>
           )}
           {hasPatternD && (
-            <span className="nv-badge" style={{ backgroundColor: "color-mix(in srgb, var(--nv-accent-amber) 20%, transparent)", color: "var(--nv-accent-amber)" }}>
+            <span className="nv-badge" style={{ backgroundColor: "var(--nv-accent-amber-glow)", color: "var(--nv-accent-amber)" }}>
               A3
             </span>
           )}

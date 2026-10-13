@@ -71,7 +71,7 @@ export default function LiveMatchBadge({ home, away, minute, checkedAt, checkedL
       </span>
       <span
         style={{
-          fontSize: "10px",
+          fontSize: "var(--nv-text-2xs)",
           fontWeight: 400,
           opacity: 0.75,
         }}

@@ -36,6 +36,7 @@
   --nv-accent-green-glow: rgba(61, 214, 140, 0.25);
   --nv-accent-amber: #f0b429;
   --nv-accent-amber-dim: rgba(240, 180, 41, 0.12);
+  --nv-accent-amber-glow: rgba(240, 180, 41, 0.25);
   --nv-accent-red: #ef5350;
   --nv-accent-red-dim: rgba(239, 83, 80, 0.12);
   --nv-accent-purple: #a78bfa;
@@ -46,11 +47,13 @@
   --nv-draw: #f0b429;
   --nv-loss: #ef5350;
   --nv-live: #ef5350;
+  --nv-live-dim: rgba(239, 83, 80, 0.15);
   --nv-live-glow: rgba(239, 83, 80, 0.3);
 
   /* --- Typography --- */
   --nv-font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
   --nv-font-mono: var(--font-jetbrains), ui-monospace, "Cascadia Code", monospace;
+  --nv-text-2xs: 0.5625rem;
   --nv-text-xs: 0.6875rem;
   --nv-text-sm: 0.8125rem;
   --nv-text-base: 0.9375rem;
@@ -86,6 +89,7 @@
   --nv-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
   --nv-shadow-glow-blue: 0 0 20px rgba(75, 140, 239, 0.15);
   --nv-shadow-glow-green: 0 0 20px rgba(61, 214, 140, 0.15);
+  --nv-shadow-glow-amber: 0 0 20px rgba(240, 180, 41, 0.15);
 
   /* --- Transitions --- */
   --nv-ease: cubic-bezier(0.16, 1, 0.3, 1);

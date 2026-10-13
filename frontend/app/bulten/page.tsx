@@ -147,7 +147,7 @@ async function MatchList({ date }: { date: string }) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "20px",
+              fontSize: "var(--nv-text-lg)",
               color: "var(--nv-accent-red)",
               fontWeight: 700,
             }}
@@ -204,7 +204,7 @@ async function MatchList({ date }: { date: string }) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "20px",
+              fontSize: "var(--nv-text-lg)",
             }}
           >
             --

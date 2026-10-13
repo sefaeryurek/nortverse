@@ -207,7 +207,7 @@ export default memo(function BultenRow({ match, timeStr, patternStatus }: Props)
                       lineHeight: 1,
                       padding: "2px 6px",
                       borderRadius: "var(--nv-radius-sm)",
-                      backgroundColor: "color-mix(in srgb, var(--nv-accent-amber) 20%, transparent)",
+                      backgroundColor: "var(--nv-accent-amber-glow)",
                       color: "var(--nv-accent-amber)",
                     }}
                   >

@@ -156,7 +156,7 @@ function ResultRow({ match }: { match: ResultMatch }) {
                 style={{
                   backgroundColor: "var(--nv-bg-elevated)",
                   color: "var(--nv-text-tertiary)",
-                  fontSize: 10,
+                  fontSize: "var(--nv-text-2xs)",
                   padding: "1px 6px",
                 }}
               >

@@ -25,7 +25,7 @@ export default function NotFound() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: "24px",
+            fontSize: "var(--nv-text-xl)",
             fontFamily: "var(--nv-font-mono)",
             fontWeight: 700,
             color: "var(--nv-accent-amber)",

@@ -46,7 +46,7 @@ async function checkHTMatch(
     if (cStats) results.push(cStats);
 
     const dFiltered = filterByHT(data.archive_d || [], htHome, htAway);
-    const dStats = computeStats(dFiltered, "A3", "var(--nv-accent-amber)", "color-mix(in srgb, var(--nv-accent-amber) 15%, transparent)");
+    const dStats = computeStats(dFiltered, "A3", "var(--nv-accent-amber)", "var(--nv-accent-amber-glow)");
     if (dStats) results.push(dStats);
 
     return results.length > 0 ? results : null;
@@ -72,7 +72,7 @@ function PctBar({
         className="flex-shrink-0 font-semibold"
         style={{
           width: 28,
-          fontSize: 11,
+          fontSize: "var(--nv-text-xs)",
           color: highlight ? color : "var(--nv-text-secondary)",
           textAlign: "right",
         }}
@@ -104,7 +104,7 @@ function PctBar({
         style={{
           width: 46,
           fontFamily: "var(--nv-font-mono)",
-          fontSize: 12,
+          fontSize: "var(--nv-text-xs)",
           color: highlight ? color : "var(--nv-text-primary)",
           textAlign: "right",
         }}
@@ -124,15 +124,16 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
       className="p-3 space-y-3"
       style={{
         borderRadius: "var(--nv-radius-md)",
-        border: `1px solid color-mix(in srgb, ${stats.color} 25%, transparent)`,
-        backgroundColor: `color-mix(in srgb, ${stats.color} 4%, transparent)`,
+        border: `1px solid ${stats.bgColor}`,
+        backgroundColor: stats.bgColor,
+        backgroundClip: "padding-box",
       }}
     >
       {/* Baslik */}
       <div className="flex items-center justify-between">
         <span
           className="inline-flex items-center gap-1.5 font-bold"
-          style={{ fontSize: 12, color: stats.color }}
+          style={{ fontSize: "var(--nv-text-xs)", color: stats.color }}
         >
           <span
             className="inline-flex items-center justify-center"
@@ -141,7 +142,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
               height: 20,
               borderRadius: "var(--nv-radius-full)",
               backgroundColor: stats.bgColor,
-              fontSize: 9,
+              fontSize: "var(--nv-text-2xs)",
               fontWeight: 800,
             }}
           >
@@ -152,7 +153,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
         <span
           className="font-semibold"
           style={{
-            fontSize: 10,
+            fontSize: "var(--nv-text-2xs)",
             color: "var(--nv-text-tertiary)",
             fontFamily: "var(--nv-font-mono)",
           }}
@@ -174,14 +175,14 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
           className="py-1.5 px-2 text-center"
           style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-elevated)" }}
         >
-          <span className="block" style={{ fontSize: 9, color: "var(--nv-text-tertiary)", fontWeight: 600 }}>
+          <span className="block" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600 }}>
             ÜST 2.5
           </span>
           <span
             className="block font-bold"
             style={{
               fontFamily: "var(--nv-font-mono)",
-              fontSize: 14,
+              fontSize: "var(--nv-text-sm)",
               color:
                 stats.ust25Pct >= 60 ? "var(--nv-accent-green)"
                   : stats.ust25Pct <= 40 ? "var(--nv-accent-red)"
@@ -195,14 +196,14 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
           className="py-1.5 px-2 text-center"
           style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-elevated)" }}
         >
-          <span className="block" style={{ fontSize: 9, color: "var(--nv-text-tertiary)", fontWeight: 600 }}>
+          <span className="block" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600 }}>
             KG VAR
           </span>
           <span
             className="block font-bold"
             style={{
               fontFamily: "var(--nv-font-mono)",
-              fontSize: 14,
+              fontSize: "var(--nv-text-sm)",
               color:
                 stats.kgVarPct >= 60 ? "var(--nv-accent-green)"
                   : stats.kgVarPct <= 40 ? "var(--nv-accent-red)"
@@ -222,7 +223,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
               key={s.score}
               className="inline-flex items-center gap-1 px-1.5 py-0.5 font-bold"
               style={{
-                fontSize: 11,
+                fontSize: "var(--nv-text-xs)",
                 fontFamily: "var(--nv-font-mono)",
                 borderRadius: "var(--nv-radius-sm)",
                 backgroundColor: i === 0 ? stats.bgColor : "var(--nv-bg-elevated)",
@@ -230,7 +231,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
               }}
             >
               {s.score}
-              <span style={{ opacity: 0.6, fontSize: 9, fontWeight: 500 }}>
+              <span style={{ opacity: 0.6, fontSize: "var(--nv-text-2xs)", fontWeight: 500 }}>
                 %{s.pct.toFixed(0)}
               </span>
             </span>
@@ -245,7 +246,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
             <div
               key={m.match_id}
               className="flex items-center gap-2 py-0.5"
-              style={{ fontSize: 10, color: "var(--nv-text-tertiary)" }}
+              style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}
             >
               <span className="truncate flex-1 min-w-0">
                 {m.home_team} - {m.away_team}
@@ -262,7 +263,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
             </div>
           ))}
           {stats.matches.length > 5 && (
-            <span style={{ fontSize: 9, color: "var(--nv-text-tertiary)" }}>
+            <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
               +{stats.matches.length - 5} maç daha
             </span>
           )}
@@ -302,11 +303,11 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
       >
         <span className="flex items-center gap-1 flex-shrink-0" title={match.league_name ?? ""}>
           <span className="text-sm leading-none" aria-hidden="true">{flag}</span>
-          <span className="font-semibold" style={{ fontSize: 11, color: "var(--nv-text-tertiary)" }}>{short}</span>
+          <span className="font-semibold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{short}</span>
         </span>
 
         {match.kickoff_time && (
-          <span className="flex-shrink-0" style={{ fontFamily: "var(--nv-font-mono)", fontSize: 11, color: "var(--nv-text-tertiary)" }}>
+          <span className="flex-shrink-0" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
             {formatTime(match.kickoff_time)}
           </span>
         )}
@@ -316,9 +317,9 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
         <span
           className="inline-flex items-center gap-1 px-2 py-0.5 font-semibold"
           style={{
-            fontSize: 10,
+            fontSize: "var(--nv-text-2xs)",
             borderRadius: "var(--nv-radius-full)",
-            backgroundColor: "color-mix(in srgb, var(--nv-live) 15%, transparent)",
+            backgroundColor: "var(--nv-live-dim)",
             color: "var(--nv-live)",
           }}
         >
@@ -355,7 +356,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
                 className="font-bold"
                 style={{
                   fontFamily: "var(--nv-font-mono)",
-                  fontSize: isSecondHalf ? 18 : 28,
+                  fontSize: isSecondHalf ? "var(--nv-text-lg)" : "var(--nv-text-2xl)",
                   lineHeight: 1,
                   color: "var(--nv-text-on-accent)",
                   backgroundColor: "var(--nv-accent-blue)",
@@ -368,7 +369,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
               >
                 {match.ht_home} - {match.ht_away}
               </span>
-              <span style={{ fontSize: 9, color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
+              <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
                 İY
               </span>
             </div>
@@ -380,7 +381,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
                   className="font-bold"
                   style={{
                     fontFamily: "var(--nv-font-mono)",
-                    fontSize: 28,
+                    fontSize: "var(--nv-text-2xl)",
                     lineHeight: 1,
                     color: liveChanged ? "var(--nv-text-on-accent)" : "var(--nv-text-primary)",
                     backgroundColor: liveChanged ? "var(--nv-live)" : "var(--nv-bg-elevated)",
@@ -393,7 +394,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
                 >
                   {match.live_home} - {match.live_away}
                 </span>
-                <span style={{ fontSize: 9, color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
+                <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
                   Güncel
                 </span>
               </div>
@@ -407,7 +408,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
             aria-expanded={expanded}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 font-semibold transition-colors"
             style={{
-              fontSize: 12,
+              fontSize: "var(--nv-text-xs)",
               backgroundColor: expanded ? "var(--nv-accent-green-dim)" : "var(--nv-bg-elevated)",
               color: expanded ? "var(--nv-accent-green)" : "var(--nv-text-secondary)",
               borderRadius: "var(--nv-radius-md)",
@@ -424,7 +425,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
             prefetch={false}
             className="flex items-center justify-center gap-1.5 px-4 py-2 font-semibold transition-colors"
             style={{
-              fontSize: 12,
+              fontSize: "var(--nv-text-xs)",
               backgroundColor: "var(--nv-accent-blue-dim)",
               color: "var(--nv-accent-blue)",
               borderRadius: "var(--nv-radius-md)",
@@ -444,7 +445,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
           className="px-3 pb-3 sm:px-4 sm:pb-4 space-y-2 nv-fade-in"
           style={{ borderTop: "1px solid var(--nv-border)", paddingTop: 12 }}
         >
-          <p className="font-semibold mb-2" style={{ fontSize: 10, color: "var(--nv-text-tertiary)", letterSpacing: "0.05em" }}>
+          <p className="font-semibold mb-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", letterSpacing: "0.05em" }}>
             İY {match.ht_home}-{match.ht_away} ile biten eşleşen arşiv maçlarının MS sonuçları:
           </p>
           {stats.map((s) => (
@@ -509,7 +510,7 @@ export default function CanliPage() {
             {validatedMatches.length > 0 && (
               <span
                 className="inline-flex items-center gap-1 px-2 py-0.5 font-semibold"
-                style={{ fontSize: 11, borderRadius: "var(--nv-radius-full)", backgroundColor: "color-mix(in srgb, var(--nv-live) 15%, transparent)", color: "var(--nv-live)" }}
+                style={{ fontSize: "var(--nv-text-xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-live-dim)", color: "var(--nv-live)" }}
               >
                 <span className="nv-live-pulse" style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--nv-live)" }} />
                 {validatedMatches.length} maç
