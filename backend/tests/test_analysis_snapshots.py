@@ -162,7 +162,7 @@ async def test_global_modal_baselines_require_timezone_aware_cutoff():
 
 def test_market_evaluation_rows_record_abstention_for_every_market():
     rows = build_market_evaluation_rows(
-        {"pattern_ft_b": _pattern(count=10)}, baselines=None,
+        {"pattern_ft_b": _pattern(count=5)}, baselines=None,
     )
 
     assert [row["market"] for row in rows] == ["result", "over_25", "btts"]
@@ -255,7 +255,7 @@ async def test_v3_capture_winner_writes_header_and_all_markets_once(monkeypatch)
         kickoff_time=NOW + timedelta(hours=2),
         league_name="English Premier League",
         league_code="ENG PR",
-        patterns={"pattern_ft_b": _pattern(count=10)},
+        patterns={"pattern_ft_b": _pattern(count=5)},
     )
 
     assert created is True

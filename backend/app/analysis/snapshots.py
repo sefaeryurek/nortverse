@@ -9,7 +9,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import ISTANBUL_TZ
+from app.config import ANALYSIS, ISTANBUL_TZ
 from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
 from app.db.models import (
     AnalysisSnapshot,
@@ -24,7 +24,7 @@ RULE_VERSION = V3_RULE_VERSION
 BASELINE_VERSION = "global-modal-v1"
 V3_ACTIVATION_CUTOFF = datetime(2026, 9, 23, 14, 55, 46, tzinfo=timezone.utc)
 MIN_BASELINE_MATCHES = 100
-MIN_ARCHIVE_MATCHES = 20
+MIN_ARCHIVE_MATCHES = ANALYSIS.min_archive_matches
 MIN_FREQUENCY_PCT = 65.0
 
 _MARKETS = {

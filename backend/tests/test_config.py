@@ -266,6 +266,18 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.temporal_decay_half_life_years == 5.0
 
+    def test_default_min_archive_matches(self, monkeypatch):
+        monkeypatch.delenv("MIN_ARCHIVE_MATCHES", raising=False)
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.min_archive_matches == 10
+
+    def test_override_min_archive_matches(self, monkeypatch):
+        monkeypatch.setenv("MIN_ARCHIVE_MATCHES", "25")
+        from app.config import AnalysisConfig
+        cfg = AnalysisConfig()
+        assert cfg.min_archive_matches == 25
+
     def test_frozen_dataclass(self):
         from app.config import AnalysisConfig
         cfg = AnalysisConfig()

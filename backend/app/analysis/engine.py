@@ -128,6 +128,10 @@ def _analyze_period(data: MatchRawData, period: Period, cfg_n: int, cfg_threshol
     h2h_home_norm = _normalize_distribution(h2h_home_dist, cfg_n)
     h2h_away_norm = _normalize_distribution(h2h_away_dist, cfg_n)
 
+    has_form = sum(form_home_dist.values()) > 0
+    has_h2h = sum(h2h_home_dist.values()) > 0
+    source_count = int(has_form) + int(has_h2h)
+
     # Her skor için oran hesapla
     all_ratios: dict[str, float] = {}
     scores_1: list[str] = []
@@ -135,10 +139,15 @@ def _analyze_period(data: MatchRawData, period: Period, cfg_n: int, cfg_threshol
     scores_2: list[str] = []
 
     for hg, ag in ALL_SCORES:
-        ratio = (
-            (h2h_home_norm.get(hg, 0.0) + form_home_norm.get(hg, 0.0))
-            + (h2h_away_norm.get(ag, 0.0) + form_away_norm.get(ag, 0.0))
-        ) / 2
+        home_sum = (
+            (h2h_home_norm.get(hg, 0.0) if has_h2h else 0.0)
+            + (form_home_norm.get(hg, 0.0) if has_form else 0.0)
+        )
+        away_sum = (
+            (h2h_away_norm.get(ag, 0.0) if has_h2h else 0.0)
+            + (form_away_norm.get(ag, 0.0) if has_form else 0.0)
+        )
+        ratio = (home_sum + away_sum) / max(source_count, 1)
 
         key = score_key(hg, ag)
         all_ratios[key] = ratio

@@ -42,19 +42,21 @@ def _m(
     )
 
 
+_SENTINEL = object()
+
 def _raw(
-    home_matches: list | None = None,
-    away_matches: list | None = None,
-    h2h: list | None = None,
+    home_matches: list | None | object = _SENTINEL,
+    away_matches: list | None | object = _SENTINEL,
+    h2h: list | None | object = _SENTINEL,
 ) -> MatchRawData:
     return MatchRawData(
         match_id="test",
         home_team="A",
         away_team="B",
         league_code="X",
-        home_recent_matches=home_matches or [_m("A", f"T{i}", 1, 0, 0, 0) for i in range(5)],
-        away_recent_matches=away_matches or [_m(f"T{i}", "B", 0, 1, 0, 0) for i in range(5)],
-        h2h_matches=h2h or [_m("A", "B", 1, 0, 0, 0) for _ in range(5)],
+        home_recent_matches=[_m("A", f"T{i}", 1, 0, 0, 0) for i in range(5)] if home_matches is _SENTINEL else home_matches,
+        away_recent_matches=[_m(f"T{i}", "B", 0, 1, 0, 0) for i in range(5)] if away_matches is _SENTINEL else away_matches,
+        h2h_matches=[_m("A", "B", 1, 0, 0, 0) for _ in range(5)] if h2h is _SENTINEL else h2h,
     )
 
 
@@ -296,3 +298,23 @@ class TestEdgeCases:
         result = analyze_match(_raw(), threshold=0.5)
         total = len(result.ft.scores_1) + len(result.ft.scores_x) + len(result.ft.scores_2)
         assert total > 0
+
+    def test_empty_h2h_uses_only_form(self):
+        """H2H 0 maç olduğunda form verisi yarılanmamalı — /1 ile bölünmeli."""
+        without_h2h = analyze_match(_raw(h2h=[]))
+        ratio = without_h2h.ft.all_ratios.get("1-0", 0)
+        assert ratio == 5.0, (
+            "H2H boşken form verisi /1 ile bölünmeli (eski bug: /2 ile yarılanıyordu)"
+        )
+
+    def test_empty_form_uses_only_h2h(self):
+        """Form 0 maç olduğunda H2H verisi yarılanmamalı."""
+        result = analyze_match(_raw(home_matches=[], away_matches=[]))
+        ratio = result.ft.all_ratios.get("1-0", 0)
+        assert ratio > 0, "Form boş olunca oranlar sıfırlanmamalı"
+
+    def test_both_sources_empty_gives_zero(self):
+        """Her iki kaynak da boşsa oranlar 0 olmalı."""
+        result = analyze_match(_raw(home_matches=[], away_matches=[], h2h=[]))
+        for key, val in result.ft.all_ratios.items():
+            assert val == 0.0, f"{key} sıfır olmalı"

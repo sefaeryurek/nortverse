@@ -71,6 +71,7 @@ class AnalysisConfig:
     pattern_d_top_n: int = field(default_factory=lambda: _env_int("PATTERN_D_TOP_N", 30))
     pattern_d_min_similarity: float = field(default_factory=lambda: _env_float("PATTERN_D_MIN_SIMILARITY", 0.80))
     temporal_decay_half_life_years: float = field(default_factory=lambda: _env_float("TEMPORAL_DECAY_HALF_LIFE", 3.0))
+    min_archive_matches: int = field(default_factory=lambda: _env_int("MIN_ARCHIVE_MATCHES", 10))
 
 
 SCRAPER = ScraperConfig()
