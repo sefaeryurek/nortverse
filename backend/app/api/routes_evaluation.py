@@ -172,28 +172,29 @@ async def daily_evaluation(
         rows = (await session.execute(stmt)).all()
 
     matches: list[MatchEvaluation] = []
-    summary_result_hit = 0
-    summary_over_hit = 0
-    summary_btts_hit = 0
     summary_score_hit = 0
-    evaluated = 0
-    evaluated_c = 0
-    summary_c_result_hit = 0
-    summary_c_over_hit = 0
-    summary_c_btts_hit = 0
-    evaluated_d = 0
-    summary_d_result_hit = 0
-    summary_d_over_hit = 0
-    summary_d_btts_hit = 0
-    confident_evaluated = 0
-    confident_result_hit = 0
-    confident_c_evaluated = 0
-    confident_c_result_hit = 0
-    confident_d_evaluated = 0
-    confident_d_result_hit = 0
-    brier_sum_b = 0.0
-    brier_sum_c = 0.0
-    brier_sum_d = 0.0
+
+    def _new_accum() -> dict:
+        return {"evaluated": 0, "result_hit": 0, "over_hit": 0, "btts_hit": 0,
+                "confident_evaluated": 0, "confident_result_hit": 0, "brier_sum": 0.0}
+
+    acc_b, acc_c, acc_d = _new_accum(), _new_accum(), _new_accum()
+
+    def _accumulate(pat: PatternEvaluation | None, acc: dict) -> None:
+        if pat is None:
+            return
+        acc["evaluated"] += 1
+        acc["brier_sum"] += pat.brier_score
+        if pat.result_hit:
+            acc["result_hit"] += 1
+        if pat.over_25_hit:
+            acc["over_hit"] += 1
+        if pat.btts_hit:
+            acc["btts_hit"] += 1
+        if pat.is_confident:
+            acc["confident_evaluated"] += 1
+            if pat.result_hit:
+                acc["confident_result_hit"] += 1
 
     for row in rows:
         ft_h, ft_a = row.actual_ft_home, row.actual_ft_away
@@ -215,63 +216,18 @@ async def daily_evaluation(
         all_scores = list(row.ft_scores_1 or []) + list(row.ft_scores_x or []) + list(row.ft_scores_2 or [])
         score_hit = actual_ft_str in all_scores
 
-        pat_b = _evaluate_pattern(
-            row.pattern_ft_b, actual_result, actual_over_25, actual_btts,
-            min_matches=ANALYSIS.eval_min_matches,
+        eval_kwargs = dict(
+            actual_result=actual_result, actual_over_25=actual_over_25,
+            actual_btts=actual_btts, min_matches=ANALYSIS.eval_min_matches,
             league_name=row.league_name,
         )
-        pat_c = _evaluate_pattern(
-            row.pattern_ft_c, actual_result, actual_over_25, actual_btts,
-            min_matches=ANALYSIS.eval_min_matches,
-            league_name=row.league_name,
-        )
-        pat_d = _evaluate_pattern(
-            row.pattern_ft_d, actual_result, actual_over_25, actual_btts,
-            min_matches=ANALYSIS.eval_min_matches,
-            league_name=row.league_name,
-        )
+        pat_b = _evaluate_pattern(row.pattern_ft_b, **eval_kwargs)
+        pat_c = _evaluate_pattern(row.pattern_ft_c, **eval_kwargs)
+        pat_d = _evaluate_pattern(row.pattern_ft_d, **eval_kwargs)
 
-        if pat_b is not None:
-            evaluated += 1
-            brier_sum_b += pat_b.brier_score
-            if pat_b.result_hit:
-                summary_result_hit += 1
-            if pat_b.over_25_hit:
-                summary_over_hit += 1
-            if pat_b.btts_hit:
-                summary_btts_hit += 1
-            if pat_b.is_confident:
-                confident_evaluated += 1
-                if pat_b.result_hit:
-                    confident_result_hit += 1
-
-        if pat_c is not None:
-            evaluated_c += 1
-            brier_sum_c += pat_c.brier_score
-            if pat_c.result_hit:
-                summary_c_result_hit += 1
-            if pat_c.over_25_hit:
-                summary_c_over_hit += 1
-            if pat_c.btts_hit:
-                summary_c_btts_hit += 1
-            if pat_c.is_confident:
-                confident_c_evaluated += 1
-                if pat_c.result_hit:
-                    confident_c_result_hit += 1
-
-        if pat_d is not None:
-            evaluated_d += 1
-            brier_sum_d += pat_d.brier_score
-            if pat_d.result_hit:
-                summary_d_result_hit += 1
-            if pat_d.over_25_hit:
-                summary_d_over_hit += 1
-            if pat_d.btts_hit:
-                summary_d_btts_hit += 1
-            if pat_d.is_confident:
-                confident_d_evaluated += 1
-                if pat_d.result_hit:
-                    confident_d_result_hit += 1
+        _accumulate(pat_b, acc_b)
+        _accumulate(pat_c, acc_c)
+        _accumulate(pat_d, acc_d)
 
         if score_hit:
             summary_score_hit += 1
@@ -300,43 +256,47 @@ async def daily_evaluation(
         ))
 
     total = len(matches)
+
+    def _brier(acc: dict) -> float | None:
+        return round(acc["brier_sum"] / acc["evaluated"], 4) if acc["evaluated"] > 0 else None
+
     summary = EvaluationSummary(
         total_matches=total,
-        evaluated=evaluated,
-        result_hit=summary_result_hit,
-        result_hit_pct=_pct(summary_result_hit, evaluated),
-        over_25_hit=summary_over_hit,
-        over_25_hit_pct=_pct(summary_over_hit, evaluated),
-        btts_hit=summary_btts_hit,
-        btts_hit_pct=_pct(summary_btts_hit, evaluated),
+        evaluated=acc_b["evaluated"],
+        result_hit=acc_b["result_hit"],
+        result_hit_pct=_pct(acc_b["result_hit"], acc_b["evaluated"]),
+        over_25_hit=acc_b["over_hit"],
+        over_25_hit_pct=_pct(acc_b["over_hit"], acc_b["evaluated"]),
+        btts_hit=acc_b["btts_hit"],
+        btts_hit_pct=_pct(acc_b["btts_hit"], acc_b["evaluated"]),
         score_list_hit=summary_score_hit,
         score_list_hit_pct=_pct(summary_score_hit, total),
-        evaluated_c=evaluated_c,
-        c_result_hit=summary_c_result_hit,
-        c_result_hit_pct=_pct(summary_c_result_hit, evaluated_c),
-        c_over_25_hit=summary_c_over_hit,
-        c_over_25_hit_pct=_pct(summary_c_over_hit, evaluated_c),
-        c_btts_hit=summary_c_btts_hit,
-        c_btts_hit_pct=_pct(summary_c_btts_hit, evaluated_c),
-        evaluated_d=evaluated_d,
-        d_result_hit=summary_d_result_hit,
-        d_result_hit_pct=_pct(summary_d_result_hit, evaluated_d),
-        d_over_25_hit=summary_d_over_hit,
-        d_over_25_hit_pct=_pct(summary_d_over_hit, evaluated_d),
-        d_btts_hit=summary_d_btts_hit,
-        d_btts_hit_pct=_pct(summary_d_btts_hit, evaluated_d),
-        confident_evaluated=confident_evaluated,
-        confident_result_hit=confident_result_hit,
-        confident_result_hit_pct=_pct(confident_result_hit, confident_evaluated),
-        confident_c_evaluated=confident_c_evaluated,
-        confident_c_result_hit=confident_c_result_hit,
-        confident_c_result_hit_pct=_pct(confident_c_result_hit, confident_c_evaluated),
-        confident_d_evaluated=confident_d_evaluated,
-        confident_d_result_hit=confident_d_result_hit,
-        confident_d_result_hit_pct=_pct(confident_d_result_hit, confident_d_evaluated),
-        brier_result_b=round(brier_sum_b / evaluated, 4) if evaluated > 0 else None,
-        brier_result_c=round(brier_sum_c / evaluated_c, 4) if evaluated_c > 0 else None,
-        brier_result_d=round(brier_sum_d / evaluated_d, 4) if evaluated_d > 0 else None,
+        evaluated_c=acc_c["evaluated"],
+        c_result_hit=acc_c["result_hit"],
+        c_result_hit_pct=_pct(acc_c["result_hit"], acc_c["evaluated"]),
+        c_over_25_hit=acc_c["over_hit"],
+        c_over_25_hit_pct=_pct(acc_c["over_hit"], acc_c["evaluated"]),
+        c_btts_hit=acc_c["btts_hit"],
+        c_btts_hit_pct=_pct(acc_c["btts_hit"], acc_c["evaluated"]),
+        evaluated_d=acc_d["evaluated"],
+        d_result_hit=acc_d["result_hit"],
+        d_result_hit_pct=_pct(acc_d["result_hit"], acc_d["evaluated"]),
+        d_over_25_hit=acc_d["over_hit"],
+        d_over_25_hit_pct=_pct(acc_d["over_hit"], acc_d["evaluated"]),
+        d_btts_hit=acc_d["btts_hit"],
+        d_btts_hit_pct=_pct(acc_d["btts_hit"], acc_d["evaluated"]),
+        confident_evaluated=acc_b["confident_evaluated"],
+        confident_result_hit=acc_b["confident_result_hit"],
+        confident_result_hit_pct=_pct(acc_b["confident_result_hit"], acc_b["confident_evaluated"]),
+        confident_c_evaluated=acc_c["confident_evaluated"],
+        confident_c_result_hit=acc_c["confident_result_hit"],
+        confident_c_result_hit_pct=_pct(acc_c["confident_result_hit"], acc_c["confident_evaluated"]),
+        confident_d_evaluated=acc_d["confident_evaluated"],
+        confident_d_result_hit=acc_d["confident_result_hit"],
+        confident_d_result_hit_pct=_pct(acc_d["confident_result_hit"], acc_d["confident_evaluated"]),
+        brier_result_b=_brier(acc_b),
+        brier_result_c=_brier(acc_c),
+        brier_result_d=_brier(acc_d),
     )
 
     return DailyEvaluation(
