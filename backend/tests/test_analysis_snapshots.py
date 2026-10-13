@@ -529,6 +529,239 @@ async def test_validation_uses_normalized_tables(monkeypatch):
     assert "actual_ft" not in query
 
 
+# ---------- build_ft_recommendations birim testleri ----------
+
+class TestBuildFtRecommendations:
+    """build_ft_recommendations fonksiyonunun kapsamlı birim testleri."""
+
+    def test_none_patterns_returns_empty(self):
+        assert build_ft_recommendations(None) == []
+
+    def test_empty_dict_returns_empty(self):
+        assert build_ft_recommendations({}) == []
+
+    def test_single_archive_result_only(self):
+        """Tek arşivde sadece result pazarı sinyal verir (O/U ve BTTS filtrelenir)."""
+        picks = build_ft_recommendations({"pattern_ft_b": _pattern(count=30, result_1=75)})
+        markets = [p["market"] for p in picks]
+        assert "result" in markets
+        assert "over_25" not in markets
+        assert "btts" not in markets
+
+    def test_match_count_below_minimum_skipped(self):
+        """MIN_ARCHIVE_MATCHES (10) altı arşiv atlanır."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=9, result_1=90),
+        })
+        assert picks == []
+
+    def test_match_count_at_minimum_included(self):
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=10, result_1=75),
+        })
+        assert len(picks) >= 1
+        assert picks[0]["match_count"] == 10
+
+    def test_frequency_below_threshold_skipped(self):
+        """MIN_FREQUENCY_PCT (65.0) altı pazar atlanır."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=30, result_1=64, over=64, btts=64),
+        })
+        assert picks == []
+
+    def test_frequency_at_threshold_included(self):
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=30, result_1=65),
+        })
+        assert len(picks) >= 1
+        assert picks[0]["frequency_pct"] == 65.0
+
+    def test_two_archives_agreeing_accepted(self):
+        """İki arşiv aynı yönde → kabul."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=30, result_1=70),
+            "pattern_ft_c": _pattern(count=20, result_1=68),
+        })
+        result_pick = [p for p in picks if p["market"] == "result"][0]
+        assert result_pick["selection"] == "1"
+        assert "archive_1" in result_pick["archive"]
+        assert "archive_2" in result_pick["archive"]
+
+    def test_two_archives_disagreeing_rejected(self):
+        """İki arşiv farklı yönde → reddedilir."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=30, result_1=70),
+            "pattern_ft_c": {
+                "match_count": 25,
+                "result_1_pct": 10, "result_x_pct": 20, "result_2_pct": 70,
+                "alt_25_pct": 30, "ust_25_pct": 70,
+                "kg_var_pct": 70, "kg_yok_pct": 30,
+            },
+        })
+        result_picks = [p for p in picks if p["market"] == "result"]
+        assert result_picks == []
+
+    def test_three_archives_two_agree_accepted(self):
+        """3 arşivden 2 aynı yönde → kabul."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=30, result_1=70),
+            "pattern_ft_c": _pattern(count=25, result_1=68),
+            "pattern_ft_d": {
+                "match_count": 20,
+                "result_1_pct": 10, "result_x_pct": 20, "result_2_pct": 70,
+                "alt_25_pct": 30, "ust_25_pct": 70,
+                "kg_var_pct": 70, "kg_yok_pct": 30,
+            },
+        })
+        result_pick = [p for p in picks if p["market"] == "result"][0]
+        assert result_pick["selection"] == "1"
+        assert "archive_1" in result_pick["archive"]
+        assert "archive_2" in result_pick["archive"]
+        assert "archive_3" not in result_pick["archive"]
+
+    def test_three_archives_all_agree(self):
+        """3 arşiv aynı yönde → hepsi etiketlenir."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=30, result_1=70),
+            "pattern_ft_c": _pattern(count=25, result_1=68),
+            "pattern_ft_d": _pattern(count=20, result_1=72),
+        })
+        result_pick = [p for p in picks if p["market"] == "result"][0]
+        assert result_pick["archive"] == "archive_1+archive_2+archive_3"
+
+    def test_three_archives_all_disagree_rejected(self):
+        """3 arşiv 3 farklı yönde → reddedilir."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=30, result_1=70),
+            "pattern_ft_c": {
+                "match_count": 25,
+                "result_1_pct": 10, "result_x_pct": 70, "result_2_pct": 20,
+                "alt_25_pct": 30, "ust_25_pct": 70,
+                "kg_var_pct": 70, "kg_yok_pct": 30,
+            },
+            "pattern_ft_d": {
+                "match_count": 20,
+                "result_1_pct": 10, "result_x_pct": 20, "result_2_pct": 70,
+                "alt_25_pct": 30, "ust_25_pct": 70,
+                "kg_var_pct": 70, "kg_yok_pct": 30,
+            },
+        })
+        result_picks = [p for p in picks if p["market"] == "result"]
+        assert result_picks == []
+
+    def test_ou_btts_need_two_archive_agreement(self):
+        """O/U ve BTTS pazarlarında tek arşiv yetmez, 2+ gerekli."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=30, over=80, btts=80),
+            "pattern_ft_c": _pattern(count=25, over=75, btts=72),
+        })
+        ou_picks = [p for p in picks if p["market"] == "over_25"]
+        btts_picks = [p for p in picks if p["market"] == "btts"]
+        assert len(ou_picks) == 1
+        assert len(btts_picks) == 1
+
+    def test_frequency_is_min_of_agreeing(self):
+        """Uyuşan arşivlerin minimum frekansı kullanılır."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=50, result_1=80),
+            "pattern_ft_c": _pattern(count=30, result_1=68),
+        })
+        result_pick = [p for p in picks if p["market"] == "result"][0]
+        assert result_pick["frequency_pct"] == 68.0
+
+    def test_match_count_is_min_of_agreeing(self):
+        """Uyuşan arşivlerin minimum match_count'u kullanılır."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=50, result_1=80),
+            "pattern_ft_c": _pattern(count=30, result_1=68),
+        })
+        result_pick = [p for p in picks if p["market"] == "result"][0]
+        assert result_pick["match_count"] == 30
+
+    def test_archive_individual_frequencies_present(self):
+        """Her arşivin ayrı frekans ve match_count bilgisi döner."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=50, result_1=80),
+            "pattern_ft_c": _pattern(count=30, result_1=68),
+        })
+        result_pick = [p for p in picks if p["market"] == "result"][0]
+        assert result_pick["archive_1_frequency_pct"] == 80.0
+        assert result_pick["archive_1_match_count"] == 50
+        assert result_pick["archive_2_frequency_pct"] == 68.0
+        assert result_pick["archive_2_match_count"] == 30
+        assert result_pick["archive_3_frequency_pct"] is None
+        assert result_pick["archive_3_match_count"] is None
+
+    def test_recommendation_id_format(self):
+        picks = build_ft_recommendations({"pattern_ft_b": _pattern(count=30, result_1=75)})
+        assert picks[0]["recommendation_id"] == f"{RULE_VERSION}:result:1"
+
+    def test_nan_value_skips_market(self):
+        """NaN veya infinity oran değeri olan pazar atlanır."""
+        pattern = _pattern(count=30)
+        pattern["result_1_pct"] = float("nan")
+        picks = build_ft_recommendations({"pattern_ft_b": pattern})
+        result_picks = [p for p in picks if p["market"] == "result"]
+        assert result_picks == []
+
+    def test_negative_value_skips_market(self):
+        pattern = _pattern(count=30)
+        pattern["result_1_pct"] = -5.0
+        picks = build_ft_recommendations({"pattern_ft_b": pattern})
+        result_picks = [p for p in picks if p["market"] == "result"]
+        assert result_picks == []
+
+    def test_value_over_100_skips_market(self):
+        pattern = _pattern(count=30)
+        pattern["result_1_pct"] = 101.0
+        picks = build_ft_recommendations({"pattern_ft_b": pattern})
+        result_picks = [p for p in picks if p["market"] == "result"]
+        assert result_picks == []
+
+    def test_non_dict_pattern_skipped(self):
+        """pattern_ft_b string ise atlanır."""
+        picks = build_ft_recommendations({"pattern_ft_b": "invalid"})
+        assert picks == []
+
+    def test_missing_match_count_skipped(self):
+        pattern = _pattern(count=30)
+        del pattern["match_count"]
+        picks = build_ft_recommendations({"pattern_ft_b": pattern})
+        assert picks == []
+
+    def test_only_archive_d(self):
+        """Sadece archive_3 (Pattern D) varsa, result sinyali verir."""
+        picks = build_ft_recommendations({
+            "pattern_ft_d": _pattern(count=20, result_1=75),
+        })
+        assert len(picks) == 1
+        assert picks[0]["archive"] == "archive_3"
+        assert picks[0]["market"] == "result"
+
+    def test_x_draw_winner(self):
+        """Beraberlik en yüksek olduğunda X seçilir."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": {
+                "match_count": 30,
+                "result_1_pct": 20, "result_x_pct": 70, "result_2_pct": 10,
+                "alt_25_pct": 70, "ust_25_pct": 30,
+                "kg_var_pct": 30, "kg_yok_pct": 70,
+            },
+        })
+        result_pick = [p for p in picks if p["market"] == "result"][0]
+        assert result_pick["selection"] == "X"
+
+    def test_multiple_markets_can_coexist(self):
+        """3 arşiv uyumlu ise result + over_25 + btts hep birlikte döner."""
+        picks = build_ft_recommendations({
+            "pattern_ft_b": _pattern(count=30, result_1=75, over=80, btts=70),
+            "pattern_ft_c": _pattern(count=25, result_1=70, over=75, btts=68),
+            "pattern_ft_d": _pattern(count=20, result_1=72, over=78, btts=72),
+        })
+        markets = {p["market"] for p in picks}
+        assert markets == {"result", "over_25", "btts"}
+
+
 def test_wilson_ci_basic():
     ci = routes_admin.wilson_ci(50, 100)
     assert ci is not None

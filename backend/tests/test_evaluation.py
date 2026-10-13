@@ -505,3 +505,120 @@ class TestMarginAndConfident:
         )
         assert result_known is not None
         assert result_unknown is not None
+
+
+class TestBrierScore:
+    """Brier skoru doğruluğu — [0, 2] aralığında, düşük = daha iyi."""
+
+    def test_perfect_prediction_brier_near_zero(self):
+        """Ham %99 ev sahibi galibiyeti, gerçek sonuç 1 → Brier ~0."""
+        data = {
+            "match_count": 100,
+            "result_1_pct": 99.0,
+            "result_x_pct": 0.5,
+            "result_2_pct": 0.5,
+            "ust_25_pct": 50.0,
+            "kg_var_pct": 50.0,
+        }
+        result = _evaluate_pattern(data, "1", True, True)
+        assert result is not None
+        assert result.brier_score < 0.05
+
+    def test_wrong_prediction_brier_high(self):
+        """Ham %90 ev sahibi galibiyeti ama sonuç 2 → Brier yüksek."""
+        data = {
+            "match_count": 100,
+            "result_1_pct": 90.0,
+            "result_x_pct": 5.0,
+            "result_2_pct": 5.0,
+            "ust_25_pct": 50.0,
+            "kg_var_pct": 50.0,
+        }
+        result = _evaluate_pattern(data, "2", True, True)
+        assert result is not None
+        assert result.brier_score > 1.0
+
+    def test_uniform_distribution_brier(self):
+        """33/33/34 dağılım → Brier ~0.667 (rastgele)."""
+        data = {
+            "match_count": 50,
+            "result_1_pct": 33.0,
+            "result_x_pct": 33.0,
+            "result_2_pct": 34.0,
+            "ust_25_pct": 50.0,
+            "kg_var_pct": 50.0,
+        }
+        result = _evaluate_pattern(data, "1", True, True)
+        assert result is not None
+        assert 0.55 < result.brier_score < 0.75
+
+    def test_brier_is_finite(self):
+        """Tüm yüzdeler 0 olsa bile brier sonlu bir değer döner."""
+        data = {
+            "match_count": 10,
+            "result_1_pct": 0.0,
+            "result_x_pct": 0.0,
+            "result_2_pct": 0.0,
+            "ust_25_pct": 0.0,
+            "kg_var_pct": 0.0,
+        }
+        result = _evaluate_pattern(data, "1", True, True)
+        assert result is not None
+        import math
+        assert math.isfinite(result.brier_score)
+
+
+class TestExtremeValues:
+    """Aşırı değerlerle log-odds shrinkage'ın hataya düşmemesi."""
+
+    def test_all_zero_pct_no_crash(self):
+        data = {
+            "match_count": 10,
+            "result_1_pct": 0.0,
+            "result_x_pct": 0.0,
+            "result_2_pct": 0.0,
+            "ust_25_pct": 0.0,
+            "kg_var_pct": 0.0,
+        }
+        result = _evaluate_pattern(data, "1", True, True)
+        assert result is not None
+
+    def test_all_100_pct_no_crash(self):
+        data = {
+            "match_count": 10,
+            "result_1_pct": 100.0,
+            "result_x_pct": 100.0,
+            "result_2_pct": 100.0,
+            "ust_25_pct": 100.0,
+            "kg_var_pct": 100.0,
+        }
+        result = _evaluate_pattern(data, "1", True, True)
+        assert result is not None
+
+    def test_single_match_count_no_division_error(self):
+        data = {
+            "match_count": 1,
+            "result_1_pct": 100.0,
+            "result_x_pct": 0.0,
+            "result_2_pct": 0.0,
+            "ust_25_pct": 100.0,
+            "kg_var_pct": 0.0,
+        }
+        result = _evaluate_pattern(data, "1", True, False)
+        assert result is not None
+        assert result.result_pick == "1"
+
+    def test_very_large_match_count(self):
+        """match_count=100000 ile shrinkage neredeyse sıfır → ham değerler korunur."""
+        data = {
+            "match_count": 100000,
+            "result_1_pct": 30.0,
+            "result_x_pct": 40.0,
+            "result_2_pct": 30.0,
+            "ust_25_pct": 55.0,
+            "kg_var_pct": 55.0,
+        }
+        result = _evaluate_pattern(data, "X", True, True)
+        assert result is not None
+        assert result.result_pick == "X"
+        assert result.result_hit is True
