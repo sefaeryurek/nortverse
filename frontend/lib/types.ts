@@ -302,17 +302,3 @@ export interface DailyEvaluation {
   matches: MatchEvaluation[];
 }
 
-export interface MatchSummary {
-  match_id: string;
-  home_team: string;
-  away_team: string;
-  league_code: string | null;
-  season: string | null;
-  actual_ft_home: number | null;
-  actual_ft_away: number | null;
-  actual_ht_home: number | null;
-  actual_ht_away: number | null;
-  ft_scores_1: string[] | null;
-  ft_scores_x: string[] | null;
-  ft_scores_2: string[] | null;
-}

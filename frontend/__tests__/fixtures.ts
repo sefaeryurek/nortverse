@@ -1,5 +1,4 @@
 import type { PatternResult } from "@/lib/types";
-import type { Pick } from "@/lib/confidence";
 import type { CartItem } from "@/lib/cart";
 
 export function makePatternResult(overrides: Partial<PatternResult> = {}): PatternResult {
@@ -124,24 +123,6 @@ export function makePatternResult(overrides: Partial<PatternResult> = {}): Patte
     h2_result_1_pct: 0,
     h2_result_x_pct: 0,
     h2_result_2_pct: 0,
-    ...overrides,
-  };
-}
-
-export function makePick(overrides: Partial<Pick> = {}): Pick {
-  return {
-    marketKey: "result",
-    field: "result_1_pct",
-    marketLabel: "Maç Sonucu",
-    selectionLabel: "1",
-    pct: 70,
-    pctA: 70,
-    pctB: null,
-    matchCountA: 20,
-    matchCountB: 0,
-    marketWeight: 1.0,
-    archive: "A",
-    confidence: 0.65,
     ...overrides,
   };
 }

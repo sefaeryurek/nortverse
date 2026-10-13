@@ -1,138 +1,5 @@
-import type { PatternResult, TrendsData } from "./types";
+import type { PatternResult } from "./types";
 import { type Period, periodLabels } from "./labels";
-
-export interface Pick {
-  marketKey: string;       // çelişki gruplaması için (örn. "result", "ou_25")
-  field: keyof PatternResult; // ham alan adı
-  marketLabel: string;     // UI: "Maç Sonucu", "2.5 Alt/Üst"
-  selectionLabel: string;  // UI: "1", "Üst 2.5", "X/1"
-  pct: number;             // arşiv sıklığı (AB için iki arşivden düşük olan)
-  pctA: number | null;
-  pctB: number | null;
-  matchCountA: number;
-  matchCountB: number;
-  marketWeight: number;
-  archive: "A" | "B" | "AB";
-  confidence: number;      // 0..~1.25
-}
-
-// A recommendation needs enough comparable archive matches in every source
-// that contributes to it. This is a display gate, not a calibrated hit rate.
-export const MIN_RECOMMENDATION_SAMPLE = 20;
-
-export function effectivePickSample(pick: Pick): number {
-  return pick.archive === "AB" ? Math.min(pick.matchCountA, pick.matchCountB)
-    : pick.archive === "A" ? pick.matchCountA : pick.matchCountB;
-}
-
-// Backtest: B+C uyumu sadece MS sonuç pazarında anlamlı sinyal veriyor
-// (+2pp). O/U ve BTTS'de uyum sıfır fayda sağlıyor (uyumsuz bile daha iyi).
-const DUAL_BONUS = 1.25;
-const DUAL_BONUS_MARKETS = new Set(["result", "dc", "fark", "hnd_a10", "hnd_h10", "hnd_a20", "hnd_h20", "iy_ms", "ht_result", "h2_result"]);
-// Backtest: Pattern B her pazarda C'den %1.6-1.8pp daha isabetli.
-const B_ONLY_BOOST = 1.03;
-const C_ONLY_PENALTY = 0.97;
-
-function volumeWeight(matchCount: number): number {
-  if (matchCount <= 0) return 0;
-  return Math.min(1.0, Math.log(matchCount + 1) / Math.log(30));
-}
-
-// Sprint 10 Faz C: Form & H2H trendleri (Sprint 8.8) → confidence boost.
-// Mantık: belirli pazar-seçim çiftleri için ilgili trend metriği eşiği geçerse
-// confidence'a çarpan uygulanır. Boost cap 1.1 (DUAL_BONUS'tan bağımsız, ayrı tavan).
-interface TrendsBoostRule {
-  marketKey: string;
-  selection: string;
-  get: (t: TrendsData) => number | undefined;
-  threshold: number;
-  boost: number;
-}
-
-const TRENDS_BOOST_RULES: TrendsBoostRule[] = [
-  { marketKey: "result", selection: "1", get: (t) => t.home_form?.win_pct, threshold: 65, boost: 1.1 },
-  { marketKey: "result", selection: "2", get: (t) => t.away_form?.win_pct, threshold: 65, boost: 1.1 },
-  { marketKey: "result", selection: "X", get: (t) => t.h2h?.draw_pct, threshold: 40, boost: 1.07 },
-  { marketKey: "kg", selection: "KG Var", get: (t) => t.h2h?.kg_var_pct, threshold: 60, boost: 1.1 },
-  { marketKey: "ou_25", selection: "Üst 2.5", get: (t) => t.home_form?.over_25_pct, threshold: 55, boost: 1.08 },
-];
-
-interface TrendsPenaltyRule {
-  marketKey: string;
-  selection: string;
-  check: (t: TrendsData) => boolean;
-  penalty: number;
-}
-
-const TRENDS_PENALTY_RULES: TrendsPenaltyRule[] = [
-  { marketKey: "result", selection: "1", check: (t) => (t.home_form?.win_pct ?? 50) <= 30, penalty: 0.88 },
-  { marketKey: "result", selection: "2", check: (t) => (t.away_form?.win_pct ?? 50) <= 30, penalty: 0.88 },
-  { marketKey: "result", selection: "1", check: (t) => (t.home_form?.loss_pct ?? 25) >= 50, penalty: 0.85 },
-  { marketKey: "result", selection: "2", check: (t) => (t.away_form?.loss_pct ?? 25) >= 50, penalty: 0.85 },
-];
-
-/**
- * Belirli (marketKey, selectionLabel) için trend boost değeri (1.0 = boost yok).
- * trends null veya eşleşen kural yoksa 1.0 döner.
- */
-export function getTrendsBoost(
-  marketKey: string,
-  selectionLabel: string,
-  trends: TrendsData | null,
-): number {
-  if (!trends) return 1.0;
-  let factor = 1.0;
-
-  for (const rule of TRENDS_BOOST_RULES) {
-    if (rule.marketKey === marketKey && rule.selection === selectionLabel) {
-      const value = rule.get(trends);
-      if (value !== undefined && value >= rule.threshold) {
-        factor *= rule.boost;
-      }
-      break;
-    }
-  }
-
-  for (const rule of TRENDS_PENALTY_RULES) {
-    if (rule.marketKey === marketKey && rule.selection === selectionLabel) {
-      if (rule.check(trends)) {
-        factor *= rule.penalty;
-      }
-    }
-  }
-
-  return factor;
-}
-
-const CONFIDENCE_CAP = 0.95;
-
-export function computeConfidence(
-  pct: number,
-  matchCount: number,
-  marketWeight: number,
-  isDual: boolean,
-  trendsBoost = 1.0,
-  marketKey = "",
-  archiveSource: "A" | "B" | "AB" = "AB",
-): number {
-  const base = (pct / 100) * volumeWeight(matchCount) * marketWeight * trendsBoost;
-  let result = base;
-
-  if (isDual && DUAL_BONUS_MARKETS.has(marketKey)) {
-    result *= DUAL_BONUS;
-  } else if (isDual) {
-    result *= 1.0;
-  }
-
-  if (archiveSource === "A") result *= B_ONLY_BOOST;
-  else if (archiveSource === "B") result *= C_ONLY_PENALTY;
-
-  if (!isDual && (marketKey === "ou_25" || marketKey === "kg")) {
-    result *= 0.5;
-  }
-
-  return Math.min(CONFIDENCE_CAP, result);
-}
 
 interface FieldSpec {
   field: keyof PatternResult;
@@ -512,10 +379,6 @@ const MARKETS: MarketSpec[] = [
   },
 ];
 
-export function getMarkets(): readonly MarketSpec[] {
-  return MARKETS;
-}
-
 function isMarketActive(market: MarketSpec, period: Period, sample: PatternResult): boolean {
   if (market.ftOnly && period !== "ft") return false;
   if (market.excludePeriods?.includes(period)) return false;
@@ -591,14 +454,3 @@ export function getMarketSummary(
   return rows;
 }
 
-/**
- * Confidence'a göre renk: ≥0.90 yüksek, 0.70-0.89 orta,
- * 0.50-0.69 düşük, <0.50 silik.
- */
-export type ConfidenceTier = "high" | "medium" | "low" | "muted";
-export function confidenceTier(c: number): ConfidenceTier {
-  if (c >= 0.9) return "high";
-  if (c >= 0.7) return "medium";
-  if (c >= 0.5) return "low";
-  return "muted";
-}

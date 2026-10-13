@@ -31,7 +31,7 @@ _STATS_CACHE_MAX = 300
 
 
 def _stats_cache_put(key: str, data: dict) -> None:
-    now = time.time()
+    now = time.monotonic()
     _stats_cache[key] = (now, data)
     if len(_stats_cache) > _STATS_CACHE_MAX:
         oldest = min(_stats_cache, key=lambda k: _stats_cache[k][0])
