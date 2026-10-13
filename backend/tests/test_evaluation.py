@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.api.routes_evaluation import _evaluate_pattern, _pct
+from app.analysis.evaluation import evaluate_pattern as _evaluate_pattern, pct as _pct
 from app.config import AnalysisConfig
 
 
@@ -352,7 +352,7 @@ class TestCalibratedThresholds:
     def test_low_ust_predicts_alt_after_shrinkage(self, monkeypatch):
         # Shrinkage + baz oran (55%) ile 45% gözlem → adjusted ~46.9% < 50 → "Alt"
         monkeypatch.setattr(
-            "app.api.routes_evaluation.ANALYSIS",
+            "app.analysis.evaluation.ANALYSIS",
             AnalysisConfig(over_25_base_rate=55.0, btts_base_rate=56.0,
                            result_shrinkage=0.45),
         )
@@ -370,7 +370,7 @@ class TestCalibratedThresholds:
 
     def test_pattern_56_still_predicts_over(self, monkeypatch):
         monkeypatch.setattr(
-            "app.api.routes_evaluation.ANALYSIS",
+            "app.analysis.evaluation.ANALYSIS",
             AnalysisConfig(),
         )
         data = {
@@ -389,7 +389,7 @@ class TestCalibratedThresholds:
     def test_low_btts_predicts_no_after_shrinkage(self, monkeypatch):
         # Shrinkage + baz oran (56%) ile 44% gözlem → adjusted ~46.5% < 50 → "KG Yok"
         monkeypatch.setattr(
-            "app.api.routes_evaluation.ANALYSIS",
+            "app.analysis.evaluation.ANALYSIS",
             AnalysisConfig(over_25_base_rate=55.0, btts_base_rate=56.0,
                            result_shrinkage=0.45),
         )
@@ -407,7 +407,7 @@ class TestCalibratedThresholds:
 
     def test_btts_above_base_rate_predicts_yes(self, monkeypatch):
         monkeypatch.setattr(
-            "app.api.routes_evaluation.ANALYSIS",
+            "app.analysis.evaluation.ANALYSIS",
             AnalysisConfig(btts_base_rate=56.0),
         )
         data = {
@@ -426,7 +426,7 @@ class TestCalibratedThresholds:
     def test_base_rate_override_via_config(self, monkeypatch):
         # Düşük baz oran (40%) — pattern 35% → adjusted < 40 → "Alt"
         monkeypatch.setattr(
-            "app.api.routes_evaluation.ANALYSIS",
+            "app.analysis.evaluation.ANALYSIS",
             AnalysisConfig(over_25_base_rate=40.0, btts_base_rate=40.0,
                            result_shrinkage=0.45),
         )

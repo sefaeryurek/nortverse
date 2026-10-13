@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-import math
 from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
+from app.analysis.evaluation import (
+    EvalAccumulator,
+    evaluate_pattern,
+    pct,
+    brier_avg,
+)
 from app.api.schemas import (
     DailyEvaluation,
     EvaluationSummary,
@@ -21,117 +26,25 @@ from app.db.models import Match
 
 router = APIRouter()
 
-BASE_RESULT = {"1": 45.3, "X": 24.9, "2": 29.8, "ou25": 52.7, "btts": 53.2}
 
-# Lig bazlı taban oranları — 21,954 skorlu maçtan hesaplandı (2026-10-10).
-LEAGUE_BASE_RATES: dict[str, dict[str, float]] = {
-    "English Premier League": {"1": 45.2, "X": 24.6, "2": 30.3, "ou25": 52.9, "btts": 52.0},
-    "Spanish La Liga": {"1": 46.9, "X": 24.9, "2": 28.2, "ou25": 49.9, "btts": 51.9},
-    "Italy Serie A": {"1": 44.3, "X": 25.8, "2": 29.9, "ou25": 50.4, "btts": 52.9},
-    "German Bundesliga": {"1": 44.9, "X": 24.8, "2": 30.3, "ou25": 63.3, "btts": 60.8},
-    "French Ligue 1": {"1": 44.4, "X": 23.3, "2": 32.3, "ou25": 55.4, "btts": 55.6},
-    "Turkish Super Lig": {"1": 46.0, "X": 24.5, "2": 29.5, "ou25": 57.3, "btts": 56.2},
-    "Dutch Eredivisie": {"1": 43.9, "X": 24.8, "2": 31.2, "ou25": 61.3, "btts": 57.7},
-}
-
-
-def _get_base_rates(league_name: str | None) -> dict[str, float]:
-    if league_name:
-        ln = league_name.lower()
-        for key, rates in LEAGUE_BASE_RATES.items():
-            if key.lower() == ln:
-                return rates
-    return BASE_RESULT
-
-
-def _evaluate_pattern(
-    pattern_data: dict | None,
-    actual_result: str,
-    actual_over_25: bool,
-    actual_btts: bool,
-    min_matches: int = 1,
-    league_name: str | None = None,
-) -> PatternEvaluation | None:
-    if not pattern_data or not isinstance(pattern_data, dict):
+def _core_to_schema(pat) -> PatternEvaluation | None:
+    if pat is None:
         return None
-    mc = pattern_data.get("match_count", 0)
-    if mc < min_matches:
-        return None
-
-    pcts = {
-        "1": pattern_data.get("result_1_pct", 0) or 0,
-        "X": pattern_data.get("result_x_pct", 0) or 0,
-        "2": pattern_data.get("result_2_pct", 0) or 0,
-    }
-
-    base_rates = _get_base_rates(league_name)
-    shrink = ANALYSIS.result_shrinkage / (1 + mc / ANALYSIS.shrinkage_half_life)
-
-    adjusted_pcts: dict[str, float] = {}
-    for k in ("1", "X", "2"):
-        raw_p = max(1.0, min(99.0, pcts[k])) / 100.0
-        base_p = base_rates[k] / 100.0
-        raw_logit = math.log(raw_p / (1 - raw_p))
-        base_logit = math.log(base_p / (1 - base_p))
-        adj_logit = raw_logit * (1 - shrink) + base_logit * shrink
-        adjusted_pcts[k] = 1 / (1 + math.exp(-adj_logit)) * 100
-
-    sorted_vals = sorted(adjusted_pcts.values(), reverse=True)
-    result_margin = sorted_vals[0] - sorted_vals[1]
-    is_confident = result_margin >= ANALYSIS.result_min_margin
-
-    result_pick = max(adjusted_pcts, key=lambda k: adjusted_pcts[k])
-    result_hit = result_pick == actual_result
-
-    ou_base = base_rates.get("ou25", ANALYSIS.over_25_base_rate)
-    btts_base = base_rates.get("btts", ANALYSIS.btts_base_rate)
-
-    over_pct = pattern_data.get("ust_25_pct", 0) or 0
-    over_raw_p = max(1.0, min(99.0, over_pct)) / 100.0
-    over_base_p = ou_base / 100.0
-    over_adj_logit = (
-        math.log(over_raw_p / (1 - over_raw_p)) * (1 - shrink)
-        + math.log(over_base_p / (1 - over_base_p)) * shrink
-    )
-    over_adjusted = 1 / (1 + math.exp(-over_adj_logit)) * 100
-    over_pick = over_adjusted > ou_base
-    over_hit = over_pick == actual_over_25
-
-    btts_pct = pattern_data.get("kg_var_pct", 0) or 0
-    btts_raw_p = max(1.0, min(99.0, btts_pct)) / 100.0
-    btts_base_p = btts_base / 100.0
-    btts_adj_logit = (
-        math.log(btts_raw_p / (1 - btts_raw_p)) * (1 - shrink)
-        + math.log(btts_base_p / (1 - btts_base_p)) * shrink
-    )
-    btts_adjusted = 1 / (1 + math.exp(-btts_adj_logit)) * 100
-    btts_pick = btts_adjusted > btts_base
-    btts_hit = btts_pick == actual_btts
-
-    brier = sum(
-        (adjusted_pcts[k] / 100.0 - (1.0 if k == actual_result else 0.0)) ** 2
-        for k in ("1", "X", "2")
-    )
-
     return PatternEvaluation(
-        match_count=mc,
-        result_pick=result_pick,
-        result_pct=round(pcts[result_pick], 1),
-        result_hit=result_hit,
-        result_margin=round(result_margin, 1),
-        is_confident=is_confident,
-        over_25_pick="Üst" if over_pick else "Alt",
-        over_25_pct=round(over_pct if over_pick else (100 - over_pct), 1),
-        over_25_hit=over_hit,
-        btts_pick="KG Var" if btts_pick else "KG Yok",
-        btts_pct=round(btts_pct if btts_pick else (100 - btts_pct), 1),
-        btts_hit=btts_hit,
-        brier_score=round(brier, 4),
+        match_count=pat.match_count,
+        result_pick=pat.result_pick,
+        result_pct=pat.result_pct,
+        result_hit=pat.result_hit,
+        result_margin=pat.result_margin,
+        is_confident=pat.is_confident,
+        over_25_pick=pat.over_25_pick,
+        over_25_pct=pat.over_25_pct,
+        over_25_hit=pat.over_25_hit,
+        btts_pick=pat.btts_pick,
+        btts_pct=pat.btts_pct,
+        btts_hit=pat.btts_hit,
+        brier_score=pat.brier_score,
     )
-
-
-def _pct(hit: int, total: int) -> float:
-    return round(hit / total * 100, 1) if total > 0 else 0.0
 
 
 @router.get("/api/evaluation", response_model=DailyEvaluation)
@@ -174,27 +87,7 @@ async def daily_evaluation(
     matches: list[MatchEvaluation] = []
     summary_score_hit = 0
 
-    def _new_accum() -> dict:
-        return {"evaluated": 0, "result_hit": 0, "over_hit": 0, "btts_hit": 0,
-                "confident_evaluated": 0, "confident_result_hit": 0, "brier_sum": 0.0}
-
-    acc_b, acc_c, acc_d = _new_accum(), _new_accum(), _new_accum()
-
-    def _accumulate(pat: PatternEvaluation | None, acc: dict) -> None:
-        if pat is None:
-            return
-        acc["evaluated"] += 1
-        acc["brier_sum"] += pat.brier_score
-        if pat.result_hit:
-            acc["result_hit"] += 1
-        if pat.over_25_hit:
-            acc["over_hit"] += 1
-        if pat.btts_hit:
-            acc["btts_hit"] += 1
-        if pat.is_confident:
-            acc["confident_evaluated"] += 1
-            if pat.result_hit:
-                acc["confident_result_hit"] += 1
+    acc_b, acc_c, acc_d = EvalAccumulator(), EvalAccumulator(), EvalAccumulator()
 
     for row in rows:
         ft_h, ft_a = row.actual_ft_home, row.actual_ft_away
@@ -221,13 +114,13 @@ async def daily_evaluation(
             actual_btts=actual_btts, min_matches=ANALYSIS.eval_min_matches,
             league_name=row.league_name,
         )
-        pat_b = _evaluate_pattern(row.pattern_ft_b, **eval_kwargs)
-        pat_c = _evaluate_pattern(row.pattern_ft_c, **eval_kwargs)
-        pat_d = _evaluate_pattern(row.pattern_ft_d, **eval_kwargs)
+        pat_b = evaluate_pattern(row.pattern_ft_b, **eval_kwargs)
+        pat_c = evaluate_pattern(row.pattern_ft_c, **eval_kwargs)
+        pat_d = evaluate_pattern(row.pattern_ft_d, **eval_kwargs)
 
-        _accumulate(pat_b, acc_b)
-        _accumulate(pat_c, acc_c)
-        _accumulate(pat_d, acc_d)
+        acc_b.accumulate(pat_b)
+        acc_c.accumulate(pat_c)
+        acc_d.accumulate(pat_d)
 
         if score_hit:
             summary_score_hit += 1
@@ -248,55 +141,52 @@ async def daily_evaluation(
             result=actual_result,
             over_25=actual_over_25,
             btts=actual_btts,
-            pattern_b=pat_b,
-            pattern_c=pat_c,
-            pattern_d=pat_d,
+            pattern_b=_core_to_schema(pat_b),
+            pattern_c=_core_to_schema(pat_c),
+            pattern_d=_core_to_schema(pat_d),
             score_list=all_scores,
             score_list_hit=score_hit,
         ))
 
     total = len(matches)
 
-    def _brier(acc: dict) -> float | None:
-        return round(acc["brier_sum"] / acc["evaluated"], 4) if acc["evaluated"] > 0 else None
-
     summary = EvaluationSummary(
         total_matches=total,
-        evaluated=acc_b["evaluated"],
-        result_hit=acc_b["result_hit"],
-        result_hit_pct=_pct(acc_b["result_hit"], acc_b["evaluated"]),
-        over_25_hit=acc_b["over_hit"],
-        over_25_hit_pct=_pct(acc_b["over_hit"], acc_b["evaluated"]),
-        btts_hit=acc_b["btts_hit"],
-        btts_hit_pct=_pct(acc_b["btts_hit"], acc_b["evaluated"]),
+        evaluated=acc_b.evaluated,
+        result_hit=acc_b.result_hit,
+        result_hit_pct=pct(acc_b.result_hit, acc_b.evaluated),
+        over_25_hit=acc_b.over_hit,
+        over_25_hit_pct=pct(acc_b.over_hit, acc_b.evaluated),
+        btts_hit=acc_b.btts_hit,
+        btts_hit_pct=pct(acc_b.btts_hit, acc_b.evaluated),
         score_list_hit=summary_score_hit,
-        score_list_hit_pct=_pct(summary_score_hit, total),
-        evaluated_c=acc_c["evaluated"],
-        c_result_hit=acc_c["result_hit"],
-        c_result_hit_pct=_pct(acc_c["result_hit"], acc_c["evaluated"]),
-        c_over_25_hit=acc_c["over_hit"],
-        c_over_25_hit_pct=_pct(acc_c["over_hit"], acc_c["evaluated"]),
-        c_btts_hit=acc_c["btts_hit"],
-        c_btts_hit_pct=_pct(acc_c["btts_hit"], acc_c["evaluated"]),
-        evaluated_d=acc_d["evaluated"],
-        d_result_hit=acc_d["result_hit"],
-        d_result_hit_pct=_pct(acc_d["result_hit"], acc_d["evaluated"]),
-        d_over_25_hit=acc_d["over_hit"],
-        d_over_25_hit_pct=_pct(acc_d["over_hit"], acc_d["evaluated"]),
-        d_btts_hit=acc_d["btts_hit"],
-        d_btts_hit_pct=_pct(acc_d["btts_hit"], acc_d["evaluated"]),
-        confident_evaluated=acc_b["confident_evaluated"],
-        confident_result_hit=acc_b["confident_result_hit"],
-        confident_result_hit_pct=_pct(acc_b["confident_result_hit"], acc_b["confident_evaluated"]),
-        confident_c_evaluated=acc_c["confident_evaluated"],
-        confident_c_result_hit=acc_c["confident_result_hit"],
-        confident_c_result_hit_pct=_pct(acc_c["confident_result_hit"], acc_c["confident_evaluated"]),
-        confident_d_evaluated=acc_d["confident_evaluated"],
-        confident_d_result_hit=acc_d["confident_result_hit"],
-        confident_d_result_hit_pct=_pct(acc_d["confident_result_hit"], acc_d["confident_evaluated"]),
-        brier_result_b=_brier(acc_b),
-        brier_result_c=_brier(acc_c),
-        brier_result_d=_brier(acc_d),
+        score_list_hit_pct=pct(summary_score_hit, total),
+        evaluated_c=acc_c.evaluated,
+        c_result_hit=acc_c.result_hit,
+        c_result_hit_pct=pct(acc_c.result_hit, acc_c.evaluated),
+        c_over_25_hit=acc_c.over_hit,
+        c_over_25_hit_pct=pct(acc_c.over_hit, acc_c.evaluated),
+        c_btts_hit=acc_c.btts_hit,
+        c_btts_hit_pct=pct(acc_c.btts_hit, acc_c.evaluated),
+        evaluated_d=acc_d.evaluated,
+        d_result_hit=acc_d.result_hit,
+        d_result_hit_pct=pct(acc_d.result_hit, acc_d.evaluated),
+        d_over_25_hit=acc_d.over_hit,
+        d_over_25_hit_pct=pct(acc_d.over_hit, acc_d.evaluated),
+        d_btts_hit=acc_d.btts_hit,
+        d_btts_hit_pct=pct(acc_d.btts_hit, acc_d.evaluated),
+        confident_evaluated=acc_b.confident_evaluated,
+        confident_result_hit=acc_b.confident_result_hit,
+        confident_result_hit_pct=pct(acc_b.confident_result_hit, acc_b.confident_evaluated),
+        confident_c_evaluated=acc_c.confident_evaluated,
+        confident_c_result_hit=acc_c.confident_result_hit,
+        confident_c_result_hit_pct=pct(acc_c.confident_result_hit, acc_c.confident_evaluated),
+        confident_d_evaluated=acc_d.confident_evaluated,
+        confident_d_result_hit=acc_d.confident_result_hit,
+        confident_d_result_hit_pct=pct(acc_d.confident_result_hit, acc_d.confident_evaluated),
+        brier_result_b=brier_avg(acc_b.brier_sum, acc_b.evaluated),
+        brier_result_c=brier_avg(acc_c.brier_sum, acc_c.evaluated),
+        brier_result_d=brier_avg(acc_d.brier_sum, acc_d.evaluated),
     )
 
     return DailyEvaluation(

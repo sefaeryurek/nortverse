@@ -1,4 +1,4 @@
-"""Audit, self-test, prune, restore ve recompute komutları."""
+"""Audit, self-test, prune, restore, recompute ve backtest komutları."""
 
 import asyncio
 import logging
@@ -515,6 +515,164 @@ def recompute_patterns_cmd(
             f"\n[bold green]Recompute tamamlandı:[/bold green] "
             f"[green]{processed} güncellendi[/green] · [red]{errors} hata[/red]"
         )
+
+    asyncio.run(_run())
+
+
+def backtest_cmd(
+    from_date: str = typer.Option(..., "--from", help="Başlangıç tarihi (YYYY-MM-DD)"),
+    to_date: str = typer.Option(..., "--to", help="Bitiş tarihi (YYYY-MM-DD)"),
+    min_matches: int = typer.Option(5, "--min-matches", help="Pattern en az N eşleşme"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Tarih aralığında değerlendirme — strateji değişikliklerinin etkisini ölç."""
+    _setup_logging("DEBUG" if verbose else "WARNING")
+
+    from datetime import date, datetime, timedelta
+    from sqlalchemy import select
+    from app.analysis.evaluation import (
+        EvalAccumulator,
+        evaluate_pattern,
+        pct,
+        brier_avg,
+    )
+    from app.config import ISTANBUL_TZ
+    from app.db.connection import get_session
+    from app.db.models import Match
+
+    try:
+        d_from = date.fromisoformat(from_date)
+        d_to = date.fromisoformat(to_date)
+    except ValueError:
+        console.print("[red]Geçersiz tarih formatı. Kullanım: YYYY-MM-DD[/red]")
+        raise typer.Exit(1)
+
+    if d_from > d_to:
+        console.print("[red]--from tarihi --to'dan sonra olamaz.[/red]")
+        raise typer.Exit(1)
+
+    async def _run() -> None:
+        start = datetime(d_from.year, d_from.month, d_from.day, tzinfo=ISTANBUL_TZ)
+        end = datetime(d_to.year, d_to.month, d_to.day, tzinfo=ISTANBUL_TZ) + timedelta(days=1)
+
+        async with get_session() as session:
+            stmt = (
+                select(
+                    Match.match_id, Match.league_name,
+                    Match.actual_ft_home, Match.actual_ft_away,
+                    Match.pattern_ft_b, Match.pattern_ft_c, Match.pattern_ft_d,
+                    Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
+                )
+                .where(
+                    Match.deleted_at.is_(None),
+                    Match.kickoff_time >= start,
+                    Match.kickoff_time < end,
+                    Match.actual_ft_home.isnot(None),
+                    Match.actual_ft_away.isnot(None),
+                )
+                .order_by(Match.kickoff_time)
+            )
+            rows = (await session.execute(stmt)).all()
+
+        if not rows:
+            console.print(f"[yellow]{d_from} — {d_to} aralığında bitmiş maç yok.[/yellow]")
+            return
+
+        acc_b, acc_c, acc_d = EvalAccumulator(), EvalAccumulator(), EvalAccumulator()
+        total_matches = 0
+        score_list_hit = 0
+
+        for row in rows:
+            ft_h, ft_a = row.actual_ft_home, row.actual_ft_away
+            if ft_h > ft_a:
+                actual_result = "1"
+            elif ft_h == ft_a:
+                actual_result = "X"
+            else:
+                actual_result = "2"
+
+            actual_over_25 = (ft_h + ft_a) > 2
+            actual_btts = ft_h > 0 and ft_a > 0
+
+            eval_kwargs = dict(
+                actual_result=actual_result, actual_over_25=actual_over_25,
+                actual_btts=actual_btts, min_matches=min_matches,
+                league_name=row.league_name,
+            )
+            pat_b = evaluate_pattern(row.pattern_ft_b, **eval_kwargs)
+            pat_c = evaluate_pattern(row.pattern_ft_c, **eval_kwargs)
+            pat_d = evaluate_pattern(row.pattern_ft_d, **eval_kwargs)
+
+            acc_b.accumulate(pat_b)
+            acc_c.accumulate(pat_c)
+            acc_d.accumulate(pat_d)
+
+            all_scores = (
+                list(row.ft_scores_1 or [])
+                + list(row.ft_scores_x or [])
+                + list(row.ft_scores_2 or [])
+            )
+            if f"{ft_h}-{ft_a}" in all_scores:
+                score_list_hit += 1
+            total_matches += 1
+
+        console.print(Panel.fit(
+            f"[bold]Backtest Sonuçları[/bold]\n"
+            f"Tarih aralığı: {d_from} → {d_to}\n"
+            f"Toplam maç: {total_matches:,} · min_matches={min_matches}",
+            border_style="cyan",
+        ))
+
+        t = Table(title="Pattern Performansı")
+        t.add_column("Metrik", style="white")
+        t.add_column("A1 (Pattern B)", style="cyan", justify="right")
+        t.add_column("A2 (Pattern C)", style="green", justify="right")
+        t.add_column("A3 (Pattern D)", style="yellow", justify="right")
+
+        def _val(acc: EvalAccumulator, field: str) -> str:
+            v = getattr(acc, field)
+            return str(v) if isinstance(v, int) else f"{v:.4f}"
+
+        t.add_row("Değerlendirilen", str(acc_b.evaluated), str(acc_c.evaluated), str(acc_d.evaluated))
+        t.add_row(
+            "MS İsabet",
+            f"{acc_b.result_hit} ({pct(acc_b.result_hit, acc_b.evaluated):.1f}%)",
+            f"{acc_c.result_hit} ({pct(acc_c.result_hit, acc_c.evaluated):.1f}%)",
+            f"{acc_d.result_hit} ({pct(acc_d.result_hit, acc_d.evaluated):.1f}%)",
+        )
+        t.add_row(
+            "Üst/Alt İsabet",
+            f"{acc_b.over_hit} ({pct(acc_b.over_hit, acc_b.evaluated):.1f}%)",
+            f"{acc_c.over_hit} ({pct(acc_c.over_hit, acc_c.evaluated):.1f}%)",
+            f"{acc_d.over_hit} ({pct(acc_d.over_hit, acc_d.evaluated):.1f}%)",
+        )
+        t.add_row(
+            "KG İsabet",
+            f"{acc_b.btts_hit} ({pct(acc_b.btts_hit, acc_b.evaluated):.1f}%)",
+            f"{acc_c.btts_hit} ({pct(acc_c.btts_hit, acc_c.evaluated):.1f}%)",
+            f"{acc_d.btts_hit} ({pct(acc_d.btts_hit, acc_d.evaluated):.1f}%)",
+        )
+        t.add_row(
+            "Güvenli MS",
+            f"{acc_b.confident_result_hit}/{acc_b.confident_evaluated} ({pct(acc_b.confident_result_hit, acc_b.confident_evaluated):.1f}%)",
+            f"{acc_c.confident_result_hit}/{acc_c.confident_evaluated} ({pct(acc_c.confident_result_hit, acc_c.confident_evaluated):.1f}%)",
+            f"{acc_d.confident_result_hit}/{acc_d.confident_evaluated} ({pct(acc_d.confident_result_hit, acc_d.confident_evaluated):.1f}%)",
+        )
+        b_brier = brier_avg(acc_b.brier_sum, acc_b.evaluated)
+        c_brier = brier_avg(acc_c.brier_sum, acc_c.evaluated)
+        d_brier = brier_avg(acc_d.brier_sum, acc_d.evaluated)
+        t.add_row(
+            "Brier Skoru",
+            f"{b_brier:.4f}" if b_brier is not None else "—",
+            f"{c_brier:.4f}" if c_brier is not None else "—",
+            f"{d_brier:.4f}" if d_brier is not None else "—",
+        )
+        t.add_row(
+            "Skor Listesi İsabet",
+            f"{score_list_hit}/{total_matches} ({pct(score_list_hit, total_matches):.1f}%)",
+            "", "",
+        )
+        console.print(t)
 
     asyncio.run(_run())
 

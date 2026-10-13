@@ -24,6 +24,7 @@ from app.cli.archive_cmds import (
 from app.cli.audit_cmds import (
     audit_db_cmd,
     audit_patterns_cmd,
+    backtest_cmd,
     prune_non_league_cmd,
     recompute_patterns_cmd,
     restore_deleted_cmd,
@@ -70,6 +71,7 @@ app.command("audit-db")(audit_db_cmd)
 app.command("audit-patterns")(audit_patterns_cmd)
 app.command("recompute-patterns")(recompute_patterns_cmd)
 app.command("self-test")(self_test_cmd)
+app.command("backtest")(backtest_cmd)
 
 
 @app.command()
