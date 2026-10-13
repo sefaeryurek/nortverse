@@ -27,6 +27,15 @@ _ht_observed_day: str = ""
 
 _stats_cache: dict[str, tuple[float, dict]] = {}
 _STATS_TTL = 3600.0
+_STATS_CACHE_MAX = 300
+
+
+def _stats_cache_put(key: str, data: dict) -> None:
+    now = time.time()
+    _stats_cache[key] = (now, data)
+    if len(_stats_cache) > _STATS_CACHE_MAX:
+        oldest = min(_stats_cache, key=lambda k: _stats_cache[k][0])
+        _stats_cache.pop(oldest, None)
 
 
 class LiveHTMatch(BaseModel):
@@ -197,7 +206,7 @@ async def get_live_ht_stats(ht_home: int, ht_away: int) -> LiveHTStats:
     count = len(rows)
     if count == 0:
         data = {"ht_score": cache_key, "archive_count": 0}
-        _stats_cache[cache_key] = (now, data)
+        _stats_cache_put(cache_key, data)
         return LiveHTStats(**data)
 
     ft_1, ft_x, ft_2 = 0, 0, 0
@@ -248,5 +257,5 @@ async def get_live_ht_stats(ht_home: int, ht_away: int) -> LiveHTStats:
             for s, c in top_scores
         ],
     }
-    _stats_cache[cache_key] = (now, data)
+    _stats_cache_put(cache_key, data)
     return LiveHTStats(**data)

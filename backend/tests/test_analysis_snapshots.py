@@ -381,7 +381,7 @@ async def test_cached_analysis_refreshes_snapshot_written_by_another_process(mon
 
     monkeypatch.setattr(services, "get_session", fake_session)
     monkeypatch.setattr(services, "_snapshot_checked_at", {})
-    monkeypatch.setattr(services, "_snapshot_finalized", set())
+    monkeypatch.setattr(services, "_snapshot_finalized", {})
     cache_put = MagicMock()
     monkeypatch.setattr(services, "cache_put", cache_put)
     response = services.AnalyzeResponse(
@@ -420,7 +420,7 @@ async def test_db_first_snapshot_rejects_stale_or_deleted_match(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cached_analysis_does_not_query_after_snapshot_is_final(monkeypatch):
-    monkeypatch.setattr(services, "_snapshot_finalized", {f"{RULE_VERSION}:123"})
+    monkeypatch.setattr(services, "_snapshot_finalized", {f"{RULE_VERSION}:123": 0.0})
     session_factory = MagicMock()
     monkeypatch.setattr(services, "get_session", session_factory)
     response = services.AnalyzeResponse(

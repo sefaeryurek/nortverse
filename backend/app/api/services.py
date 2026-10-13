@@ -52,7 +52,17 @@ _analysis_cached_at: dict[str, float] = {}
 analysis_cache: OrderedDict[str, AnalyzeResponse] = OrderedDict()
 _analysis_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
 _snapshot_checked_at: dict[str, float] = {}
-_snapshot_finalized: set[str] = set()
+_snapshot_finalized: dict[str, float] = {}
+
+_SNAPSHOT_FINALIZED_MAX = 600
+
+
+def _snapshot_finalized_put(key: str) -> None:
+    _snapshot_finalized[key] = time.monotonic()
+    if len(_snapshot_finalized) > _SNAPSHOT_FINALIZED_MAX:
+        oldest = min(_snapshot_finalized, key=_snapshot_finalized.get)  # type: ignore[arg-type]
+        _snapshot_finalized.pop(oldest, None)
+
 
 fixture_cache: dict[str, tuple[float, list]] = {}
 _FIXTURE_CACHE_MAX = 30
@@ -84,7 +94,7 @@ def cache_put(match_id: str, value: AnalyzeResponse) -> None:
         _analysis_cached_at.pop(evicted, None)
         snapshot_key = _snapshot_cache_key(evicted)
         _snapshot_checked_at.pop(snapshot_key, None)
-        _snapshot_finalized.discard(snapshot_key)
+        _snapshot_finalized.pop(snapshot_key, None)
 
 
 def cache_get(match_id: str) -> AnalyzeResponse | None:
@@ -96,7 +106,7 @@ def cache_get(match_id: str) -> AnalyzeResponse | None:
         _analysis_cached_at.pop(match_id, None)
         snapshot_key = _snapshot_cache_key(match_id)
         _snapshot_checked_at.pop(snapshot_key, None)
-        _snapshot_finalized.discard(snapshot_key)
+        _snapshot_finalized.pop(snapshot_key, None)
         return None
     analysis_cache.move_to_end(match_id)
     return analysis_cache[match_id]
@@ -166,7 +176,7 @@ async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) 
     async with get_session() as session:
         snapshot = await session.get(AnalysisSnapshot, (row.match_id, RULE_VERSION))
         if snapshot is not None:
-            _snapshot_finalized.add(_snapshot_cache_key(row.match_id))
+            _snapshot_finalized_put(_snapshot_cache_key(row.match_id))
             return snapshot.picks if isinstance(snapshot.picks, list) else []
         if row.analyzed_at is None:
             return []
@@ -193,7 +203,7 @@ async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) 
             patterns=patterns,
         )
         if picks is not None:
-            _snapshot_finalized.add(_snapshot_cache_key(row.match_id))
+            _snapshot_finalized_put(_snapshot_cache_key(row.match_id))
             return picks
     return []
 
@@ -221,7 +231,7 @@ async def _refresh_cached_recommendations(response: AnalyzeResponse) -> AnalyzeR
         log.warning("Snapshot cache yenilemesi başarısız [%s]: %s", response.match_id, exc)
         return response
     if snapshot is not None:
-        _snapshot_finalized.add(snapshot_key)
+        _snapshot_finalized_put(snapshot_key)
     picks = snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []
     if [item.model_dump() for item in response.ft_recommendations] == picks:
         return response
@@ -523,7 +533,9 @@ def enqueue_bg_analysis(matches: list) -> None:
     if bg_queue is None:
         return
     if len(_bg_queued) >= _BG_QUEUED_MAX:
-        _bg_queued.clear()
+        to_remove = list(_bg_queued)[:_BG_QUEUED_MAX // 2]
+        for item in to_remove:
+            _bg_queued.discard(item)
     for m in matches:
         if cache_get(m.match_id) is None and m.match_id not in _bg_queued:
             _bg_queued.add(m.match_id)
