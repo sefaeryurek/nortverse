@@ -7,6 +7,7 @@ Slim hub: app oluşturma, middleware, lifespan, router kayıtları.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -18,6 +19,23 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+
+def _configure_logging() -> None:
+    level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    fmt = os.environ.get("LOG_FORMAT", "text")
+    if fmt == "json":
+        log_fmt = '{"time":"%(asctime)s","level":"%(levelname)s","name":"%(name)s","msg":"%(message)s"}'
+    else:
+        log_fmt = "%(asctime)s %(levelname)-8s [%(name)s] %(message)s"
+    logging.basicConfig(level=level, format=log_fmt, force=True)
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+
+
+_configure_logging()
 
 from app.config import ISTANBUL_TZ
 from app.analysis.persist import PatternComputationError
@@ -105,9 +123,17 @@ def _recent_score_date(raw_date: str | None) -> bool:
     return today - timedelta(days=1) <= target <= today
 
 
+_req_log = logging.getLogger("nortverse.request")
+
+
 @app.middleware("http")
 async def add_cache_headers(request, call_next):
+    import time as _time
+    t0 = _time.monotonic()
     response = await call_next(request)
+    elapsed_ms = round((_time.monotonic() - t0) * 1000)
+    if request.url.path.startswith("/api/"):
+        _req_log.info("%s %s → %d (%dms)", request.method, request.url.path, response.status_code, elapsed_ms)
     if request.method in ("GET", "HEAD") and response.status_code == 200:
         for prefix, rule in _CACHE_RULES.items():
             if request.url.path == prefix:

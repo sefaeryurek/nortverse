@@ -3,8 +3,13 @@ REM Nortverse - Gunluk PostgreSQL yedekleme
 REM Task Scheduler ile her sabah 07:00'de calistirilir
 REM Son 7 yedegi tutar, eskileri siler
 
-set LOGFILE=C:\Users\Sefa\Desktop\NORTVERSE - CODEX\scripts\logs\backup.log
+set LOGDIR=C:\Users\Sefa\Desktop\NORTVERSE - CODEX\scripts\logs
+set LOGFILE=%LOGDIR%\backup.log
 set BACKUP_DIR=C:\Users\Sefa\Desktop\NORTVERSE - CODEX\backups
+set MIN_BACKUP_SIZE=1048576
+
+REM Log klasoru yoksa olustur
+if not exist "%LOGDIR%" mkdir "%LOGDIR%"
 
 REM Backup klasoru yoksa olustur
 if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%"
@@ -30,7 +35,13 @@ REM pg_dump ile yedek al (custom format + sikistirma — hizli restore icin)
 docker exec nortverse-db-1 pg_dump -U nortverse -d nortverse --format=custom --compress=9 > "%BACKUP_FILE%" 2>> "%LOGFILE%"
 
 if %errorlevel% equ 0 (
-    echo [%date% %time%] Yedekleme basarili: %BACKUP_FILE% >> "%LOGFILE%"
+    REM Dosya boyutu kontrolu (en az 1 MB olmali)
+    for %%A in ("%BACKUP_FILE%") do set FSIZE=%%~zA
+    if %FSIZE% LSS %MIN_BACKUP_SIZE% (
+        echo [%date% %time%] UYARI: Yedek dosyasi cok kucuk (%FSIZE% byte) — bozuk olabilir >> "%LOGFILE%"
+    ) else (
+        echo [%date% %time%] Yedekleme basarili: %BACKUP_FILE% (%FSIZE% byte) >> "%LOGFILE%"
+    )
 ) else (
     echo [%date% %time%] HATA: Yedekleme basarisiz (exit code: %errorlevel%) >> "%LOGFILE%"
     exit /b 1
