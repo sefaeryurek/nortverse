@@ -2,24 +2,12 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { ApiError, getLiveHTMatches, getMatchedMatches } from "@/lib/api";
+import { getLiveHTMatches, getMatchedMatches } from "@/lib/api";
 import type { LiveHTMatch, MatchedMatch, MatchedMatchesResponse } from "@/lib/api";
 import { leagueDisplay } from "@/lib/leagues";
+import { formatTime } from "@/lib/dates";
 
-const POLL_INTERVAL = 20_000;
-
-function formatKickoff(iso: string | null): string {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleTimeString("tr-TR", {
-      timeZone: "Europe/Istanbul",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
-}
+const POLL_INTERVAL = 45_000;
 
 interface HTFilteredStats {
   archive: string;
@@ -377,7 +365,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
 
         {match.kickoff_time && (
           <span className="flex-shrink-0" style={{ fontFamily: "var(--nv-font-mono)", fontSize: 11, color: "var(--nv-text-tertiary)" }}>
-            {formatKickoff(match.kickoff_time)}
+            {formatTime(match.kickoff_time)}
           </span>
         )}
 

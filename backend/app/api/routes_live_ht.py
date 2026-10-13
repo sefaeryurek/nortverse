@@ -12,7 +12,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import Integer, func, select
+from sqlalchemy import func, select
 
 from app.config import ISTANBUL_TZ
 from app.api.live_snapshot import get_live_snapshot

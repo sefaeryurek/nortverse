@@ -11,7 +11,7 @@ function PeriodBadge({ period }: { period: "ht" | "h2" | "ft" }) {
       style={{
         backgroundColor: "var(--nv-bg-elevated)",
         color: "var(--nv-text-secondary)",
-        fontSize: "8px",
+        fontSize: "var(--nv-text-xs)",
       }}
     >
       {label}

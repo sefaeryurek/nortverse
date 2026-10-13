@@ -426,7 +426,7 @@ async function ResultList({ date, q }: { date: string; q: string }) {
             style={{
               fontSize: "var(--nv-text-sm)",
               backgroundColor: "var(--nv-accent-blue)",
-              color: "var(--nv-text-inverse)",
+              color: "var(--nv-text-on-accent)",
               borderRadius: "var(--nv-radius-md)",
             }}
           >
