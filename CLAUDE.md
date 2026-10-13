@@ -68,6 +68,10 @@ python -m app.cli.main repair-archive --apply        # Sorunlu kayıtları soft-
 python -m app.cli.main normalize-leagues             # Lig adlarını normalize et (dry-run)
 python -m app.cli.main normalize-leagues --apply     # Lig adlarını kanonik forma çevir
 
+# Backtest (Sprint 76)
+python -m app.cli.main backtest --from 2025-01-01 --to 2025-12-31  # tarih aralığında strateji testi
+python -m app.cli.main backtest --from 2026-01-01 --to 2026-10-01 --min-matches 10  # min eşleşme filtresi
+
 # Frontend (ayrı terminalde, frontend/ dizininden)
 cd ../frontend
 npm run dev                                          # http://localhost:3000
@@ -224,6 +228,7 @@ nortverse/
 │   │   │   ├── pattern_stats.py   # PatternResult model + compute_stats — ~130 istatistik alanı
 │   │   │   ├── persist.py         # compute_all_patterns + update_match_patterns (Sprint 8)
 │   │   │   ├── correlation.py      # Poisson korelasyon faktörleri — pazar çiftleri arası (Sprint 19)
+│   │   │   ├── evaluation.py      # Değerlendirme çekirdek mantığı — API + CLI ortak (Sprint 76)
 │   │   │   ├── repair.py          # detect_issues + needs_normalization — tarihsel veri onarımı (Sprint 20)
 │   │   │   ├── score_snapshots.py # Skor snapshot yönetimi
 │   │   │   ├── skip_cache.py      # Atlanan maç cache'i
@@ -279,6 +284,7 @@ nortverse/
 │   │   ├── test_services.py             # API services birim testleri (26 test, Sprint 23)
 │   │   ├── test_config.py              # Config env override testleri (25+2 test, Sprint 23+37)
 │   │   ├── test_evaluation.py          # Günlük değerlendirme testleri (19 test, Sprint 37)
+│   │   ├── test_evaluation_core.py    # Değerlendirme çekirdek mantığı testleri (20 test, Sprint 76)
 │   │   ├── test_pattern_d.py          # Cosine similarity testleri (18 test, Sprint 46)
 │   │   ├── test_live_ht.py            # Canlı İY eşleşme testleri (17 test, Sprint 47)
 │   │   └── test_temporal_weights.py   # Temporal weighting testleri (Sprint 53)
@@ -1358,6 +1364,24 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Arşiv genişleme devam ediyor (başka seanslarda):** 30,294 → 33,707 aktif maç (+3,413)
 - **Sonuç:** 768 backend + 206 frontend + 28 E2E = **1002 toplam test**
 
+### Sprint 76 — TAMAMLANDI ✅ (Backtest CLI + Değerlendirme Modülü DRY)
+- **Bağlam:** Değerlendirme mantığı (log-odds shrinkage, lig bazlı baz oranları, Brier skoru) sadece API endpoint'inde yaşıyordu — CLI backtest komutu için tekrar yazılması gerekiyordu.
+- **`app/analysis/evaluation.py` (yeni modül):**
+  - `evaluate_pattern()`: Log-odds shrinkage + lig bazlı baz oranları ile pattern değerlendirmesi
+  - `PatternEval` dataclass: Değerlendirme sonucu (result/O-U/KG hit, margin, confident, Brier)
+  - `EvalAccumulator` dataclass: Çoklu maç üzerinden toplu istatistik biriktirme + `merge()` desteği
+  - `get_base_rates()`, `pct()`, `brier_avg()` yardımcı fonksiyonlar
+  - `BASE_RESULT` ve `LEAGUE_BASE_RATES` sabitleri (7 lig)
+- **`routes_evaluation.py` refactored:** 307 → 197 satır; tüm hesaplama mantığı `evaluation.py`'den import edilir, endpoint sadece DB sorgusu + schema dönüşümü yapar
+- **`backtest` CLI komutu (`audit_cmds.py`):**
+  - `--from` ve `--to` tarih aralığı (zorunlu), `--min-matches` filtresi (default 5)
+  - Tarih aralığındaki tüm bitmiş maçları DB'den çeker
+  - B/C/D pattern'leri `evaluate_pattern()` ile değerlendirir
+  - Rich tablo ile özet: MS/O-U/KG isabet, güvenli MS, Brier skoru, skor listesi isabet
+  - Kullanım: `python -m app.cli.main backtest --from 2025-01-01 --to 2025-12-31`
+- **Testler:** 20 yeni `test_evaluation_core.py` (get_base_rates, pct, brier_avg, evaluate_pattern, EvalAccumulator) + mevcut `test_evaluation.py` import yolları güncellendi
+- **Sonuç:** 908 backend + 206 frontend + 28 E2E = **1142 toplam test** (tüm sprint'ler boyunca eklenen Sprint 66-75 testleri dahil)
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1648,14 +1672,14 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 | Duplicate | 0 |
 | Mantıksal duplicate | 0 |
 
-### Test Durumu (Sprint 54 sonrası)
+### Test Durumu (Sprint 76 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 768 | ✅ Yeşil |
+| **Backend** | pytest | 908 | ✅ Yeşil |
 | **Frontend birim** | vitest | 206 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 1002 | — |
+| **Toplam** | — | 1142 | — |
 
 ### Sıradaki Adımlar
 
