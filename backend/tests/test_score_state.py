@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 
 import pytest
 
+from app.config import ISTANBUL_TZ
 from app.api.score_state import MatchState, resolve_match_state, _utc, LIVE_FRESH_SECONDS
 from app.scraper.fixture_scores import FixtureScore
 
@@ -31,7 +32,7 @@ class TestUtc:
         assert result.tzinfo == timezone.utc
 
     def test_aware_datetime(self):
-        dt = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone(timedelta(hours=3)))
+        dt = datetime(2026, 1, 1, 12, 0, 0, tzinfo=ISTANBUL_TZ)
         result = _utc(dt)
         assert result is not None
         assert result.tzinfo == timezone.utc

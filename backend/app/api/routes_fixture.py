@@ -11,6 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.config import ISTANBUL_TZ
 from app.analysis.league_filter import is_supported_league
 from app.api.schemas import FixtureMatchOut
 from app.api.live_snapshot import get_live_snapshot
@@ -58,7 +59,7 @@ async def _enrich_prediction_status(items: list[dict]) -> dict[str, bool]:
 
 async def _bulletin_items(items: list[dict], req_date: date) -> list[FixtureMatchOut]:
     now = datetime.now(timezone.utc)
-    today = now.astimezone(timezone(timedelta(hours=3))).date()
+    today = now.astimezone(ISTANBUL_TZ).date()
     live_snapshot = await get_live_snapshot() if today - timedelta(days=1) <= req_date <= today else None
 
     pred_status = await _enrich_prediction_status(items)
@@ -106,7 +107,7 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz tarih formatı. Kullanım: YYYY-MM-DD")
 
-    today = datetime.now(timezone(timedelta(hours=3))).date()
+    today = datetime.now(ISTANBUL_TZ).date()
     cache_key = parsed_date.isoformat() if parsed_date else today.isoformat()
     req_date = parsed_date or today
 
@@ -140,12 +141,11 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
             if not isinstance(db_row.matches_json, list):
                 raise ValueError("Fixture cache must contain a list")
             result = []
-            istanbul_tz = timezone(timedelta(hours=3))
             for raw in db_row.matches_json:
                 match = FixtureMatchOut(**raw)
                 if not is_supported_league(match.league_name, match.league_code):
                     continue
-                if match.kickoff_time and datetime.fromisoformat(match.kickoff_time).astimezone(istanbul_tz).date() != req_date:
+                if match.kickoff_time and datetime.fromisoformat(match.kickoff_time).astimezone(ISTANBUL_TZ).date() != req_date:
                     continue
                 result.append(raw)
             fixture_cache_put(cache_key, result)

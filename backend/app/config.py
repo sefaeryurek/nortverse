@@ -5,7 +5,10 @@ Tüm değerler env var ile override edilebilir. Env var yoksa mevcut default kul
 
 import os
 from dataclasses import dataclass, field
+from datetime import timedelta, timezone
 from pathlib import Path
+
+ISTANBUL_TZ = timezone(timedelta(hours=3))
 
 
 def _env_float(key: str, default: float) -> float:

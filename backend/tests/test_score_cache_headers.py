@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
+from app.config import ISTANBUL_TZ
+
 import pytest
 from starlette.requests import Request
 from starlette.responses import Response
@@ -13,7 +15,7 @@ from app.api.main import add_cache_headers
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", ["/api/fixture", "/api/results"])
 async def test_today_and_yesterday_use_short_score_cache(path):
-    today = datetime.now(timezone(timedelta(hours=3))).date()
+    today = datetime.now(ISTANBUL_TZ).date()
 
     async def call_next(_request):
         return Response(status_code=200)

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.api import live_snapshot as snapshots
+from app.config import ISTANBUL_TZ
 from app.scraper.fixture_scores import FixtureScore
 
 
@@ -57,7 +58,7 @@ async def test_quick_board_scores_are_available_before_slow_minute_source(monkey
 
     async def board(day):
         days.append(day)
-        today = datetime.now(timezone(timedelta(hours=3))).date()
+        today = datetime.now(ISTANBUL_TZ).date()
         if day == today - timedelta(days=1):
             await gate.wait()
         return {"102": FixtureScore("102", "live", 1, 0)}
@@ -79,7 +80,7 @@ async def test_quick_board_scores_are_available_before_slow_minute_source(monkey
         assert partial is not None
         assert partial.scores["102"].status == "live"
         assert partial.scores["102"].minute is None
-        today = datetime.now(timezone(timedelta(hours=3))).date()
+        today = datetime.now(ISTANBUL_TZ).date()
         assert set(days) == {today - timedelta(days=1), today, today + timedelta(days=1)}
 
         gate.set()

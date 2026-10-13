@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import ISTANBUL_TZ
 from app.analysis.league_filter import CUP_KEYWORDS, canonical_league_name, is_supported_league
 from app.db.models import Match, ScoreSnapshot
 from app.db.connection import get_session
@@ -93,8 +94,7 @@ async def capture_score_snapshot(
 
 async def capture_prepared_score_snapshots(target_date: date) -> int:
     """Freeze previously prepared analyses only while their matches are still upcoming."""
-    istanbul = timezone(timedelta(hours=3))
-    day_start = datetime.combine(target_date, datetime.min.time(), istanbul)
+    day_start = datetime.combine(target_date, datetime.min.time(), ISTANBUL_TZ)
     day_end = day_start + timedelta(days=1)
     captured_at = datetime.now(timezone.utc)
     async with get_session() as session:

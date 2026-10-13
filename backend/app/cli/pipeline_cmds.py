@@ -2,13 +2,14 @@
 
 import asyncio
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 import typer
 from rich.panel import Panel
 from rich.table import Table
 
+from app.config import ISTANBUL_TZ
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.pattern_b import find_pattern_b_matches
 from app.analysis.pattern_c import find_pattern_c_all_periods
@@ -417,7 +418,7 @@ def refresh_fixture_cache_cmd(
     """Ertesi günün maç listesini analiz yapmadan önbelleğe alır."""
     _setup_logging("INFO")
     day = (datetime.strptime(target_date, "%Y-%m-%d").date() if target_date
-           else datetime.now(timezone(timedelta(hours=3))).date() + timedelta(days=1))
+           else datetime.now(ISTANBUL_TZ).date() + timedelta(days=1))
 
     from app.pipeline.runner import refresh_fixture_cache
 

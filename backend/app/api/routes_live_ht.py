@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import Integer, func, select
 
+from app.config import ISTANBUL_TZ
 from app.api.live_snapshot import get_live_snapshot
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
@@ -76,7 +77,7 @@ def _is_second_half_or_later(minute: str | None) -> bool:
 
 def _cleanup_observed() -> None:
     global _ht_observed_day
-    today = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
+    today = datetime.now(ISTANBUL_TZ).strftime("%Y-%m-%d")
     if _ht_observed_day != today:
         _ht_observed.clear()
         _ht_observed_day = today
@@ -135,7 +136,7 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
 
             missing_ids = [mid for mid in ids if mid not in info]
             if missing_ids:
-                today = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
+                today = datetime.now(ISTANBUL_TZ).strftime("%Y-%m-%d")
                 for date_str in (today,):
                     fc = (await session.execute(
                         select(FixtureCache.matches_json).where(FixtureCache.date == date_str)

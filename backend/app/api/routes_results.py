@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
+from app.config import ISTANBUL_TZ
 from app.analysis.league_filter import is_supported_league
 from app.api.schemas import MatchSummary, ResultOut
 from app.api.live_snapshot import get_live_snapshot
@@ -69,9 +70,9 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz tarih formatı. Kullanım: YYYY-MM-DD")
     else:
-        d = datetime.now(timezone(timedelta(hours=3))).date()
+        d = datetime.now(ISTANBUL_TZ).date()
 
-    day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=timezone(timedelta(hours=3)))
+    day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=ISTANBUL_TZ)
     day_end = day_start + timedelta(days=1)
 
     async with get_session() as session:
@@ -93,16 +94,15 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         ).all()
 
     by_id = {row.match_id: row for row in rows}
-    today = datetime.now(timezone(timedelta(hours=3))).date()
+    today = datetime.now(ISTANBUL_TZ).date()
     live_snapshot = await get_live_snapshot() if today - timedelta(days=1) <= d <= today else None
     fixtures = fixture_row.matches_json if fixture_row and isinstance(fixture_row.matches_json, list) else []
-    istanbul_tz = timezone(timedelta(hours=3))
     listed = [
         item for item in fixtures
         if isinstance(item, dict) and item.get("match_id")
         and (
             (kickoff := _utc_datetime(item.get("kickoff_time"))) is None
-            or kickoff.astimezone(istanbul_tz).date() == d
+            or kickoff.astimezone(ISTANBUL_TZ).date() == d
         )
     ]
     seen = {item["match_id"] for item in listed}

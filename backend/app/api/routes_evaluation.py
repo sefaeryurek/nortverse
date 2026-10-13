@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -15,7 +15,7 @@ from app.api.schemas import (
     MatchEvaluation,
     PatternEvaluation,
 )
-from app.config import ANALYSIS
+from app.config import ANALYSIS, ISTANBUL_TZ
 from app.db.connection import get_session
 from app.db.models import Match
 
@@ -139,17 +139,15 @@ async def daily_evaluation(
     target_date: Optional[str] = Query(None, alias="date"),
 ) -> DailyEvaluation:
     """Belirli bir günün maçları için tahmin vs sonuç karşılaştırması."""
-    istanbul = timezone(timedelta(hours=3))
-
     if target_date:
         try:
             req_date = date.fromisoformat(target_date)
         except ValueError:
             raise HTTPException(400, "Geçersiz tarih formatı. Kullanım: YYYY-MM-DD")
     else:
-        req_date = datetime.now(istanbul).date()
+        req_date = datetime.now(ISTANBUL_TZ).date()
 
-    day_start = datetime(req_date.year, req_date.month, req_date.day, tzinfo=istanbul)
+    day_start = datetime(req_date.year, req_date.month, req_date.day, tzinfo=ISTANBUL_TZ)
     day_end = day_start + timedelta(days=1)
 
     async with get_session() as session:

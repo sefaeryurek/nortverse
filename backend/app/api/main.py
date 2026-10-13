@@ -10,7 +10,7 @@ import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 # Windows'ta Playwright subprocess için ProactorEventLoop gerekiyor
 if sys.platform == "win32":
@@ -19,6 +19,7 @@ if sys.platform == "win32":
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import ISTANBUL_TZ
 from app.analysis.persist import PatternComputationError
 from app.api.live_snapshot import shutdown_live_snapshot
 from app.api.routes_admin import router as admin_router
@@ -96,7 +97,7 @@ _RECENT_SCORE_CACHE = "public, s-maxage=15, stale-while-revalidate=15"
 
 
 def _recent_score_date(raw_date: str | None) -> bool:
-    today = datetime.now(timezone(timedelta(hours=3))).date()
+    today = datetime.now(ISTANBUL_TZ).date()
     try:
         target = date.fromisoformat(raw_date) if raw_date else today
     except ValueError:

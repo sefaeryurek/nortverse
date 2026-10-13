@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from app.config import ISTANBUL_TZ
 from app.scraper.fixture_scores import FixtureScore
 from app.scraper.live_scores import fetch_live_scores
 from app.scraper.source_board import fetch_source_board
@@ -37,7 +38,7 @@ class LiveSnapshot:
 async def _refresh() -> LiveSnapshot | None:
     global _cached, _cached_at, _retry_after
     started_at = time.monotonic()
-    today = datetime.now(timezone(timedelta(hours=3))).date()
+    today = datetime.now(ISTANBUL_TZ).date()
     live_task = asyncio.create_task(fetch_live_scores())
     board_days = (today - timedelta(days=1), today, today + timedelta(days=1))
 

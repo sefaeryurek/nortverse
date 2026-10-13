@@ -116,8 +116,9 @@ class TestCleanupObserved:
 
     def test_keeps_on_same_day(self):
         import app.api.routes_live_ht as mod
-        from datetime import datetime, timedelta, timezone
-        today = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d")
+        from datetime import datetime
+        from app.config import ISTANBUL_TZ
+        today = datetime.now(ISTANBUL_TZ).strftime("%Y-%m-%d")
         mod._ht_observed["test"] = (2, 1)
         mod._ht_observed_day = today
         _cleanup_observed()

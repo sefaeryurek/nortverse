@@ -14,6 +14,7 @@ from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import load_only
 
+from app.config import ISTANBUL_TZ
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import canonical_league_name, is_supported_league
 from app.analysis.score_snapshots import capture_score_snapshot
@@ -228,7 +229,6 @@ async def _upsert(
 async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> int:
     """Keep compact source competition labels and already observed scores."""
     cache_date = cache_day.isoformat()
-    istanbul_tz = timezone(timedelta(hours=3))
     cache_json = [
         {
             "match_id": f.match_id,
@@ -255,7 +255,7 @@ async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> i
                 if old.get("match_id") in new_ids or not old.get("kickoff_time"):
                     continue
                 try:
-                    old_day = datetime.fromisoformat(old["kickoff_time"]).astimezone(istanbul_tz).date()
+                    old_day = datetime.fromisoformat(old["kickoff_time"]).astimezone(ISTANBUL_TZ).date()
                 except (ValueError, TypeError):
                     continue
                 if old_day == cache_day:
@@ -310,10 +310,8 @@ async def run_pipeline(
     """
     stats = {"analyzed": 0, "skipped": 0, "errors": 0}
 
-    IST = timezone(timedelta(hours=3))
-
     async with browser_context() as ctx:
-        cache_day = target_date or datetime.now(IST).date()
+        cache_day = target_date or datetime.now(ISTANBUL_TZ).date()
         source_fixtures = await fetch_istanbul_fixture(cache_day, only_hot=only_hot, ctx=ctx)
         fixtures = [fixture for fixture in source_fixtures
                     if is_supported_league(fixture.league_name, fixture.league_code)]
@@ -470,16 +468,14 @@ def _fixture_score_revision(
 
 async def update_results(target_date: Optional[date] = None) -> dict:
     """Refresh scores from the source calendar pages and update analyzed matches."""
-    istanbul_tz = timezone(timedelta(hours=3))
-
     if target_date:
         d = target_date
     else:
-        now_ist = datetime.now(istanbul_tz)
+        now_ist = datetime.now(ISTANBUL_TZ)
         # Gece 00:00–04:00 İstanbul'da çalışırsa önceki günün maçlarını güncelle
         d = (now_ist - timedelta(days=1)).date() if now_ist.hour < 4 else now_ist.date()
 
-    day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=istanbul_tz)
+    day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=ISTANBUL_TZ)
     day_end = day_start + timedelta(days=1)
 
     stats = {"updated": 0, "not_finished": 0, "errors": 0, "skipped": 0}

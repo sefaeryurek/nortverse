@@ -25,7 +25,7 @@ from typing import Optional
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
-from app.config import SCRAPER
+from app.config import ISTANBUL_TZ, SCRAPER
 from app.models import FixtureMatch
 from app.scraper.browser import browser_context, close_ad_overlay, goto_with_retry
 
@@ -34,8 +34,6 @@ _SITE_TZ = timezone.utc
 # Fixture sayfasındaki f=ft/sc gün seçimi kaynak sitenin UTC+8 takvimine göre.
 # Akşam İstanbul'da bir sonraki güne geçtiğinde UTC+3 kullanmak yanlış sayfayı açar.
 _SITE_CALENDAR_TZ = timezone(timedelta(hours=8))
-# Tarih hesaplamaları için İstanbul
-_ISTANBUL_TZ = timezone(timedelta(hours=3))
 
 log = logging.getLogger(__name__)
 
@@ -239,9 +237,9 @@ async def fetch_fixture(
     # Belirli bir tarih istendiyse İstanbul günü dışındaki maçları çıkar
     if target_date is not None and filter_istanbul_date:
         day_start = datetime(target_date.year, target_date.month, target_date.day,
-                             0, 0, 0, tzinfo=_ISTANBUL_TZ)
+                             0, 0, 0, tzinfo=ISTANBUL_TZ)
         day_end = datetime(target_date.year, target_date.month, target_date.day,
-                           23, 59, 59, tzinfo=_ISTANBUL_TZ)
+                           23, 59, 59, tzinfo=ISTANBUL_TZ)
         before = len(matches)
         matches = [m for m in matches
                    if m.kickoff_time and day_start <= m.kickoff_time <= day_end]
@@ -264,7 +262,7 @@ async def fetch_istanbul_fixture(
                                      filter_istanbul_date=False)
         selected: dict[str, FixtureMatch] = {}
         for match in first + second:
-            if match.kickoff_time and match.kickoff_time.astimezone(_ISTANBUL_TZ).date() == target_date:
+            if match.kickoff_time and match.kickoff_time.astimezone(ISTANBUL_TZ).date() == target_date:
                 selected.setdefault(match.match_id, match)
         return list(selected.values())
 

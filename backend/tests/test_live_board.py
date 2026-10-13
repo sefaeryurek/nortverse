@@ -8,6 +8,7 @@ import pytest
 from app.api import routes_fixture as rf
 from app.api.live_snapshot import LiveSnapshot
 from app.api.score_state import resolve_match_state
+from app.config import ISTANBUL_TZ
 from app.scraper.fixture_scores import FixtureScore
 from app.scraper.live_scores import parse_live_scores
 from app.scraper.source_board import parse_source_board
@@ -60,7 +61,7 @@ async def test_bulletin_keeps_live_and_scheduled_but_removes_finished(monkeypatc
         "103": FixtureScore("103", "scheduled"),
     }, now)
     monkeypatch.setattr(rf, "get_live_snapshot", AsyncMock(return_value=snapshot))
-    today = now.astimezone(timezone(timedelta(hours=3))).date()
+    today = now.astimezone(ISTANBUL_TZ).date()
     items = [{"match_id": mid, "home_team": "A", "away_team": "B", "league_code": "ENG PR",
               "league_name": "English Premier League", "kickoff_time": None}
              for mid in ("101", "102", "103")]
@@ -72,7 +73,7 @@ async def test_bulletin_keeps_live_and_scheduled_but_removes_finished(monkeypatc
 @pytest.mark.asyncio
 async def test_bulletin_hides_unverified_matches_after_kickoff(monkeypatch):
     now = datetime.now(timezone.utc)
-    today = now.astimezone(timezone(timedelta(hours=3))).date()
+    today = now.astimezone(ISTANBUL_TZ).date()
     snapshot = LiveSnapshot({
         "scheduled_old": FixtureScore("scheduled_old", "scheduled"),
         "live": FixtureScore("live", "live", 1, 0, minute="67"),

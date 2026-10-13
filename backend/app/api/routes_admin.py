@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import APIRouter
 from sqlalchemy import case, func, or_, select, text
 
+from app.config import ISTANBUL_TZ
 from app.analysis.correlation import compute_poisson_correlations
 from app.analysis.league_filter import CUP_KEYWORDS
 from app.analysis.repair import compute_quality_score
@@ -195,7 +196,7 @@ async def health() -> HealthResponse:
             row = await session.execute(select(func.max(Match.analyzed_at)))
             last_pipeline = row.scalar_one_or_none()
 
-            fc = await session.get(FixtureCache, datetime.now(timezone(timedelta(hours=3))).date().isoformat())
+            fc = await session.get(FixtureCache, datetime.now(ISTANBUL_TZ).date().isoformat())
             if fc:
                 last_fixture_cached = fc.cached_at
 

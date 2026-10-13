@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from sqlalchemy import cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 
+from app.config import ISTANBUL_TZ
 from app.api.schemas import AnalyzeResponse, PeriodOut
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
@@ -122,7 +123,7 @@ async def _fixture_metadata(match_id: str, kickoff_time: datetime | None = None)
             FixtureCache.matches_json.contains([{"match_id": match_id}]),
         )
         if kickoff_time is not None and kickoff_time.tzinfo is not None:
-            day = kickoff_time.astimezone(timezone(timedelta(hours=3))).date()
+            day = kickoff_time.astimezone(ISTANBUL_TZ).date()
             query = query.where(FixtureCache.date.in_([
                 (day + timedelta(days=offset)).isoformat() for offset in (-1, 0, 1)
             ]))
