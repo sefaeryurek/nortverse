@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import case, func, or_, select, text
 
 from app.config import ISTANBUL_TZ
@@ -23,6 +24,17 @@ from app.db.models import FixtureCache, Match
 
 log = logging.getLogger(__name__)
 router = APIRouter()
+
+_ADMIN_KEY = os.environ.get("ADMIN_API_KEY", "")
+
+
+async def _require_admin(request: Request) -> None:
+    if not _ADMIN_KEY:
+        return
+    token = request.headers.get("X-Admin-Key", "")
+    if token != _ADMIN_KEY:
+        raise HTTPException(403, "Yetkisiz erişim")
+
 
 _corr_cache: dict[str, float] | None = None
 
@@ -263,7 +275,7 @@ async def analysis_evidence() -> AnalysisEvidence:
     )
 
 
-@router.get("/api/analysis-validation", response_model=AnalysisValidationV3)
+@router.get("/api/analysis-validation", response_model=AnalysisValidationV3, dependencies=[Depends(_require_admin)])
 async def analysis_validation() -> AnalysisValidationV3:
     """Evaluate frozen pre-kickoff selections using immutable observation ledger."""
     params = {"rule_version": RULE_VERSION}
@@ -335,7 +347,7 @@ async def analysis_validation() -> AnalysisValidationV3:
     )
 
 
-@router.get("/api/score-validation", response_model=ScoreValidation)
+@router.get("/api/score-validation", response_model=ScoreValidation, dependencies=[Depends(_require_admin)])
 async def score_validation() -> ScoreValidation:
     """Compare frozen score lists with equal-length prior-score baselines."""
     async with get_session() as session:
@@ -354,7 +366,7 @@ async def score_validation() -> ScoreValidation:
     )
 
 
-@router.get("/api/admin/quality", response_model=DataQuality)
+@router.get("/api/admin/quality", response_model=DataQuality, dependencies=[Depends(_require_admin)])
 async def admin_quality() -> DataQuality:
     """Detaylı veri kalitesi raporu."""
     async with get_session() as session:

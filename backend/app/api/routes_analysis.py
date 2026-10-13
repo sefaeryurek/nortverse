@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import collections
 import logging
 import time
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Request
 from sqlalchemy import Float, cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -29,14 +30,41 @@ from app.db.models import Match
 log = logging.getLogger(__name__)
 router = APIRouter()
 
+# ─── Basit IP-bazlı rate limiter (yeni bağımlılık gerektirmez) ───────────────
+_rate_buckets: dict[str, collections.deque] = {}
+_RATE_WINDOW = 60.0
+_RATE_LIMIT_GET = 30
+_RATE_LIMIT_POST = 5
+_RATE_BUCKETS_MAX = 2000
+
+
+def _check_rate(ip: str, limit: int) -> None:
+    now = time.monotonic()
+    bucket = _rate_buckets.get(ip)
+    if bucket is None:
+        bucket = collections.deque()
+        _rate_buckets[ip] = bucket
+        if len(_rate_buckets) > _RATE_BUCKETS_MAX:
+            oldest_key = next(iter(_rate_buckets))
+            del _rate_buckets[oldest_key]
+    while bucket and bucket[0] < now - _RATE_WINDOW:
+        bucket.popleft()
+    if len(bucket) >= limit:
+        raise HTTPException(429, "Çok fazla istek — lütfen biraz bekleyin")
+    bucket.append(now)
+
 _matched_cache: dict[str, tuple[float, dict]] = {}
 _MATCHED_CACHE_TTL = 600.0
 _MATCHED_CACHE_MAX = 200
 
 
 @router.get("/api/analyze/{match_id}", response_model=AnalyzeResponse)
-async def get_analyze(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> AnalyzeResponse:
+async def get_analyze(
+    request: Request,
+    match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
+) -> AnalyzeResponse:
     """Maçı analiz eder. Cache'te varsa anında döner, yoksa scrape eder."""
+    _check_rate(request.client.host if request.client else "unknown", _RATE_LIMIT_GET)
     try:
         return await asyncio.wait_for(analyze_and_cache(match_id), timeout=ANALYSIS_TIMEOUT)
     except asyncio.TimeoutError:
@@ -44,8 +72,13 @@ async def get_analyze(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> Analyze
 
 
 @router.post("/api/analyze/{match_id}", response_model=AnalyzeResponse)
-async def post_analyze(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> AnalyzeResponse:
+async def post_analyze(
+    request: Request,
+    match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
+) -> AnalyzeResponse:
     """Maçı her zaman scrape eder ve cache'i günceller."""
+    _check_rate(request.client.host if request.client else "unknown", _RATE_LIMIT_POST)
+
     async def refresh():
         async with get_or_make_lock(match_id):
             response = await do_analyze(match_id)
