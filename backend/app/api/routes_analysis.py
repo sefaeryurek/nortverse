@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from datetime import datetime, timezone
 
@@ -27,6 +28,10 @@ from app.db.models import Match
 
 log = logging.getLogger(__name__)
 router = APIRouter()
+
+_matched_cache: dict[str, tuple[float, dict]] = {}
+_MATCHED_CACHE_TTL = 600.0
+_MATCHED_CACHE_MAX = 200
 
 
 @router.get("/api/analyze/{match_id}", response_model=AnalyzeResponse)
@@ -103,6 +108,10 @@ async def get_matched_matches(
     match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
 ) -> dict:
     """Analiz edilen maçın arşivde eşleşen maçlarını döndürür (B ve C)."""
+    cached = _matched_cache.get(match_id)
+    if cached and time.time() - cached[0] < _MATCHED_CACHE_TTL:
+        return cached[1]
+
     now = datetime.now(timezone.utc)
 
     async with get_session() as session:
@@ -208,4 +217,11 @@ async def get_matched_matches(
                     archive_d.append(d)
                 archive_d.sort(key=lambda x: x.get("similarity", 0), reverse=True)
 
-    return {"archive_b": archive_b, "archive_c": archive_c, "archive_d": archive_d}
+    result = {"archive_b": archive_b, "archive_c": archive_c, "archive_d": archive_d}
+
+    _matched_cache[match_id] = (time.time(), result)
+    if len(_matched_cache) > _MATCHED_CACHE_MAX:
+        oldest = min(_matched_cache, key=lambda k: _matched_cache[k][0])
+        del _matched_cache[oldest]
+
+    return result

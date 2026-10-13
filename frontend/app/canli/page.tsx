@@ -10,6 +10,23 @@ import { filterByHT, computeStats } from "@/lib/live-stats";
 import type { HTFilteredStats } from "@/lib/live-stats";
 
 const POLL_INTERVAL = 45_000;
+const CONCURRENCY_LIMIT = 3;
+
+async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  limit: number,
+): Promise<T[]> {
+  const results: T[] = [];
+  let i = 0;
+  async function next(): Promise<void> {
+    while (i < tasks.length) {
+      const idx = i++;
+      results[idx] = await tasks[idx]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => next()));
+  return results;
+}
 
 async function checkHTMatch(
   matchId: string,
@@ -450,11 +467,11 @@ export default function CanliPage() {
       const data = await getLiveHTMatches();
 
       const validated: ValidatedMatch[] = [];
-      const checks = data.map(async (m) => {
+      const tasks = data.map((m) => async () => {
         const stats = await checkHTMatch(m.match_id, m.ht_home, m.ht_away);
         if (stats) validated.push({ match: m, stats });
       });
-      await Promise.all(checks);
+      await runWithConcurrency(tasks, CONCURRENCY_LIMIT);
 
       validated.sort((a, b) => {
         const aMin = a.match.live_minute || "";

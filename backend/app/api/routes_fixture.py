@@ -199,6 +199,25 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
     return await _bulletin_items([m.model_dump() for m in result], req_date)
 
 
+_pattern_status_cache: dict[str, tuple[float, dict]] = {}
+_PATTERN_STATUS_TTL = 300.0
+_PATTERN_STATUS_MAX = 500
+
+
+def _ps_cache_get(mid: str) -> dict | None:
+    entry = _pattern_status_cache.get(mid)
+    if entry and time.time() - entry[0] < _PATTERN_STATUS_TTL:
+        return entry[1]
+    return None
+
+
+def _ps_cache_put(mid: str, val: dict) -> None:
+    _pattern_status_cache[mid] = (time.time(), val)
+    if len(_pattern_status_cache) > _PATTERN_STATUS_MAX:
+        oldest = min(_pattern_status_cache, key=lambda k: _pattern_status_cache[k][0])
+        del _pattern_status_cache[oldest]
+
+
 @router.get("/api/fixture/pattern-status")
 async def get_pattern_status(
     match_ids: str = Query(..., description="Virgülle ayrılmış match_id listesi"),
@@ -209,40 +228,61 @@ async def get_pattern_status(
     if not ids or len(ids) > 500:
         return {}
 
-    async with get_session() as session:
-        stmt = (
-            select(
-                Match.match_id,
-                Match.pattern_ft_b,
-                Match.pattern_ft_c,
-                Match.pattern_ft_d,
-            )
-            .where(Match.match_id.in_(ids))
-            .where(Match.deleted_at.is_(None))
-        )
-        rows = (await session.execute(stmt)).all()
-
     result: dict[str, dict] = {}
-    for row in rows:
-        b_data = row[1]
-        c_data = row[2]
-        d_data = row[3]
-        has_b = bool(b_data and isinstance(b_data, dict) and b_data.get("match_count", 0) >= 5)
-        has_c = bool(c_data and isinstance(c_data, dict) and c_data.get("match_count", 0) >= 1)
-        has_d = bool(d_data and isinstance(d_data, dict) and d_data.get("match_count", 0) >= 1)
-        if has_b or has_c or has_d:
-            agreement = False
-            agreement_bcd = False
-            winners: dict[str, str] = {}
-            for label, data, active in [("b", b_data, has_b), ("c", c_data, has_c), ("d", d_data, has_d)]:
-                if active:
-                    winners[label] = max(
-                        ["1", "x", "2"],
-                        key=lambda k, d=data: d.get(f"result_{k}_pct", 0),
-                    )
-            if "b" in winners and "c" in winners:
-                agreement = winners["b"] == winners["c"]
-            if "b" in winners and "c" in winners and "d" in winners:
-                agreement_bcd = len(set(winners.values())) == 1
-            result[row[0]] = {"has_b": has_b, "has_c": has_c, "has_d": has_d, "agreement": agreement, "agreement_bcd": agreement_bcd}
+    miss_ids: list[str] = []
+    for mid in ids:
+        cached = _ps_cache_get(mid)
+        if cached is not None:
+            if cached:
+                result[mid] = cached
+        else:
+            miss_ids.append(mid)
+
+    if miss_ids:
+        async with get_session() as session:
+            stmt = (
+                select(
+                    Match.match_id,
+                    Match.pattern_ft_b,
+                    Match.pattern_ft_c,
+                    Match.pattern_ft_d,
+                )
+                .where(Match.match_id.in_(miss_ids))
+                .where(Match.deleted_at.is_(None))
+            )
+            rows = (await session.execute(stmt)).all()
+
+        found_ids: set[str] = set()
+        for row in rows:
+            found_ids.add(row[0])
+            b_data = row[1]
+            c_data = row[2]
+            d_data = row[3]
+            has_b = bool(b_data and isinstance(b_data, dict) and b_data.get("match_count", 0) >= 5)
+            has_c = bool(c_data and isinstance(c_data, dict) and c_data.get("match_count", 0) >= 1)
+            has_d = bool(d_data and isinstance(d_data, dict) and d_data.get("match_count", 0) >= 1)
+            if has_b or has_c or has_d:
+                agreement = False
+                agreement_bcd = False
+                winners: dict[str, str] = {}
+                for label, data, active in [("b", b_data, has_b), ("c", c_data, has_c), ("d", d_data, has_d)]:
+                    if active:
+                        winners[label] = max(
+                            ["1", "x", "2"],
+                            key=lambda k, d=data: d.get(f"result_{k}_pct", 0),
+                        )
+                if "b" in winners and "c" in winners:
+                    agreement = winners["b"] == winners["c"]
+                if "b" in winners and "c" in winners and "d" in winners:
+                    agreement_bcd = len(set(winners.values())) == 1
+                val = {"has_b": has_b, "has_c": has_c, "has_d": has_d, "agreement": agreement, "agreement_bcd": agreement_bcd}
+                _ps_cache_put(row[0], val)
+                result[row[0]] = val
+            else:
+                _ps_cache_put(row[0], {})
+
+        for mid in miss_ids:
+            if mid not in found_ids:
+                _ps_cache_put(mid, {})
+
     return result
