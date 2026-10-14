@@ -54,3 +54,7 @@ xx/
 
 # DB yedekleri
 backups/
+
+# ML model dosyaları
+backend/models/
+*.joblib

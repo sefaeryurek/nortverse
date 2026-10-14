@@ -29,6 +29,7 @@ from app.cli.audit_cmds import (
     recompute_patterns_cmd,
     restore_deleted_cmd,
     self_test_cmd,
+    train_ensemble_cmd,
 )
 from app.cli.pipeline_cmds import (
     analyze,
@@ -72,6 +73,7 @@ app.command("audit-patterns")(audit_patterns_cmd)
 app.command("recompute-patterns")(recompute_patterns_cmd)
 app.command("self-test")(self_test_cmd)
 app.command("backtest")(backtest_cmd)
+app.command("train-ensemble")(train_ensemble_cmd)
 
 
 @app.command()

@@ -12,6 +12,10 @@ rich==13.9.2
 # Data handling
 pydantic==2.9.2
 
+# Machine Learning — ensemble meta-model (Sprint 81)
+scikit-learn==1.5.2
+joblib==1.4.2
+
 # Veritabanı
 sqlalchemy==2.0.36
 alembic==1.13.3
