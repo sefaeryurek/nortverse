@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import OrderedDict
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
@@ -25,7 +26,7 @@ router = APIRouter()
 _ht_observed: dict[str, tuple[int, int]] = {}
 _ht_observed_day: str = ""
 
-_stats_cache: dict[str, tuple[float, dict]] = {}
+_stats_cache: OrderedDict[str, tuple[float, dict]] = OrderedDict()
 _STATS_TTL = 3600.0
 _STATS_CACHE_MAX = 300
 
@@ -33,9 +34,9 @@ _STATS_CACHE_MAX = 300
 def _stats_cache_put(key: str, data: dict) -> None:
     now = time.monotonic()
     _stats_cache[key] = (now, data)
-    if len(_stats_cache) > _STATS_CACHE_MAX:
-        oldest = min(_stats_cache, key=lambda k: _stats_cache[k][0])
-        _stats_cache.pop(oldest, None)
+    _stats_cache.move_to_end(key)
+    while len(_stats_cache) > _STATS_CACHE_MAX:
+        _stats_cache.popitem(last=False)
 
 
 class LiveHTMatch(BaseModel):

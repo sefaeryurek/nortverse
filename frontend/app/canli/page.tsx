@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { getLiveHTMatches, getMatchedMatches } from "@/lib/api";
 import type { LiveHTMatch, MatchedMatchesResponse } from "@/lib/api";

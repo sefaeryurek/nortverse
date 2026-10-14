@@ -6,6 +6,7 @@ import asyncio
 import collections
 import logging
 import time
+from collections import OrderedDict
 
 from datetime import datetime, timezone
 
@@ -38,7 +39,12 @@ _RATE_LIMIT_POST = 5
 _RATE_BUCKETS_MAX = 2000
 
 
+_rate_sweep_counter = 0
+_RATE_SWEEP_INTERVAL = 100
+
+
 def _check_rate(ip: str, limit: int) -> None:
+    global _rate_sweep_counter
     now = time.monotonic()
     bucket = _rate_buckets.get(ip)
     if bucket is None:
@@ -52,8 +58,14 @@ def _check_rate(ip: str, limit: int) -> None:
     if len(bucket) >= limit:
         raise HTTPException(429, "Çok fazla istek — lütfen biraz bekleyin")
     bucket.append(now)
+    _rate_sweep_counter += 1
+    if _rate_sweep_counter >= _RATE_SWEEP_INTERVAL:
+        _rate_sweep_counter = 0
+        stale_keys = [k for k, v in _rate_buckets.items() if not v or v[-1] < now - _RATE_WINDOW]
+        for k in stale_keys:
+            del _rate_buckets[k]
 
-_matched_cache: dict[str, tuple[float, dict]] = {}
+_matched_cache: OrderedDict[str, tuple[float, dict]] = OrderedDict()
 _MATCHED_CACHE_TTL = 600.0
 _MATCHED_CACHE_MAX = 200
 
@@ -142,7 +154,8 @@ async def get_matched_matches(
 ) -> dict:
     """Analiz edilen maçın arşivde eşleşen maçlarını döndürür (B ve C)."""
     cached = _matched_cache.get(match_id)
-    if cached and time.time() - cached[0] < _MATCHED_CACHE_TTL:
+    if cached and time.monotonic() - cached[0] < _MATCHED_CACHE_TTL:
+        _matched_cache.move_to_end(match_id)
         return cached[1]
 
     now = datetime.now(timezone.utc)
@@ -252,9 +265,9 @@ async def get_matched_matches(
 
     result = {"archive_b": archive_b, "archive_c": archive_c, "archive_d": archive_d}
 
-    _matched_cache[match_id] = (time.time(), result)
-    if len(_matched_cache) > _MATCHED_CACHE_MAX:
-        oldest = min(_matched_cache, key=lambda k: _matched_cache[k][0])
-        del _matched_cache[oldest]
+    _matched_cache[match_id] = (time.monotonic(), result)
+    _matched_cache.move_to_end(match_id)
+    while len(_matched_cache) > _MATCHED_CACHE_MAX:
+        _matched_cache.popitem(last=False)
 
     return result

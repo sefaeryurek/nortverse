@@ -49,9 +49,13 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [expanded, setExpanded] = useState(() => {
-    try { return localStorage.getItem("nv_sidebar") === "1"; } catch { return false; }
-  });
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("nv_sidebar") === "1") setExpanded(true);
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem("nv_sidebar", expanded ? "1" : "0"); } catch { /* ignore */ }

@@ -52,28 +52,28 @@ _analysis_cached_at: dict[str, float] = {}
 analysis_cache: OrderedDict[str, AnalyzeResponse] = OrderedDict()
 _analysis_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
 _snapshot_checked_at: dict[str, float] = {}
-_snapshot_finalized: dict[str, float] = {}
+_snapshot_finalized: OrderedDict[str, float] = OrderedDict()
 
 _SNAPSHOT_FINALIZED_MAX = 600
 
 
 def _snapshot_finalized_put(key: str) -> None:
     _snapshot_finalized[key] = time.monotonic()
-    if len(_snapshot_finalized) > _SNAPSHOT_FINALIZED_MAX:
-        oldest = min(_snapshot_finalized, key=_snapshot_finalized.get)  # type: ignore[arg-type]
-        _snapshot_finalized.pop(oldest, None)
+    _snapshot_finalized.move_to_end(key)
+    while len(_snapshot_finalized) > _SNAPSHOT_FINALIZED_MAX:
+        _snapshot_finalized.popitem(last=False)
 
 
-fixture_cache: dict[str, tuple[float, list]] = {}
+fixture_cache: OrderedDict[str, tuple[float, list]] = OrderedDict()
 _FIXTURE_CACHE_MAX = 30
 
 
 def fixture_cache_put(key: str, data: list) -> None:
     """Fixture cache'e yaz, sınırı aşarsa en eski entry'yi at."""
     fixture_cache[key] = (time.time(), data)
-    if len(fixture_cache) > _FIXTURE_CACHE_MAX:
-        oldest_key = min(fixture_cache, key=lambda k: fixture_cache[k][0])
-        del fixture_cache[oldest_key]
+    fixture_cache.move_to_end(key)
+    while len(fixture_cache) > _FIXTURE_CACHE_MAX:
+        fixture_cache.popitem(last=False)
 
 bg_queue: asyncio.Queue[str] | None = None
 _bg_queued: set[str] = set()
@@ -533,9 +533,8 @@ def enqueue_bg_analysis(matches: list) -> None:
     if bg_queue is None:
         return
     if len(_bg_queued) >= _BG_QUEUED_MAX:
-        to_remove = list(_bg_queued)[:_BG_QUEUED_MAX // 2]
-        for item in to_remove:
-            _bg_queued.discard(item)
+        log.info("Arka plan kuyruğu dolu (%d), yeni ekleme atlanıyor", len(_bg_queued))
+        return
     for m in matches:
         if cache_get(m.match_id) is None and m.match_id not in _bg_queued:
             _bg_queued.add(m.match_id)

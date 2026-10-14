@@ -72,15 +72,22 @@ function MatchRow({ match, showSimilarity }: { match: MatchedMatch; showSimilari
 export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, hasPatternD }: Props) {
   const [data, setData] = useState<MatchedMatchesResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setData(null);
+    setError(false);
+  }, [matchId]);
 
   useEffect(() => {
     if (!open || data) return;
     let cancelled = false;
     setLoading(true);
+    setError(false);
     getMatchedMatches(matchId)
       .then((d) => { if (!cancelled) setData(d); })
-      .catch((err) => { console.error("Matched matches fetch failed:", err); })
+      .catch((err) => { console.error("Matched matches fetch failed:", err); if (!cancelled) setError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, matchId, data]);
@@ -137,6 +144,19 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, 
           {loading && (
             <div className="text-xs" style={{ color: "var(--nv-text-tertiary)", padding: "var(--nv-space-md) 0" }}>
               Yükleniyor...
+            </div>
+          )}
+
+          {error && !loading && (
+            <div className="flex items-center gap-2" style={{ padding: "var(--nv-space-md) 0" }}>
+              <span className="text-xs" style={{ color: "var(--nv-text-tertiary)" }}>Veri yüklenemedi</span>
+              <button
+                onClick={() => { setError(false); setData(null); }}
+                className="text-xs font-semibold"
+                style={{ color: "var(--nv-accent-blue)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                Tekrar dene
+              </button>
             </div>
           )}
 

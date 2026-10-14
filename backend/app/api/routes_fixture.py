@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 import time
+from collections import OrderedDict
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -199,23 +200,24 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
     return await _bulletin_items([m.model_dump() for m in result], req_date)
 
 
-_pattern_status_cache: dict[str, tuple[float, dict]] = {}
+_pattern_status_cache: OrderedDict[str, tuple[float, dict]] = OrderedDict()
 _PATTERN_STATUS_TTL = 300.0
 _PATTERN_STATUS_MAX = 500
 
 
 def _ps_cache_get(mid: str) -> dict | None:
     entry = _pattern_status_cache.get(mid)
-    if entry and time.time() - entry[0] < _PATTERN_STATUS_TTL:
+    if entry and time.monotonic() - entry[0] < _PATTERN_STATUS_TTL:
+        _pattern_status_cache.move_to_end(mid)
         return entry[1]
     return None
 
 
 def _ps_cache_put(mid: str, val: dict) -> None:
-    _pattern_status_cache[mid] = (time.time(), val)
-    if len(_pattern_status_cache) > _PATTERN_STATUS_MAX:
-        oldest = min(_pattern_status_cache, key=lambda k: _pattern_status_cache[k][0])
-        del _pattern_status_cache[oldest]
+    _pattern_status_cache[mid] = (time.monotonic(), val)
+    _pattern_status_cache.move_to_end(mid)
+    while len(_pattern_status_cache) > _PATTERN_STATUS_MAX:
+        _pattern_status_cache.popitem(last=False)
 
 
 @router.get("/api/fixture/pattern-status")

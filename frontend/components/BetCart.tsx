@@ -120,7 +120,6 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
 
       {/* Acik panel -- desktop'ta sticky kart, mobile'da tam sheet */}
       {open && (
-        <>
           <dialog
             ref={dialogRef}
             aria-label="Bahis Sepeti"
@@ -260,7 +259,6 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
               </button>
             </div>
           </dialog>
-        </>
       )}
     </>
   );

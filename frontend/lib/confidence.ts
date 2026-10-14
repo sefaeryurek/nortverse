@@ -411,10 +411,10 @@ const SUMMARY_MARKET_KEYS = [
  * Piyasa Özeti: sadece ana pazarların kazananlarını Arşiv-A ve Arşiv-B için ayrı gösterir.
  */
 export function getMarketSummary(
-  patternA: PatternResult | null,
-  patternB: PatternResult | null,
+  archiveB: PatternResult | null,
+  archiveC: PatternResult | null,
   period: Period,
-  patternC: PatternResult | null = null,
+  archiveD: PatternResult | null = null,
 ): MarketSummaryRow[] {
   const lbl = periodLabels(period);
   const rows: MarketSummaryRow[] = [];
@@ -422,7 +422,7 @@ export function getMarketSummary(
   for (const key of SUMMARY_MARKET_KEYS) {
     const market = MARKETS.find((m) => m.key === key);
     if (!market) continue;
-    if (![patternA, patternB, patternC].some((sample) => sample && isMarketActive(market, period, sample))) continue;
+    if (![archiveB, archiveC, archiveD].some((sample) => sample && isMarketActive(market, period, sample))) continue;
 
     const pickWinner = (result: PatternResult | null) => {
       if (!result || !isMarketActive(market, period, result)) return null;
@@ -436,9 +436,9 @@ export function getMarketSummary(
       return best;
     };
 
-    const winnerA = pickWinner(patternA);
-    const winnerB = pickWinner(patternB);
-    const winnerC = pickWinner(patternC);
+    const winnerA = pickWinner(archiveB);
+    const winnerB = pickWinner(archiveC);
+    const winnerC = pickWinner(archiveD);
     const agreement = !!winnerA && !!winnerB && winnerA.selectionLabel === winnerB.selectionLabel;
 
     rows.push({
