@@ -6,12 +6,14 @@ bu listede kalır. Hem İY skoru hem güncel canlı skor gösterilir.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import time
 from collections import OrderedDict
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
@@ -260,3 +262,112 @@ async def get_live_ht_stats(ht_home: int, ht_away: int) -> LiveHTStats:
     }
     _stats_cache_put(cache_key, data)
     return LiveHTStats(**data)
+
+
+# ─── WebSocket bağlantı yöneticisi (Sprint 82) ─────────────────────────────
+
+class _ConnectionManager:
+    """Bağlı WebSocket istemcilerini takip eder ve toplu mesaj gönderir."""
+
+    def __init__(self) -> None:
+        self._connections: set[WebSocket] = set()
+
+    async def connect(self, ws: WebSocket) -> None:
+        await ws.accept()
+        self._connections.add(ws)
+        log.info("WebSocket bağlantısı açıldı — toplam: %d", len(self._connections))
+
+    def disconnect(self, ws: WebSocket) -> None:
+        self._connections.discard(ws)
+        log.info("WebSocket bağlantısı kapandı — toplam: %d", len(self._connections))
+
+    async def broadcast(self, data: str) -> None:
+        dead: list[WebSocket] = []
+        for ws in self._connections:
+            try:
+                await ws.send_text(data)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self._connections.discard(ws)
+
+    @property
+    def count(self) -> int:
+        return len(self._connections)
+
+
+_ws_manager = _ConnectionManager()
+_WS_BROADCAST_INTERVAL = 15.0
+_ws_broadcaster_task: asyncio.Task | None = None
+
+
+async def _ws_broadcaster() -> None:
+    """Periyodik olarak canlı maç verisi çekip tüm bağlı istemcilere gönderir."""
+    while True:
+        try:
+            await asyncio.sleep(_WS_BROADCAST_INTERVAL)
+            if _ws_manager.count == 0:
+                continue
+            matches = await get_live_ht_matches()
+            payload = json.dumps(
+                [m.model_dump() for m in matches],
+                ensure_ascii=False,
+            )
+            await _ws_manager.broadcast(payload)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            log.warning("WebSocket broadcast hatası", exc_info=True)
+
+
+def start_ws_broadcaster() -> None:
+    global _ws_broadcaster_task
+    if _ws_broadcaster_task is None or _ws_broadcaster_task.done():
+        _ws_broadcaster_task = asyncio.create_task(_ws_broadcaster())
+        log.info("WebSocket broadcaster başlatıldı (interval=%.0fs)", _WS_BROADCAST_INTERVAL)
+
+
+async def stop_ws_broadcaster() -> None:
+    global _ws_broadcaster_task
+    if _ws_broadcaster_task and not _ws_broadcaster_task.done():
+        _ws_broadcaster_task.cancel()
+        try:
+            await _ws_broadcaster_task
+        except asyncio.CancelledError:
+            pass
+        _ws_broadcaster_task = None
+        log.info("WebSocket broadcaster durduruldu")
+
+
+@router.websocket("/ws/live-ht")
+async def ws_live_ht(ws: WebSocket) -> None:
+    """Canlı maç verisi WebSocket endpoint'i.
+
+    Bağlantı açılır açılmaz mevcut veriyi gönderir,
+    sonra broadcaster periyodik güncelleme yapar.
+    İstemci "ping" gönderirse "pong" döner.
+    """
+    await _ws_manager.connect(ws)
+    try:
+        matches = await get_live_ht_matches()
+        initial = json.dumps(
+            [m.model_dump() for m in matches],
+            ensure_ascii=False,
+        )
+        await ws.send_text(initial)
+
+        while True:
+            try:
+                msg = await asyncio.wait_for(ws.receive_text(), timeout=60.0)
+                if msg == "ping":
+                    await ws.send_text("pong")
+            except asyncio.TimeoutError:
+                await ws.send_text("pong")
+            except WebSocketDisconnect:
+                break
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        log.warning("WebSocket hata", exc_info=True)
+    finally:
+        _ws_manager.disconnect(ws)

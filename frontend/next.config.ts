@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
         source: "/api/:path*",
         destination: `${getProxyTarget()}/api/:path*`,
       },
+      {
+        source: "/ws/:path*",
+        destination: `${getProxyTarget()}/ws/:path*`,
+      },
     ];
   },
 };

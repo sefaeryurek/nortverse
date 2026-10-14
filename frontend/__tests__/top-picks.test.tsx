@@ -10,7 +10,8 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 const recommendation: FTRecommendation = {
   recommendation_id: "ft-display-v3:result:1", archive: "archive_1+archive_2", market: "result", selection: "1",
-  frequency_pct: 72, match_count: 30, archive_1_frequency_pct: 75, archive_1_match_count: 35,
+  frequency_pct: 72, match_count: 30, calibrated_pct: null, margin: null, is_confident: false,
+  archive_1_frequency_pct: 75, archive_1_match_count: 35,
   archive_2_frequency_pct: 72, archive_2_match_count: 30,
   archive_3_frequency_pct: null, archive_3_match_count: null,
 };

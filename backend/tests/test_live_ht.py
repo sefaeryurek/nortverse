@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+
 import pytest
 
 from app.api.routes_live_ht import (
     LiveHTMatch,
     LiveHTStats,
+    _ConnectionManager,
     _is_second_half_or_later,
     _cleanup_observed,
     _ht_observed,
@@ -141,3 +145,82 @@ class TestStatsEndpoint:
             from app.api.routes_live_ht import get_live_ht_stats
             await get_live_ht_stats(16, 0)
         assert exc_info.value.status_code == 400
+
+
+class _FakeWebSocket:
+    """WebSocket davranışını taklit eden test double."""
+
+    def __init__(self, *, fail_send: bool = False):
+        self.accepted = False
+        self.messages: list[str] = []
+        self._fail_send = fail_send
+
+    async def accept(self) -> None:
+        self.accepted = True
+
+    async def send_text(self, data: str) -> None:
+        if self._fail_send:
+            raise RuntimeError("bağlantı koptu")
+        self.messages.append(data)
+
+
+class TestConnectionManager:
+    @pytest.mark.asyncio
+    async def test_connect_and_count(self):
+        mgr = _ConnectionManager()
+        ws = _FakeWebSocket()
+        await mgr.connect(ws)
+        assert mgr.count == 1
+        assert ws.accepted
+
+    @pytest.mark.asyncio
+    async def test_disconnect(self):
+        mgr = _ConnectionManager()
+        ws = _FakeWebSocket()
+        await mgr.connect(ws)
+        mgr.disconnect(ws)
+        assert mgr.count == 0
+
+    @pytest.mark.asyncio
+    async def test_disconnect_unknown_noop(self):
+        mgr = _ConnectionManager()
+        ws = _FakeWebSocket()
+        mgr.disconnect(ws)
+        assert mgr.count == 0
+
+    @pytest.mark.asyncio
+    async def test_broadcast(self):
+        mgr = _ConnectionManager()
+        ws1 = _FakeWebSocket()
+        ws2 = _FakeWebSocket()
+        await mgr.connect(ws1)
+        await mgr.connect(ws2)
+        await mgr.broadcast('{"test": true}')
+        assert ws1.messages == ['{"test": true}']
+        assert ws2.messages == ['{"test": true}']
+
+    @pytest.mark.asyncio
+    async def test_broadcast_removes_dead(self):
+        mgr = _ConnectionManager()
+        ws_ok = _FakeWebSocket()
+        ws_dead = _FakeWebSocket(fail_send=True)
+        await mgr.connect(ws_ok)
+        await mgr.connect(ws_dead)
+        assert mgr.count == 2
+        await mgr.broadcast("data")
+        assert mgr.count == 1
+        assert ws_ok.messages == ["data"]
+
+    @pytest.mark.asyncio
+    async def test_broadcast_empty_no_error(self):
+        mgr = _ConnectionManager()
+        await mgr.broadcast("test")
+
+    @pytest.mark.asyncio
+    async def test_multiple_broadcasts(self):
+        mgr = _ConnectionManager()
+        ws = _FakeWebSocket()
+        await mgr.connect(ws)
+        await mgr.broadcast("msg1")
+        await mgr.broadcast("msg2")
+        assert ws.messages == ["msg1", "msg2"]

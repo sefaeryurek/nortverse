@@ -82,11 +82,12 @@ export interface MatchedMatch {
   home_team: string;
   away_team: string;
   league_code: string | null;
+  league_name?: string | null;
   ht: string | null;
   h2: string | null;
   ft: string | null;
-  kickoff_time: string | null;
-  similarity?: number;
+  kickoff_time?: string | null;
+  similarity?: number | null;
 }
 
 export interface MatchedMatchesResponse {

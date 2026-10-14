@@ -44,7 +44,7 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_analysis import router as analysis_router
 from app.api.routes_evaluation import router as evaluation_router
 from app.api.routes_fixture import router as fixture_router
-from app.api.routes_live_ht import router as live_ht_router
+from app.api.routes_live_ht import router as live_ht_router, start_ws_broadcaster, stop_ws_broadcaster
 from app.api.routes_results import router as results_router
 from app.api.services import bg_worker, init_bg_queue, shutdown_bg_queue
 
@@ -55,9 +55,11 @@ from app.api.services import bg_worker, init_bg_queue, shutdown_bg_queue
 async def lifespan(app: FastAPI):
     init_bg_queue()
     worker = asyncio.create_task(bg_worker())
+    start_ws_broadcaster()
     try:
         yield
     finally:
+        await stop_ws_broadcaster()
         await shutdown_live_snapshot()
         worker.cancel()
         try:

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getLiveHTMatches, getMatchedMatches } from "@/lib/api";
 import type { LiveHTMatch, MatchedMatchesResponse } from "@/lib/api";
@@ -8,6 +8,8 @@ import { leagueDisplay } from "@/lib/leagues";
 import { formatTime } from "@/lib/dates";
 import { filterByHT, computeStats } from "@/lib/live-stats";
 import type { HTFilteredStats } from "@/lib/live-stats";
+import { useLiveWs } from "@/lib/use-live-ws";
+import type { WsStatus } from "@/lib/use-live-ws";
 
 const POLL_INTERVAL = 45_000;
 const CONCURRENCY_LIMIT = 3;
@@ -457,29 +459,92 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
   );
 }
 
+async function validateMatches(data: LiveHTMatch[]): Promise<ValidatedMatch[]> {
+  const validated: ValidatedMatch[] = [];
+  const tasks = data.map((m) => async () => {
+    const stats = await checkHTMatch(m.match_id, m.ht_home, m.ht_away);
+    if (stats) validated.push({ match: m, stats });
+  });
+  await runWithConcurrency(tasks, CONCURRENCY_LIMIT);
+  validated.sort((a, b) => {
+    const aMin = a.match.live_minute || "";
+    const bMin = b.match.live_minute || "";
+    return aMin.localeCompare(bMin);
+  });
+  return validated;
+}
+
+function ConnectionBadge({ status }: { status: WsStatus }) {
+  if (status === "connected") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-1.5 py-0.5"
+        style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-accent-green-dim)", color: "var(--nv-accent-green)" }}
+        title="WebSocket ile anlık güncelleme"
+      >
+        <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "currentColor" }} />
+        WS
+      </span>
+    );
+  }
+  if (status === "fallback") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-1.5 py-0.5"
+        style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}
+        title="REST polling ile güncelleme (45sn)"
+      >
+        REST
+      </span>
+    );
+  }
+  return null;
+}
+
 export default function CanliPage() {
   const [validatedMatches, setValidatedMatches] = useState<ValidatedMatch[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const lastMatchIdsRef = useRef("");
 
+  const ws = useLiveWs();
+  const usingWs = ws.status === "connected";
+  const useFallback = ws.status === "fallback";
+
+  // WebSocket'ten gelen veriyi işle
+  useEffect(() => {
+    if (!usingWs || ws.matches.length === 0) return;
+    const newIds = ws.matches.map((m) => `${m.match_id}:${m.live_minute}`).join(",");
+    if (newIds === lastMatchIdsRef.current) return;
+    lastMatchIdsRef.current = newIds;
+
+    let cancelled = false;
+    validateMatches(ws.matches).then((validated) => {
+      if (cancelled) return;
+      setValidatedMatches(validated);
+      setError("");
+      setLoading(false);
+      setLastUpdate(ws.lastUpdate);
+    });
+    return () => { cancelled = true; };
+  }, [usingWs, ws.matches, ws.lastUpdate]);
+
+  // WebSocket bağlantı açılırken veya boş veri gelirken ilk yükleme
+  useEffect(() => {
+    if (!usingWs) return;
+    if (ws.matches.length === 0 && ws.lastUpdate) {
+      setValidatedMatches([]);
+      setLoading(false);
+      setLastUpdate(ws.lastUpdate);
+    }
+  }, [usingWs, ws.matches.length, ws.lastUpdate]);
+
+  // REST fallback polling
   const fetchMatches = useCallback(async () => {
     try {
       const data = await getLiveHTMatches();
-
-      const validated: ValidatedMatch[] = [];
-      const tasks = data.map((m) => async () => {
-        const stats = await checkHTMatch(m.match_id, m.ht_home, m.ht_away);
-        if (stats) validated.push({ match: m, stats });
-      });
-      await runWithConcurrency(tasks, CONCURRENCY_LIMIT);
-
-      validated.sort((a, b) => {
-        const aMin = a.match.live_minute || "";
-        const bMin = b.match.live_minute || "";
-        return aMin.localeCompare(bMin);
-      });
-
+      const validated = await validateMatches(data);
       setValidatedMatches(validated);
       setError("");
       setLastUpdate(new Date());
@@ -494,10 +559,21 @@ export default function CanliPage() {
   }, []);
 
   useEffect(() => {
+    if (!useFallback) return;
     fetchMatches();
     const timer = window.setInterval(fetchMatches, POLL_INTERVAL);
     return () => window.clearInterval(timer);
-  }, [fetchMatches]);
+  }, [useFallback, fetchMatches]);
+
+  // İlk bağlantı sırasında (connecting) başlangıç yüklemesi
+  useEffect(() => {
+    if (ws.status === "connecting" && loading) {
+      const timer = setTimeout(() => {
+        if (loading) fetchMatches();
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [ws.status, loading, fetchMatches]);
 
   return (
     <div className="flex flex-col h-full pb-[60px] md:pb-0">
@@ -517,11 +593,14 @@ export default function CanliPage() {
               </span>
             )}
           </div>
-          {lastUpdate && (
-            <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", fontFamily: "var(--nv-font-mono)" }}>
-              {lastUpdate.toLocaleTimeString("tr-TR", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <ConnectionBadge status={ws.status} />
+            {lastUpdate && (
+              <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", fontFamily: "var(--nv-font-mono)" }}>
+                {lastUpdate.toLocaleTimeString("tr-TR", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </span>
+            )}
+          </div>
         </div>
         <p className="mt-1" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
           Devre arası ve 2. yarıdaki maçların A1/A2/A3 arşiv eşleşmelerine göre İY filtreli MS tahminleri

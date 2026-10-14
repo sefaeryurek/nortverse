@@ -44,7 +44,7 @@ describe("periodLabels", () => {
       const labels = periodLabels(period);
       for (const key of keys) {
         expect(labels).toHaveProperty(key);
-        expect((labels as Record<string, string>)[key]).toBeTruthy();
+        expect((labels as unknown as Record<string, string>)[key]).toBeTruthy();
       }
     }
   });
