@@ -141,6 +141,9 @@ class RecommendationOut(BaseModel):
     selection: str
     frequency_pct: float
     match_count: int
+    calibrated_pct: Optional[float] = None
+    margin: Optional[float] = None
+    is_confident: bool = False
     archive_1_frequency_pct: Optional[float] = None
     archive_1_match_count: Optional[int] = None
     archive_2_frequency_pct: Optional[float] = None

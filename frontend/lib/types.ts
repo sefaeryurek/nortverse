@@ -168,6 +168,9 @@ export interface FTRecommendation {
   selection: "1" | "X" | "2" | "under" | "over" | "yes" | "no";
   frequency_pct: number;
   match_count: number;
+  calibrated_pct: number | null;
+  margin: number | null;
+  is_confident: boolean;
   archive_1_frequency_pct: number | null;
   archive_1_match_count: number | null;
   archive_2_frequency_pct: number | null;

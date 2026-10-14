@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ANALYSIS, ISTANBUL_TZ
+from app.analysis.evaluation import calibrate_pattern
 from app.analysis.league_filter import CUP_KEYWORDS, is_supported_league
 from app.db.models import (
     AnalysisSnapshot,
@@ -146,15 +147,21 @@ _ARCHIVE_KEYS = (
 )
 
 
-def build_ft_recommendations(patterns: dict | None) -> list[dict]:
+def build_ft_recommendations(
+    patterns: dict | None,
+    league_name: str | None = None,
+) -> list[dict]:
     """Build the only FT selections that the product may display as tracked picks.
 
     3 arşiv (B/C/D) çoğunluk kuralı: en az 2/3 aynı yönde ise sinyal.
     O/U ve BTTS için de en az 2 arşiv uyumu gerekli.
+    Kalibrasyon: log-odds shrinkage ile lig bazlı baz orana doğru düzeltme.
     """
     if patterns is None:
         return []
     by_archive: dict[str, dict[str, dict]] = {}
+    cal_by_archive: dict[str, dict[str, dict]] = {}
+
     for archive, key in _ARCHIVE_KEYS:
         pattern = patterns.get(key)
         if not isinstance(pattern, dict):
@@ -176,6 +183,9 @@ def build_ft_recommendations(patterns: dict | None) -> list[dict]:
                     "match_count": count,
                 }
         by_archive[archive] = candidates
+
+        cal_picks = calibrate_pattern(pattern, league_name=league_name, min_matches=MIN_ARCHIVE_MATCHES)
+        cal_by_archive[archive] = {cp.market: cp for cp in cal_picks}
 
     picks = []
     for market in _MARKETS:
@@ -201,6 +211,16 @@ def build_ft_recommendations(patterns: dict | None) -> list[dict]:
         agreeing_entries = [e for name, e in present if name in agreeing]
         frequency = min(e["frequency_pct"] for e in agreeing_entries)
         count = min(e["match_count"] for e in agreeing_entries)
+
+        cal_items = []
+        for name in agreeing:
+            cp = cal_by_archive.get(name, {}).get(market)
+            if cp:
+                cal_items.append(cp)
+        calibrated_pct = round(min(c.calibrated_pct for c in cal_items), 1) if cal_items else None
+        margin = round(min(c.margin for c in cal_items), 1) if cal_items else None
+        is_confident = all(c.is_confident for c in cal_items) if cal_items else False
+
         picks.append({
             "recommendation_id": f"{RULE_VERSION}:{market}:{best_selection}",
             "archive": archive_label,
@@ -208,6 +228,9 @@ def build_ft_recommendations(patterns: dict | None) -> list[dict]:
             "selection": best_selection,
             "frequency_pct": frequency,
             "match_count": count,
+            "calibrated_pct": calibrated_pct,
+            "margin": margin,
+            "is_confident": is_confident,
             "archive_1_frequency_pct": first["frequency_pct"] if first else None,
             "archive_1_match_count": first["match_count"] if first else None,
             "archive_2_frequency_pct": second["frequency_pct"] if second else None,
@@ -313,7 +336,7 @@ def prekickoff_picks(
     if not has_ft_data:
         return None
 
-    return build_ft_recommendations(patterns)
+    return build_ft_recommendations(patterns, league_name=league_name)
 
 
 async def capture_v3_recommendations(

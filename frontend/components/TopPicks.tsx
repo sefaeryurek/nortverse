@@ -49,7 +49,8 @@ function archiveBadgeClass(archive: string) {
 
 const RecommendationRow = memo(function RecommendationRow({ recommendation }: { recommendation: FTRecommendation }) {
   const match = useMatchInfo();
-  const pct = Math.round(recommendation.frequency_pct);
+  const calPct = recommendation.calibrated_pct != null ? Math.round(recommendation.calibrated_pct) : null;
+  const pct = calPct ?? Math.round(recommendation.frequency_pct);
   const color = pctColor(pct);
   const archive = archiveLabel(recommendation.archive);
 
@@ -84,10 +85,20 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 mb-0.5">
+        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
           <span className={archiveBadgeClass(recommendation.archive)}>
             {archiveLabel(recommendation.archive)}
           </span>
+          {recommendation.is_confident && (
+            <span className="nv-badge" style={{
+              backgroundColor: "rgba(34,197,94,0.15)",
+              color: "var(--nv-accent-green)",
+              fontSize: "9px",
+              fontWeight: 700,
+            }}>
+              Güvenli
+            </span>
+          )}
           <span
             className="text-[10px] uppercase"
             style={{
@@ -128,8 +139,20 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
           >
             %{pct}
           </div>
+          {calPct != null && (
+            <div
+              className="mt-0.5 text-[9px]"
+              style={{
+                fontFamily: "var(--nv-font-mono)",
+                color: "var(--nv-text-tertiary)",
+              }}
+              title="Ham frekans yüzdesi (kalibrasyon öncesi)"
+            >
+              ham %{Math.round(recommendation.frequency_pct)}
+            </div>
+          )}
           <div
-            className="mt-0.5 text-[9px]"
+            className={`${calPct != null ? "" : "mt-0.5 "}text-[9px]`}
             style={{
               fontFamily: "var(--nv-font-mono)",
               color: "var(--nv-text-tertiary)",
@@ -205,7 +228,7 @@ export default memo(function TopPicks({ recommendations, period }: Props) {
         style={{ color: "var(--nv-text-tertiary)" }}
       >
         Seçimler maç başlamadan sabitlenir ve aynı kayıt sonuçlandıktan sonra ölçülür.
-        Yüzde, benzer geçmiş maçlardaki görülme sıklığıdır; kalibre edilmiş olasılık veya getiri tahmini değildir.
+        Yüzde, lig bazlı baz oranları ve log-odds shrinkage ile kalibre edilmiştir.
       </p>
     </div>
   );

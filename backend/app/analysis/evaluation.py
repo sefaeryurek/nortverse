@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from app.config import ANALYSIS
 
 
-BASE_RESULT = {"1": 45.3, "X": 24.9, "2": 29.8, "ou25": 52.7, "btts": 53.2}
+BASE_RESULT: dict[str, float] = {"1": 45.3, "X": 24.9, "2": 29.8, "ou25": 52.7, "btts": 53.2}
 
 LEAGUE_BASE_RATES: dict[str, dict[str, float]] = {
     "English Premier League": {"1": 45.2, "X": 24.6, "2": 30.3, "ou25": 52.9, "btts": 52.0},
@@ -131,6 +131,86 @@ def evaluate_pattern(
         btts_hit=btts_hit,
         brier_score=round(brier, 4),
     )
+
+
+def _shrink_pct(raw_pct: float, base_pct: float, shrink: float) -> float:
+    """Log-odds shrinkage: ham yüzdeyi baz orana doğru küçültür."""
+    raw_p = max(1.0, min(99.0, raw_pct)) / 100.0
+    base_p = base_pct / 100.0
+    raw_logit = math.log(raw_p / (1 - raw_p))
+    base_logit = math.log(base_p / (1 - base_p))
+    adj_logit = raw_logit * (1 - shrink) + base_logit * shrink
+    return 1 / (1 + math.exp(-adj_logit)) * 100
+
+
+@dataclass
+class CalibratedPick:
+    market: str
+    selection: str
+    raw_pct: float
+    calibrated_pct: float
+    margin: float
+    is_confident: bool
+
+
+def calibrate_pattern(
+    pattern_data: dict | None,
+    league_name: str | None = None,
+    min_matches: int = 1,
+) -> list[CalibratedPick]:
+    """Pre-match kalibrasyon: ham pattern yüzdelerini shrinkage ile düzeltir."""
+    if not pattern_data or not isinstance(pattern_data, dict):
+        return []
+    mc = pattern_data.get("match_count", 0)
+    if not isinstance(mc, int) or mc < min_matches:
+        return []
+
+    base_rates = get_base_rates(league_name)
+    shrink = ANALYSIS.result_shrinkage / (1 + mc / ANALYSIS.shrinkage_half_life)
+    picks: list[CalibratedPick] = []
+
+    result_pcts = {
+        "1": pattern_data.get("result_1_pct", 0) or 0,
+        "X": pattern_data.get("result_x_pct", 0) or 0,
+        "2": pattern_data.get("result_2_pct", 0) or 0,
+    }
+    adj_result = {k: _shrink_pct(v, base_rates[k], shrink) for k, v in result_pcts.items()}
+    sorted_vals = sorted(adj_result.values(), reverse=True)
+    margin = sorted_vals[0] - sorted_vals[1]
+    best = max(adj_result, key=lambda k: adj_result[k])
+    picks.append(CalibratedPick(
+        market="result", selection=best,
+        raw_pct=round(result_pcts[best], 1),
+        calibrated_pct=round(adj_result[best], 1),
+        margin=round(margin, 1),
+        is_confident=margin >= ANALYSIS.result_min_margin,
+    ))
+
+    ou_base = base_rates.get("ou25", ANALYSIS.over_25_base_rate)
+    over_raw = pattern_data.get("ust_25_pct", 0) or 0
+    over_cal = _shrink_pct(over_raw, ou_base, shrink)
+    is_over = over_cal > ou_base
+    picks.append(CalibratedPick(
+        market="over_25", selection="over" if is_over else "under",
+        raw_pct=round(over_raw if is_over else (100 - over_raw), 1),
+        calibrated_pct=round(over_cal if is_over else (100 - over_cal), 1),
+        margin=round(abs(over_cal - ou_base), 1),
+        is_confident=abs(over_cal - ou_base) >= 5.0,
+    ))
+
+    btts_base = base_rates.get("btts", ANALYSIS.btts_base_rate)
+    btts_raw = pattern_data.get("kg_var_pct", 0) or 0
+    btts_cal = _shrink_pct(btts_raw, btts_base, shrink)
+    is_btts = btts_cal > btts_base
+    picks.append(CalibratedPick(
+        market="btts", selection="yes" if is_btts else "no",
+        raw_pct=round(btts_raw if is_btts else (100 - btts_raw), 1),
+        calibrated_pct=round(btts_cal if is_btts else (100 - btts_cal), 1),
+        margin=round(abs(btts_cal - btts_base), 1),
+        is_confident=abs(btts_cal - btts_base) >= 5.0,
+    ))
+
+    return picks
 
 
 def pct(hit: int, total: int) -> float:
