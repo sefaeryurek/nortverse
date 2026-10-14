@@ -229,6 +229,7 @@ nortverse/
 │   │   │   ├── persist.py         # compute_all_patterns + update_match_patterns (Sprint 8)
 │   │   │   ├── correlation.py      # Poisson korelasyon faktörleri — pazar çiftleri arası (Sprint 19)
 │   │   │   ├── evaluation.py      # Değerlendirme çekirdek mantığı — API + CLI ortak (Sprint 76)
+│   │   │   ├── ensemble.py        # LogisticRegression meta-model B+C+D birleştirme (Sprint 81)
 │   │   │   ├── repair.py          # detect_issues + needs_normalization — tarihsel veri onarımı (Sprint 20)
 │   │   │   ├── score_snapshots.py # Skor snapshot yönetimi
 │   │   │   ├── skip_cache.py      # Atlanan maç cache'i
@@ -243,7 +244,7 @@ nortverse/
 │   │   │   ├── routes_results.py  # /api/results, /api/matches endpoint'leri (Sprint 22)
 │   │   │   ├── routes_admin.py    # /api/health, /api/admin/quality, /api/correlations (Sprint 22)
 │   │   │   ├── routes_evaluation.py # /api/evaluation — günlük tahmin vs sonuç karşılaştırması (Sprint 37)
-│   │   │   ├── routes_live_ht.py  # /api/live-ht — canlı İY eşleşme endpoint'leri (Sprint 47)
+│   │   │   ├── routes_live_ht.py  # /api/live-ht + /ws/live-ht — canlı İY eşleşme + WebSocket (Sprint 47+82)
 │   │   │   ├── score_state.py     # Skor durumu yönetimi
 │   │   │   └── live_snapshot.py   # Canlı snapshot endpoint
 │   │   ├── pipeline/
@@ -253,9 +254,9 @@ nortverse/
 │   │       ├── _helpers.py        # Ortak yardımcılar: console, logging, render (Sprint 21)
 │   │       ├── pipeline_cmds.py   # analyze, fetch-fixture, run-pipeline, serve (Sprint 21)
 │   │       ├── archive_cmds.py    # build-archive, repair-archive, normalize-leagues (Sprint 21)
-│   │       └── audit_cmds.py      # audit-db, self-test, prune-non-league (Sprint 21)
+│   │       └── audit_cmds.py      # audit-db, self-test, prune-non-league, backtest, train-ensemble (Sprint 21+76+81)
 │   ├── alembic/                   # DB migration (15 migration)
-│   ├── tests/                     # 638 test
+│   ├── tests/                     # 936 test
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -286,8 +287,9 @@ nortverse/
 │   │   ├── test_evaluation.py          # Günlük değerlendirme testleri (19 test, Sprint 37)
 │   │   ├── test_evaluation_core.py    # Değerlendirme çekirdek mantığı testleri (20 test, Sprint 76)
 │   │   ├── test_pattern_d.py          # Cosine similarity testleri (18 test, Sprint 46)
-│   │   ├── test_live_ht.py            # Canlı İY eşleşme testleri (17 test, Sprint 47)
-│   │   └── test_temporal_weights.py   # Temporal weighting testleri (Sprint 53)
+│   │   ├── test_live_ht.py            # Canlı İY eşleşme + WebSocket testleri (24 test, Sprint 47+82)
+│   │   ├── test_temporal_weights.py   # Temporal weighting testleri (Sprint 53)
+│   │   └── test_ensemble.py           # Ensemble meta-model testleri (21 test, Sprint 81)
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
@@ -342,8 +344,9 @@ nortverse/
 │   │   ├── list-validation.ts     # Liste veri doğrulama (Sprint 12 denetim)
 │   │   ├── match-context.tsx      # MatchProvider — match metadata paylaşımı (Sprint 8.7)
 │   │   ├── pattern-fields.ts      # Pattern alan isimleri (Sprint 12 denetim)
-│   │   └── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
-│   ├── __tests__/                 # 209 vitest test
+│   │   ├── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
+│   │   └── use-live-ws.ts         # useLiveWs hook — WebSocket canlı maç + REST fallback (Sprint 82)
+│   ├── __tests__/                 # 294 vitest test
 │   │   ├── fixtures.ts            # Test factory'leri
 │   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
 │   │   ├── cart.test.ts           # Sepet helper'ları (~14 test)
@@ -370,7 +373,8 @@ nortverse/
 │   │   ├── analyze-client.test.tsx       # AnalyzeClient component testleri
 │   │   ├── auto-refresh.test.tsx         # AutoRefresh component testleri
 │   │   ├── score-freshness.test.tsx      # Skor tazeliği testleri
-│   │   └── match-visibility.test.ts      # Maç görünürlük testleri
+│   │   ├── match-visibility.test.ts      # Maç görünürlük testleri
+│   │   └── labels.test.ts               # Periyot etiketleri testleri (Sprint 18)
 │   ├── e2e/                       # 14 Playwright E2E test (×2 viewport = 28)
 │   │   ├── navigation.spec.ts     # Sayfa yükleme, redirect, DayTabs (6 test)
 │   │   ├── analyze.spec.ts        # Analiz sayfası, periyot sekmeleri (4 test)
@@ -378,7 +382,7 @@ nortverse/
 │   ├── AGENTS.md                  # ⚠️ Next.js özel sürüm uyarısı — kod yazmadan önce oku
 │   ├── playwright.config.ts       # Playwright E2E yapılandırması (Sprint 18)
 │   ├── vitest.config.mts          # Vitest yapılandırması (Sprint 10)
-│   └── next.config.ts             # Rewrite proxy: /api/* → localhost:8000/api/*
+│   └── next.config.ts             # Rewrite proxy: /api/* + /ws/* → localhost:8000 (Sprint 82)
 └── CLAUDE.md
 ```
 
@@ -1382,6 +1386,58 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Testler:** 20 yeni `test_evaluation_core.py` (get_base_rates, pct, brier_avg, evaluate_pattern, EvalAccumulator) + mevcut `test_evaluation.py` import yolları güncellendi
 - **Sonuç:** 908 backend + 206 frontend + 28 E2E = **1142 toplam test** (tüm sprint'ler boyunca eklenen Sprint 66-75 testleri dahil)
 
+### Sprint 77 — TAMAMLANDI ✅ (Dead Code Temizliği + Config Tutarlılık + Cache Clock Fix)
+- **371 satır dead code kaldırıldı:** Kullanılmayan fonksiyonlar, ölü import'lar, stale config
+- **Config tutarlılık:** CLAUDE.md ile config.py default değerleri senkronize edildi
+- **Cache clock fix:** `_stats_cache` zaman karşılaştırması düzeltildi
+
+### Sprint 78 — TAMAMLANDI ✅ (React.memo Optimizasyonu)
+- **React.memo eklendi:** Ağır component'lerde (MatchCard, ArchiveSection, PctBar) gereksiz re-render engellendi
+- Canlı sayfada polling sırasında performans iyileştirmesi
+
+### Sprint 79 — TAMAMLANDI ✅ (Cache O(n)→O(1) + Bug Fix'ler + Hydration Düzeltmesi)
+- **OrderedDict LRU cache:** `_snapshot_finalized` ve `_snapshot_checked_at` dict'leri `OrderedDict`'e dönüştürüldü — O(n) eviction → O(1)
+- **Hydration düzeltmesi:** Frontend SSR/CSR uyumsuzluk fix
+
+### Sprint 80 — TAMAMLANDI ✅ (Frontend/Backend Strateji Birleştirme)
+- **Bağlam:** Frontend MarketSummary basit yüzde karşılaştırma, backend evaluation log-odds shrinkage — birleştirildi
+- **`evaluation.py` — `calibrate_pattern()` fonksiyonu:** Log-odds shrinkage'ı pre-match tahminlere uygular (actual sonuç gerekmez)
+- **`CalibratedPick` dataclass:** market, selection, raw_pct, calibrated_pct, margin, is_confident
+- **`snapshots.py` entegrasyonu:** `build_ft_recommendations` her arşiv için `calibrate_pattern()` çağırıyor
+- **`RecommendationOut` schema:** `calibrated_pct`, `margin`, `is_confident` alanları eklendi
+- **Frontend TopPicks:** calibrated_pct varsa onu kullanır, "Güvenli" rozeti gösterir
+
+### Sprint 81 — TAMAMLANDI ✅ (Ensemble Meta-Model B+C+D)
+- **`app/analysis/ensemble.py` (yeni modül):**
+  - `build_result_features()`: 12 feature vektör (3 pattern × (3 result pcts + match_count))
+  - `build_ou_features()` / `build_btts_features()`: 6 feature vektörler
+  - `train_ensemble()`: 3 LogisticRegression model (result 3-class, O/U binary, BTTS binary) + StandardScaler
+  - `predict()` → `EnsemblePrediction`: result_probs, picks, confidence
+  - `save_models()` / `load_models()`: joblib serialization
+  - Eksik pattern'ler lig bazlı baz oranları ile impute edilir
+- **CLI:** `train-ensemble` komutu (tarih aralığından eğitim), `backtest --ensemble` parametresi
+- **Bağımlılık:** `scikit-learn==1.5.2`, `joblib==1.4.2` (kullanıcı onaylı)
+- **Testler:** 21 yeni test (`test_ensemble.py`) — feature extraction, training, prediction, persistence
+
+### Sprint 82 — TAMAMLANDI ✅ (Canlı Maç WebSocket)
+- **Bağlam:** Canlı sayfada 45sn REST polling → WebSocket ile anlık güncelleme
+- **Backend `routes_live_ht.py`:**
+  - `_ConnectionManager`: WebSocket bağlantı yöneticisi — connect/disconnect/broadcast, kopuk bağlantı otomatik temizleme
+  - `_ws_broadcaster`: 15sn periyodik veri çekip tüm bağlı istemcilere gönderir
+  - `ws_live_ht` endpoint (`/ws/live-ht`): bağlantı anında mevcut veri + broadcaster periyodik güncelleme + ping/pong keepalive
+  - `start_ws_broadcaster()` / `stop_ws_broadcaster()`: lifespan'da yönetilir
+- **Frontend `lib/use-live-ws.ts` (yeni):**
+  - `useLiveWs()` hook: otomatik reconnect (exponential backoff 1s→15s), 30sn ping keepalive
+  - WebSocket bağlanamazsa `status: "fallback"` → eski 45sn REST polling devreye girer
+  - `WsStatus` type: `"connecting" | "connected" | "disconnected" | "fallback"`
+- **Frontend `/canli` sayfası güncellendi:**
+  - WebSocket → anlık maç verileri; REST fallback → eski 45sn polling
+  - `ConnectionBadge` component: WS (yeşil) veya REST göstergesi
+  - 3sn bağlantı timeout sonrası REST'ten ilk veri yüklenir
+- **`next.config.ts`:** `/ws/*` proxy rewrite eklendi
+- **Testler:** 7 yeni `_ConnectionManager` testi (connect, disconnect, broadcast, dead cleanup)
+- **Type fix'ler:** Sprint 80'den kalan FTRecommendation test fixture eksiklikleri düzeltildi
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1643,7 +1699,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-11 — Sprint 54 TAMAMLANDI, Local Development)
+## Kaldığımız Yer (2026-10-14 — Sprint 82 TAMAMLANDI, Local Development)
 
 ### ✅ Mevcut Durum — Local Development
 
@@ -1653,49 +1709,33 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 |---|---|---|
 | **Frontend** | Local Next.js dev | `http://localhost:3000` |
 | **Backend** | Local FastAPI | `http://localhost:8000` |
-| **Veritabanı** | Docker PostgreSQL | Port 5433, 33,707 aktif maç |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 33,707+ aktif maç |
 | **Otomasyon** | Windows Task Scheduler | 4 bat script (pipeline + skor + yedekleme) |
 | **CI/CD** | GitHub Actions | `quality.yml` aktif (push/PR), cron'lar devre dışı |
 
 **Eski cloud deployment (Render + Vercel + Neon):** Konfigürasyon korunuyor ama aktif değil.
 
-### Veri Kalitesi (Sprint 54 — recompute TAMAMLANDI)
-
-| Metrik | Değer |
-|---|---|
-| Aktif maç | 33,707 |
-| Pattern computed | 29,918 |
-| Pattern eksik | 3,789 (recompute sırasında eklenen yeni maçlar — ikinci pas ile tamamlanabilir) |
-| Pattern tutarsızlık | 0 |
-| Quality score | 97.5/100 |
-| Arşiv | 7+ lig × 24+ sezon (arşiv genişleme devam ediyor) |
-| Duplicate | 0 |
-| Mantıksal duplicate | 0 |
-
-### Test Durumu (Sprint 76 sonrası)
+### Test Durumu (Sprint 82 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 908 | ✅ Yeşil |
-| **Frontend birim** | vitest | 206 | ✅ Yeşil |
+| **Backend** | pytest | 936 | ✅ Yeşil |
+| **Frontend birim** | vitest | 294 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 1142 | — |
+| **Toplam** | — | 1258 | — |
 
-### Sıradaki Adımlar
+### Son Tamamlanan Sprint'ler
 
-**Tamamlanan (Sprint 54'te):**
-- ✅ Pattern recompute: 18,807 maç güncellendi, 0 hata — quality 97.5/100
-- ✅ CLAUDE.md tutarsızlık düzeltmeleri (MAJORITY_BOOST yanlış iddiası, Neon referansları, aktif maç sayısı)
-- ✅ Pattern D config: top_n=20→30, min_similarity=0.85→0.80 (kapsam artırma)
+- ✅ **Sprint 80:** Frontend/Backend strateji birleştirme — `calibrate_pattern()` ile log-odds shrinkage TopPicks'e entegre
+- ✅ **Sprint 81:** Ensemble meta-model (B+C+D) — LogisticRegression ile 3 ayrı model (result/O-U/BTTS), CLI eğitim + backtest entegrasyonu
+- ✅ **Sprint 82:** Canlı maç WebSocket — 45sn polling → 15sn WebSocket broadcast, REST fallback, `useLiveWs` hook
 
-**Bekleyen konular (kullanıcı kararı gerektirir):**
+### Bekleyen Konular
+
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
-- **Frontend/Backend strateji birleştirme:** Frontend MarketSummary basit yüzde karşılaştırma, backend evaluation log-odds shrinkage + lig bazlı baz oranları — ikisi farklı sayfalarda ama uzun vadede birleştirilmeli
 - **Platt scaling:** Confidence skoru hâlâ olasılık olarak yorumlanmamalı — gelecekte Platt scaling veya isotonic regression ile gerçek olasılığa kalibre edilebilir
-- **Ensemble stacking B+C+D:** Logistic regression meta-model (scikit-learn gerektirir — onay gerekir)
 - **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
-- **Canlı maç WebSocket:** Şu an polling (45sn), real-time push için WebSocket gerekir (onay gerekir)
 
 ### Bilinen Açık Konular
 
@@ -1703,4 +1743,4 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 - **Task Scheduler "missed run":** Kaçırılan görevlerin yeniden çalıştırılması ayarı etkinleştirilmeli
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
-- **Pattern eksik 3,789 maç:** Recompute sırasında başka seanslarda eklenen yeni arşiv maçları — ikinci `recompute-patterns --only-missing` pası ile tamamlanabilir
+- **Pattern eksik:** Recompute sırasında eklenen yeni arşiv maçları — `recompute-patterns --only-missing` pası ile tamamlanabilir
