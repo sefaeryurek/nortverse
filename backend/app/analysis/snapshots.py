@@ -150,6 +150,7 @@ _ARCHIVE_KEYS = (
 def build_ft_recommendations(
     patterns: dict | None,
     league_name: str | None = None,
+    calibrator: object | None = None,
 ) -> list[dict]:
     """Build the only FT selections that the product may display as tracked picks.
 
@@ -184,7 +185,7 @@ def build_ft_recommendations(
                 }
         by_archive[archive] = candidates
 
-        cal_picks = calibrate_pattern(pattern, league_name=league_name, min_matches=MIN_ARCHIVE_MATCHES)
+        cal_picks = calibrate_pattern(pattern, league_name=league_name, min_matches=MIN_ARCHIVE_MATCHES, calibrator=calibrator)
         cal_by_archive[archive] = {cp.market: cp for cp in cal_picks}
 
     picks = []
@@ -336,7 +337,8 @@ def prekickoff_picks(
     if not has_ft_data:
         return None
 
-    return build_ft_recommendations(patterns, league_name=league_name)
+    from app.analysis.calibration import get_default_calibrator
+    return build_ft_recommendations(patterns, league_name=league_name, calibrator=get_default_calibrator())
 
 
 async def capture_v3_recommendations(

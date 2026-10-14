@@ -157,8 +157,9 @@ def calibrate_pattern(
     pattern_data: dict | None,
     league_name: str | None = None,
     min_matches: int = 1,
+    calibrator: object | None = None,
 ) -> list[CalibratedPick]:
-    """Pre-match kalibrasyon: ham pattern yüzdelerini shrinkage ile düzeltir."""
+    """Pre-match kalibrasyon: ham pattern yüzdelerini shrinkage + isotonic ile düzeltir."""
     if not pattern_data or not isinstance(pattern_data, dict):
         return []
     mc = pattern_data.get("match_count", 0)
@@ -178,10 +179,14 @@ def calibrate_pattern(
     sorted_vals = sorted(adj_result.values(), reverse=True)
     margin = sorted_vals[0] - sorted_vals[1]
     best = max(adj_result, key=lambda k: adj_result[k])
+    result_cal = adj_result[best]
+    if calibrator is not None:
+        from app.analysis.calibration import apply_calibration
+        result_cal = apply_calibration(result_cal, "result", calibrator)
     picks.append(CalibratedPick(
         market="result", selection=best,
         raw_pct=round(result_pcts[best], 1),
-        calibrated_pct=round(adj_result[best], 1),
+        calibrated_pct=round(result_cal, 1),
         margin=round(margin, 1),
         is_confident=margin >= ANALYSIS.result_min_margin,
     ))
@@ -190,10 +195,14 @@ def calibrate_pattern(
     over_raw = pattern_data.get("ust_25_pct", 0) or 0
     over_cal = _shrink_pct(over_raw, ou_base, shrink)
     is_over = over_cal > ou_base
+    over_display = over_cal if is_over else (100 - over_cal)
+    if calibrator is not None:
+        from app.analysis.calibration import apply_calibration
+        over_display = apply_calibration(over_display, "over_25", calibrator)
     picks.append(CalibratedPick(
         market="over_25", selection="over" if is_over else "under",
         raw_pct=round(over_raw if is_over else (100 - over_raw), 1),
-        calibrated_pct=round(over_cal if is_over else (100 - over_cal), 1),
+        calibrated_pct=round(over_display, 1),
         margin=round(abs(over_cal - ou_base), 1),
         is_confident=abs(over_cal - ou_base) >= 5.0,
     ))
@@ -202,10 +211,14 @@ def calibrate_pattern(
     btts_raw = pattern_data.get("kg_var_pct", 0) or 0
     btts_cal = _shrink_pct(btts_raw, btts_base, shrink)
     is_btts = btts_cal > btts_base
+    btts_display = btts_cal if is_btts else (100 - btts_cal)
+    if calibrator is not None:
+        from app.analysis.calibration import apply_calibration
+        btts_display = apply_calibration(btts_display, "btts", calibrator)
     picks.append(CalibratedPick(
         market="btts", selection="yes" if is_btts else "no",
         raw_pct=round(btts_raw if is_btts else (100 - btts_raw), 1),
-        calibrated_pct=round(btts_cal if is_btts else (100 - btts_cal), 1),
+        calibrated_pct=round(btts_display, 1),
         margin=round(abs(btts_cal - btts_base), 1),
         is_confident=abs(btts_cal - btts_base) >= 5.0,
     ))
