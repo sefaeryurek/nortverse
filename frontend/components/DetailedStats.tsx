@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore, useState } from "react";
+import { memo, useSyncExternalStore, useState } from "react";
 import type { PatternResult } from "@/lib/types";
 import { type Period, periodLabels } from "@/lib/labels";
 
@@ -458,7 +458,7 @@ function ArchiveDetailCard({
   );
 }
 
-export default function DetailedStats({ patternB, patternC, patternD, period }: Props) {
+export default memo(function DetailedStats({ patternB, patternC, patternD, period }: Props) {
   const [override, setOpen] = useState<boolean | null>(null);
   const savedOpen = useSyncExternalStore(subscribeDetails, readDetails, () => false);
   const open = override ?? savedOpen;
@@ -556,7 +556,7 @@ export default function DetailedStats({ patternB, patternC, patternD, period }: 
       )}
     </div>
   );
-}
+});
 
 function subscribeDetails(listener: () => void) {
   window.addEventListener("storage", listener);

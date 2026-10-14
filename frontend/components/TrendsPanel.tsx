@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { TrendBlock, TrendsData } from "@/lib/types";
 
 interface Props {
@@ -229,7 +230,7 @@ function TrendCard({
   );
 }
 
-export default function TrendsPanel({ trends, homeTeam, awayTeam }: Props) {
+export default memo(function TrendsPanel({ trends, homeTeam, awayTeam }: Props) {
   if (!trends) return null;
   const blocks: { block: TrendBlock | null; title: string; subtitle?: string; accent: string }[] = [
     {
@@ -289,4 +290,4 @@ export default function TrendsPanel({ trends, homeTeam, awayTeam }: Props) {
       </div>
     </div>
   );
-}
+});

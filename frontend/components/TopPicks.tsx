@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { FTRecommendation } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import { useMatchInfo } from "@/lib/match-context";
@@ -46,7 +47,7 @@ function archiveBadgeClass(archive: string) {
   return "nv-badge nv-badge-amber";
 }
 
-function RecommendationRow({ recommendation }: { recommendation: FTRecommendation }) {
+const RecommendationRow = memo(function RecommendationRow({ recommendation }: { recommendation: FTRecommendation }) {
   const match = useMatchInfo();
   const pct = Math.round(recommendation.frequency_pct);
   const color = pctColor(pct);
@@ -146,9 +147,9 @@ function RecommendationRow({ recommendation }: { recommendation: FTRecommendatio
       </div>
     </div>
   );
-}
+});
 
-export default function TopPicks({ recommendations, period }: Props) {
+export default memo(function TopPicks({ recommendations, period }: Props) {
   if (period !== "ft") return null;
   if (recommendations.length === 0) {
     return (
@@ -208,4 +209,4 @@ export default function TopPicks({ recommendations, period }: Props) {
       </p>
     </div>
   );
-}
+});
