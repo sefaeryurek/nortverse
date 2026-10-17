@@ -10,7 +10,7 @@ Tahmin: calibrate_pattern() sonrası uygulanır.
 from __future__ import annotations
 
 import logging
-import math
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -178,7 +178,11 @@ def load_calibrator(path: str | Path) -> CalibratorModels | None:
         return None
 
 
-_DEFAULT_PATH = Path("models/calibrator.joblib")
+# Çalışma dizininden bağımsız: backend/models/calibrator.joblib (CALIBRATOR_PATH ile değiştirilebilir).
+_DEFAULT_PATH = Path(
+    os.environ.get("CALIBRATOR_PATH")
+    or Path(__file__).resolve().parents[2] / "models" / "calibrator.joblib"
+)
 _cached_calibrator: CalibratorModels | None = None
 _cache_checked: bool = False
 

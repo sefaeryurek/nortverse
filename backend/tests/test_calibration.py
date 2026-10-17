@@ -197,7 +197,9 @@ class TestDefaultCalibrator:
     def teardown_method(self):
         reset_calibrator_cache()
 
-    def test_returns_none_when_no_model(self):
+    def test_returns_none_when_no_model(self, tmp_path, monkeypatch):
+        import app.analysis.calibration as calibration
+        monkeypatch.setattr(calibration, "_DEFAULT_PATH", tmp_path / "yok.joblib")
         result = get_default_calibrator()
         assert result is None
 
