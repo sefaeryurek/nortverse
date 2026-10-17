@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
@@ -283,6 +284,229 @@ class MatchFinalResultObservation(Base):
     )
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     source_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class MatchHtObservation(Base):
+    """Değişmez İY skoru gözlemi — canlı tahminin İY anında dondurulduğunun kanıtı."""
+
+    __tablename__ = "match_ht_observations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["match_id"], ["matches.match_id"],
+            name="fk_match_ht_observations_match", ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "match_id", "source", "source_revision",
+            name="uq_match_ht_observations_source_revision",
+        ),
+        CheckConstraint("observed_at > kickoff_time", name="ck_match_ht_observations_chronology"),
+        CheckConstraint(
+            "ht_home BETWEEN 0 AND 30 AND ht_away BETWEEN 0 AND 30",
+            name="ck_match_ht_observations_score_range",
+        ),
+        CheckConstraint(
+            "phase IN ('ht_break', 'second_half', 'final')", name="ck_match_ht_observations_phase",
+        ),
+        CheckConstraint(
+            "length(trim(source)) > 0 AND length(trim(source_revision)) > 0",
+            name="ck_match_ht_observations_source",
+        ),
+        Index("ix_match_ht_observations_match_ingested", "match_id", "ingested_at", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    match_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    kickoff_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ht_home: Mapped[int] = mapped_column(Integer, nullable=False)
+    ht_away: Mapped[int] = mapped_column(Integer, nullable=False)
+    phase: Mapped[str] = mapped_column(String(12), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_revision: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+# Defter ve backtest tabloları aynı tahmin kolonlarını paylaşır.
+_LEDGER_SOURCES = "('live_ht', 'top_pick', 'market_summary')"
+
+
+def _prediction_columns_checks(prefix: str) -> tuple:
+    return (
+        CheckConstraint(f"source IN {_LEDGER_SOURCES}", name=f"ck_{prefix}_source"),
+        CheckConstraint("period IN ('ht', 'h2', 'ft')", name=f"ck_{prefix}_period"),
+        CheckConstraint("market ~ '^[a-z0-9_]+$'", name=f"ck_{prefix}_market"),
+        CheckConstraint("length(trim(selection)) > 0", name=f"ck_{prefix}_selection"),
+        CheckConstraint(
+            "archive IS NULL OR archive IN ('a1', 'a2', 'a3')", name=f"ck_{prefix}_archive",
+        ),
+        CheckConstraint(
+            "agreement IS NULL OR agreement BETWEEN 0 AND 3", name=f"ck_{prefix}_agreement",
+        ),
+        CheckConstraint(
+            "prob_shown_bp BETWEEN 0 AND 10000"
+            " AND (prob_raw_bp IS NULL OR prob_raw_bp BETWEEN 0 AND 10000)"
+            " AND (prob_cal_bp IS NULL OR prob_cal_bp BETWEEN 0 AND 10000)"
+            " AND (baseline_prob_bp IS NULL OR baseline_prob_bp BETWEEN 0 AND 10000)",
+            name=f"ck_{prefix}_prob_range",
+        ),
+        CheckConstraint(
+            "confidence_tier IS NULL OR confidence_tier IN ('high', 'medium', 'low', 'insufficient')",
+            name=f"ck_{prefix}_tier",
+        ),
+        CheckConstraint("sample_n IS NULL OR sample_n > 0", name=f"ck_{prefix}_sample"),
+        CheckConstraint(
+            "(ht_home IS NULL) = (ht_away IS NULL)", name=f"ck_{prefix}_ht_pair",
+        ),
+    )
+
+
+class _PredictionColumns:
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    pattern_hash: Mapped[str | None] = mapped_column(String(48))
+    match_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    league_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    kickoff_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period: Mapped[str] = mapped_column(String(2), nullable=False)
+    market: Mapped[str] = mapped_column(String(24), nullable=False)
+    selection: Mapped[str] = mapped_column(String(16), nullable=False)
+    archive: Mapped[str | None] = mapped_column(String(8))
+    agreement_set: Mapped[str | None] = mapped_column(String(16))
+    agreement: Mapped[int | None] = mapped_column(Integer)
+    prob_shown_bp: Mapped[int] = mapped_column(Integer, nullable=False)
+    prob_raw_bp: Mapped[int | None] = mapped_column(Integer)
+    prob_cal_bp: Mapped[int | None] = mapped_column(Integer)
+    baseline_selection: Mapped[str | None] = mapped_column(String(16))
+    baseline_prob_bp: Mapped[int | None] = mapped_column(Integer)
+    confidence_tier: Mapped[str | None] = mapped_column(String(12))
+    sample_n: Mapped[int | None] = mapped_column(Integer)
+    informational: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    ht_home: Mapped[int | None] = mapped_column(Integer)
+    ht_away: Mapped[int | None] = mapped_column(Integer)
+    details: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+
+
+class PredictionLedger(_PredictionColumns, Base):
+    """Kullanıcıya gerçekten gösterilen tahminlerin değişmez defteri (ilk kayıt kazanır)."""
+
+    __tablename__ = "prediction_ledger"
+    __table_args__ = (
+        *_prediction_columns_checks("prediction_ledger"),
+        ForeignKeyConstraint(
+            ["match_id"], ["matches.match_id"],
+            name="fk_prediction_ledger_match", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["ht_observation_id"], ["match_ht_observations.id"],
+            name="fk_prediction_ledger_ht_observation", ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "source", "rule_version", "match_id", "period", "market", "archive",
+            name="uq_prediction_ledger_decision", postgresql_nulls_not_distinct=True,
+        ),
+        CheckConstraint(
+            "origin IN ('realtime', 'backfill_v3')", name="ck_prediction_ledger_origin",
+        ),
+        CheckConstraint("as_of <= recorded_at", name="ck_prediction_ledger_recorded_after_as_of"),
+        CheckConstraint(
+            "(source = 'live_ht' AND as_of > kickoff_time AND ht_home IS NOT NULL"
+            " AND ht_observation_id IS NOT NULL)"
+            " OR (source IN ('top_pick', 'market_summary') AND as_of < kickoff_time"
+            " AND (origin = 'backfill_v3' OR recorded_at < kickoff_time))",
+            name="ck_prediction_ledger_chronology",
+        ),
+        Index("ix_prediction_ledger_source_kickoff", "source", "rule_version", "kickoff_time"),
+        Index("ix_prediction_ledger_match", "match_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, server_default="realtime")
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    ht_observation_id: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class PredictionResolution(Base):
+    """Defter satırının tuttu/tutmadı çözümü — skor düzeltilirse yeni satır eklenir."""
+
+    __tablename__ = "prediction_resolutions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["ledger_id"], ["prediction_ledger.id"],
+            name="fk_prediction_resolutions_ledger", ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "ledger_id", "resolver_version", "ft_home", "ft_away", "ht_home", "ht_away", "outcome",
+            name="uq_prediction_resolutions_state", postgresql_nulls_not_distinct=True,
+        ),
+        CheckConstraint(
+            "outcome IN ('hit', 'miss', 'void')", name="ck_prediction_resolutions_outcome",
+        ),
+        Index("ix_prediction_resolutions_ledger", "ledger_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    ledger_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    outcome: Mapped[str] = mapped_column(String(8), nullable=False)
+    ft_home: Mapped[int | None] = mapped_column(Integer)
+    ft_away: Mapped[int | None] = mapped_column(Integer)
+    ht_home: Mapped[int | None] = mapped_column(Integer)
+    ht_away: Mapped[int | None] = mapped_column(Integer)
+    resolver_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    resolved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+
+class BacktestRun(Base):
+    """Bir backtest koşusu — 'bugünkü algoritma o gün ne derdi' simülasyonu."""
+
+    __tablename__ = "backtest_runs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    strategy: Mapped[str] = mapped_column(String(16), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    params: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    date_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    date_to: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    train_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    git_sha: Mapped[str | None] = mapped_column(String(40))
+    notes: Mapped[str | None] = mapped_column(String(500))
+
+
+class PredictionBacktest(_PredictionColumns, Base):
+    """Backtest tahminleri — gerçek defterle şema seviyesinde karışmaz, yeniden üretilebilir."""
+
+    __tablename__ = "prediction_backtest"
+    __table_args__ = (
+        *_prediction_columns_checks("prediction_backtest"),
+        ForeignKeyConstraint(
+            ["run_id"], ["backtest_runs.id"],
+            name="fk_prediction_backtest_run", ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "run_id", "match_id", "period", "market", "archive",
+            name="uq_prediction_backtest_decision", postgresql_nulls_not_distinct=True,
+        ),
+        CheckConstraint(
+            "outcome IS NULL OR outcome IN ('hit', 'miss', 'void')",
+            name="ck_prediction_backtest_outcome",
+        ),
+        Index("ix_prediction_backtest_run", "run_id", "kickoff_time"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    outcome: Mapped[str | None] = mapped_column(String(8))
+    ft_home: Mapped[int | None] = mapped_column(Integer)
+    ft_away: Mapped[int | None] = mapped_column(Integer)
 
 
 class ScoreSnapshot(Base):

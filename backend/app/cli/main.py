@@ -40,6 +40,7 @@ from app.cli.pipeline_cmds import (
     fetch_and_analyze_cmd,
     fetch_fixture_cmd,
     refresh_fixture_cache_cmd,
+    resolve_predictions_cmd,
     run_pipeline_cmd,
     serve,
     update_scores_cmd,
@@ -57,6 +58,7 @@ app.command("capture-score-snapshots")(capture_score_snapshots_cmd)
 app.command("capture-recommendations")(capture_recommendations_cmd)
 app.command("refresh-fixture-cache")(refresh_fixture_cache_cmd)
 app.command("update-scores")(update_scores_cmd)
+app.command("resolve-predictions")(resolve_predictions_cmd)
 app.command()(serve)
 
 # --- Arşiv / Onarım ---

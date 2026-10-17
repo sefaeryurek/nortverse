@@ -437,6 +437,7 @@ def update_scores_cmd(
     if target_date:
         dt = datetime.strptime(target_date, "%Y-%m-%d").date()
 
+    from app.analysis.ledger import resolve_pending
     from app.pipeline import update_results
 
     async def _run() -> None:
@@ -448,6 +449,28 @@ def update_scores_cmd(
             f"{stats['skipped']} atlandı · "
             f"[red]{stats['errors']} hata[/red]"
         )
+        _print_resolution(await resolve_pending())
+
+    asyncio.run(_run())
+
+
+def _print_resolution(stats: dict[str, int]) -> None:
+    console.print(
+        f"[bold green]Tahmin defteri çözümü:[/bold green] "
+        f"[green]{stats['resolved']} çözüldü[/green] · {stats['void']} geçersiz (silinmiş maç) · "
+        f"[yellow]{stats['unresolvable']} çözülemedi[/yellow]"
+    )
+
+
+def resolve_predictions_cmd(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Tahmin defterindeki skoru gelen tahminlerin tuttu/tutmadı kaydını ekler."""
+    _setup_logging("DEBUG" if verbose else "INFO")
+    from app.analysis.ledger import resolve_pending
+
+    async def _run() -> None:
+        _print_resolution(await resolve_pending())
 
     asyncio.run(_run())
 
