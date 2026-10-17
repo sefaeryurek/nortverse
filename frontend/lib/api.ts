@@ -129,31 +129,7 @@ export interface LiveHTMatch {
   kickoff_time: string | null;
 }
 
-export interface TopFTScore {
-  score: string;
-  count: number;
-  pct: number;
-}
-
-export interface LiveHTStats {
-  ht_score: string;
-  archive_count: number;
-  ft_result_1_pct: number;
-  ft_result_x_pct: number;
-  ft_result_2_pct: number;
-  ft_ust_25_pct: number;
-  ft_kg_var_pct: number;
-  h2_result_1_pct: number;
-  h2_result_x_pct: number;
-  h2_result_2_pct: number;
-  top_ft_scores: TopFTScore[];
-}
-
 export async function getLiveHTMatches(): Promise<LiveHTMatch[]> {
   return request<LiveHTMatch[]>("/api/live-ht", { cache: "no-store" });
-}
-
-export async function getLiveHTStats(htHome: number, htAway: number): Promise<LiveHTStats> {
-  return request<LiveHTStats>(`/api/live-ht/${htHome}-${htAway}/stats`, { cache: "no-store" });
 }
 

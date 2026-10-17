@@ -9,12 +9,9 @@ import pytest
 
 from app.api.routes_live_ht import (
     LiveHTMatch,
-    LiveHTStats,
     _ConnectionManager,
     _is_second_half_or_later,
     _cleanup_observed,
-    _ht_observed,
-    _ht_observed_day,
 )
 
 
@@ -80,36 +77,6 @@ class TestLiveHTMatchModel:
         assert m.live_away is None
 
 
-class TestLiveHTStatsModel:
-    def test_default_values(self):
-        stats = LiveHTStats(ht_score="1-0", archive_count=0)
-        assert stats.ft_result_1_pct == 0.0
-        assert stats.ft_result_x_pct == 0.0
-        assert stats.ft_result_2_pct == 0.0
-        assert stats.ft_ust_25_pct == 0.0
-        assert stats.ft_kg_var_pct == 0.0
-        assert stats.h2_result_1_pct == 0.0
-        assert stats.top_ft_scores == []
-
-    def test_with_values(self):
-        stats = LiveHTStats(
-            ht_score="1-0",
-            archive_count=100,
-            ft_result_1_pct=68.2,
-            ft_result_x_pct=18.1,
-            ft_result_2_pct=13.7,
-            ft_ust_25_pct=55.3,
-            ft_kg_var_pct=42.1,
-            h2_result_1_pct=42.5,
-            h2_result_x_pct=30.0,
-            h2_result_2_pct=27.5,
-            top_ft_scores=[{"score": "2-0", "count": 20, "pct": 20.0}],
-        )
-        assert stats.archive_count == 100
-        assert stats.ft_result_1_pct == 68.2
-        assert len(stats.top_ft_scores) == 1
-
-
 class TestCleanupObserved:
     def test_clears_on_new_day(self):
         import app.api.routes_live_ht as mod
@@ -127,24 +94,6 @@ class TestCleanupObserved:
         mod._ht_observed_day = today
         _cleanup_observed()
         assert "test" in mod._ht_observed
-
-
-class TestStatsEndpoint:
-    @pytest.mark.asyncio
-    async def test_invalid_score_raises(self):
-        from fastapi import HTTPException
-        with pytest.raises(HTTPException) as exc_info:
-            from app.api.routes_live_ht import get_live_ht_stats
-            await get_live_ht_stats(-1, 0)
-        assert exc_info.value.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_invalid_high_score_raises(self):
-        from fastapi import HTTPException
-        with pytest.raises(HTTPException) as exc_info:
-            from app.api.routes_live_ht import get_live_ht_stats
-            await get_live_ht_stats(16, 0)
-        assert exc_info.value.status_code == 400
 
 
 class _FakeWebSocket:
