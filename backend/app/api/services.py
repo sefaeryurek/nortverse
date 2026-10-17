@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from sqlalchemy import cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 
-from app.config import ISTANBUL_TZ
+from app.config import ANALYSIS, ISTANBUL_TZ
 from app.api.schemas import AnalyzeResponse, PeriodOut
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
@@ -25,6 +25,7 @@ from app.analysis.pattern_stats import PatternResult
 from app.analysis.snapshots import RULE_VERSION, capture_v3_recommendations
 
 
+from app.analysis.pattern_d import find_pattern_d_all_periods
 from app.analysis.persist import (
     StalePatternWrite,
     compute_all_patterns,
@@ -276,6 +277,27 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
             "pattern_ht_d": row.pattern_ht_d, "pattern_h2_d": row.pattern_h2_d,
             "pattern_ft_d": row.pattern_ft_d,
         }
+        if ft_d is None and ft_ratios:
+            log.info("Pattern D eksik, lazy backfill: %s", mid)
+            try:
+                _ht_d, _h2_d, _ft_d = await find_pattern_d_all_periods(
+                    ft_ratios,
+                    top_n=ANALYSIS.pattern_d_top_n,
+                    min_similarity=ANALYSIS.pattern_d_min_similarity,
+                    exclude_match_id=mid,
+                    as_of=row.analyzed_at,
+                    league_name=row.league_name,
+                )
+                patterns["pattern_ht_d"] = _ht_d.model_dump() if _ht_d else None
+                patterns["pattern_h2_d"] = _h2_d.model_dump() if _h2_d else None
+                patterns["pattern_ft_d"] = _ft_d.model_dump() if _ft_d else None
+                ht_d, h2_d, ft_d = _ht_d, _h2_d, _ft_d
+                try:
+                    await update_match_patterns(mid, patterns, expected_analyzed_at=row.analyzed_at)
+                except Exception:
+                    log.warning("Pattern D lazy backfill kaydedilemedi [%s]", mid)
+            except Exception:
+                log.warning("Pattern D lazy backfill hesaplanamadı [%s]", mid, exc_info=True)
     else:
         log.info("Yavaş yol — pattern durumu bilinmiyor, hesaplanıyor: %s", mid)
         patterns = await compute_all_patterns(
