@@ -551,6 +551,57 @@ def recompute_patterns_cmd(
     asyncio.run(_run())
 
 
+def backtest_ledger_cmd(
+    strategy: str = typer.Option("live_ht", "--strategy", help="Şimdilik: live_ht"),
+    from_date: str = typer.Option(..., "--from", help="Başlangıç (YYYY-MM-DD)"),
+    to_date: str = typer.Option(..., "--to", help="Bitiş, hariç (YYYY-MM-DD)"),
+    alpha: float = typer.Option(0.5, "--alpha", help="Maç öncesi LR üssü (live_model.ALPHA)"),
+    notes: Optional[str] = typer.Option(None, "--notes"),
+    replace_run: Optional[int] = typer.Option(None, "--replace-run", help="Bu koşuyu silip yeniden üret"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Sızıntısız backtest — sonuçlar prediction_backtest'e yazılır (gerçek defterle karışmaz)."""
+    _setup_logging("DEBUG" if verbose else "INFO")
+    from datetime import datetime
+    from app.analysis.backtest import load_backtest_rows, ms_brier_report, run_live_backtest
+    from app.analysis.performance import group_summaries, summarize
+    from app.config import ISTANBUL_TZ
+
+    if strategy != "live_ht":
+        console.print("[red]Şimdilik sadece --strategy live_ht destekleniyor.[/red]")
+        raise typer.Exit(1)
+    start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
+    end = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
+
+    def _line(label: str, s: dict) -> None:
+        lift = "—" if s["lift_pct"] is None else f"{s['lift_pct']:+.1f}"
+        console.print(
+            f"  {label:<22} n={s['resolved']:>5}  isabet=%{s['hit_pct'] or 0:5.1f}  "
+            f"[%{s['ci_low'] or 0:.1f}–{s['ci_high'] or 0:.1f}]  ort.olasılık=%{s['avg_prob_pct'] or 0:5.1f}  "
+            f"taban=%{s['baseline_hit_pct'] or 0:5.1f}  fark={lift}"
+        )
+
+    async def _run() -> None:
+        run_id = await run_live_backtest(start, end, notes=notes, alpha=alpha, replace_run=replace_run)
+        rows = await load_backtest_rows(run_id)
+        brier = ms_brier_report(rows)
+        console.print(f"\n[bold cyan]Canlı İY→MS backtest #{run_id}[/bold cyan] ({from_date} → {to_date}, α={alpha})")
+        for market in ("result", "ou_25", "kg"):
+            market_rows = [r for r in rows if r["market"] == market]
+            if not market_rows:
+                continue
+            _line(market, summarize(market_rows))
+            for group in group_summaries(market_rows, "tier"):
+                _line(f"  · {group['key']}", group)
+        if brier["brier"] is not None:
+            console.print(
+                f"\n  MS çok sınıflı Brier: model {brier['brier']:.4f} · İY tabanı {brier['baseline_brier']:.4f} "
+                "(düşük daha iyi)"
+            )
+
+    asyncio.run(_run())
+
+
 def backtest_cmd(
     from_date: str = typer.Option(..., "--from", help="Başlangıç tarihi (YYYY-MM-DD)"),
     to_date: str = typer.Option(..., "--to", help="Bitiş tarihi (YYYY-MM-DD)"),

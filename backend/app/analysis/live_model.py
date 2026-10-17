@@ -28,7 +28,8 @@ LIVE_RULE_VERSION = "live-ms-v1"
 MIN_COND_N = 30
 PRIOR_SEASON_DAYS = 3 * 365
 PREMATCH_K = 20.0
-ALPHA = 1.0
+# Backtest (6071 maç, 2023-07..2026-10): α=0.5 Brier .5048 / α=1 .5079 / α=2 .5340; iki dönemde de 0.5 önde.
+ALPHA = 0.5
 TIER_HIGH = 0.70
 TIER_MEDIUM = 0.55
 MIN_ARCHIVE_N = 5
@@ -47,15 +48,15 @@ class Counts:
     def n(self) -> int:
         return self.n1 + self.nx + self.n2
 
-    def add(self, ft_h: int, ft_a: int) -> None:
+    def add(self, ft_h: int, ft_a: int, sign: int = 1) -> None:
         if ft_h > ft_a:
-            self.n1 += 1
+            self.n1 += sign
         elif ft_h == ft_a:
-            self.nx += 1
+            self.nx += sign
         else:
-            self.n2 += 1
-        self.over25 += ft_h + ft_a >= 3
-        self.btts += ft_h > 0 and ft_a > 0
+            self.n2 += sign
+        self.over25 += sign * (ft_h + ft_a >= 3)
+        self.btts += sign * (ft_h > 0 and ft_a > 0)
 
     def result_dist(self) -> dict[str, float]:
         """Laplace(0.5) — küçük örneklemde %0/%100 iddiası olmaz."""

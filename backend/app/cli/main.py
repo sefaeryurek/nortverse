@@ -25,6 +25,7 @@ from app.cli.audit_cmds import (
     audit_db_cmd,
     audit_patterns_cmd,
     backtest_cmd,
+    backtest_ledger_cmd,
     prune_non_league_cmd,
     recompute_patterns_cmd,
     restore_deleted_cmd,
@@ -76,6 +77,7 @@ app.command("audit-patterns")(audit_patterns_cmd)
 app.command("recompute-patterns")(recompute_patterns_cmd)
 app.command("self-test")(self_test_cmd)
 app.command("backtest")(backtest_cmd)
+app.command("backtest-ledger")(backtest_ledger_cmd)
 app.command("train-ensemble")(train_ensemble_cmd)
 app.command("train-calibrator")(train_calibrator_cmd)
 

@@ -19,7 +19,7 @@ from app.db.models import PredictionLedger, PredictionResolution
 log = logging.getLogger(__name__)
 
 
-def _uniform(rows: list[dict]) -> list[dict]:
+def uniform_rows(rows: list[dict]) -> list[dict]:
     """Çok satırlı INSERT ilk satırın anahtarlarını kullanır; eksik anahtarlar None ile doldurulur."""
     keys = {key for row in rows for key in row}
     return [{key: row.get(key) for key in keys} for row in rows]
@@ -29,7 +29,7 @@ async def record_predictions(session, rows: list[dict]) -> int:
     """Defter satırlarını ekler; zaten varsa atlar. Eklenen satır sayısını döner."""
     if not rows:
         return 0
-    stmt = insert(PredictionLedger).values(_uniform(rows)).on_conflict_do_nothing(
+    stmt = insert(PredictionLedger).values(uniform_rows(rows)).on_conflict_do_nothing(
         constraint="uq_prediction_ledger_decision",
     )
     result = await session.execute(stmt)
@@ -102,7 +102,7 @@ async def resolve_pending(batch_size: int = 2000) -> dict[str, int]:
                 stats["void" if outcome["outcome"] == "void" else "resolved"] += 1
             if rows:
                 await session.execute(
-                    insert(PredictionResolution).values(_uniform(rows)).on_conflict_do_nothing(
+                    insert(PredictionResolution).values(uniform_rows(rows)).on_conflict_do_nothing(
                         constraint="uq_prediction_resolutions_state",
                     )
                 )

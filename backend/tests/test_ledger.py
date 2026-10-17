@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from sqlalchemy import CheckConstraint, UniqueConstraint
 
-from app.analysis.ledger import _outcome_row, _uniform
+from app.analysis.ledger import _outcome_row, uniform_rows
 from app.db.models import MatchHtObservation, PredictionBacktest, PredictionLedger, PredictionResolution
 
 
@@ -39,7 +39,7 @@ def test_resolution_and_ht_observation_constraints():
 
 
 def test_uniform_fills_missing_keys():
-    rows = _uniform([{"a": 1}, {"a": 2, "b": 3}])
+    rows = uniform_rows([{"a": 1}, {"a": 2, "b": 3}])
     assert rows == [{"a": 1, "b": None}, {"a": 2, "b": 3}]
 
 
