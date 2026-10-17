@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useLocale } from "@/lib/locale-context";
 
 interface Props {
   error: Error & { digest?: string };
@@ -8,6 +9,8 @@ interface Props {
 }
 
 export default function GlobalError({ error, reset }: Props) {
+  const { t } = useLocale();
+
   useEffect(() => {
     console.error("[GlobalError]", error);
   }, [error]);
@@ -51,7 +54,7 @@ export default function GlobalError({ error, reset }: Props) {
             marginBottom: "var(--nv-space-sm)",
           }}
         >
-          Bir şeyler ters gitti
+          {t.error.title}
         </h2>
 
         <p
@@ -61,7 +64,7 @@ export default function GlobalError({ error, reset }: Props) {
             marginBottom: "var(--nv-space-sm)",
           }}
         >
-          {error.message || "Beklenmeyen bir hata oluştu."}
+          {error.message || t.error.fallbackMessage}
         </p>
 
         {error.digest && (
@@ -91,7 +94,7 @@ export default function GlobalError({ error, reset }: Props) {
             transition: `opacity var(--nv-duration-normal) var(--nv-ease)`,
           }}
         >
-          Tekrar dene
+          {t.common.retry}
         </button>
       </div>
     </div>

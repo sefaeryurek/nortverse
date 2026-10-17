@@ -1,8 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import BetCart from "@/components/BetCart";
+import { LocaleProvider } from "@/lib/locale-context";
+import { type Locale, COOKIE_NAME, defaultLocale, isLocale } from "@/lib/i18n";
 
 const inter = Inter({
   subsets: ["latin", "latin-ext"],
@@ -37,19 +40,25 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(COOKIE_NAME)?.value;
+  const locale: Locale = isLocale(raw) ? raw : defaultLocale;
+
   return (
-    <html lang="tr" className={`${inter.variable} ${jetbrains.variable} h-full`}>
+    <html lang={locale} className={`${inter.variable} ${jetbrains.variable} h-full`}>
       <body className="h-dvh flex flex-col md:flex-row overflow-hidden">
-        <Sidebar />
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          {children}
-        </main>
-        <BetCart />
+        <LocaleProvider initial={locale}>
+          <Sidebar />
+          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+            {children}
+          </main>
+          <BetCart />
+        </LocaleProvider>
       </body>
     </html>
   );

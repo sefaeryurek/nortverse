@@ -1,6 +1,13 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { type Locale, COOKIE_NAME, defaultLocale, getDictionary, isLocale } from "@/lib/i18n";
 
-export default function NotFound() {
+export default async function NotFound() {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(COOKIE_NAME)?.value;
+  const locale: Locale = isLocale(raw) ? raw : defaultLocale;
+  const t = getDictionary(locale);
+
   return (
     <div
       className="flex items-center justify-center p-6"
@@ -42,7 +49,7 @@ export default function NotFound() {
             marginBottom: "var(--nv-space-sm)",
           }}
         >
-          Sayfa bulunamadı
+          {t.notFound.title}
         </h2>
 
         <p
@@ -52,7 +59,7 @@ export default function NotFound() {
             marginBottom: "var(--nv-space-lg)",
           }}
         >
-          Aradığınız sayfa mevcut değil veya taşınmış olabilir.
+          {t.notFound.description}
         </p>
 
         <Link
@@ -69,7 +76,7 @@ export default function NotFound() {
             transition: `opacity var(--nv-duration-normal) var(--nv-ease)`,
           }}
         >
-          Bültene dön
+          {t.notFound.goBack}
         </Link>
       </div>
     </div>

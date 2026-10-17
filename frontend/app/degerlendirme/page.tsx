@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
@@ -8,6 +9,7 @@ import { resolvePageDate } from "@/lib/dates";
 import { leagueDisplay } from "@/lib/leagues";
 import type { DailyEvaluation, MatchEvaluation, PatternEvaluation } from "@/lib/types";
 import Link from "next/link";
+import { type Dictionary, type Locale, COOKIE_NAME, defaultLocale, getDictionary, isLocale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Değerlendirme",
@@ -134,9 +136,11 @@ function HitBadge({ hit, label }: { hit: boolean; label: string }) {
 function PatternBadge({
   pat,
   archiveLabel,
+  t,
 }: {
   pat: PatternEvaluation;
   archiveLabel: string;
+  t: Dictionary;
 }) {
   const lowConfidence = pat.match_count < 10;
   return (
@@ -165,13 +169,13 @@ function PatternBadge({
             color: "var(--nv-accent-blue)",
           }}
         >
-          Güvenli
+          {t.evaluation.confident}
         </span>
       )}
       <HitBadge hit={pat.over_25_hit} label={`${pat.over_25_pick} %${pat.over_25_pct.toFixed(0)}`} />
       <HitBadge hit={pat.btts_hit} label={`${pat.btts_pick} %${pat.btts_pct.toFixed(0)}`} />
       <span style={{ color: "var(--nv-text-tertiary)" }}>
-        ({pat.match_count} maç)
+        ({pat.match_count} {t.common.match})
       </span>
     </div>
   );
@@ -181,7 +185,7 @@ function PatternBadge({
 /*  EvalRow                                                           */
 /* ------------------------------------------------------------------ */
 
-function EvalRow({ match }: { match: MatchEvaluation }) {
+function EvalRow({ match, t }: { match: MatchEvaluation; t: Dictionary }) {
   const { flag } = leagueDisplay(match.league_code, match.league_name);
   const leagueName = match.league_name || match.league_code || "";
 
@@ -282,13 +286,13 @@ function EvalRow({ match }: { match: MatchEvaluation }) {
       {/* Alt satir: Tahmin sonuclari */}
       <div className="mt-2 flex flex-col gap-1.5">
         {match.pattern_b && (
-          <PatternBadge pat={match.pattern_b} archiveLabel="A1" />
+          <PatternBadge pat={match.pattern_b} archiveLabel="A1" t={t} />
         )}
         {match.pattern_c && (
-          <PatternBadge pat={match.pattern_c} archiveLabel="A2" />
+          <PatternBadge pat={match.pattern_c} archiveLabel="A2" t={t} />
         )}
         {match.pattern_d && (
-          <PatternBadge pat={match.pattern_d} archiveLabel="A3" />
+          <PatternBadge pat={match.pattern_d} archiveLabel="A3" t={t} />
         )}
         {!match.pattern_b && !match.pattern_c && !match.pattern_d && (
           <span
@@ -297,7 +301,7 @@ function EvalRow({ match }: { match: MatchEvaluation }) {
               color: "var(--nv-text-tertiary)",
             }}
           >
-            Tahmin verisi yok
+            {t.evaluation.noPrediction}
           </span>
         )}
 
@@ -309,7 +313,9 @@ function EvalRow({ match }: { match: MatchEvaluation }) {
             </span>
             <HitBadge
               hit={match.score_list_hit}
-              label={match.score_list_hit ? `${match.actual_ft} listede` : `${match.actual_ft} listede değil`}
+              label={match.score_list_hit
+                ? t.evaluation.inList.replace("{score}", match.actual_ft)
+                : t.evaluation.notInList.replace("{score}", match.actual_ft)}
             />
           </div>
         )}
@@ -328,7 +334,7 @@ function EvalRow({ match }: { match: MatchEvaluation }) {
             borderRadius: "var(--nv-radius-md)",
           }}
         >
-          Analiz
+          {t.common.analysis}
         </Link>
       </div>
     </div>
@@ -339,13 +345,13 @@ function EvalRow({ match }: { match: MatchEvaluation }) {
 /*  EvalList (async server component)                                 */
 /* ------------------------------------------------------------------ */
 
-async function EvalList({ date }: { date: string }) {
+async function EvalList({ date, t }: { date: string; t: Dictionary }) {
   let data: DailyEvaluation | null = null;
   let error = "";
   try {
     data = await getEvaluation(date);
   } catch (e) {
-    error = e instanceof Error ? e.message : "Bağlantı hatası";
+    error = e instanceof Error ? e.message : t.common.connectionError;
   }
 
   if (error || !data) {
@@ -356,7 +362,7 @@ async function EvalList({ date }: { date: string }) {
             className="font-medium"
             style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}
           >
-            {error || "Veri alınamadı"}
+            {error || t.common.dataError}
           </p>
           <RetryButton />
         </div>
@@ -372,14 +378,14 @@ async function EvalList({ date }: { date: string }) {
             className="font-medium"
             style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}
           >
-            Bu tarihte değerlendirilebilecek bitmiş maç bulunamadı.
+            {t.evaluation.noEvalMatches}
           </p>
           <Link
             href={`/sonuclar?date=${date}`}
             className="inline-block font-medium transition-colors"
             style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-blue)" }}
           >
-            Sonuçlar sayfasına bak
+            {t.evaluation.viewResults}
           </Link>
         </div>
       </div>
@@ -393,15 +399,15 @@ async function EvalList({ date }: { date: string }) {
       {/* Özet kartları — Arşiv 1 (Pattern B) */}
       <div className="px-[var(--nv-page-gutter)] pt-4 pb-1">
         <span style={{ fontSize: "var(--nv-text-xs)", fontWeight: 700, color: "var(--nv-accent-blue)" }}>
-          A1 — Arşiv 1
+          {t.evaluation.archive1}
         </span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 px-[var(--nv-page-gutter)] pb-3">
-        <SummaryCard label="Sonuç İsabeti" hit={s.result_hit} total={s.evaluated} pct={s.result_hit_pct} />
-        <SummaryCard label="Güvenli Sonuç" hit={s.confident_result_hit} total={s.confident_evaluated} pct={s.confident_result_hit_pct} />
-        <SummaryCard label="2.5 Üst/Alt" hit={s.over_25_hit} total={s.evaluated} pct={s.over_25_hit_pct} />
-        <SummaryCard label="KG İsabeti" hit={s.btts_hit} total={s.evaluated} pct={s.btts_hit_pct} />
-        <SummaryCard label="Skor Listesi" hit={s.score_list_hit} total={s.total_matches} pct={s.score_list_hit_pct} />
+        <SummaryCard label={t.evaluation.resultAccuracy} hit={s.result_hit} total={s.evaluated} pct={s.result_hit_pct} />
+        <SummaryCard label={t.evaluation.confidentResult} hit={s.confident_result_hit} total={s.confident_evaluated} pct={s.confident_result_hit_pct} />
+        <SummaryCard label={t.evaluation.overUnder} hit={s.over_25_hit} total={s.evaluated} pct={s.over_25_hit_pct} />
+        <SummaryCard label={t.evaluation.bttsAccuracy} hit={s.btts_hit} total={s.evaluated} pct={s.btts_hit_pct} />
+        <SummaryCard label={t.evaluation.scoreList} hit={s.score_list_hit} total={s.total_matches} pct={s.score_list_hit_pct} />
       </div>
 
       {/* Özet kartları — Arşiv 2 (Pattern C) */}
@@ -409,14 +415,14 @@ async function EvalList({ date }: { date: string }) {
         <>
           <div className="px-[var(--nv-page-gutter)] pt-2 pb-1">
             <span style={{ fontSize: "var(--nv-text-xs)", fontWeight: 700, color: "var(--nv-accent-green)" }}>
-              A2 — Arşiv 2
+              {t.evaluation.archive2}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-[var(--nv-page-gutter)] pb-3">
-            <SummaryCard label="Sonuç İsabeti" hit={s.c_result_hit} total={s.evaluated_c} pct={s.c_result_hit_pct} />
-            <SummaryCard label="Güvenli Sonuç" hit={s.confident_c_result_hit} total={s.confident_c_evaluated} pct={s.confident_c_result_hit_pct} />
-            <SummaryCard label="2.5 Üst/Alt" hit={s.c_over_25_hit} total={s.evaluated_c} pct={s.c_over_25_hit_pct} />
-            <SummaryCard label="KG İsabeti" hit={s.c_btts_hit} total={s.evaluated_c} pct={s.c_btts_hit_pct} />
+            <SummaryCard label={t.evaluation.resultAccuracy} hit={s.c_result_hit} total={s.evaluated_c} pct={s.c_result_hit_pct} />
+            <SummaryCard label={t.evaluation.confidentResult} hit={s.confident_c_result_hit} total={s.confident_c_evaluated} pct={s.confident_c_result_hit_pct} />
+            <SummaryCard label={t.evaluation.overUnder} hit={s.c_over_25_hit} total={s.evaluated_c} pct={s.c_over_25_hit_pct} />
+            <SummaryCard label={t.evaluation.bttsAccuracy} hit={s.c_btts_hit} total={s.evaluated_c} pct={s.c_btts_hit_pct} />
           </div>
         </>
       )}
@@ -426,14 +432,14 @@ async function EvalList({ date }: { date: string }) {
         <>
           <div className="px-[var(--nv-page-gutter)] pt-2 pb-1">
             <span style={{ fontSize: "var(--nv-text-xs)", fontWeight: 700, color: "var(--nv-accent-amber)" }}>
-              A3 — Arşiv 3
+              {t.evaluation.archive3}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-[var(--nv-page-gutter)] pb-3">
-            <SummaryCard label="Sonuç İsabeti" hit={s.d_result_hit} total={s.evaluated_d} pct={s.d_result_hit_pct} />
-            <SummaryCard label="Güvenli Sonuç" hit={s.confident_d_result_hit} total={s.confident_d_evaluated} pct={s.confident_d_result_hit_pct} />
-            <SummaryCard label="2.5 Üst/Alt" hit={s.d_over_25_hit} total={s.evaluated_d} pct={s.d_over_25_hit_pct} />
-            <SummaryCard label="KG İsabeti" hit={s.d_btts_hit} total={s.evaluated_d} pct={s.d_btts_hit_pct} />
+            <SummaryCard label={t.evaluation.resultAccuracy} hit={s.d_result_hit} total={s.evaluated_d} pct={s.d_result_hit_pct} />
+            <SummaryCard label={t.evaluation.confidentResult} hit={s.confident_d_result_hit} total={s.confident_d_evaluated} pct={s.confident_d_result_hit_pct} />
+            <SummaryCard label={t.evaluation.overUnder} hit={s.d_over_25_hit} total={s.evaluated_d} pct={s.d_over_25_hit_pct} />
+            <SummaryCard label={t.evaluation.bttsAccuracy} hit={s.d_btts_hit} total={s.evaluated_d} pct={s.d_btts_hit_pct} />
           </div>
         </>
       )}
@@ -456,20 +462,20 @@ async function EvalList({ date }: { date: string }) {
               backgroundColor: "var(--nv-accent-green)",
             }}
           />
-          {s.total_matches} bitmiş maç
+          {t.evaluation.finishedMatches.replace("{count}", String(s.total_matches))}
         </span>
         <span
           style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}
         >
-          {s.evaluated} değerlendirilen
+          {t.evaluation.evaluatedCount.replace("{count}", String(s.evaluated))}
         </span>
         {(s.brier_result_b != null || s.brier_result_c != null || s.brier_result_d != null) && (
           <span
             className="flex items-center gap-2 ml-auto"
             style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}
-            title="Brier Skoru — düşük = daha iyi kalibre (0 = mükemmel, 0.667 = rastgele)"
+            title={t.evaluation.brierTooltip}
           >
-            Brier:
+            {t.evaluation.brier}
             {s.brier_result_b != null && (
               <span style={{ color: "var(--nv-accent-blue)" }}>A1 {s.brier_result_b.toFixed(3)}</span>
             )}
@@ -486,7 +492,7 @@ async function EvalList({ date }: { date: string }) {
       {/* Mac kartlari */}
       <div className="grid gap-3 px-[var(--nv-page-gutter)] py-4">
         {data.matches.map((m) => (
-          <EvalRow key={m.match_id} match={m} />
+          <EvalRow key={m.match_id} match={m} t={t} />
         ))}
       </div>
     </div>
@@ -509,6 +515,11 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
   const date = resolvePageDate(params.date, today);
   if (date === null) redirect("/degerlendirme");
 
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(COOKIE_NAME)?.value;
+  const locale: Locale = isLocale(raw) ? raw : defaultLocale;
+  const t = getDictionary(locale);
+
   return (
     <div className="flex flex-col h-full pb-[60px] md:pb-0">
       {/* Baslik */}
@@ -525,7 +536,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
               letterSpacing: "var(--nv-tracking-tight)",
             }}
           >
-            Değerlendirme
+            {t.evaluation.title}
           </h1>
           <span
             className="nv-badge"
@@ -545,12 +556,13 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
         activeDate={date}
         basePath="/degerlendirme"
         range="past"
+        locale={locale}
       />
 
       {/* Degerlendirme listesi */}
       <div className="flex-1 overflow-y-auto">
         <Suspense fallback={<EvalSkeleton />}>
-          <EvalList date={date} />
+          <EvalList date={date} t={t} />
         </Suspense>
       </div>
     </div>

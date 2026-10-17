@@ -1,3 +1,5 @@
+import type { Dictionary } from "@/lib/i18n";
+
 export type Period = "ht" | "h2" | "ft";
 
 export interface PeriodLabels {
@@ -12,7 +14,21 @@ export interface PeriodLabels {
   toplamGol: string;
 }
 
-export function periodLabels(period: Period): PeriodLabels {
+export function periodLabels(period: Period, t?: Dictionary): PeriodLabels {
+  if (t) {
+    const src = t.periodLabels[period];
+    return {
+      prefix: src.prefix,
+      sonuc: src.sonuc,
+      hnd: src.hnd,
+      combo15: src.combo15,
+      combo25: src.combo25,
+      comboKg: src.comboKg,
+      fark: src.fark,
+      taraf: src.taraf,
+      toplamGol: src.toplamGol,
+    };
+  }
   if (period === "ht") {
     return {
       prefix: "İY",

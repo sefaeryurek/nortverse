@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { formatTime, isRecentScoreDate, resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
@@ -10,6 +11,7 @@ import { showResultMatch } from "@/lib/match-visibility";
 import { leagueDisplay } from "@/lib/leagues";
 import type { ResultMatch } from "@/lib/types";
 import Link from "next/link";
+import { type Locale, COOKIE_NAME, defaultLocale, getDictionary, isLocale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Sonuçlar",
@@ -79,7 +81,8 @@ function scoreColor(
 /*  ResultRow                                                         */
 /* ------------------------------------------------------------------ */
 
-function ResultRow({ match }: { match: ResultMatch }) {
+function ResultRow({ match, locale }: { match: ResultMatch; locale: Locale }) {
+  const t = getDictionary(locale);
   const timeStr = formatTime(match.kickoff_time);
   const { flag, short } = leagueDisplay(match.league_code, match.league_name);
 
@@ -90,7 +93,7 @@ function ResultRow({ match }: { match: ResultMatch }) {
     : null;
   const htStr =
     match.actual_ht_home !== null && match.actual_ht_away !== null
-      ? `IY ${match.actual_ht_home}-${match.actual_ht_away}`
+      ? `${t.periods.ht} ${match.actual_ht_home}-${match.actual_ht_away}`
       : null;
 
   const color = scoreColor(match.actual_ft_home, match.actual_ft_away);
@@ -212,7 +215,7 @@ function ResultRow({ match }: { match: ResultMatch }) {
             borderRadius: "var(--nv-radius-md)",
           }}
         >
-          Analiz
+          {t.common.analysis}
         </Link>
       </div>
     </div>
@@ -223,7 +226,8 @@ function ResultRow({ match }: { match: ResultMatch }) {
 /*  ResultList (async server component)                               */
 /* ------------------------------------------------------------------ */
 
-async function ResultList({ date, q }: { date: string; q: string }) {
+async function ResultList({ date, q, locale }: { date: string; q: string; locale: Locale }) {
+  const t = getDictionary(locale);
   let matches: ResultMatch[] = [];
   let error = "";
   try {
@@ -232,7 +236,7 @@ async function ResultList({ date, q }: { date: string; q: string }) {
       showResultMatch(match, now.getTime()),
     );
   } catch (e) {
-    error = e instanceof Error ? e.message : "Bağlantı hatası";
+    error = e instanceof Error ? e.message : t.common.connectionError;
   }
 
   /* --- Hata durumu --- */
@@ -306,8 +310,8 @@ async function ResultList({ date, q }: { date: string; q: string }) {
             }}
           >
             {isToday
-              ? "Bugün için henüz doğrulanmış maç sonucu kaydı yok."
-              : "Bu tarihte doğrulanmış maç sonucu kaydı bulunamadı."}
+              ? t.results.noMatchesToday
+              : t.results.noMatchesDate}
           </p>
           {isToday && (
             <p
@@ -316,7 +320,7 @@ async function ResultList({ date, q }: { date: string; q: string }) {
                 color: "var(--nv-text-tertiary)",
               }}
             >
-              Başlayacak ve süren maçlar Bülten sayfasında görünür.
+              {t.results.scheduledNote}
             </p>
           )}
           <Link
@@ -327,7 +331,7 @@ async function ResultList({ date, q }: { date: string; q: string }) {
               color: "var(--nv-accent-blue)",
             }}
           >
-            Bültendeki maçlara bak
+            {t.results.viewBulletin}
           </Link>
         </div>
       </div>
@@ -378,7 +382,7 @@ async function ResultList({ date, q }: { date: string; q: string }) {
               backgroundColor: "var(--nv-accent-green)",
             }}
           />
-          {matches.length} biten maç
+          {t.results.finishedCount.replace("{count}", String(matches.length))}
         </span>
 
         {lastChecked && (
@@ -388,8 +392,8 @@ async function ResultList({ date, q }: { date: string; q: string }) {
               color: "var(--nv-text-tertiary)",
             }}
           >
-            Son kontrol:{" "}
-            {new Date(lastChecked).toLocaleString("tr-TR", {
+            {t.results.lastCheck}{" "}
+            {new Date(lastChecked).toLocaleString(locale === "tr" ? "tr-TR" : "en-GB", {
               timeZone: "Europe/Istanbul",
               dateStyle: "short",
               timeStyle: "short",
@@ -409,8 +413,8 @@ async function ResultList({ date, q }: { date: string; q: string }) {
             name="q"
             defaultValue={q}
             maxLength={80}
-            aria-label="Takım veya lig ara"
-            placeholder="Takım veya lig ara"
+            aria-label={t.results.searchPlaceholder}
+            placeholder={t.results.searchPlaceholder}
             className="min-w-0 flex-1 px-3 py-2 transition-colors"
             style={{
               fontSize: "var(--nv-text-sm)",
@@ -430,7 +434,7 @@ async function ResultList({ date, q }: { date: string; q: string }) {
               borderRadius: "var(--nv-radius-md)",
             }}
           >
-            Ara
+            {t.common.search}
           </button>
         </form>
         {q && (
@@ -440,7 +444,7 @@ async function ResultList({ date, q }: { date: string; q: string }) {
               color: "var(--nv-text-secondary)",
             }}
           >
-            {visible.length} eşleşen maç
+            {t.results.matchingCount.replace("{count}", String(visible.length))}
           </p>
         )}
       </div>
@@ -471,7 +475,7 @@ async function ResultList({ date, q }: { date: string; q: string }) {
                 color: "var(--nv-text-secondary)",
               }}
             >
-              Bu filtreyle eşleşen maç bulunamadı.
+              {t.results.noFilter}
             </p>
           </div>
         </div>
@@ -479,7 +483,7 @@ async function ResultList({ date, q }: { date: string; q: string }) {
 
       <div className="grid gap-3 px-[var(--nv-page-gutter)] py-4">
         {visible.map((m) => (
-          <ResultRow key={m.match_id} match={m} />
+          <ResultRow key={m.match_id} match={m} locale={locale} />
         ))}
       </div>
     </div>
@@ -500,6 +504,11 @@ export default async function SonuclarPage({ searchParams }: Props) {
   const q =
     typeof params.q === "string" ? params.q.trim().slice(0, 80) : "";
 
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(COOKIE_NAME)?.value;
+  const locale: Locale = isLocale(raw) ? raw : defaultLocale;
+  const t = getDictionary(locale);
+
   return (
     <div className="flex flex-col h-full pb-[60px] md:pb-0">
       {/* Başlık */}
@@ -518,7 +527,7 @@ export default async function SonuclarPage({ searchParams }: Props) {
               letterSpacing: "var(--nv-tracking-tight)",
             }}
           >
-            Sonuçlar
+            {t.results.title}
           </h1>
           <span className="nv-badge" style={{
             backgroundColor: "var(--nv-bg-elevated)",
@@ -535,13 +544,14 @@ export default async function SonuclarPage({ searchParams }: Props) {
         activeDate={date}
         basePath="/sonuclar"
         range="past"
+        locale={locale}
       />
       {isRecentScoreDate(date, today) && <AutoRefresh />}
 
       {/* Sonuç listesi */}
       <div className="flex-1 overflow-y-auto">
         <Suspense fallback={<ResultSkeleton />}>
-          <ResultList date={date} q={q} />
+          <ResultList date={date} q={q} locale={locale} />
         </Suspense>
       </div>
     </div>

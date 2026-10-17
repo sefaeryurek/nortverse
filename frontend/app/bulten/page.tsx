@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { formatTime, isRecentScoreDate, resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
@@ -12,6 +13,7 @@ import { showBulletinMatch } from "@/lib/match-visibility";
 import type { FixtureMatch } from "@/lib/types";
 import { leagueDisplay } from "@/lib/leagues";
 import Link from "next/link";
+import { type Locale, COOKIE_NAME, defaultLocale, getDictionary, isLocale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Bülten",
@@ -100,7 +102,8 @@ function sortMatches(
     .map(({ match, timeStr }) => ({ match, timeStr }));
 }
 
-async function MatchList({ date }: { date: string }) {
+async function MatchList({ date, locale }: { date: string; locale: Locale }) {
+  const t = getDictionary(locale);
   let matches: FixtureMatch[] = [];
   let patternStatus: PatternStatusMap = {};
   let error = "";
@@ -118,7 +121,7 @@ async function MatchList({ date }: { date: string }) {
       }
     }
   } catch (e) {
-    error = e instanceof Error ? e.message : "Bağlantı hatası";
+    error = e instanceof Error ? e.message : t.common.connectionError;
   }
 
   if (error) {
@@ -171,7 +174,7 @@ async function MatchList({ date }: { date: string }) {
               marginBottom: "var(--nv-space-lg)",
             }}
           >
-            Veriler şu anda yüklenemiyor. Biraz sonra tekrar deneyebilirsiniz.
+            {t.common.loadError}
           </p>
           <RetryButton />
         </div>
@@ -217,7 +220,7 @@ async function MatchList({ date }: { date: string }) {
               marginBottom: "var(--nv-space-sm)",
             }}
           >
-            Bu tarihte analiz edilmiş maç yok.
+            {t.bulletin.noMatches}
           </p>
           <p
             style={{
@@ -226,7 +229,7 @@ async function MatchList({ date }: { date: string }) {
               marginBottom: "var(--nv-space-md)",
             }}
           >
-            Günlük pipeline çalıştıktan sonra maçlar burada görünecektir.
+            {t.bulletin.pipelineNote}
           </p>
           <Link
             href={`/sonuclar?date=${date}`}
@@ -239,7 +242,7 @@ async function MatchList({ date }: { date: string }) {
               fontWeight: 500,
             }}
           >
-            Kesin sonuçlara bak
+            {t.bulletin.viewResults}
           </Link>
         </div>
       </div>
@@ -265,15 +268,15 @@ async function MatchList({ date }: { date: string }) {
           color: "var(--nv-text-tertiary)",
         }}
       >
-        <span className="nv-badge nv-badge-blue">{matches.length} maç</span>
+        <span className="nv-badge nv-badge-blue">{t.bulletin.matchCount.replace("{count}", String(matches.length))}</span>
         {liveCount > 0 && (
           <span className="nv-badge nv-badge-red nv-live-pulse">
-            Canlı: {liveCount}
+            {t.bulletin.liveCount.replace("{count}", String(liveCount))}
           </span>
         )}
         {scheduledCount > 0 && (
           <span className="nv-badge nv-badge-green">
-            Başlayacak: {scheduledCount}
+            {t.bulletin.scheduledCount.replace("{count}", String(scheduledCount))}
           </span>
         )}
       </div>
@@ -320,6 +323,8 @@ async function MatchList({ date }: { date: string }) {
                   match={match}
                   timeStr={timeStr}
                   patternStatus={patternStatus[match.match_id]}
+                  t={t}
+                  dateLocale={locale === "tr" ? "tr-TR" : "en-GB"}
                 />
               ))}
             </div>
@@ -335,6 +340,11 @@ export default async function BultenPage({ searchParams }: Props) {
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   const date = resolvePageDate(params.date, today, true);
   if (date === null) redirect("/bulten");
+
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(COOKIE_NAME)?.value;
+  const locale: Locale = isLocale(raw) ? raw : defaultLocale;
+  const t = getDictionary(locale);
 
   return (
     <div className="flex flex-col h-full pb-[60px] md:pb-0">
@@ -354,7 +364,7 @@ export default async function BultenPage({ searchParams }: Props) {
               letterSpacing: "var(--nv-tracking-tight)",
             }}
           >
-            Günlük Bülten
+            {t.bulletin.title}
           </h1>
           <span className="nv-badge nv-badge-blue">
             {date}
@@ -363,13 +373,13 @@ export default async function BultenPage({ searchParams }: Props) {
       </div>
 
       {/* Gun sekmeleri */}
-      <DayTabs referenceDate={today} activeDate={date} />
+      <DayTabs referenceDate={today} activeDate={date} locale={locale} />
       {isRecentScoreDate(date, today) && <AutoRefresh />}
 
       {/* Mac listesi */}
       <div className="flex-1 overflow-y-auto">
         <Suspense fallback={<BultenSkeleton />}>
-          <MatchList date={date} />
+          <MatchList date={date} locale={locale} />
         </Suspense>
       </div>
     </div>

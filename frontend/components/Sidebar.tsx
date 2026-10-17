@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useLocale } from "@/lib/locale-context";
 
-const NAV = [
+const NAV_ICONS = [
   {
     href: "/bulten",
-    label: "Bülten",
+    key: "bulletin" as const,
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -17,7 +18,7 @@ const NAV = [
   },
   {
     href: "/sonuclar",
-    label: "Sonuçlar",
+    key: "results" as const,
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
@@ -26,7 +27,7 @@ const NAV = [
   },
   {
     href: "/degerlendirme",
-    label: "Değerlendirme",
+    key: "evaluation" as const,
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 11l3 3L22 4" />
@@ -36,7 +37,7 @@ const NAV = [
   },
   {
     href: "/canli",
-    label: "Canlı",
+    key: "live" as const,
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" fill="var(--nv-accent-red)" stroke="none" />
@@ -49,6 +50,7 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { locale, t, setLocale } = useLocale();
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -60,6 +62,11 @@ export default function Sidebar() {
   useEffect(() => {
     try { localStorage.setItem("nv_sidebar", expanded ? "1" : "0"); } catch { /* ignore */ }
   }, [expanded]);
+
+  const navItems = NAV_ICONS.map((item) => ({
+    ...item,
+    label: t.nav[item.key],
+  }));
 
   return (
     <>
@@ -106,7 +113,7 @@ export default function Sidebar() {
             onClick={() => setExpanded((v) => !v)}
             className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-md transition-colors"
             style={{ color: "var(--nv-text-tertiary)" }}
-            aria-label={expanded ? "Menüyü daralt" : "Menüyü genişlet"}
+            aria-label={expanded ? t.nav.collapse : t.nav.expand}
           >
             <svg
               width="16"
@@ -128,8 +135,8 @@ export default function Sidebar() {
         </div>
 
         {/* Nav */}
-        <nav aria-label="Ana menu" className="flex-1 flex flex-col gap-1 px-2 py-3">
-          {NAV.map(({ href, label, icon }) => {
+        <nav aria-label={locale === "tr" ? "Ana menü" : "Main menu"} className="flex-1 flex flex-col gap-1 px-2 py-3">
+          {navItems.map(({ href, label, icon }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
@@ -159,23 +166,43 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* Footer */}
-        {expanded && (
-          <div
-            className="px-4 py-3 text-xs"
+        {/* Language switcher + Footer */}
+        <div
+          className="flex flex-col gap-2 px-2 py-3"
+          style={{ borderTop: "1px solid var(--nv-border)" }}
+        >
+          <button
+            onClick={() => setLocale(locale === "tr" ? "en" : "tr")}
+            className="flex items-center gap-3 rounded-lg transition-all"
             style={{
-              borderTop: "1px solid var(--nv-border)",
+              padding: expanded ? "8px 12px" : "8px 0",
+              justifyContent: expanded ? "flex-start" : "center",
               color: "var(--nv-text-tertiary)",
+              transitionDuration: "var(--nv-duration-normal)",
             }}
+            title={expanded ? undefined : t.nav.language}
+            aria-label={t.nav.language}
           >
-            Futbol Analiz Sistemi
-          </div>
-        )}
+            <span className="flex-shrink-0 flex items-center justify-center text-xs font-bold" style={{ width: 20, height: 20 }}>
+              {locale === "tr" ? "EN" : "TR"}
+            </span>
+            {expanded && (
+              <span className="text-sm font-medium truncate">
+                {locale === "tr" ? "English" : "Türkçe"}
+              </span>
+            )}
+          </button>
+          {expanded && (
+            <div className="px-2 text-xs" style={{ color: "var(--nv-text-tertiary)" }}>
+              {t.nav.footer}
+            </div>
+          )}
+        </div>
       </aside>
 
       {/* ==================== MOBILE BOTTOM TAB BAR ==================== */}
       <nav
-        aria-label="Mobil ana menu"
+        aria-label={locale === "tr" ? "Mobil ana menü" : "Mobile main menu"}
         className="md:hidden fixed bottom-0 left-0 right-0 flex items-stretch nv-glass"
         style={{
           height: "var(--nv-bottom-bar-h)",
@@ -183,7 +210,7 @@ export default function Sidebar() {
           borderTop: "1px solid var(--nv-border)",
         }}
       >
-        {NAV.map(({ href, label, icon }) => {
+        {navItems.map(({ href, label, icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <Link

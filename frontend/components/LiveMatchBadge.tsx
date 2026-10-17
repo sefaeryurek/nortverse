@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { isLiveScoreStale } from "@/lib/score-freshness";
+import { useLocale } from "@/lib/locale-context";
 
 interface Props {
   home: number;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function LiveMatchBadge({ home, away, minute, checkedAt, checkedLabel, initialStale }: Props) {
+  const { t } = useLocale();
   const [stale, setStale] = useState(initialStale);
 
   useEffect(() => {
@@ -22,11 +24,11 @@ export default function LiveMatchBadge({ home, away, minute, checkedAt, checkedL
     return () => window.clearInterval(timer);
   }, [checkedAt]);
 
-  const minuteLabel = minute === "HT" ? "İY" : minute ? `${minute}′` : "CANLI";
+  const minuteLabel = minute === "HT" ? t.liveMatchBadge.ht : minute ? `${minute}′` : t.liveMatchBadge.live;
 
   return (
     <span
-      aria-label={stale ? "Son görülen skor; güncel veri bekleniyor" : "Canlı skor"}
+      aria-label={stale ? t.liveMatchBadge.staleScore : t.liveMatchBadge.liveScore}
       data-stale={stale}
       className={stale ? "nv-badge nv-badge-amber" : "nv-badge nv-badge-red nv-live-pulse"}
       style={{
@@ -45,7 +47,6 @@ export default function LiveMatchBadge({ home, away, minute, checkedAt, checkedL
           gap: 6,
         }}
       >
-        {/* Canli nabiz noktasi */}
         {!stale && (
           <span
             className="nv-live-pulse"
@@ -58,7 +59,7 @@ export default function LiveMatchBadge({ home, away, minute, checkedAt, checkedL
             }}
           />
         )}
-        <span>{stale ? "Son skor" : minuteLabel}</span>
+        <span>{stale ? t.liveMatchBadge.lastScore : minuteLabel}</span>
       </span>
       <span
         style={{
@@ -76,7 +77,7 @@ export default function LiveMatchBadge({ home, away, minute, checkedAt, checkedL
           opacity: 0.75,
         }}
       >
-        {checkedLabel ? `Son kontrol ${checkedLabel}` : "Kontrol zamanı bilinmiyor"}
+        {checkedLabel ? t.liveMatchBadge.lastCheck.replace("{time}", checkedLabel) : t.liveMatchBadge.unknownCheck}
       </span>
     </span>
   );

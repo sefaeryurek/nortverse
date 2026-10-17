@@ -10,6 +10,7 @@ import { filterByHT, computeStats } from "@/lib/live-stats";
 import type { HTFilteredStats } from "@/lib/live-stats";
 import { useLiveWs } from "@/lib/use-live-ws";
 import type { WsStatus } from "@/lib/use-live-ws";
+import { useLocale } from "@/lib/locale-context";
 
 const POLL_INTERVAL = 45_000;
 const CONCURRENCY_LIMIT = 3;
@@ -118,6 +119,7 @@ function PctBar({
 }
 
 function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
+  const { t } = useLocale();
   const { result1Pct, resultXPct, result2Pct } = stats;
   const max = Math.max(result1Pct, resultXPct, result2Pct);
 
@@ -150,7 +152,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
           >
             {stats.archive}
           </span>
-          Arşiv {stats.archive.replace("A", "")} — İY Eşleşen
+          {t.live.archiveMatched.replace("{n}", stats.archive.replace("A", ""))}
         </span>
         <span
           className="font-semibold"
@@ -160,7 +162,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
             fontFamily: "var(--nv-font-mono)",
           }}
         >
-          {stats.matches.length} maç
+          {stats.matches.length} {t.common.match}
         </span>
       </div>
 
@@ -178,7 +180,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
           style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-elevated)" }}
         >
           <span className="block" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600 }}>
-            ÜST 2.5
+            {t.live.over25}
           </span>
           <span
             className="block font-bold"
@@ -199,7 +201,7 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
           style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-elevated)" }}
         >
           <span className="block" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600 }}>
-            KG VAR
+            {t.live.bttsYes}
           </span>
           <span
             className="block font-bold"
@@ -254,19 +256,19 @@ function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
                 {m.home_team} - {m.away_team}
               </span>
               <span className="flex-shrink-0" style={{ color: "var(--nv-text-secondary)" }}>
-                İY {m.ht}
+                {t.live.ht} {m.ht}
               </span>
               <span
                 className="flex-shrink-0 font-bold"
                 style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}
               >
-                MS {m.ft}
+                {t.live.ft} {m.ft}
               </span>
             </div>
           ))}
           {stats.matches.length > 5 && (
             <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
-              +{stats.matches.length - 5} maç daha
+              {t.live.moreMatches.replace("{count}", String(stats.matches.length - 5))}
             </span>
           )}
         </div>
@@ -281,6 +283,7 @@ interface ValidatedMatch {
 }
 
 function MatchCard({ vm }: { vm: ValidatedMatch }) {
+  const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const { match, stats } = vm;
 
@@ -288,7 +291,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
 
   const isHT = match.live_minute === "HT";
   const isSecondHalf = !isHT && match.live_minute != null;
-  const minuteLabel = isHT ? "Devre Arası" : match.live_minute ? `${match.live_minute}'` : "";
+  const minuteLabel = isHT ? t.live.halfTime : match.live_minute ? `${match.live_minute}'` : "";
 
   const homeName = match.home_team || "?";
   const awayName = match.away_team || "?";
@@ -372,7 +375,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
                 {match.ht_home} - {match.ht_away}
               </span>
               <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
-                İY
+                {t.live.ht}
               </span>
             </div>
 
@@ -397,7 +400,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
                   {match.live_home} - {match.live_away}
                 </span>
                 <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
-                  Güncel
+                  {t.live.current}
                 </span>
               </div>
             )}
@@ -420,7 +423,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
               <path d="M3 3v18h18" />
               <path d="M7 16l4-8 4 4 6-6" />
             </svg>
-            {expanded ? "Gizle" : "İY Arşiv Analizi"}
+            {expanded ? t.common.hide : t.live.htArchiveAnalysis}
           </button>
           <Link
             href={`/analyze/${match.match_id}?home=${encodeURIComponent(homeName)}&away=${encodeURIComponent(awayName)}`}
@@ -437,7 +440,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
               <circle cx="11" cy="11" r="8" />
               <path d="M21 21l-4.35-4.35" />
             </svg>
-            Detaylı Analiz
+            {t.common.detailedAnalysis}
           </Link>
         </div>
       </div>
@@ -448,7 +451,7 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
           style={{ borderTop: "1px solid var(--nv-border)", paddingTop: 12 }}
         >
           <p className="font-semibold mb-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", letterSpacing: "0.05em" }}>
-            İY {match.ht_home}-{match.ht_away} ile biten eşleşen arşiv maçlarının MS sonuçları:
+            {t.live.htMatchPrefix.replace("{home}", String(match.ht_home)).replace("{away}", String(match.ht_away))}
           </p>
           {stats.map((s) => (
             <ArchiveSection key={s.archive} stats={s} />
@@ -475,12 +478,13 @@ async function validateMatches(data: LiveHTMatch[]): Promise<ValidatedMatch[]> {
 }
 
 function ConnectionBadge({ status }: { status: WsStatus }) {
+  const { t } = useLocale();
   if (status === "connected") {
     return (
       <span
         className="inline-flex items-center gap-1 px-1.5 py-0.5"
         style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-accent-green-dim)", color: "var(--nv-accent-green)" }}
-        title="WebSocket ile anlık güncelleme"
+        title={t.live.wsTooltip}
       >
         <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "currentColor" }} />
         WS
@@ -492,7 +496,7 @@ function ConnectionBadge({ status }: { status: WsStatus }) {
       <span
         className="inline-flex items-center gap-1 px-1.5 py-0.5"
         style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}
-        title="REST polling ile güncelleme (45sn)"
+        title={t.live.restTooltip}
       >
         REST
       </span>
@@ -502,6 +506,7 @@ function ConnectionBadge({ status }: { status: WsStatus }) {
 }
 
 export default function CanliPage() {
+  const { t } = useLocale();
   const [validatedMatches, setValidatedMatches] = useState<ValidatedMatch[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -550,7 +555,7 @@ export default function CanliPage() {
       setLastUpdate(new Date());
     } catch {
       setValidatedMatches((prev) => {
-        if (prev.length === 0) setError("Canlı veri alınamadı.");
+        if (prev.length === 0) setError(t.live.liveDataError);
         return prev;
       });
     } finally {
@@ -581,7 +586,7 @@ export default function CanliPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="font-bold" style={{ fontSize: "var(--nv-text-xl)", color: "var(--nv-text-primary)", letterSpacing: "var(--nv-tracking-tight)" }}>
-              Canlı
+              {t.live.title}
             </h1>
             {validatedMatches.length > 0 && (
               <span
@@ -589,7 +594,7 @@ export default function CanliPage() {
                 style={{ fontSize: "var(--nv-text-xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-live-dim)", color: "var(--nv-live)" }}
               >
                 <span className="nv-live-pulse" style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--nv-live)" }} />
-                {validatedMatches.length} maç
+                {validatedMatches.length} {t.common.match}
               </span>
             )}
           </div>
@@ -603,7 +608,7 @@ export default function CanliPage() {
           </div>
         </div>
         <p className="mt-1" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-          Devre arası ve 2. yarıdaki maçların A1/A2/A3 arşiv eşleşmelerine göre İY filtreli MS tahminleri
+          {t.live.htDescription}
         </p>
       </div>
 
@@ -645,7 +650,7 @@ export default function CanliPage() {
                 className="px-4 py-2 font-semibold transition-colors"
                 style={{ fontSize: "var(--nv-text-sm)", backgroundColor: "var(--nv-accent-blue)", color: "var(--nv-text-on-accent)", borderRadius: "var(--nv-radius-md)" }}
               >
-                Tekrar Dene
+                {t.common.retry}
               </button>
             </div>
           </div>
@@ -661,13 +666,13 @@ export default function CanliPage() {
                 </svg>
               </div>
               <p className="font-medium" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}>
-                Şu anda arşiv eşleşmesi olan canlı maç yok.
+                {t.live.noLiveMatches}
               </p>
               <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-                Maçlar devre arasına girdiğinde, İY skoruyla eşleşen arşiv maçları varsa burada MS tahminleri görünecek.
+                {t.live.noLiveNote}
               </p>
               <Link href="/bulten" className="inline-block font-medium transition-colors" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-blue)" }}>
-                Bültendeki maçlara bak
+                {t.live.viewBulletin}
               </Link>
             </div>
           </div>

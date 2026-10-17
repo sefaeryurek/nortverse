@@ -1,4 +1,7 @@
+"use client";
+
 import type { AnalyzeResponse, PatternResult } from "@/lib/types";
+import { useLocale } from "@/lib/locale-context";
 
 export function computePowerScore(
   data: AnalyzeResponse,
@@ -67,6 +70,7 @@ interface Props {
 }
 
 export default function PowerScoreGauge({ score, patternB, patternC, patternD, trendCount }: Props) {
+  const { t } = useLocale();
   if (score <= 0) return null;
 
   const gaugeColor =
@@ -127,7 +131,7 @@ export default function PowerScoreGauge({ score, patternB, patternC, patternD, t
               letterSpacing: "var(--nv-tracking-wide)",
             }}
           >
-            Maç Güç Skoru
+            {t.powerScore.title}
           </h3>
           <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
             {patternB && patternB.match_count > 0 && (
@@ -139,7 +143,7 @@ export default function PowerScoreGauge({ score, patternB, patternC, patternD, t
                   fontSize: "var(--nv-text-xs)",
                 }}
               >
-                Arşiv 1: {patternB.match_count} maç
+                {t.analyze.archive1}: {patternB.match_count} {t.common.match}
               </span>
             )}
             {patternC && patternC.match_count > 0 && (
@@ -151,7 +155,7 @@ export default function PowerScoreGauge({ score, patternB, patternC, patternD, t
                   fontSize: "var(--nv-text-xs)",
                 }}
               >
-                Arşiv 2: {patternC.match_count} maç
+                {t.analyze.archive2}: {patternC.match_count} {t.common.match}
               </span>
             )}
             {patternD && patternD.match_count > 0 && (
@@ -163,7 +167,7 @@ export default function PowerScoreGauge({ score, patternB, patternC, patternD, t
                   fontSize: "var(--nv-text-xs)",
                 }}
               >
-                Arşiv 3: {patternD.match_count} maç
+                {t.analyze.archive3}: {patternD.match_count} {t.common.match}
               </span>
             )}
             {trendCount > 0 && (
@@ -191,7 +195,7 @@ export default function PowerScoreGauge({ score, patternB, patternC, patternD, t
                     fontSize: "var(--nv-text-xs)",
                   }}
                 >
-                  Üçlü arşiv onayı
+                  {t.powerScore.tripleArchive}
                 </span>
               );
               if (active >= 2) return (
@@ -203,7 +207,7 @@ export default function PowerScoreGauge({ score, patternB, patternC, patternD, t
                     fontSize: "var(--nv-text-xs)",
                   }}
                 >
-                  Çift arşiv onayı
+                  {t.powerScore.dualArchive}
                 </span>
               );
               return null;

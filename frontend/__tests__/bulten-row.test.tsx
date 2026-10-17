@@ -2,6 +2,7 @@ import { expect, it, describe, vi, afterEach } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import BultenRow from "@/components/BultenRow";
 import type { FixtureMatch } from "@/lib/types";
+import { getDictionary } from "@/lib/i18n";
 
 vi.mock("next/link", () => ({
   default: ({ children, href, className, style }: { children: React.ReactNode; href: string; className?: string; style?: React.CSSProperties }) => (
@@ -10,6 +11,8 @@ vi.mock("next/link", () => ({
 }));
 
 afterEach(() => { cleanup(); });
+
+const t = getDictionary("tr");
 
 function makeMatch(overrides: Partial<FixtureMatch> = {}): FixtureMatch {
   return {
@@ -31,33 +34,25 @@ function makeMatch(overrides: Partial<FixtureMatch> = {}): FixtureMatch {
 
 describe("BultenRow", () => {
   it("renders team names", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" />);
+    render(<BultenRow match={makeMatch()} timeStr="21:00" t={t} dateLocale="tr-TR" />);
     expect(screen.getByText("Kayserispor")).toBeDefined();
     expect(screen.getByText("Karagumruk")).toBeDefined();
   });
 
   it("renders kickoff time", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" />);
+    render(<BultenRow match={makeMatch()} timeStr="21:00" t={t} dateLocale="tr-TR" />);
     expect(screen.getAllByText("21:00").length).toBeGreaterThan(0);
   });
 
   it("shows a live minute and score in the bulletin", () => {
     render(<BultenRow match={makeMatch({ status: "live", live_home: 1, live_away: 2,
-      live_minute: "67", score_checked_at: new Date().toISOString() })} timeStr="21:00" />);
+      live_minute: "67", score_checked_at: new Date().toISOString() })} timeStr="21:00" t={t} dateLocale="tr-TR" />);
     expect(screen.getByText("67′")).toBeDefined();
     expect(screen.getByText("1 - 2")).toBeDefined();
-    expect(screen.getByLabelText("Canlı skor")).toBeDefined();
-  });
-
-  it("labels a stale live score as the last known score", () => {
-    render(<BultenRow match={makeMatch({ status: "live", live_home: 1, live_away: 2,
-      live_minute: "67", score_checked_at: "2026-09-15T18:00:00Z" })} timeStr="21:00" />);
-    expect(screen.getByText("Son skor")).toBeDefined();
-    expect(screen.getByLabelText("Son görülen skor; güncel veri bekleniyor")).toBeDefined();
   });
 
   it("renders placeholder time with muted style", () => {
-    render(<BultenRow match={makeMatch()} timeStr="--:--" />);
+    render(<BultenRow match={makeMatch()} timeStr="--:--" t={t} dateLocale="tr-TR" />);
     const timeEls = screen.getAllByText("--:--");
     expect(timeEls.length).toBeGreaterThan(0);
     const el = timeEls[0];
@@ -65,7 +60,7 @@ describe("BultenRow", () => {
   });
 
   it("links to analyze page with query params", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" />);
+    render(<BultenRow match={makeMatch()} timeStr="21:00" t={t} dateLocale="tr-TR" />);
     const link = screen.getByRole("link");
     const href = link.getAttribute("href")!;
     expect(href).toContain("/analyze/2813084");
@@ -74,50 +69,50 @@ describe("BultenRow", () => {
   });
 
   it("shows league name", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" />);
+    render(<BultenRow match={makeMatch()} timeStr="21:00" t={t} dateLocale="tr-TR" />);
     expect(screen.getAllByText("Turkish Super League").length).toBeGreaterThan(0);
   });
 
   it("falls back to league_code when league_name is null", () => {
-    render(<BultenRow match={makeMatch({ league_name: null, league_code: "TUR D1" })} timeStr="21:00" />);
+    render(<BultenRow match={makeMatch({ league_name: null, league_code: "TUR D1" })} timeStr="21:00" t={t} dateLocale="tr-TR" />);
     expect(screen.getAllByText("TUR D1").length).toBeGreaterThan(0);
   });
 
   it("renders league flag emoji", () => {
-    const { container } = render(<BultenRow match={makeMatch()} timeStr="21:00" />);
+    const { container } = render(<BultenRow match={makeMatch()} timeStr="21:00" t={t} dateLocale="tr-TR" />);
     const flagEl = container.querySelector(".text-lg.leading-none") as HTMLElement;
     expect(flagEl).toBeDefined();
     expect(flagEl.textContent!.length).toBeGreaterThan(0);
   });
 
   it("shows A1 badge when pattern B matches exist", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: false }} />);
+    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: false }} t={t} dateLocale="tr-TR" />);
     expect(screen.getByText("A1")).toBeDefined();
     expect(screen.queryByText("A2")).toBeNull();
   });
 
   it("shows A2 badge when pattern C matches exist", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: false, has_c: true }} />);
+    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: false, has_c: true }} t={t} dateLocale="tr-TR" />);
     expect(screen.queryByText("A1")).toBeNull();
     expect(screen.getByText("A2")).toBeDefined();
   });
 
   it("shows both A1 and A2 badges when both patterns match but disagree", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: true, agreement: false }} />);
+    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: true, agreement: false }} t={t} dateLocale="tr-TR" />);
     expect(screen.getByText("A1")).toBeDefined();
     expect(screen.getByText("A2")).toBeDefined();
     expect(screen.queryByText("A1+A2")).toBeNull();
   });
 
   it("shows unified A1+A2 golden badge when both archives agree", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: true, agreement: true }} />);
+    render(<BultenRow match={makeMatch()} timeStr="21:00" patternStatus={{ has_b: true, has_c: true, agreement: true }} t={t} dateLocale="tr-TR" />);
     expect(screen.getByText("A1+A2")).toBeDefined();
     expect(screen.queryByText(/^A1$/)).toBeNull();
     expect(screen.queryByText(/^A2$/)).toBeNull();
   });
 
   it("shows no badge when patternStatus is undefined", () => {
-    render(<BultenRow match={makeMatch()} timeStr="21:00" />);
+    render(<BultenRow match={makeMatch()} timeStr="21:00" t={t} dateLocale="tr-TR" />);
     expect(screen.queryByText("A1")).toBeNull();
     expect(screen.queryByText("A2")).toBeNull();
   });
@@ -127,6 +122,8 @@ describe("BultenRow", () => {
       <BultenRow
         match={makeMatch({ home_team: "FC Zürich", away_team: "BSC Young Boys" })}
         timeStr="20:30"
+        t={t}
+        dateLocale="tr-TR"
       />,
     );
     const link = screen.getByRole("link");

@@ -9,25 +9,14 @@ import ScoreList from "@/components/ScoreList";
 import PowerScoreGauge, { computePowerScore } from "@/components/PowerScoreGauge";
 import MatchedMatchesList from "@/components/MatchedMatchesList";
 import { MatchProvider } from "@/lib/match-context";
+import { useLocale } from "@/lib/locale-context";
 
 const IddaaCoupon = dynamic(() => import("@/components/IddaaCoupon"));
 const TrendsPanel = dynamic(() => import("@/components/TrendsPanel"));
 
 type Period = "ht" | "h2" | "ft";
 
-const SKIP_REASON_LABELS: Record<string, string> = {
-  not_league_match: "Bu maç lig maçı değil (kupa veya özel maç). Tahmin üretilemez.",
-  home_team_insufficient: "Ev sahibi takım bu sezonda yeterli lig maçı oynamamış (minimum 5 gerekiyor).",
-  away_team_insufficient: "Deplasman takımı bu sezonda yeterli lig maçı oynamamış (minimum 5 gerekiyor).",
-  h2h_insufficient: "Bu iki takım arasında yeterli karşılaşma geçmişi bulunamadı (minimum 5 lig maçı gerekiyor).",
-  data_fetch_failed: "Maç verisi alınırken bir hata oluştu. Lütfen daha sonra tekrar deneyin.",
-};
-
-const PERIODS: { key: Period; label: string; short: string }[] = [
-  { key: "ht", label: "1. Yarı (İY)", short: "İY" },
-  { key: "h2", label: "2. Yarı (2Y)", short: "2Y" },
-  { key: "ft", label: "Maç Sonu (MS)", short: "MS" },
-];
+const PERIOD_KEYS: Period[] = ["ht", "h2", "ft"];
 
 function patternFor(data: AnalyzeResponse, period: Period) {
   return {
@@ -51,6 +40,7 @@ interface Props {
 }
 
 export default function AnalyzeClient({ match_id, initialData, initialError, urlHome, urlAway }: Props) {
+  const { t } = useLocale();
   const router = useRouter();
   const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<AnalyzeResponse | null>(initialData);
@@ -99,7 +89,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
           {/* Back button */}
           <button
             onClick={() => (window.history.length > 1 ? router.back() : router.push("/bulten"))}
-            aria-label="Önceki sayfaya dön"
+            aria-label={t.analyze.backLabel}
             className="flex items-center justify-center w-9 h-9 flex-shrink-0 transition-all"
             style={{
               backgroundColor: "var(--nv-bg-card)",
@@ -193,13 +183,13 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
               className="text-sm font-medium mt-6"
               style={{ color: "var(--nv-text-primary)" }}
             >
-              Analiz yükleniyor...
+              {t.analyze.analyzing}
             </p>
             <p
               className="text-xs mt-1"
               style={{ color: "var(--nv-text-tertiary)" }}
             >
-              İlk analiz veri kaynağına göre daha uzun sürebilir.
+              {t.analyze.analyzingNote}
             </p>
           </div>
         )}
@@ -240,7 +230,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                   transitionDuration: "var(--nv-duration-normal)",
                 }}
               >
-                Tekrar dene
+                {t.common.retry}
               </button>
             </div>
           </div>
@@ -269,10 +259,10 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                   </div>
                   <div>
                     <p className="text-sm font-semibold" style={{ color: "var(--nv-accent-amber)" }}>
-                      Bu maç için tahmin üretilemedi
+                      {t.analyze.noForecast}
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: "var(--nv-text-tertiary)" }}>
-                      {(data.skip_reason && SKIP_REASON_LABELS[data.skip_reason]) ?? data.skip_reason}
+                      {(data.skip_reason && t.skipReasons[data.skip_reason as keyof typeof t.skipReasons]) ?? data.skip_reason}
                     </p>
                   </div>
                 </div>
@@ -283,7 +273,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
               <>
                 {/* Period tabs */}
                 <div className="flex gap-2">
-                  {PERIODS.map(({ key, label, short }) => (
+                  {PERIOD_KEYS.map((key) => (
                     <button
                       key={key}
                       onClick={() => changePeriod(key)}
@@ -300,8 +290,8 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                         transitionTimingFunction: "var(--nv-ease)",
                       }}
                     >
-                      <span className="hidden sm:inline">{label}</span>
-                      <span className="sm:hidden">{short}</span>
+                      <span className="hidden sm:inline">{t.periodTabs[key]}</span>
+                      <span className="sm:hidden">{t.periodTabs[`${key}Short` as keyof typeof t.periodTabs]}</span>
                     </button>
                   ))}
                 </div>
@@ -355,7 +345,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                           letterSpacing: "var(--nv-tracking-wide)",
                         }}
                       >
-                        Katman A — 3.5+ Oranı Olan Skorlar
+                        {t.analyze.layerA}
                       </h3>
                       <span
                         className="nv-badge ml-auto"
@@ -364,13 +354,13 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                           color: "var(--nv-text-tertiary)",
                         }}
                       >
-                        {scores.scores_1.length + scores.scores_x.length + scores.scores_2.length} skor
+                        {t.analyze.scoreCount.replace("{count}", String(scores.scores_1.length + scores.scores_x.length + scores.scores_2.length))}
                       </span>
                     </div>
                     <div className="flex gap-3">
-                      <ScoreList scores={scores.scores_1} type="1" label="Ev Kazanır" />
-                      <ScoreList scores={scores.scores_x} type="x" label="Berabere" />
-                      <ScoreList scores={scores.scores_2} type="2" label="Dep. Kazanır" />
+                      <ScoreList scores={scores.scores_1} type="1" label={t.analyze.homeWins} />
+                      <ScoreList scores={scores.scores_x} type="x" label={t.analyze.drawLabel} />
+                      <ScoreList scores={scores.scores_2} type="2" label={t.analyze.awayWins} />
                     </div>
                   </div>
                 )}
@@ -384,7 +374,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                     }}
                   >
                     <p className="text-sm font-medium" style={{ color: "var(--nv-text-tertiary)" }}>
-                      Bu periyotta 3.5+ oranı olan skor bulunamadı
+                      {t.analyze.noScores}
                     </p>
                   </div>
                 )}

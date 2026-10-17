@@ -2,9 +2,11 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale } from "@/lib/locale-context";
 
 export default function RetryButton() {
   const router = useRouter();
+  const { t } = useLocale();
   const [pending, startTransition] = useTransition();
   return (
     <button
@@ -25,7 +27,7 @@ export default function RetryButton() {
         boxShadow: "var(--nv-shadow-glow-blue)",
       }}
     >
-      {pending ? "Yeniden yükleniyor…" : "Tekrar dene"}
+      {pending ? t.common.retrying : t.common.retry}
     </button>
   );
 }

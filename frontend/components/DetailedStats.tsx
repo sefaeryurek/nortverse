@@ -3,6 +3,8 @@
 import { memo, useSyncExternalStore, useState } from "react";
 import type { PatternResult } from "@/lib/types";
 import { type Period, periodLabels } from "@/lib/labels";
+import { useLocale } from "@/lib/locale-context";
+import type { Dictionary } from "@/lib/i18n";
 
 interface Props {
   patternB: PatternResult | null;
@@ -131,15 +133,17 @@ function ArchiveDetailCard({
   accentColor,
   badgeClass,
   period,
+  t,
 }: {
   result: PatternResult;
   title: string;
   accentColor: string;
   badgeClass: string;
   period: Period;
+  t: Dictionary;
 }) {
   const isFT = period === "ft";
-  const lbl = periodLabels(period);
+  const lbl = periodLabels(period, t);
 
   return (
     <div
@@ -155,7 +159,7 @@ function ArchiveDetailCard({
           <h3 className="text-sm font-bold" style={{ color: accentColor }}>{title}</h3>
         </div>
         <span className={badgeClass}>
-          {result.match_count} maç
+          {result.match_count} {t.common.match}
         </span>
       </div>
 
@@ -166,14 +170,14 @@ function ArchiveDetailCard({
           { label: `${lbl.prefix} 2`, value: result.result_2_pct },
         ]} />
         <Row items={[
-          { label: "1X", sub: "Çifte Şans", value: result.dc_1x_pct },
-          { label: "X2", sub: "Çifte Şans", value: result.dc_x2_pct },
-          { label: "12", sub: "Çifte Şans", value: result.dc_12_pct },
+          { label: "1X", sub: t.detailedStats.doubleChance, value: result.dc_1x_pct },
+          { label: "X2", sub: t.detailedStats.doubleChance, value: result.dc_x2_pct },
+          { label: "12", sub: t.detailedStats.doubleChance, value: result.dc_12_pct },
         ]} />
       </Section>
 
       {isFT && Object.entries(result).some(([key, value]) => key.startsWith("iy_ms_") && typeof value === "number" && value > 0) && (
-        <Section title="İlk Yarı / Maç Sonucu">
+        <Section title={t.detailedStats.htMs}>
           <Row items={[
             { label: "1/1", value: result.iy_ms_11_pct },
             { label: "1/X", value: result.iy_ms_1x_pct },
@@ -243,7 +247,7 @@ function ArchiveDetailCard({
       )}
 
       <Section title={lbl.taraf}>
-        <SubLabel text="Ev Sahibi" />
+        <SubLabel text={t.detailedStats.home} />
         {/* IY/2Y'de 2.5 hatti acilmaz (Alt %99+, Ust nadir) -- sadece FT'de goster */}
         <Row items={
           isFT
@@ -262,7 +266,7 @@ function ArchiveDetailCard({
                 { label: "Üst 1.5", sub: "Ev", value: result.ev_ust_15_pct },
               ]
         } />
-        <SubLabel text="Deplasman" />
+        <SubLabel text={t.detailedStats.away} />
         <Row items={
           isFT
             ? [
@@ -282,7 +286,7 @@ function ArchiveDetailCard({
         } />
         {isFT && (result.ev_ht_ust_05_pct + result.ev_ht_alt_05_pct > 0) && (
           <>
-            <SubLabel text="1. Yarı" />
+            <SubLabel text={t.detailedStats.firstHalf} />
             <Row items={[
               { label: "Ev 1.Y Alt", sub: "0.5", value: result.ev_ht_alt_05_pct },
               { label: "Ev 1.Y Üst", sub: "0.5", value: result.ev_ht_ust_05_pct },
@@ -294,7 +298,7 @@ function ArchiveDetailCard({
       </Section>
 
       <Section title={lbl.toplamGol}>
-        <SubLabel text="Gol Aralığı" />
+        <SubLabel text={t.detailedStats.goalRange} />
         <Row items={[
           { label: "0-1 Gol", value: result.gol_01_pct },
           { label: "2-3 Gol", value: result.gol_23_pct },
@@ -303,19 +307,19 @@ function ArchiveDetailCard({
         ]} />
         {isFT && (result.encok_gol_1y_pct + result.encok_gol_2y_pct + result.encok_gol_esit_pct > 0) && (
           <>
-            <SubLabel text="En Çok Gol Olacak Yarı" />
+            <SubLabel text={t.detailedStats.mostGoalsHalf} />
             <Row items={[
-              { label: "1. Yarı", value: result.encok_gol_1y_pct },
-              { label: "Eşit", value: result.encok_gol_esit_pct },
-              { label: "2. Yarı", value: result.encok_gol_2y_pct },
+              { label: t.detailedStats.firstHalf, value: result.encok_gol_1y_pct },
+              { label: t.detailedStats.equal, value: result.encok_gol_esit_pct },
+              { label: t.detailedStats.secondHalf, value: result.encok_gol_2y_pct },
             ]} />
           </>
         )}
       </Section>
 
       {isFT && (result.iy_ust_05_pct + result.iy_alt_05_pct > 0) && (
-        <Section title="Yarı Alt/Üst">
-          <SubLabel text="1. Yarı" />
+        <Section title={t.detailedStats.halfOverUnder}>
+          <SubLabel text={t.detailedStats.firstHalf} />
           <Row items={[
             { label: "Alt 0.5", sub: "1Y", value: result.iy_alt_05_pct },
             { label: "Üst 0.5", sub: "1Y", value: result.iy_ust_05_pct },
@@ -325,13 +329,13 @@ function ArchiveDetailCard({
             { label: "Üst 2.5", sub: "1Y", value: result.iy_ust_25_pct },
           ]} />
           <Row items={[
-            { label: "İki Yarı Alt", sub: "1.5", value: result.iki_yari_alt15_pct },
-            { label: "İki Yarı Üst", sub: "1.5", value: result.iki_yari_ust15_pct },
+            { label: t.detailedStats.bothHalfUnder, sub: "1.5", value: result.iki_yari_alt15_pct },
+            { label: t.detailedStats.bothHalfOver, sub: "1.5", value: result.iki_yari_ust15_pct },
           ]} />
         </Section>
       )}
 
-      <Section title="Gol Sayısı ve KG">
+      <Section title={t.detailedStats.goalsAndBtts}>
         {/* IY/2Y'de 2.5 ve 3.5 hatlari acilmaz -- sadece FT'de goster */}
         <Row items={
           isFT
@@ -349,8 +353,8 @@ function ArchiveDetailCard({
               ]
         } />
         <Row items={[
-          { label: "KG Var", value: result.kg_var_pct },
-          { label: "KG Yok", value: result.kg_yok_pct },
+          { label: t.detailedStats.bttsYes, value: result.kg_var_pct },
+          { label: t.detailedStats.bttsNo, value: result.kg_yok_pct },
         ]} />
       </Section>
 
@@ -377,49 +381,49 @@ function ArchiveDetailCard({
       </Section>
 
       {isFT && (result.ht_kg_var_pct + result.ht_kg_yok_pct > 0) && (
-        <Section title="Yarı KG Detayı">
-          <SubLabel text="1. Yarı Karşılıklı Gol" />
+        <Section title={t.detailedStats.halfBttsDetail}>
+          <SubLabel text={t.detailedStats.ht1Btts} />
           <Row items={[
             { label: "1Y KG Var", value: result.ht_kg_var_pct },
             { label: "1Y KG Yok", value: result.ht_kg_yok_pct },
           ]} />
-          <SubLabel text="2. Yarı Karşılıklı Gol" />
+          <SubLabel text={t.detailedStats.ht2Btts} />
           <Row items={[
             { label: "2Y KG Var", value: result.h2_kg_var_pct },
             { label: "2Y KG Yok", value: result.h2_kg_yok_pct },
           ]} />
-          <SubLabel text="1. Yarı / 2. Yarı Karşılıklı Gol" />
+          <SubLabel text={t.detailedStats.ht1ht2Btts} />
           <Row items={[
             { label: "İY Var / 2Y Var", value: result.iy_h2_kg_vv_pct },
             { label: "İY Var / 2Y Yok", value: result.iy_h2_kg_vy_pct },
             { label: "İY Yok / 2Y Var", value: result.iy_h2_kg_yv_pct },
             { label: "İY Yok / 2Y Yok", value: result.iy_h2_kg_yy_pct },
           ]} />
-          <SubLabel text="Her İki Yarıda da Gol" />
+          <SubLabel text={t.detailedStats.bothHalvesGoal} />
           <Row items={[
             { label: "Ev İki Yarıda", value: result.ev_iki_yari_gol_pct },
             { label: "Dep İki Yarıda", value: result.dep_iki_yari_gol_pct },
           ]} />
-          <SubLabel text="Ev Sahibi Hangi Yarıda Daha Çok Gol Atar?" />
+          <SubLabel text={t.detailedStats.homeWhichHalf} />
           <Row items={[
-            { label: "1. Yarı", value: result.ev_encok_1y_pct },
-            { label: "Eşit", value: result.ev_encok_esit_pct },
-            { label: "2. Yarı", value: result.ev_encok_2y_pct },
+            { label: t.detailedStats.firstHalf, value: result.ev_encok_1y_pct },
+            { label: t.detailedStats.equal, value: result.ev_encok_esit_pct },
+            { label: t.detailedStats.secondHalf, value: result.ev_encok_2y_pct },
           ]} />
-          <SubLabel text="Deplasman Hangi Yarıda Daha Çok Gol Atar?" />
+          <SubLabel text={t.detailedStats.awayWhichHalf} />
           <Row items={[
-            { label: "1. Yarı", value: result.dep_encok_1y_pct },
-            { label: "Eşit", value: result.dep_encok_esit_pct },
-            { label: "2. Yarı", value: result.dep_encok_2y_pct },
+            { label: t.detailedStats.firstHalf, value: result.dep_encok_1y_pct },
+            { label: t.detailedStats.equal, value: result.dep_encok_esit_pct },
+            { label: t.detailedStats.secondHalf, value: result.dep_encok_2y_pct },
           ]} />
         </Section>
       )}
 
       {isFT && ((result.ht_result_1_pct + result.ht_result_x_pct + result.ht_result_2_pct > 0) || (result.h2_result_1_pct + result.h2_result_x_pct + result.h2_result_2_pct > 0)) && (
-        <Section title="Yarı Sonuçları">
+        <Section title={t.detailedStats.halfResults}>
           {(result.ht_result_1_pct + result.ht_result_x_pct + result.ht_result_2_pct > 0) && (
             <>
-              <SubLabel text="1. Yarı Sonucu" />
+              <SubLabel text={t.detailedStats.htResult} />
               <Row items={[
                 { label: "İY 1", value: result.ht_result_1_pct },
                 { label: "İY X", value: result.ht_result_x_pct },
@@ -438,7 +442,7 @@ function ArchiveDetailCard({
           )}
           {(result.h2_result_1_pct + result.h2_result_x_pct + result.h2_result_2_pct > 0) && (
             <>
-              <SubLabel text="2. Yarı Sonucu" />
+              <SubLabel text={t.detailedStats.h2Result} />
               <Row items={[
                 { label: "2Y 1", value: result.h2_result_1_pct },
                 { label: "2Y X", value: result.h2_result_x_pct },
@@ -450,7 +454,7 @@ function ArchiveDetailCard({
       )}
 
       {result.score_freq && Object.keys(result.score_freq).length > 0 && (
-        <Section title="Skor Sıklığı">
+        <Section title={t.detailedStats.scoreFrequency}>
           <ScoreFreq freq={result.score_freq} />
         </Section>
       )}
@@ -459,6 +463,7 @@ function ArchiveDetailCard({
 }
 
 export default memo(function DetailedStats({ patternB, patternC, patternD, period }: Props) {
+  const { t } = useLocale();
   const [override, setOpen] = useState<boolean | null>(null);
   const savedOpen = useSyncExternalStore(subscribeDetails, readDetails, () => false);
   const open = override ?? savedOpen;
@@ -489,9 +494,9 @@ export default memo(function DetailedStats({ patternB, patternC, patternD, perio
         aria-expanded={open}
       >
         <span className="flex items-center gap-2">
-          <span className="text-sm font-semibold">Detaylı Analiz</span>
+          <span className="text-sm font-semibold">{t.detailedStats.title}</span>
           <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
-            tüm pazarlar (~130 oran)
+            {t.detailedStats.allMarkets}
           </span>
         </span>
         <svg
@@ -514,7 +519,7 @@ export default memo(function DetailedStats({ patternB, patternC, patternD, perio
       {open && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 nv-fade-in">
           {patternB ? (
-            <ArchiveDetailCard result={patternB} title="Arşiv 1 — Skor Seti" accentColor="var(--nv-accent-blue)" badgeClass="nv-badge nv-badge-blue" period={period} />
+            <ArchiveDetailCard result={patternB} title={t.analyze.archive1Detail} accentColor="var(--nv-accent-blue)" badgeClass="nv-badge nv-badge-blue" period={period} t={t} />
           ) : (
             <div
               className="nv-card flex items-center justify-center"
@@ -523,11 +528,11 @@ export default memo(function DetailedStats({ patternB, patternC, patternD, perio
                 padding: "var(--nv-space-2xl)",
               }}
             >
-              <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>Arşiv 1: Yeterli veri yok</p>
+              <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>{t.analyze.archive1NoData}</p>
             </div>
           )}
           {patternC ? (
-            <ArchiveDetailCard result={patternC} title="Arşiv 2 — Oran Benzerliği" accentColor="var(--nv-accent-purple)" badgeClass="nv-badge nv-badge-purple" period={period} />
+            <ArchiveDetailCard result={patternC} title={t.analyze.archive2Detail} accentColor="var(--nv-accent-purple)" badgeClass="nv-badge nv-badge-purple" period={period} t={t} />
           ) : (
             <div
               className="nv-card flex items-center justify-center"
@@ -536,11 +541,11 @@ export default memo(function DetailedStats({ patternB, patternC, patternD, perio
                 padding: "var(--nv-space-2xl)",
               }}
             >
-              <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>Arşiv 2: Yeterli veri yok</p>
+              <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>{t.analyze.archive2NoData}</p>
             </div>
           )}
           {patternD ? (
-            <ArchiveDetailCard result={patternD} title="Arşiv 3 — Cosine Similarity" accentColor="var(--nv-accent-amber)" badgeClass="nv-badge nv-badge-amber" period={period} />
+            <ArchiveDetailCard result={patternD} title={t.analyze.archive3Detail} accentColor="var(--nv-accent-amber)" badgeClass="nv-badge nv-badge-amber" period={period} t={t} />
           ) : (
             <div
               className="nv-card flex items-center justify-center"
@@ -549,7 +554,7 @@ export default memo(function DetailedStats({ patternB, patternC, patternD, perio
                 padding: "var(--nv-space-2xl)",
               }}
             >
-              <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>Arşiv 3: Yeterli veri yok</p>
+              <p className="text-sm" style={{ color: "var(--nv-text-tertiary)" }}>{t.analyze.archive3NoData}</p>
             </div>
           )}
         </div>

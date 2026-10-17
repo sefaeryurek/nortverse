@@ -1,5 +1,8 @@
+"use client";
+
 import type { FTRecommendation, PatternResult } from "@/lib/types";
 import type { Period } from "@/lib/labels";
+import { useLocale } from "@/lib/locale-context";
 import TopPicks from "./TopPicks";
 import MarketSummary from "./MarketSummary";
 import DetailedStats from "./DetailedStats";
@@ -13,6 +16,7 @@ interface Props {
 }
 
 export default function IddaaCoupon({ patternB, patternC, patternD, period, recommendations }: Props) {
+  const { t } = useLocale();
   const hasB = patternB !== null && patternB.match_count >= 5;
   const hasC = patternC !== null && patternC.match_count >= 1;
   const hasD = patternD !== null && patternD.match_count >= 1;
@@ -33,13 +37,13 @@ export default function IddaaCoupon({ patternB, patternC, patternD, period, reco
             className="text-sm font-medium"
             style={{ color: "var(--nv-text-secondary)" }}
           >
-            Bu periyot için yeterli arşiv verisi bulunamadı.
+            {t.iddaa.noData}
           </p>
           <p
             className="text-xs mt-1"
             style={{ color: "var(--nv-text-tertiary)" }}
           >
-            Arşiv 1 için en az 5, Arşiv 2/3 için en az 1 eşleşme gerekiyor
+            {t.iddaa.noDataNote}
           </p>
         </div>
       </div>

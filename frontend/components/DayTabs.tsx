@@ -1,14 +1,17 @@
 import Link from "next/link";
+import { type Locale, defaultLocale, getDictionary } from "@/lib/i18n";
 
-const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+const DAYS_TR = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+const DAYS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export function getRollingDates(now = new Date(), todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" }), range: "upcoming" | "past" = "upcoming"): { label: string; date: string; today: boolean }[] {
+export function getRollingDates(now = new Date(), todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" }), range: "upcoming" | "past" = "upcoming", locale: Locale = defaultLocale): { label: string; date: string; today: boolean }[] {
+  const days = locale === "en" ? DAYS_EN : DAYS_TR;
   return Array.from({ length: 8 }, (_, i) => {
     const d = new Date(`${todayIso}T12:00:00Z`);
     d.setUTCDate(d.getUTCDate() + (range === "past" ? -i : i - 1));
     const iso = d.toISOString().slice(0, 10);
-    const dayIdx = (d.getUTCDay() + 6) % 7; // 0=Pzt
-    return { label: DAYS[dayIdx], date: iso, today: iso === todayIso };
+    const dayIdx = (d.getUTCDay() + 6) % 7; // 0=Mon
+    return { label: days[dayIdx], date: iso, today: iso === todayIso };
   });
 }
 
@@ -17,14 +20,16 @@ interface Props {
   basePath?: string;
   referenceDate?: string;
   range?: "upcoming" | "past";
+  locale?: Locale;
 }
 
-export default function DayTabs({ activeDate, basePath = "/bulten", referenceDate, range = "upcoming" }: Props) {
+export default function DayTabs({ activeDate, basePath = "/bulten", referenceDate, range = "upcoming", locale = defaultLocale }: Props) {
   const effectiveRange = basePath === "/sonuclar" ? "past" : range;
-  const days = getRollingDates(undefined, referenceDate, effectiveRange);
+  const days = getRollingDates(undefined, referenceDate, effectiveRange, locale);
+  const t = getDictionary(locale);
 
   return (
-    <nav aria-label={effectiveRange === "past" ? "Geçmiş tarihler: bugün ve önceki 7 gün" : "Bülten tarihleri"}>
+    <nav aria-label={effectiveRange === "past" ? t.dayTabs.pastRange : t.dayTabs.bulletinDates}>
       {effectiveRange === "past" && (
         <p
           className="px-4 pt-3 pb-1"
@@ -33,7 +38,7 @@ export default function DayTabs({ activeDate, basePath = "/bulten", referenceDat
             color: "var(--nv-text-tertiary)",
           }}
         >
-          Bugün ve önceki 7 gün
+          {t.dayTabs.pastRange}
         </p>
       )}
       <div
@@ -115,7 +120,7 @@ export default function DayTabs({ activeDate, basePath = "/bulten", referenceDat
               key={date}
               href={`${basePath}?date=${date}`}
               prefetch={false}
-              aria-label={`${date} tarihindeki maçlar`}
+              aria-label={t.dayTabs.dateLabel.replace("{date}", date)}
               className="nv-daytab-inactive"
               style={baseStyle}
             >

@@ -2,6 +2,8 @@
 
 import { memo } from "react";
 import type { TrendBlock, TrendsData } from "@/lib/types";
+import { useLocale } from "@/lib/locale-context";
+import type { Dictionary } from "@/lib/i18n";
 
 interface Props {
   trends: TrendsData | null;
@@ -9,13 +11,13 @@ interface Props {
   awayTeam: string;
 }
 
-function ResultDot({ r }: { r: "G" | "B" | "M" }) {
+function ResultDot({ r, t }: { r: "G" | "B" | "M"; t: Dictionary }) {
   const cfg =
     r === "G"
-      ? { bg: "var(--nv-win)", label: "G" }
+      ? { bg: "var(--nv-win)", label: t.trends.win[0] }
       : r === "B"
-        ? { bg: "var(--nv-draw)", label: "B" }
-        : { bg: "var(--nv-loss)", label: "M" };
+        ? { bg: "var(--nv-draw)", label: t.trends.draw[0] }
+        : { bg: "var(--nv-loss)", label: t.trends.loss[0] };
   return (
     <span
       className="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold"
@@ -60,11 +62,13 @@ function TrendCard({
   title,
   subtitle,
   accent,
+  t,
 }: {
   block: TrendBlock;
   title: string;
   subtitle?: string;
   accent: string;
+  t: Dictionary;
 }) {
   const maxGoal = Math.max(block.avg_goals_for, block.avg_goals_against, 0.1);
   const forPct = (block.avg_goals_for / maxGoal) * 100;
@@ -101,7 +105,7 @@ function TrendCard({
           )}
         </div>
         <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-secondary)" }}>
-          {block.sample_size} maç
+          {block.sample_size} {t.common.match}
         </span>
       </div>
 
@@ -109,13 +113,13 @@ function TrendCard({
       {block.last_n_results.length > 0 && (
         <div className="flex items-center gap-1 mb-2">
           {block.last_n_results.map((r, i) => (
-            <ResultDot key={i} r={r} />
+            <ResultDot key={i} r={r} t={t} />
           ))}
           <span
             className="text-[9px] ml-1"
             style={{ color: "var(--nv-text-tertiary)" }}
           >
-            son {block.last_n_results.length}
+            {t.trends.last.replace("{count}", String(block.last_n_results.length))}
           </span>
         </div>
       )}
@@ -163,15 +167,14 @@ function TrendCard({
         className="space-y-1 pt-2 mt-auto"
         style={{ borderTop: "1px solid var(--nv-border)" }}
       >
-        <MetricRow label="Galibiyet" value={`%${Math.round(block.win_pct)}`} highlight={block.win_pct >= 60} />
-        <MetricRow label="Beraberlik" value={`%${Math.round(block.draw_pct)}`} />
-        <MetricRow label="Mağlubiyet" value={`%${Math.round(block.loss_pct)}`} />
-        <MetricRow label="KG Var" value={`%${Math.round(block.kg_var_pct)}`} highlight={block.kg_var_pct >= 60} />
-        <MetricRow label="Üst 2.5" value={`%${Math.round(block.over_25_pct)}`} highlight={block.over_25_pct >= 60} />
-        {/* Att / Yedi — mini bar ile */}
+        <MetricRow label={t.trends.win} value={`%${Math.round(block.win_pct)}`} highlight={block.win_pct >= 60} />
+        <MetricRow label={t.trends.draw} value={`%${Math.round(block.draw_pct)}`} />
+        <MetricRow label={t.trends.loss} value={`%${Math.round(block.loss_pct)}`} />
+        <MetricRow label={t.trends.bttsYes} value={`%${Math.round(block.kg_var_pct)}`} highlight={block.kg_var_pct >= 60} />
+        <MetricRow label={t.trends.over25} value={`%${Math.round(block.over_25_pct)}`} highlight={block.over_25_pct >= 60} />
         <div className="text-xs space-y-1">
           <div className="flex items-center justify-between">
-            <span style={{ color: "var(--nv-text-secondary)" }}>Att / Yedi</span>
+            <span style={{ color: "var(--nv-text-secondary)" }}>{t.trends.goalsForAgainst}</span>
             <span
               className="font-bold"
               style={{
@@ -231,24 +234,25 @@ function TrendCard({
 }
 
 export default memo(function TrendsPanel({ trends, homeTeam, awayTeam }: Props) {
+  const { t } = useLocale();
   if (!trends) return null;
   const blocks: { block: TrendBlock | null; title: string; subtitle?: string; accent: string }[] = [
     {
       block: trends.home_form,
-      title: "Ev Form",
+      title: t.trends.homeForm,
       subtitle: homeTeam,
       accent: "var(--nv-accent-green)",
     },
     {
       block: trends.away_form,
-      title: "Dep Form",
+      title: t.trends.awayForm,
       subtitle: awayTeam,
       accent: "var(--nv-accent-amber)",
     },
     {
       block: trends.h2h,
-      title: "H2H",
-      subtitle: "Ev sahibi perspektifi",
+      title: t.trends.h2h,
+      subtitle: t.trends.h2hSubtitle,
       accent: "var(--nv-accent-purple)",
     },
   ];
@@ -267,13 +271,13 @@ export default memo(function TrendsPanel({ trends, homeTeam, awayTeam }: Props) 
             letterSpacing: "var(--nv-tracking-wide)",
           }}
         >
-          Form & H2H Trendleri
+          {t.trends.title}
         </h3>
         <span
           className="nv-badge"
           style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}
         >
-          son lig maçları
+          {t.trends.subtitle}
         </span>
       </div>
 
@@ -285,6 +289,7 @@ export default memo(function TrendsPanel({ trends, homeTeam, awayTeam }: Props) 
             title={b.title}
             subtitle={b.subtitle}
             accent={b.accent}
+            t={t}
           />
         ))}
       </div>

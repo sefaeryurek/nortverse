@@ -4,18 +4,21 @@ import type { FixtureMatch } from "@/lib/types";
 import { leagueDisplay } from "@/lib/leagues";
 import { isLiveScoreStale } from "@/lib/score-freshness";
 import LiveMatchBadge from "./LiveMatchBadge";
+import type { Dictionary } from "@/lib/i18n";
 
 interface Props {
   match: FixtureMatch;
   timeStr: string;
   patternStatus?: { has_b: boolean; has_c: boolean; has_d?: boolean; agreement?: boolean; agreement_bcd?: boolean };
+  t: Dictionary;
+  dateLocale: string;
 }
 
-export default memo(function BultenRow({ match, timeStr, patternStatus }: Props) {
+export default memo(function BultenRow({ match, timeStr, patternStatus, t, dateLocale }: Props) {
   const { flag } = leagueDisplay(match.league_code, match.league_name);
   const leagueName = match.league_name || match.league_code;
   const checkedLabel = match.score_checked_at
-    ? new Date(match.score_checked_at).toLocaleString("tr-TR", {
+    ? new Date(match.score_checked_at).toLocaleString(dateLocale, {
       day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul",
     }) : null;
 
@@ -136,7 +139,7 @@ export default memo(function BultenRow({ match, timeStr, patternStatus }: Props)
           <div className="flex items-center gap-1 flex-shrink-0">
             {patternStatus.agreement_bcd ? (
               <span
-                title="Arşiv 1+2+3 uyumlu — en güçlü sinyal"
+                title={t.bultenRow.archiveTriple}
                 style={{
                   fontSize: "var(--nv-text-xs)",
                   fontWeight: 700,
@@ -151,7 +154,7 @@ export default memo(function BultenRow({ match, timeStr, patternStatus }: Props)
               </span>
             ) : patternStatus.has_b && patternStatus.has_c && patternStatus.agreement ? (
               <span
-                title="Arşiv 1+2 uyumlu"
+                title={t.bultenRow.archiveDual}
                 style={{
                   fontSize: "var(--nv-text-xs)",
                   fontWeight: 700,
@@ -168,7 +171,7 @@ export default memo(function BultenRow({ match, timeStr, patternStatus }: Props)
               <>
                 {patternStatus.has_b && (
                   <span
-                    title="Arşiv 1 eşleşmesi var"
+                    title={t.bultenRow.archive1Match}
                     style={{
                       fontSize: "var(--nv-text-xs)",
                       fontWeight: 700,
@@ -184,7 +187,7 @@ export default memo(function BultenRow({ match, timeStr, patternStatus }: Props)
                 )}
                 {patternStatus.has_c && (
                   <span
-                    title="Arşiv 2 eşleşmesi var"
+                    title={t.bultenRow.archive2Match}
                     style={{
                       fontSize: "var(--nv-text-xs)",
                       fontWeight: 700,
@@ -200,7 +203,7 @@ export default memo(function BultenRow({ match, timeStr, patternStatus }: Props)
                 )}
                 {patternStatus.has_d && (
                   <span
-                    title="Arşiv 3 eşleşmesi var (cosine similarity)"
+                    title={t.bultenRow.archive3Match}
                     style={{
                       fontSize: "var(--nv-text-xs)",
                       fontWeight: 700,

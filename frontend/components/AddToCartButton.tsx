@@ -1,6 +1,7 @@
 "use client";
 
 import { useCart, type CartItem } from "@/lib/cart";
+import { useLocale } from "@/lib/locale-context";
 
 interface Props {
   item: Omit<CartItem, "addedAt">;
@@ -14,6 +15,7 @@ interface Props {
  */
 export default function AddToCartButton({ item, size = "sm", className }: Props) {
   const { addItem, removeItem, has, hydrated } = useCart();
+  const { t } = useLocale();
   const inCart = hydrated && has(item);
   const dim = size === "sm" ? "w-5 h-5 text-[10px]" : "w-6 h-6 text-xs";
 
@@ -36,8 +38,8 @@ export default function AddToCartButton({ item, size = "sm", className }: Props)
         transitionDuration: "var(--nv-duration-normal)",
         transitionTimingFunction: "var(--nv-ease)",
       }}
-      aria-label={inCart ? "Sepetten çıkar" : "Sepete ekle"}
-      title={inCart ? "Sepetten çıkar" : "Sepete ekle"}
+      aria-label={inCart ? t.cartButton.removeFromCart : t.cartButton.addToCart}
+      title={inCart ? t.cartButton.removeFromCart : t.cartButton.addToCart}
     >
       {inCart ? "✓" : "+"}
     </button>

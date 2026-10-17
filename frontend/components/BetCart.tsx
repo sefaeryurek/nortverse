@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { itemKey, useCart } from "@/lib/cart";
+import { useLocale } from "@/lib/locale-context";
 
-function PeriodBadge({ period }: { period: "ht" | "h2" | "ft" }) {
-  const label = period === "ht" ? "İY" : period === "h2" ? "2Y" : "MS";
+function PeriodBadge({ period, periodLabels }: { period: "ht" | "h2" | "ft"; periodLabels: { ht: string; h2: string; ft: string } }) {
+  const label = periodLabels[period];
   return (
     <span
       className="nv-badge"
@@ -25,6 +26,7 @@ export default function BetCart() {
 }
 
 function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
+  const { t } = useLocale();
   const { items, removeItem, clear, count } = cart;
   const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -59,12 +61,12 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
             transitionDuration: "var(--nv-duration-normal)",
             transitionTimingFunction: "var(--nv-ease)",
           }}
-          aria-label={`Bahis sepetini aç (${count} tahmin)`}
+          aria-label={t.cart.openCart.replace("{count}", String(count))}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          <span className="text-sm font-bold">Sepet</span>
+          <span className="text-sm font-bold">{t.cart.cart}</span>
           <span
             className="nv-badge"
             style={{
@@ -89,7 +91,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
             borderTop: "1px solid var(--nv-accent-green)",
             boxShadow: "0 -4px 16px rgba(0,0,0,0.4)",
           }}
-          aria-label={`Bahis sepetini aç (${count} tahmin)`}
+          aria-label={t.cart.openCart.replace("{count}", String(count))}
         >
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="var(--nv-accent-green)" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -97,13 +99,13 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
           <span
             className="nv-badge nv-badge-green flex-shrink-0"
           >
-            {count} seçim
+            {t.cart.selections.replace("{count}", String(count))}
           </span>
           <div
             className="flex-1 text-center text-xs"
             style={{ color: "var(--nv-accent-green)" }}
           >
-            Arşiv seçimleri
+            {t.cart.archiveSelections}
           </div>
           <span
             className="text-xs font-bold px-3 py-1.5 flex-shrink-0"
@@ -113,7 +115,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
               borderRadius: "var(--nv-radius-md)",
             }}
           >
-            Aç
+            {t.common.open}
           </span>
         </button>
       )}
@@ -122,7 +124,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
       {open && (
           <dialog
             ref={dialogRef}
-            aria-label="Bahis Sepeti"
+            aria-label={t.cart.title}
             onCancel={() => setOpen(false)}
             onClose={() => setOpen(false)}
             className="fixed z-50 m-0 top-auto w-full max-w-none flex flex-col md:left-auto md:right-4 md:bottom-4 md:w-80 md:max-h-[80vh] md:rounded-xl right-0 left-0 bottom-0 max-h-[85vh] rounded-t-2xl nv-glass backdrop:bg-black/60"
@@ -142,7 +144,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
                 <h3 className="text-sm font-bold" style={{ color: "var(--nv-accent-green)" }}>
-                  Bahis Sepeti
+                  {t.cart.title}
                 </h3>
                 <span className="nv-badge nv-badge-green">
                   {count}
@@ -155,7 +157,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
                   color: "var(--nv-text-secondary)",
                   backgroundColor: "var(--nv-bg-elevated)",
                 }}
-                aria-label="Sepeti kapat"
+                aria-label={t.cart.closeCart}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -176,7 +178,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <PeriodBadge period={it.period} />
+                      <PeriodBadge period={it.period} periodLabels={t.periods} />
                       <span
                         className="text-[10px] truncate"
                         style={{ color: "var(--nv-text-tertiary)" }}
@@ -217,7 +219,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
                         color: "var(--nv-text-tertiary)",
                         backgroundColor: "var(--nv-bg-elevated)",
                       }}
-                      aria-label="Tahmini sepetten kaldır"
+                      aria-label={t.cart.removeItem}
                     >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -241,7 +243,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
                 style={{ color: "var(--nv-text-tertiary)" }}
                 role="status"
               >
-                Yüzdeler geçmiş arşiv eşleşmelerinin sıklığıdır. Seçimlerin birlikte gerçekleşme olasılığı veya bahis oranı olarak kullanılamaz.
+                {t.cart.disclaimer}
               </p>
               <button
                 onClick={clear}
@@ -255,7 +257,7 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
                   transitionTimingFunction: "var(--nv-ease)",
                 }}
               >
-                Sepeti Temizle
+                {t.cart.clearCart}
               </button>
             </div>
           </dialog>

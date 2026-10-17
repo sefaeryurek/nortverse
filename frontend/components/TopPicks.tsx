@@ -4,6 +4,8 @@ import { memo } from "react";
 import type { FTRecommendation } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import { useMatchInfo } from "@/lib/match-context";
+import { useLocale } from "@/lib/locale-context";
+import type { Dictionary } from "@/lib/i18n";
 import AddToCartButton from "./AddToCartButton";
 
 interface Props {
@@ -11,16 +13,17 @@ interface Props {
   period: Period;
 }
 
-const MARKET_LABELS: Record<FTRecommendation["market"], string> = {
-  result: "Maç Sonucu",
-  over_25: "2.5 Alt/Üst",
-  btts: "Karşılıklı Gol",
-};
+function marketLabel(t: Dictionary, market: FTRecommendation["market"]): string {
+  return t.markets[market] ?? market;
+}
 
-const SELECTION_LABELS: Record<FTRecommendation["selection"], string> = {
-  "1": "Ev Sahibi", X: "Beraberlik", "2": "Deplasman",
-  under: "2.5 Alt", over: "2.5 Üst", yes: "Var", no: "Yok",
-};
+function selectionLabel(t: Dictionary, sel: FTRecommendation["selection"]): string {
+  const map: Record<string, string> = {
+    "1": t.markets.home, X: t.markets.draw, "2": t.markets.away,
+    under: t.markets.under, over: t.markets.over, yes: t.markets.yes, no: t.markets.no,
+  };
+  return map[sel] ?? sel;
+}
 
 const ARCHIVE_NAME: Record<string, string> = {
   archive_1: "A1", archive_2: "A2", archive_3: "A3",
@@ -49,10 +52,13 @@ function archiveBadgeClass(archive: string) {
 
 const RecommendationRow = memo(function RecommendationRow({ recommendation }: { recommendation: FTRecommendation }) {
   const match = useMatchInfo();
+  const { t } = useLocale();
   const calPct = recommendation.calibrated_pct != null ? Math.round(recommendation.calibrated_pct) : null;
   const pct = calPct ?? Math.round(recommendation.frequency_pct);
   const color = pctColor(pct);
   const archive = archiveLabel(recommendation.archive);
+  const mktLabel = marketLabel(t, recommendation.market);
+  const selLabel = selectionLabel(t, recommendation.selection);
 
   return (
     <div
@@ -96,7 +102,7 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
               fontSize: "9px",
               fontWeight: 700,
             }}>
-              Güvenli
+              {t.evaluation.confident}
             </span>
           )}
           <span
@@ -106,14 +112,14 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
               letterSpacing: "var(--nv-tracking-wide)",
             }}
           >
-            {MARKET_LABELS[recommendation.market]}
+            {mktLabel}
           </span>
         </div>
         <div
           className="text-sm font-semibold"
           style={{ color: "var(--nv-text-primary)" }}
         >
-          {SELECTION_LABELS[recommendation.selection]}
+          {selLabel}
         </div>
         {/* Percentage bar */}
         <div className="nv-pct-bar mt-1.5" style={{ height: "4px" }}>
@@ -146,9 +152,9 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
                 fontFamily: "var(--nv-font-mono)",
                 color: "var(--nv-text-tertiary)",
               }}
-              title="Ham frekans yüzdesi (kalibrasyon öncesi)"
+              title={t.topPicks.rawPctTooltip}
             >
-              ham %{Math.round(recommendation.frequency_pct)}
+              {t.topPicks.rawPct.replace("{pct}", String(Math.round(recommendation.frequency_pct)))}
             </div>
           )}
           <div
@@ -158,13 +164,13 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
               color: "var(--nv-text-tertiary)",
             }}
           >
-            {recommendation.match_count} maç
+            {recommendation.match_count} {t.common.match}
           </div>
         </div>
         {match && <AddToCartButton item={{
           matchId: match.matchId, homeTeam: match.homeTeam, awayTeam: match.awayTeam,
-          marketKey: recommendation.market, marketLabel: MARKET_LABELS[recommendation.market],
-          selectionLabel: SELECTION_LABELS[recommendation.selection], pct: recommendation.frequency_pct,
+          marketKey: recommendation.market, marketLabel: mktLabel,
+          selectionLabel: selLabel, pct: recommendation.frequency_pct,
           archive, period: "ft",
         }} />}
       </div>
@@ -173,6 +179,7 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
 });
 
 export default memo(function TopPicks({ recommendations, period }: Props) {
+  const { t } = useLocale();
   if (period !== "ft") return null;
   if (recommendations.length === 0) {
     return (
@@ -190,14 +197,13 @@ export default memo(function TopPicks({ recommendations, period }: Props) {
             letterSpacing: "var(--nv-tracking-wide)",
           }}
         >
-          İleri dönem deneysel seçimler
+          {t.topPicks.title}
         </h3>
         <p
           className="mt-1 text-xs leading-relaxed"
           style={{ color: "var(--nv-text-tertiary)" }}
         >
-          Bu maç için ft-display-v3 kuralıyla maç öncesi kaydedilmiş seçim bulunmuyor.
-          Ayrıntılı arşiv istatistikleri aşağıda bilgi amacıyla gösteriliyor.
+          {t.topPicks.emptyMessage}
         </p>
       </div>
     );
@@ -212,10 +218,10 @@ export default memo(function TopPicks({ recommendations, period }: Props) {
             letterSpacing: "var(--nv-tracking-wide)",
           }}
         >
-          İleri dönem deneysel seçimler
+          {t.topPicks.title}
         </h3>
         <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
-          ft-display-v3 · {recommendations.length} seçim
+          ft-display-v3 · {t.topPicks.selectionCount.replace("{count}", String(recommendations.length))}
         </span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -227,8 +233,7 @@ export default memo(function TopPicks({ recommendations, period }: Props) {
         className="text-[10px] leading-relaxed mt-3"
         style={{ color: "var(--nv-text-tertiary)" }}
       >
-        Seçimler maç başlamadan sabitlenir ve aynı kayıt sonuçlandıktan sonra ölçülür.
-        Yüzde, lig bazlı baz oranları ve log-odds shrinkage ile kalibre edilmiştir.
+        {t.topPicks.disclaimer}
       </p>
     </div>
   );

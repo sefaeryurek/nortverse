@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getMatchedMatches } from "@/lib/api";
 import type { MatchedMatchesResponse, MatchedMatch } from "@/lib/api";
+import { useLocale } from "@/lib/locale-context";
 
 interface Props {
   matchId: string;
@@ -31,7 +32,7 @@ function ScoreBadge({ label, score }: { label: string; score: string | null }) {
   );
 }
 
-function MatchRow({ match, showSimilarity }: { match: MatchedMatch; showSimilarity?: boolean }) {
+function MatchRow({ match, showSimilarity, htLabel, h2Label, ftLabel }: { match: MatchedMatch; showSimilarity?: boolean; htLabel: string; h2Label: string; ftLabel: string }) {
   return (
     <div
       className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 py-2 px-2"
@@ -61,15 +62,16 @@ function MatchRow({ match, showSimilarity }: { match: MatchedMatch; showSimilari
             {(match.similarity * 100).toFixed(1)}%
           </span>
         )}
-        <ScoreBadge label="IY" score={match.ht} />
-        <ScoreBadge label="2Y" score={match.h2} />
-        <ScoreBadge label="MS" score={match.ft} />
+        <ScoreBadge label={htLabel} score={match.ht} />
+        <ScoreBadge label={h2Label} score={match.h2} />
+        <ScoreBadge label={ftLabel} score={match.ft} />
       </div>
     </div>
   );
 }
 
 export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, hasPatternD }: Props) {
+  const { t } = useLocale();
   const [data, setData] = useState<MatchedMatchesResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -118,7 +120,7 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, 
             letterSpacing: "var(--nv-tracking-wide)",
           }}
         >
-          Eşleşen Arşiv Maçları
+          {t.analyze.matchedMatches}
         </h3>
         <div className="flex gap-1">
           {hasPatternB && (
@@ -143,19 +145,19 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, 
         <div style={{ marginTop: "var(--nv-space-md)" }}>
           {loading && (
             <div className="text-xs" style={{ color: "var(--nv-text-tertiary)", padding: "var(--nv-space-md) 0" }}>
-              Yükleniyor...
+              {t.analyze.loading}
             </div>
           )}
 
           {error && !loading && (
             <div className="flex items-center gap-2" style={{ padding: "var(--nv-space-md) 0" }}>
-              <span className="text-xs" style={{ color: "var(--nv-text-tertiary)" }}>Veri yüklenemedi</span>
+              <span className="text-xs" style={{ color: "var(--nv-text-tertiary)" }}>{t.analyze.loadError}</span>
               <button
                 onClick={() => { setError(false); setData(null); }}
                 className="text-xs font-semibold"
                 style={{ color: "var(--nv-accent-blue)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
               >
-                Tekrar dene
+                {t.common.retry}
               </button>
             </div>
           )}
@@ -169,14 +171,14 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, 
                       className="text-[10px] font-bold uppercase"
                       style={{ color: "var(--nv-accent-blue)", letterSpacing: "var(--nv-tracking-wide)" }}
                     >
-                      Arşiv 1 (Skor Seti Eşleşmesi)
+                      {t.analyze.archive1ScoreSet}
                     </span>
                     <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
-                      {data.archive_b.length} maç
+                      {data.archive_b.length} {t.common.match}
                     </span>
                   </div>
                   {data.archive_b.map((m) => (
-                    <MatchRow key={`b-${m.match_id}`} match={m} />
+                    <MatchRow key={`b-${m.match_id}`} match={m} htLabel={t.periodTabs.htShort} h2Label={t.periodTabs.h2Short} ftLabel={t.periodTabs.ftShort} />
                   ))}
                 </div>
               )}
@@ -188,14 +190,14 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, 
                       className="text-[10px] font-bold uppercase"
                       style={{ color: "var(--nv-accent-green)", letterSpacing: "var(--nv-tracking-wide)" }}
                     >
-                      Arşiv 2 (Oran Eşleşmesi)
+                      {t.analyze.archive2RatioMatch}
                     </span>
                     <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
-                      {data.archive_c.length} maç
+                      {data.archive_c.length} {t.common.match}
                     </span>
                   </div>
                   {data.archive_c.map((m) => (
-                    <MatchRow key={`c-${m.match_id}`} match={m} />
+                    <MatchRow key={`c-${m.match_id}`} match={m} htLabel={t.periodTabs.htShort} h2Label={t.periodTabs.h2Short} ftLabel={t.periodTabs.ftShort} />
                   ))}
                 </div>
               )}
@@ -207,21 +209,21 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, 
                       className="text-[10px] font-bold uppercase"
                       style={{ color: "var(--nv-accent-amber)", letterSpacing: "var(--nv-tracking-wide)" }}
                     >
-                      Arşiv 3 (Cosine Similarity)
+                      {t.analyze.archive3Cosine}
                     </span>
                     <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
-                      {data.archive_d.length} maç
+                      {data.archive_d.length} {t.common.match}
                     </span>
                   </div>
                   {data.archive_d.map((m) => (
-                    <MatchRow key={`d-${m.match_id}`} match={m} showSimilarity />
+                    <MatchRow key={`d-${m.match_id}`} match={m} showSimilarity htLabel={t.periodTabs.htShort} h2Label={t.periodTabs.h2Short} ftLabel={t.periodTabs.ftShort} />
                   ))}
                 </div>
               )}
 
               {data.archive_b.length === 0 && data.archive_c.length === 0 && (!data.archive_d || data.archive_d.length === 0) && (
                 <div className="text-xs" style={{ color: "var(--nv-text-tertiary)", padding: "var(--nv-space-md) 0" }}>
-                  Eşleşen maç bulunamadı
+                  {t.analyze.noMatchesFound}
                 </div>
               )}
             </>

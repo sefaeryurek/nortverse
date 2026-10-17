@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { PatternResult } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import { getMarketSummary } from "@/lib/confidence";
+import { useLocale } from "@/lib/locale-context";
 
 interface Props {
   patternB: PatternResult | null;
@@ -69,6 +70,7 @@ function Cell({
 }
 
 export default function MarketSummary({ patternB, patternC, patternD, period }: Props) {
+  const { t } = useLocale();
   const rows = useMemo(() => getMarketSummary(patternB, patternC, period, patternD), [patternB, patternC, patternD, period]);
 
   if (rows.length === 0) return null;
@@ -90,14 +92,13 @@ export default function MarketSummary({ patternB, patternC, patternD, period }: 
             letterSpacing: "var(--nv-tracking-wide)",
           }}
         >
-          Ana Pazar Özeti
+          {t.marketSummary.title}
         </h3>
         <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
-          arşivde en sık görülen seçim
+          {t.marketSummary.subtitle}
         </span>
       </div>
 
-      {/* Sütun başlıkları */}
       <div
         className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-1 pb-2 mb-2"
         style={{ borderBottom: "1px solid var(--nv-border)" }}
@@ -106,7 +107,7 @@ export default function MarketSummary({ patternB, patternC, patternD, period }: 
           className="text-[10px] uppercase"
           style={{ color: "var(--nv-text-tertiary)", letterSpacing: "var(--nv-tracking-wide)" }}
         >
-          Pazar
+          {t.marketSummary.market}
         </div>
         <div
           className="text-[10px] uppercase text-right"
@@ -143,7 +144,7 @@ export default function MarketSummary({ patternB, patternC, patternD, period }: 
                 <span
                   className="text-[8px] font-bold leading-none"
                   style={{ color: "var(--nv-accent-amber)" }}
-                  title="İki arşiv aynı seçimde uyuşuyor"
+                  title={t.marketSummary.agreementTooltip}
                 >
                   ✦
                 </span>
@@ -178,7 +179,7 @@ export default function MarketSummary({ patternB, patternC, patternD, period }: 
           borderTop: "1px solid var(--nv-border-subtle)",
         }}
       >
-        <span style={{ color: "var(--nv-accent-amber)" }}>✦</span> = A1+A2 aynı seçimde uyuşuyor. Yüzdeler doğrulanmış maç olasılığı değildir.
+        <span style={{ color: "var(--nv-accent-amber)" }}>✦</span> = {t.marketSummary.footer}
       </p>
     </div>
   );
