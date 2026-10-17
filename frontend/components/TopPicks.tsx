@@ -221,7 +221,7 @@ export default memo(function TopPicks({ recommendations, period }: Props) {
           {t.topPicks.title}
         </h3>
         <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}>
-          ft-display-v3 · {t.topPicks.selectionCount.replace("{count}", String(recommendations.length))}
+          {recommendations[0].recommendation_id.split(":")[0]} · {t.topPicks.selectionCount.replace("{count}", String(recommendations.length))}
         </span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
