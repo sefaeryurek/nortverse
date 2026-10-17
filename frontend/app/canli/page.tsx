@@ -37,7 +37,7 @@ async function checkHTMatch(
   htAway: number,
 ): Promise<HTFilteredStats[] | null> {
   try {
-    const data: MatchedMatchesResponse = await getMatchedMatches(matchId);
+    const data: MatchedMatchesResponse = await getMatchedMatches(matchId, "ft");
     const results: HTFilteredStats[] = [];
 
     const bFiltered = filterByHT(data.archive_b || [], htHome, htAway);
@@ -469,12 +469,16 @@ async function validateMatches(data: LiveHTMatch[]): Promise<ValidatedMatch[]> {
     if (stats) validated.push({ match: m, stats });
   });
   await runWithConcurrency(tasks, CONCURRENCY_LIMIT);
-  validated.sort((a, b) => {
-    const aMin = a.match.live_minute || "";
-    const bMin = b.match.live_minute || "";
-    return aMin.localeCompare(bMin);
-  });
+  validated.sort((a, b) => minuteOrder(a.match.live_minute) - minuteOrder(b.match.live_minute));
   return validated;
+}
+
+function minuteOrder(minute: string | null | undefined): number {
+  if (minute === "HT") return 45.5;
+  const [base, extra] = (minute ?? "").split("+");
+  const n = Number.parseInt(base, 10);
+  if (Number.isNaN(n)) return 999;
+  return n + (Number.parseInt(extra ?? "0", 10) || 0) / 100;
 }
 
 function ConnectionBadge({ status }: { status: WsStatus }) {
@@ -512,33 +516,44 @@ export default function CanliPage() {
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const lastMatchIdsRef = useRef("");
+  const pendingIdsRef = useRef("");
+  const reqSeqRef = useRef(0);
 
   const ws = useLiveWs();
   const usingWs = ws.status === "connected";
   const useFallback = ws.status === "fallback";
 
-  // WebSocket'ten gelen veriyi işle
+  // WebSocket'ten gelen veriyi işle. Yeni yayın eski doğrulamayı iptal etmez;
+  // en son başlatılan doğrulama kazanır, liste sadece başarıyla bitince "işlendi" sayılır.
   useEffect(() => {
     if (!usingWs || ws.matches.length === 0) return;
     const newIds = ws.matches.map((m) => `${m.match_id}:${m.live_minute}`).join(",");
-    if (newIds === lastMatchIdsRef.current) return;
-    lastMatchIdsRef.current = newIds;
+    if (newIds === lastMatchIdsRef.current || newIds === pendingIdsRef.current) return;
+    pendingIdsRef.current = newIds;
+    const seq = ++reqSeqRef.current;
 
-    let cancelled = false;
-    validateMatches(ws.matches).then((validated) => {
-      if (cancelled) return;
-      setValidatedMatches(validated);
-      setError("");
-      setLoading(false);
-      setLastUpdate(ws.lastUpdate);
-    });
-    return () => { cancelled = true; };
-  }, [usingWs, ws.matches, ws.lastUpdate]);
+    validateMatches(ws.matches)
+      .then((validated) => {
+        if (seq !== reqSeqRef.current) return;
+        lastMatchIdsRef.current = newIds;
+        setValidatedMatches(validated);
+        setError("");
+        setLastUpdate(new Date());
+      })
+      .finally(() => {
+        if (seq !== reqSeqRef.current) return;
+        pendingIdsRef.current = "";
+        setLoading(false);
+      });
+  }, [usingWs, ws.matches]);
 
   // WebSocket bağlantı açılırken veya boş veri gelirken ilk yükleme
   useEffect(() => {
     if (!usingWs) return;
     if (ws.matches.length === 0 && ws.lastUpdate) {
+      reqSeqRef.current++;
+      lastMatchIdsRef.current = "";
+      pendingIdsRef.current = "";
       setValidatedMatches([]);
       setLoading(false);
       setLastUpdate(ws.lastUpdate);
@@ -561,7 +576,7 @@ export default function CanliPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!useFallback) return;
