@@ -26,7 +26,8 @@ function pattern(value: unknown): boolean {
   return value === null || record(value) && count(value.match_count) && (value.match_count as number) > 0
     && Object.keys(PATTERN_PERCENT_FIELDS).every((key) => percentage(value[key]))
     && record(value.score_freq) && Object.entries(value.score_freq).every(([key, frequency]) =>
-      scoreLabel(key) && count(frequency) && (frequency as number) <= (value.match_count as number));
+      scoreLabel(key) && finite(frequency) && (frequency as number) >= 0
+      && (frequency as number) <= (value.match_count as number));
 }
 
 function trend(value: unknown): boolean {
