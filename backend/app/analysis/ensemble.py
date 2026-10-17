@@ -41,7 +41,9 @@ def _extract_pattern_features(
 ) -> list[float]:
     """Pattern'den feature'ları çıkar, eksikse baz oranları kullan."""
     if not isinstance(pattern, dict) or not pattern.get("match_count"):
-        return [base_rates.get(f.replace("_pct", "").replace("result_", ""), 33.3) for f in fields]
+        keys = [f.replace("_pct", "").replace("result_", "") for f in fields]
+        # result_x_pct → "x"; baz oran tablosunda beraberlik anahtarı "X".
+        return [base_rates.get(k, base_rates.get(k.upper(), 33.3)) for k in keys]
     return [float(pattern.get(f, 0) or 0) for f in fields]
 
 

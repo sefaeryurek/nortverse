@@ -242,6 +242,11 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.pattern_d_min_similarity == 0.90
 
+    def test_default_pattern_d_min_matches(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_D_MIN_MATCHES", raising=False)
+        from app.config import AnalysisConfig
+        assert AnalysisConfig().pattern_d_min_matches == 10
+
     def test_default_temporal_decay_half_life(self, monkeypatch):
         monkeypatch.delenv("TEMPORAL_DECAY_HALF_LIFE", raising=False)
         from app.config import AnalysisConfig

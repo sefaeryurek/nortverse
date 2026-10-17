@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
 from app.analysis.pattern_b import RESULT_KNOWN_DELAY
-from app.config import ISTANBUL_TZ
 from app.db.connection import get_session
 from app.db.models import Match
 
@@ -200,8 +200,9 @@ def predict_live(
 # ─── Günlük COND önbelleği ──────────────────────────────────────────────────
 
 _table: CondTable | None = None
-_table_day: str | None = None
+_table_built_at: float = 0.0
 _lock = asyncio.Lock()
+TABLE_TTL_SECONDS = 6 * 3600
 
 
 async def build_cond_table(as_of: datetime) -> CondTable:
@@ -234,23 +235,26 @@ async def build_cond_table(as_of: datetime) -> CondTable:
     return table
 
 
+def _table_fresh() -> bool:
+    return _table is not None and time.monotonic() - _table_built_at < TABLE_TTL_SECONDS
+
+
 async def get_cond_table() -> CondTable:
-    """İstanbul gününe göre günde bir kez kurulur (sızıntısız: kesim = kuruluş anı − 3 saat)."""
-    global _table, _table_day
-    today = datetime.now(ISTANBUL_TZ).date().isoformat()
-    if _table is not None and _table_day == today:
+    """6 saatte bir kurulur (sızıntısız: kesim = kuruluş anı − 3 saat; yeni sonuçlar gün içinde girer)."""
+    global _table, _table_built_at
+    if _table_fresh():
         return _table
     async with _lock:
-        if _table is None or _table_day != today:
+        if not _table_fresh():
             _table = await build_cond_table(datetime.now(timezone.utc))
-            _table_day = today
+            _table_built_at = time.monotonic()
     return _table
 
 
 def invalidate_cond_table() -> None:
-    global _table, _table_day
+    global _table, _table_built_at
     _table = None
-    _table_day = None
+    _table_built_at = 0.0
 
 
 async def archive_ht_filtered(blobs: dict[str, dict | None], ht: tuple[int, int]) -> list[dict]:

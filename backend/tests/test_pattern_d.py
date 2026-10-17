@@ -149,6 +149,24 @@ async def _run_d(target, candidates, **kwargs):
         return await find_pattern_d_all_periods(target, **kwargs)
 
 
+class TestFindPatternDGuards:
+    @pytest.mark.asyncio
+    async def test_below_min_matches_returns_none(self):
+        candidates = [_make_candidate(str(i), _make_ratios(3.0)) for i in range(3)]
+        assert await _run_d(_make_ratios(3.0), candidates, min_matches=4) == (None, None, None)
+        _, _, ft = await _run_d(_make_ratios(3.0), candidates, min_matches=3)
+        assert ft.match_count == 3
+
+    def test_idf_uses_only_matches_before_cutoff(self):
+        from app.analysis.pattern_d import IDF_CUTOFF
+        common = {score_key(h, a): 1.0 for h, a in ALL_SCORES}
+        rare = {score_key(h, a): (1.0 if i == 0 else 0.0) for i, (h, a) in enumerate(ALL_SCORES)}
+        before = [_make_candidate(f"b{i}", common, kickoff=IDF_CUTOFF - timedelta(days=10)) for i in range(20)]
+        after = [_make_candidate(f"a{i}", rare, kickoff=IDF_CUTOFF + timedelta(days=10)) for i in range(50)]
+        pool = _build_pool(before + after)
+        assert pool.idf == _compute_idf_weights(before)
+
+
 class TestFindPatternD:
     @pytest.mark.asyncio
     async def test_empty_ratios_returns_none(self):

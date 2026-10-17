@@ -86,8 +86,8 @@ async def test_adaptive_returns_first_sufficient_tolerance():
 
 
 @pytest.mark.asyncio
-async def test_adaptive_returns_max_tolerance_result_when_never_sufficient():
-    """Hiçbir tolerance yetmezse max_tolerance sonucunu döndürür."""
+async def test_adaptive_returns_none_when_never_sufficient():
+    """Hiçbir tolerance minimum eşleşmeye ulaşmazsa sonuç yok (1-2 maçlık %100 gösterilmez)."""
     as_of = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
     async def mock_find(ft_ratios, min_matches=1, tolerance=0.0,
@@ -102,8 +102,7 @@ async def test_adaptive_returns_max_tolerance_result_when_never_sufficient():
             base_tolerance=0.5, max_tolerance=1.0, tolerance_step=0.25,
             as_of=as_of,
         )
-    assert result[2] is not None
-    assert result[2].match_count == 1
+    assert result == (None, None, None)
 
 
 @pytest.mark.asyncio

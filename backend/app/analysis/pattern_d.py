@@ -14,6 +14,7 @@ Zaman (as_of) ve lig filtresi bellekte uygulanır → cache her maçta yeniden y
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import time
@@ -32,6 +33,8 @@ from app.db.models import Match
 log = logging.getLogger(__name__)
 
 _CACHE_TTL = 3600.0
+# IDF ağırlıkları sadece bu tarihten önce oynanmış maçlardan: 2023-07 sonrası backtest'te gelecek bilgisi yok.
+IDF_CUTOFF = datetime(2023, 7, 1, tzinfo=timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -57,6 +60,7 @@ class _Pool:
 
 
 _pool: _Pool | None = None
+_pool_lock = asyncio.Lock()
 
 
 def _to_vector(ratios: dict[str, float]) -> list[float]:
@@ -109,8 +113,13 @@ def _unit(vec: list[float], weights: list[float]) -> tuple[float, ...] | None:
     return tuple(x / norm for x in weighted)
 
 
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
 def _build_pool(rows: list[tuple]) -> _Pool:
-    idf = _compute_idf_weights(rows)
+    idf_rows = [r for r in rows if r[9] is not None and _aware(r[9]) < IDF_CUTOFF]
+    idf = _compute_idf_weights(idf_rows or rows)
     candidates: list[_Candidate] = []
     for r in rows:
         if not isinstance(r[1], dict) or r[9] is None:
@@ -118,7 +127,7 @@ def _build_pool(rows: list[tuple]) -> _Pool:
         unit = _unit(_to_vector(r[1]), idf)
         if unit is None:
             continue
-        kickoff = r[9] if r[9].tzinfo else r[9].replace(tzinfo=timezone.utc)
+        kickoff = _aware(r[9])
         candidates.append(_Candidate(
             match_id=str(r[0]), unit_vec=unit, league_name=r[8], kickoff_time=kickoff,
             actual_ft_home=r[2], actual_ft_away=r[3],
@@ -132,33 +141,39 @@ def _build_pool(rows: list[tuple]) -> _Pool:
 
 
 async def _load_pool() -> _Pool:
-    """Sonucu bilinen tüm aktif maçları bir kez yükler (as_of'tan bağımsız)."""
+    """Sonucu bilinen tüm aktif maçları bir kez yükler (as_of'tan bağımsız).
+
+    Kilit: soğuk önbellekte eşzamanlı istekler havuzu bir kez kurar.
+    Kurulum (vektör normalizasyonu) olay döngüsünü bloklamamak için thread'de yapılır.
+    """
     global _pool
     if _pool is not None and time.monotonic() - _pool.loaded_at < _CACHE_TTL:
         return _pool
-    known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
-    stmt = select(
-        Match.match_id,
-        Match.ft_all_ratios,
-        Match.actual_ft_home, Match.actual_ft_away,
-        Match.actual_ht_home, Match.actual_ht_away,
-        Match.actual_h2_home, Match.actual_h2_away,
-        Match.league_name,
-        Match.kickoff_time,
-    ).where(
-        Match.ft_all_ratios.isnot(None),
-        Match.actual_ft_home.isnot(None),
-        Match.actual_ft_away.isnot(None),
-        Match.deleted_at.is_(None),
-        Match.kickoff_time.isnot(None),
-        known_at > Match.kickoff_time,
-    )
-    async with get_session() as session:
-        rows = list((await session.execute(stmt)).all())
-    pool = _build_pool(rows)
-    _pool = pool
-    log.info("Pattern D aday havuzu yüklendi: %d maç", len(pool.candidates))
-    return pool
+    async with _pool_lock:
+        if _pool is not None and time.monotonic() - _pool.loaded_at < _CACHE_TTL:
+            return _pool
+        known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
+        stmt = select(
+            Match.match_id,
+            Match.ft_all_ratios,
+            Match.actual_ft_home, Match.actual_ft_away,
+            Match.actual_ht_home, Match.actual_ht_away,
+            Match.actual_h2_home, Match.actual_h2_away,
+            Match.league_name,
+            Match.kickoff_time,
+        ).where(
+            Match.ft_all_ratios.isnot(None),
+            Match.actual_ft_home.isnot(None),
+            Match.actual_ft_away.isnot(None),
+            Match.deleted_at.is_(None),
+            Match.kickoff_time.isnot(None),
+            known_at > Match.kickoff_time,
+        )
+        async with get_session() as session:
+            rows = list((await session.execute(stmt)).all())
+        _pool = await asyncio.to_thread(_build_pool, rows)
+        log.info("Pattern D aday havuzu yüklendi: %d maç", len(_pool.candidates))
+        return _pool
 
 
 class _MatchedRow:
@@ -188,6 +203,7 @@ async def find_pattern_d_all_periods(
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
     league_name: str | None = None,
+    min_matches: int = 1,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
     """FT oran vektöründe benzerliği min_similarity üzerindeki tüm maçları bulur.
 
@@ -197,6 +213,7 @@ async def find_pattern_d_all_periods(
         exclude_match_id: Analiz edilen maçın kendisi (self-exclusion)
         as_of: Sadece bu andan önce sonucu bilinen maçlar aday olur
         league_name: Sadece aynı lig (başka lige düşülmez); None ise tüm ligler
+        min_matches: Bu sayının altında eşleşme varsa sonuç yok (küçük örneklem %100'leri)
 
     Returns:
         (ht_result, h2_result, ft_result) — benzer maç yoksa None
@@ -228,8 +245,8 @@ async def find_pattern_d_all_periods(
         tw = 0.5 ** (max(0.0, age_years) / half_life) if half_life > 0 else 1.0
         scored.append((sim, sim * tw, c))
 
-    if not scored:
-        log.debug("Pattern D: min_similarity=%.2f üzerinde eşleşme yok", min_similarity)
+    if len(scored) < max(1, min_matches):
+        log.debug("Pattern D: %d eşleşme (minimum %d)", len(scored), min_matches)
         return None, None, None
 
     scored.sort(key=lambda x: x[0], reverse=True)

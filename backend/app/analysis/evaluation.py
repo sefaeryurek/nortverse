@@ -97,7 +97,8 @@ def evaluate_pattern(
         + math.log(over_base_p / (1 - over_base_p)) * shrink
     )
     over_adjusted = 1 / (1 + math.exp(-over_adj_logit)) * 100
-    over_pick = over_adjusted > ou_base
+    # Seçim olasılığı %50'nin üstünde olan taraf ("Alt %40" gibi %50 altı seçim gösterilmez).
+    over_pick = over_adjusted > 50.0
     over_hit = over_pick == actual_over_25
 
     btts_pct = pattern_data.get("kg_var_pct", 0) or 0
@@ -108,7 +109,7 @@ def evaluate_pattern(
         + math.log(btts_base_p / (1 - btts_base_p)) * shrink
     )
     btts_adjusted = 1 / (1 + math.exp(-btts_adj_logit)) * 100
-    btts_pick_val = btts_adjusted > btts_base
+    btts_pick_val = btts_adjusted > 50.0
     btts_hit = btts_pick_val == actual_btts
 
     brier = sum(

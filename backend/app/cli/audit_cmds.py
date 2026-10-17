@@ -444,20 +444,26 @@ def recompute_patterns_cmd(
         help="Sadece ayar parmak izi eskimiş aileleri hesapla (kesilirse kaldığı yerden devam eder).",
     ),
     family: Optional[list[str]] = typer.Option(None, "--family", help="Sadece bu aile(ler): b, c, d"),
+    include_finished: bool = typer.Option(
+        False, "--include-finished",
+        help="Bitmiş maçları da yeniden hesapla (backtest verisi; o gün gösterilen değil). Varsayılan: sadece yaklaşanlar.",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Pattern B/C/D alanlarını yeniden hesaplayıp DB'ye yaz.
 
-    Önce yaklaşan maçlar, sonra yeniden eskiye arşiv işlenir.
+    Varsayılan olarak sadece başlamamış maçlar işlenir; bitmiş maçların saklı pattern'i
+    "bugünkü algoritma o gün ne derdi" (backtest) verisidir ve ancak --include-finished ile değişir.
+    Gerçekte gösterilen tahminler değişmez defterde (prediction_ledger) korunur.
     """
     _setup_logging("DEBUG" if verbose else "INFO")
     if not verbose:
         logging.getLogger("app.analysis").setLevel(logging.WARNING)
 
     import time as _time
-    from sqlalchemy import or_, select
+    from sqlalchemy import func, or_, select
     from app.db.connection import get_session
-    from app.db.models import Match
+    from app.db.models import AuditLog, Match
     from app.analysis.persist import (
         FAMILIES, compute_all_patterns, pattern_as_of, pattern_hashes, update_match_patterns,
     )
@@ -473,6 +479,13 @@ def recompute_patterns_cmd(
         hash_cols = {f: getattr(Match, f"pattern_{f}_hash") for f in FAMILIES}
         async with get_session() as session:
             filters = [Match.deleted_at.is_(None), Match.analyzed_at.is_not(None)]
+            if not include_finished:
+                filters.append(or_(Match.kickoff_time.is_(None), Match.kickoff_time > func.now()))
+            else:
+                session.add(AuditLog(
+                    operation="recompute_include_finished", actor="cli",
+                    details={"families": wanted, "stale_only": stale_only, "hashes": current},
+                ))
             if only_missing:
                 filters.append(Match.pattern_computed_at.is_(None))
             if stale_only:
