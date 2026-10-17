@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import ISTANBUL_TZ
-from app.analysis.league_filter import is_supported_league
+from app.analysis.league_filter import is_main_league, is_supported_league
 from app.api.schemas import FixtureMatchOut
 from app.api.live_snapshot import get_live_snapshot
 from app.api.score_state import _utc, resolve_match_state
@@ -144,7 +144,7 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
             result = []
             for raw in db_row.matches_json:
                 match = FixtureMatchOut(**raw)
-                if not is_supported_league(match.league_name, match.league_code):
+                if not is_main_league(match.league_name, match.league_code):
                     continue
                 if match.kickoff_time and datetime.fromisoformat(match.kickoff_time).astimezone(ISTANBUL_TZ).date() != req_date:
                     continue
@@ -175,7 +175,7 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
             detail="Maç verisi şu anda alınamıyor. Lütfen biraz sonra tekrar deneyin.",
         ) from exc
     source_matches = matches
-    matches = [m for m in source_matches if is_supported_league(m.league_name, m.league_code)]
+    matches = [m for m in source_matches if is_main_league(m.league_name, m.league_code)]
 
     result = [
         FixtureMatchOut(

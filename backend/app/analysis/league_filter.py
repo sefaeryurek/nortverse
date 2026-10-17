@@ -197,6 +197,33 @@ LEAGUE_ALIASES: dict[str, str] = {
 }
 
 
+MAIN_LEAGUES: frozenset[str] = frozenset({
+    "English Premier League",
+    "Spanish La Liga",
+    "Italy Serie A",
+    "German Bundesliga",
+    "France Ligue 1",
+    "French Ligue 1",
+    "Turkey Super Lig",
+    "Turkish Super Lig",
+    "Dutch Eredivisie",
+    "Holland Eredivisie",
+})
+
+
+def is_main_league(*names: str | None) -> bool:
+    """Bülten için beyaz liste: sadece 7 ana lig."""
+    for n in names:
+        if not n:
+            continue
+        if n.strip() in MAIN_LEAGUES:
+            return True
+        canonical = canonical_league_name(n)
+        if canonical in MAIN_LEAGUES:
+            return True
+    return False
+
+
 def canonical_league_name(name: str | None) -> str:
     """Lig adını kanonik forma çevir. Tanınmıyorsa orijinali (trimmed) döner."""
     if not name:

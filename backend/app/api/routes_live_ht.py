@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.config import ISTANBUL_TZ
-from app.analysis.league_filter import is_supported_league
+from app.analysis.league_filter import is_main_league
 from app.api.live_snapshot import get_live_snapshot
 from app.db.connection import get_session
 from app.db.models import FixtureCache, Match
@@ -141,7 +141,7 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
             if not r:
                 continue
             league = r[3]
-            if not is_supported_league(league):
+            if not is_main_league(league):
                 continue
             m.home_team = r[1]
             m.away_team = r[2]

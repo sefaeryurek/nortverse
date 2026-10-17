@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
 from app.config import ISTANBUL_TZ
-from app.analysis.league_filter import is_supported_league
+from app.analysis.league_filter import is_main_league
 from app.api.schemas import MatchSummary, ResultOut
 from app.api.live_snapshot import get_live_snapshot
 from app.api.score_state import _utc as _utc_datetime, resolve_match_state
@@ -114,7 +114,7 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
         row = by_id.get(item["match_id"])
         league_code = item.get("league_code") or (row.league_code if row else None)
         league_name = item.get("league_name") or (row.league_name if row else None)
-        if not is_supported_league(league_name, league_code):
+        if not is_main_league(league_name, league_code):
             continue
         if row is None:
             continue
