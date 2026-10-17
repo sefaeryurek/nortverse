@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 
 from app.config import ISTANBUL_TZ
@@ -79,15 +79,14 @@ async def _refresh() -> LiveSnapshot | None:
                 base = scores.get(match_id)
                 if base is None or base.status != "finished":
                     if base is None or observed.status != "scheduled":
-                        if base is not None and base.ht_home is not None and observed.ht_home is None:
-                            observed = FixtureScore(
-                                match_id=observed.match_id,
-                                status=observed.status,
-                                home=observed.home,
-                                away=observed.away,
-                                ht_home=base.ht_home,
-                                ht_away=base.ht_away,
-                                minute=observed.minute,
+                        if base is not None:
+                            # Canlı sayfanın dakikası esas; panonun İY skoru ve evresi korunur.
+                            keep_ht = base.ht_home is not None and observed.ht_home is None
+                            observed = replace(
+                                observed,
+                                ht_home=base.ht_home if keep_ht else observed.ht_home,
+                                ht_away=base.ht_away if keep_ht else observed.ht_away,
+                                phase=observed.phase or base.phase,
                             )
                         scores[match_id] = observed
         if not scores:

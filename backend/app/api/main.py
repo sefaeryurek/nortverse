@@ -39,6 +39,7 @@ _configure_logging()
 
 from app.config import ISTANBUL_TZ
 from app.analysis.persist import PatternComputationError
+from app.api.live_ledger import start_live_watcher, stop_live_watcher
 from app.api.live_snapshot import shutdown_live_snapshot
 from app.api.routes_admin import router as admin_router
 from app.api.routes_analysis import router as analysis_router
@@ -56,9 +57,11 @@ async def lifespan(app: FastAPI):
     init_bg_queue()
     worker = asyncio.create_task(bg_worker())
     start_ws_broadcaster()
+    start_live_watcher()
     try:
         yield
     finally:
+        await stop_live_watcher()
         await stop_ws_broadcaster()
         await shutdown_live_snapshot()
         worker.cancel()

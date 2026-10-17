@@ -11,7 +11,6 @@ from app.api.routes_live_ht import (
     LiveHTMatch,
     _ConnectionManager,
     _is_second_half_or_later,
-    _cleanup_observed,
 )
 
 
@@ -64,6 +63,16 @@ class TestIsSecondHalfOrLater:
     def test_non_numeric(self):
         assert _is_second_half_or_later("abc") is False
 
+    def test_second_half_phase_without_minute(self):
+        # "2nd Half" etiketi saat göstermeyebilir; maç listeden düşmemeli.
+        assert _is_second_half_or_later(None, "2h") is True
+
+    def test_ht_phase(self):
+        assert _is_second_half_or_later(None, "ht") is True
+
+    def test_first_half_phase_overrides_minute(self):
+        assert _is_second_half_or_later("45+3", "1h") is False
+
 
 class TestLiveHTMatchModel:
     def test_live_score_fields(self):
@@ -75,25 +84,7 @@ class TestLiveHTMatchModel:
         m = LiveHTMatch(match_id="123", ht_home=1, ht_away=0)
         assert m.live_home is None
         assert m.live_away is None
-
-
-class TestCleanupObserved:
-    def test_clears_on_new_day(self):
-        import app.api.routes_live_ht as mod
-        mod._ht_observed["test"] = (1, 0)
-        mod._ht_observed_day = "2020-01-01"
-        _cleanup_observed()
-        assert "test" not in mod._ht_observed
-
-    def test_keeps_on_same_day(self):
-        import app.api.routes_live_ht as mod
-        from datetime import datetime
-        from app.config import ISTANBUL_TZ
-        today = datetime.now(ISTANBUL_TZ).strftime("%Y-%m-%d")
-        mod._ht_observed["test"] = (2, 1)
-        mod._ht_observed_day = today
-        _cleanup_observed()
-        assert "test" in mod._ht_observed
+        assert m.prediction is None
 
 
 class _FakeWebSocket:
@@ -164,6 +155,39 @@ class TestConnectionManager:
     async def test_broadcast_empty_no_error(self):
         mgr = _ConnectionManager()
         await mgr.broadcast("test")
+
+    @pytest.mark.asyncio
+    async def test_broadcast_survives_connect_during_send(self):
+        mgr = _ConnectionManager()
+        late = _FakeWebSocket()
+
+        class _Slow(_FakeWebSocket):
+            async def send_text(self, data: str) -> None:
+                await mgr.connect(late)  # gönderim sırasında yeni bağlantı
+                await super().send_text(data)
+
+        slow = _Slow()
+        await mgr.connect(slow)
+        await mgr.broadcast("x")
+        assert slow.messages == ["x"]
+        assert mgr.count == 2
+
+    @pytest.mark.asyncio
+    async def test_broadcast_drops_hanging_client(self, monkeypatch):
+        import app.api.routes_live_ht as mod
+        monkeypatch.setattr(mod, "_SEND_TIMEOUT", 0.01)
+        mgr = _ConnectionManager()
+
+        class _Hang(_FakeWebSocket):
+            async def send_text(self, data: str) -> None:
+                await asyncio.sleep(1)
+
+        ok, hang = _FakeWebSocket(), _Hang()
+        await mgr.connect(ok)
+        await mgr.connect(hang)
+        await mgr.broadcast("y")
+        assert ok.messages == ["y"]
+        assert mgr.count == 1
 
     @pytest.mark.asyncio
     async def test_multiple_broadcasts(self):

@@ -6,11 +6,12 @@ from bs4 import BeautifulSoup
 
 from app.scraper.browser import browser_context, goto_with_retry
 from app.scraper.fixture import _MATCH_ROW_RE
-from app.scraper.fixture_scores import FixtureScore, _MINUTE_RE, _score
+from app.scraper.fixture_scores import FixtureScore, _MINUTE_RE, _score, phase_from_minute
 
 _FINISHED = {"FT"}
 _POSTPONED = {"Postp.", "Pend.", "Abd.", "Canc."}
 _LIVE = {"1st Half", "2nd Half", "HT"}
+_LABEL_PHASES = {"1st Half": "1h", "HT": "ht", "2nd Half": "2h"}
 _SCORE_CELL = "td.f-b.blue"
 
 
@@ -32,11 +33,14 @@ def parse_live_scores(html: str) -> dict[str, FixtureScore]:
         pair = _score(score_cell.get_text(" ", strip=True)) if score_cell else None
         if pair is None:
             continue
+        minute = label if _MINUTE_RE.fullmatch(label) else ("HT" if label == "HT" else None)
+        finished = label in _FINISHED
         scores[match_id] = FixtureScore(
             match_id=match_id,
-            status="finished" if label in _FINISHED else "live",
+            status="finished" if finished else "live",
             home=pair[0], away=pair[1],
-            minute=label if _MINUTE_RE.fullmatch(label) else ("HT" if label == "HT" else None),
+            minute=minute,
+            phase=None if finished else (_LABEL_PHASES.get(label) or phase_from_minute(minute)),
         )
     return scores
 

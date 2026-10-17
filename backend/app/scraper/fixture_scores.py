@@ -25,6 +25,20 @@ class FixtureScore:
     ht_home: int | None = None
     ht_away: int | None = None
     minute: str | None = None
+    phase: str | None = None  # '1h' | 'ht' | '2h' — dakika bilinmese de maçın evresi
+
+
+def phase_from_minute(minute: str | None) -> str | None:
+    """'HT' → ht; 46+ → 2h; 1..45(+N) → 1h; bilinmiyorsa None."""
+    if not minute:
+        return None
+    if minute == "HT":
+        return "ht"
+    try:
+        base = int(minute.split("+")[0])
+    except ValueError:
+        return None
+    return "2h" if base >= 46 else "1h"
 
 
 def _score(value: str) -> tuple[int, int] | None:
