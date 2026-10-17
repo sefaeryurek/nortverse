@@ -403,8 +403,12 @@ async def capture_v3_recommendations(
 
 
 async def capture_prepared_recommendations(target_date: date) -> int:
-    """Recompute prepared matches with an as-of cutoff, then freeze display picks."""
-    from app.analysis.persist import compute_all_patterns
+    """Hazır maçların pattern'lerini güncel ayarla hesaplayıp yazar, sonra v4 kararını dondurur.
+
+    Pattern'ler DB'ye de yazılır → ekrandaki Ana Pazar ile dondurulan seçim aynı veriden gelir.
+    """
+    from app.analysis.persist import compute_all_patterns, update_match_patterns
+    from app.analysis.prematch_v4 import capture_v4_recommendations
     from app.db.connection import get_session
     from app.db.models import Match
 
@@ -424,7 +428,6 @@ async def capture_prepared_recommendations(target_date: date) -> int:
                 Match.deleted_at.is_(None), Match.kickoff_time >= day_start,
                 Match.kickoff_time < day_end, Match.kickoff_time > started_at,
                 Match.analyzed_at.is_not(None), Match.analyzed_at <= started_at,
-                Match.analyzed_at >= V3_ACTIVATION_CUTOFF,
                 Match.analyzed_at < Match.kickoff_time, Match.ft_scores_1.is_not(None),
             )
         )).all()
@@ -439,6 +442,11 @@ async def capture_prepared_recommendations(target_date: date) -> int:
             ft_ratios=match.ft_all_ratios or {}, as_of=match.analyzed_at,
             league_name=match.league_name,
         )
+        try:
+            await update_match_patterns(match.match_id, patterns, expected_analyzed_at=match.analyzed_at,
+                                        computed_as_of=match.analyzed_at)
+        except Exception:
+            continue
         captured_at = datetime.now(timezone.utc)
         async with get_session() as session:
             current = (await session.execute(
@@ -452,7 +460,7 @@ async def capture_prepared_recommendations(target_date: date) -> int:
             )).scalar_one_or_none()
             if current is None:
                 continue
-            picks, created = await capture_v3_recommendations(
+            picks, created = await capture_v4_recommendations(
                 session,
                 match_id=match.match_id,
                 analyzed_at=match.analyzed_at,

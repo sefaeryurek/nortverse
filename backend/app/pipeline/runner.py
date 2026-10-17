@@ -18,7 +18,7 @@ from app.config import ISTANBUL_TZ
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import canonical_league_name, is_supported_league
 from app.analysis.score_snapshots import capture_score_snapshot
-from app.analysis.snapshots import capture_v3_recommendations
+from app.analysis.prematch_v4 import capture_v4_recommendations
 from app.analysis.persist import FAMILIES, compute_all_patterns, hash_columns, pattern_as_of
 from app.analysis.skip_cache import save_skip
 from app.analysis.trends import compute_trends
@@ -206,7 +206,7 @@ async def _upsert(
                 raise StaleAnalysisWrite(f"Newer analysis exists: {result.match_id}")
             picks: list[dict] | None = None
             if raw is not None:
-                picks, _ = await capture_v3_recommendations(
+                picks, _ = await capture_v4_recommendations(
                     session,
                     match_id=result.match_id,
                     analyzed_at=result.analyzed_at,

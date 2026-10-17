@@ -22,7 +22,7 @@ from app.api.schemas import AnalyzeResponse, PeriodOut
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
-from app.analysis.snapshots import RULE_VERSION, capture_v3_recommendations
+from app.analysis.prematch_v4 import V4_RULE_VERSION as RULE_VERSION, capture_v4_recommendations
 
 
 from app.analysis.persist import (
@@ -196,7 +196,7 @@ async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) 
         )).scalar_one_or_none()
         if current is None:
             return []
-        picks, _ = await capture_v3_recommendations(
+        picks, _ = await capture_v4_recommendations(
             session,
             match_id=row.match_id,
             analyzed_at=current.analyzed_at,

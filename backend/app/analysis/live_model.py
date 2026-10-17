@@ -108,6 +108,14 @@ class CondTable:
     def league_prior(self, league: str) -> dict[str, float]:
         return self.prior.get(league, Counts()).result_dist()
 
+    def league_goal_prior(self, league: str) -> dict[str, float]:
+        """Lig son 3 sezon MS Üst 2.5 ve KG oranı (Laplace 0.5)."""
+        counts = self.prior.get(league, Counts())
+        return {
+            "over25": (counts.over25 + 0.5) / (counts.n + 1.0),
+            "btts": (counts.btts + 0.5) / (counts.n + 1.0),
+        }
+
 
 def prematch_posterior(
     blobs: list[dict | None], prior: dict[str, float], k: float = PREMATCH_K,

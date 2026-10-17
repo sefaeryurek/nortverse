@@ -22,6 +22,8 @@ from app.analysis.snapshots import (
     load_market_baselines,
     prekickoff_picks,
 )
+from app.analysis import prematch_v4
+from app.analysis.live_model import CondTable
 from app.api import routes_admin
 from app.api import services
 from app.db.models import Match
@@ -30,6 +32,17 @@ from app.pipeline import runner
 
 
 NOW = datetime(2026, 9, 24, 10, tzinfo=timezone.utc)
+
+
+def _empty_cond_table(monkeypatch):
+    """v4 yakalama lig ortalaması için COND tablosu ister; boş tablo ≈ eşit dağılım."""
+    table = CondTable(cutoff=NOW, prior_from=NOW)
+    monkeypatch.setattr(prematch_v4, "get_cond_table", AsyncMock(return_value=table))
+    return table
+
+
+def _sql(call) -> str:
+    return str(call.args[0].compile(dialect=postgresql.dialect()))
 
 
 def _pattern(count=30, result_1=70, over=68, btts=66):
@@ -298,7 +311,7 @@ async def test_v3_capture_conflict_returns_frozen_picks_without_loading_baseline
 
 
 @pytest.mark.asyncio
-async def test_prepared_capture_uses_frozen_analysis_time_and_v3_bundle(monkeypatch):
+async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatch):
     prepared = SimpleNamespace(
         match_id="prepared-1",
         analyzed_at=V3_ACTIVATION_CUTOFF,
@@ -315,7 +328,7 @@ async def test_prepared_capture_uses_frozen_analysis_time_and_v3_bundle(monkeypa
     capture_session.execute.side_effect = [
         MagicMock(scalar_one_or_none=lambda: prepared),
         MagicMock(rowcount=1),
-        MagicMock(rowcount=3),
+        MagicMock(rowcount=5),
     ]
     sessions = iter((listing_session, capture_session))
 
@@ -325,19 +338,20 @@ async def test_prepared_capture_uses_frozen_analysis_time_and_v3_bundle(monkeypa
 
     patterns = {"pattern_ft_b": _pattern()}
     compute = AsyncMock(return_value=patterns)
-    monkeypatch.setattr(snapshots, "get_session", fake_session, raising=False)
+    write = AsyncMock()
     monkeypatch.setattr("app.db.connection.get_session", fake_session)
     monkeypatch.setattr(persist, "compute_all_patterns", compute)
-    load_baselines = AsyncMock(return_value={"result": None, "over_25": None, "btts": None})
-    monkeypatch.setattr(snapshots, "load_market_baselines", load_baselines)
+    monkeypatch.setattr(persist, "update_match_patterns", write)
+    _empty_cond_table(monkeypatch)
 
     count = await snapshots.capture_prepared_recommendations(date(2099, 1, 1))
 
     assert count == 1
     assert compute.await_args.kwargs["as_of"] == V3_ACTIVATION_CUTOFF
-    assert load_baselines.await_count == 1
-    market_params = capture_session.execute.await_args_list[2].args[1]
-    assert [row["market"] for row in market_params] == ["result", "over_25", "btts"]
+    write.assert_awaited_once()  # ekran ile dondurulan seçim aynı pattern'den
+    calls = capture_session.execute.await_args_list
+    assert "INSERT INTO analysis_snapshots" in _sql(calls[1])
+    assert "INSERT INTO prediction_ledger" in _sql(calls[2])
 
 
 @pytest.mark.asyncio
@@ -358,10 +372,9 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
     session.execute.side_effect = [
         MagicMock(scalar_one_or_none=lambda: row),
         MagicMock(rowcount=1),
-        MagicMock(rowcount=3),
+        MagicMock(rowcount=5),
     ]
-    load_baselines = AsyncMock(return_value={"result": None, "over_25": None, "btts": None})
-    monkeypatch.setattr("app.analysis.snapshots.load_market_baselines", load_baselines)
+    _empty_cond_table(monkeypatch)
     picks = await services._frozen_recommendations(row, {"pattern_ft_b": _pattern()})
 
     assert [pick["market"] for pick in picks] == ["result"]
@@ -421,7 +434,7 @@ async def test_db_first_snapshot_rejects_stale_or_deleted_match(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cached_analysis_does_not_query_after_snapshot_is_final(monkeypatch):
-    monkeypatch.setattr(services, "_snapshot_finalized", OrderedDict({f"{RULE_VERSION}:123": 0.0}))
+    monkeypatch.setattr(services, "_snapshot_finalized", OrderedDict({f"{services.RULE_VERSION}:123": 0.0}))
     session_factory = MagicMock()
     monkeypatch.setattr(services, "get_session", session_factory)
     response = services.AnalyzeResponse(
@@ -438,32 +451,26 @@ async def test_cached_analysis_does_not_query_after_snapshot_is_final(monkeypatc
 @pytest.mark.asyncio
 async def test_upsert_freezes_first_prekickoff_record_and_never_updates_it(monkeypatch):
     session = AsyncMock()
-    session.execute.side_effect = [
-        MagicMock(rowcount=1),  # match upsert
-        MagicMock(rowcount=1),  # v3 header CAS
-        MagicMock(rowcount=3),  # v3 market rows
-        MagicMock(rowcount=1),  # score snapshot
-    ]
+    session.execute.side_effect = [MagicMock(rowcount=1) for _ in range(6)]
 
     @asynccontextmanager
     async def fake_session():
         yield session
 
     monkeypatch.setattr(runner, "get_session", fake_session)
-    load_baselines = AsyncMock(return_value={"result": None, "over_25": None, "btts": None})
-    monkeypatch.setattr("app.analysis.snapshots.load_market_baselines", load_baselines)
+    _empty_cond_table(monkeypatch)
     raw = MatchRawData(match_id="123", home_team="Home", away_team="Away",
                        league_code="ENG PR", kickoff_time=NOW + timedelta(hours=2))
     result = analyze_match(raw)
     result.analyzed_at = NOW
     await runner._upsert(result, raw, {"pattern_ft_b": _pattern()}, captured_at=NOW + timedelta(minutes=1))
 
-    assert session.execute.await_count == 3
-    statement = session.execute.await_args_list[1].args[0]
-    sql = str(statement.compile(dialect=postgresql.dialect()))
+    calls = session.execute.await_args_list
+    sql = _sql(calls[1])
     assert "INSERT INTO analysis_snapshots" in sql
     assert "ON CONFLICT (match_id, rule_version) DO NOTHING" in sql
-    assert statement.compile(dialect=postgresql.dialect()).params["picks"]
+    assert calls[1].args[0].compile(dialect=postgresql.dialect()).params["picks"]
+    assert "INSERT INTO prediction_ledger" in _sql(calls[2])
 
 
 @pytest.mark.asyncio
