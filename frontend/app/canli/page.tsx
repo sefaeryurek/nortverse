@@ -1,413 +1,234 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { getLiveHTMatches, getMatchedMatches } from "@/lib/api";
-import type { LiveHTMatch, MatchedMatchesResponse } from "@/lib/api";
+import { getLiveHTMatches, getLivePrediction } from "@/lib/api";
+import type { LiveArchiveSummary, LiveGoalMarket, LiveHTMatch, LiveOutcome, LivePrediction, LiveTier } from "@/lib/api";
 import { leagueDisplay } from "@/lib/leagues";
 import { formatTime } from "@/lib/dates";
-import { filterByHT, computeStats } from "@/lib/live-stats";
-import type { HTFilteredStats } from "@/lib/live-stats";
+import { minuteOrder } from "@/lib/live-order";
 import { useLiveWs } from "@/lib/use-live-ws";
 import type { WsStatus } from "@/lib/use-live-ws";
 import { useLocale } from "@/lib/locale-context";
+import type { Dictionary } from "@/lib/i18n";
 
 const POLL_INTERVAL = 45_000;
-const CONCURRENCY_LIMIT = 3;
+const WS_GRACE_MS = 3_000;
+const OUTCOMES: LiveOutcome[] = ["1", "X", "2"];
+const OUTCOME_COLORS: Record<LiveOutcome, string> = {
+  "1": "var(--nv-win)",
+  X: "var(--nv-draw)",
+  "2": "var(--nv-loss)",
+};
 
-async function runWithConcurrency<T>(
-  tasks: (() => Promise<T>)[],
-  limit: number,
-): Promise<T[]> {
-  const results: T[] = [];
-  let i = 0;
-  async function next(): Promise<void> {
-    while (i < tasks.length) {
-      const idx = i++;
-      results[idx] = await tasks[idx]();
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => next()));
-  return results;
+function pct(prob: number | undefined): string {
+  return `%${((prob ?? 0) * 100).toFixed(1)}`;
 }
 
-async function checkHTMatch(
-  matchId: string,
-  htHome: number,
-  htAway: number,
-): Promise<HTFilteredStats[] | null> {
-  try {
-    const data: MatchedMatchesResponse = await getMatchedMatches(matchId, "ft");
-    const results: HTFilteredStats[] = [];
-
-    const bFiltered = filterByHT(data.archive_b || [], htHome, htAway);
-    const bStats = computeStats(bFiltered, "A1", "var(--nv-accent-blue)", "var(--nv-accent-blue-dim)");
-    if (bStats) results.push(bStats);
-
-    const cFiltered = filterByHT(data.archive_c || [], htHome, htAway);
-    const cStats = computeStats(cFiltered, "A2", "var(--nv-accent-green)", "var(--nv-accent-green-dim)");
-    if (cStats) results.push(cStats);
-
-    const dFiltered = filterByHT(data.archive_d || [], htHome, htAway);
-    const dStats = computeStats(dFiltered, "A3", "var(--nv-accent-amber)", "var(--nv-accent-amber-glow)");
-    if (dStats) results.push(dStats);
-
-    return results.length > 0 ? results : null;
-  } catch {
-    return null;
-  }
+function tierStyle(tier: LiveTier): { bg: string; color: string } {
+  if (tier === "high") return { bg: "var(--nv-accent-green-dim)", color: "var(--nv-accent-green)" };
+  if (tier === "medium") return { bg: "var(--nv-accent-blue-dim)", color: "var(--nv-accent-blue)" };
+  return { bg: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" };
 }
 
-function PctBar({
-  label,
-  pct,
-  color,
-  highlight,
-}: {
-  label: string;
-  pct: number;
-  color: string;
-  highlight?: boolean;
-}) {
+function tierLabel(tier: LiveTier, t: Dictionary): string {
+  const p = t.live.prediction;
+  return { high: p.tierHigh, medium: p.tierMedium, low: p.tierLow, insufficient: p.tierInsufficient }[tier];
+}
+
+function levelLabel(level: LivePrediction["ms"]["cond_level"], t: Dictionary): string {
+  const p = t.live.prediction;
+  return { score: p.levelScore, diff: p.levelDiff, global_diff: p.levelGlobal }[level];
+}
+
+function PctBar({ label, value, color, highlight }: { label: string; value: number; color: string; highlight?: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      <span
-        className="flex-shrink-0 font-semibold"
-        style={{
-          width: 28,
-          fontSize: "var(--nv-text-xs)",
-          color: highlight ? color : "var(--nv-text-secondary)",
-          textAlign: "right",
-        }}
-      >
+      <span className="flex-shrink-0 font-semibold text-right" style={{ width: 20, fontSize: "var(--nv-text-xs)", color: highlight ? color : "var(--nv-text-secondary)" }}>
         {label}
       </span>
-      <div
-        className="flex-1"
-        style={{
-          height: 8,
-          borderRadius: 4,
-          backgroundColor: "var(--nv-bg-elevated)",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            width: `${Math.min(pct, 100)}%`,
-            height: "100%",
-            borderRadius: 4,
-            backgroundColor: color,
-            opacity: highlight ? 1 : 0.5,
-            transition: "width 0.3s ease",
-          }}
-        />
+      <div className="flex-1" style={{ height: 8, borderRadius: 4, backgroundColor: "var(--nv-bg-elevated)", overflow: "hidden" }}>
+        <div style={{ width: `${Math.min(value * 100, 100)}%`, height: "100%", borderRadius: 4, backgroundColor: color, opacity: highlight ? 1 : 0.45 }} />
       </div>
-      <span
-        className="flex-shrink-0 font-bold"
-        style={{
-          width: 46,
-          fontFamily: "var(--nv-font-mono)",
-          fontSize: "var(--nv-text-xs)",
-          color: highlight ? color : "var(--nv-text-primary)",
-          textAlign: "right",
-        }}
-      >
-        %{pct.toFixed(1)}
+      <span className="flex-shrink-0 font-bold text-right" style={{ width: 52, fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-xs)", color: highlight ? color : "var(--nv-text-primary)" }}>
+        {pct(value)}
       </span>
     </div>
   );
 }
 
-function ArchiveSection({ stats }: { stats: HTFilteredStats }) {
-  const { t } = useLocale();
-  const { result1Pct, resultXPct, result2Pct } = stats;
-  const max = Math.max(result1Pct, resultXPct, result2Pct);
-
+function GoalChip({ label, market, t }: { label: string; market: LiveGoalMarket; t: Dictionary }) {
+  if (!market.applicable || !market.pick || !market.tier) return null;
+  const p = t.live.prediction;
+  const pickLabel = { over: p.over, under: p.under, yes: p.yes, no: p.no }[market.pick] ?? market.pick;
+  const style = tierStyle(market.tier);
   return (
-    <div
-      className="p-3 space-y-3"
-      style={{
-        borderRadius: "var(--nv-radius-md)",
-        border: `1px solid ${stats.bgColor}`,
-        backgroundColor: stats.bgColor,
-        backgroundClip: "padding-box",
-      }}
+    <span
+      className="inline-flex items-center gap-1.5 px-2 py-1 font-semibold"
+      style={{ fontSize: "var(--nv-text-xs)", borderRadius: "var(--nv-radius-md)", backgroundColor: style.bg, color: style.color }}
+      title={tierLabel(market.tier, t)}
     >
-      {/* Baslik */}
-      <div className="flex items-center justify-between">
-        <span
-          className="inline-flex items-center gap-1.5 font-bold"
-          style={{ fontSize: "var(--nv-text-xs)", color: stats.color }}
-        >
-          <span
-            className="inline-flex items-center justify-center"
-            style={{
-              width: 20,
-              height: 20,
-              borderRadius: "var(--nv-radius-full)",
-              backgroundColor: stats.bgColor,
-              fontSize: "var(--nv-text-2xs)",
-              fontWeight: 800,
-            }}
-          >
-            {stats.archive}
-          </span>
-          {t.live.archiveMatched.replace("{n}", stats.archive.replace("A", ""))}
+      {label} {pickLabel}
+      <span style={{ fontFamily: "var(--nv-font-mono)" }}>{pct(market.prob)}</span>
+    </span>
+  );
+}
+
+function PredictionPanel({ prediction }: { prediction: LivePrediction }) {
+  const { t } = useLocale();
+  const p = t.live.prediction;
+  const { ms } = prediction;
+  const tier = tierStyle(ms.tier);
+  return (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-bold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", letterSpacing: "var(--nv-tracking-wide)" }}>
+          {p.title}
         </span>
         <span
-          className="font-semibold"
+          className="font-extrabold"
+          style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-lg)", color: OUTCOME_COLORS[ms.pick] }}
+        >
+          {ms.pick} {pct(ms.prob)}
+        </span>
+        <span className="px-2 py-0.5 font-semibold" style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: tier.bg, color: tier.color }}>
+          {tierLabel(ms.tier, t)}
+        </span>
+        <span className="flex-1" />
+        <span
+          className="px-2 py-0.5 font-semibold"
           style={{
             fontSize: "var(--nv-text-2xs)",
-            color: "var(--nv-text-tertiary)",
-            fontFamily: "var(--nv-font-mono)",
+            borderRadius: "var(--nv-radius-full)",
+            backgroundColor: prediction.frozen ? "var(--nv-accent-green-dim)" : "var(--nv-bg-elevated)",
+            color: prediction.frozen ? "var(--nv-accent-green)" : "var(--nv-text-tertiary)",
           }}
+          title={p.frozenTooltip}
         >
-          {stats.matches.length} {t.common.match}
+          {prediction.frozen ? p.frozen : p.notFrozen}
+          {prediction.frozen && prediction.frozen_at ? ` ${formatTime(prediction.frozen_at)}` : ""}
+          {prediction.late ? ` · ${p.lateNote}` : ""}
         </span>
       </div>
-
-      {/* MS Sonucu */}
       <div className="space-y-1">
-        <PctBar label="1" pct={result1Pct} color="var(--nv-win)" highlight={result1Pct === max} />
-        <PctBar label="X" pct={resultXPct} color="var(--nv-draw)" highlight={resultXPct === max} />
-        <PctBar label="2" pct={result2Pct} color="var(--nv-loss)" highlight={result2Pct === max} />
+        {OUTCOMES.map((o) => (
+          <PctBar key={o} label={o} value={ms.probs[o]} color={OUTCOME_COLORS[o]} highlight={o === ms.pick} />
+        ))}
       </div>
-
-      {/* Ust/Alt + KG */}
-      <div className="grid grid-cols-2 gap-2">
-        <div
-          className="py-1.5 px-2 text-center"
-          style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-elevated)" }}
-        >
-          <span className="block" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600 }}>
-            {t.live.over25}
-          </span>
-          <span
-            className="block font-bold"
-            style={{
-              fontFamily: "var(--nv-font-mono)",
-              fontSize: "var(--nv-text-sm)",
-              color:
-                stats.ust25Pct >= 60 ? "var(--nv-accent-green)"
-                  : stats.ust25Pct <= 40 ? "var(--nv-accent-red)"
-                    : "var(--nv-text-primary)",
-            }}
-          >
-            %{stats.ust25Pct.toFixed(0)}
-          </span>
-        </div>
-        <div
-          className="py-1.5 px-2 text-center"
-          style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-elevated)" }}
-        >
-          <span className="block" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600 }}>
-            {t.live.bttsYes}
-          </span>
-          <span
-            className="block font-bold"
-            style={{
-              fontFamily: "var(--nv-font-mono)",
-              fontSize: "var(--nv-text-sm)",
-              color:
-                stats.kgVarPct >= 60 ? "var(--nv-accent-green)"
-                  : stats.kgVarPct <= 40 ? "var(--nv-accent-red)"
-                    : "var(--nv-text-primary)",
-            }}
-          >
-            %{stats.kgVarPct.toFixed(0)}
-          </span>
-        </div>
+      <p style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
+        {p.htBaseline}: {ms.ht_baseline.pick} {pct(ms.ht_baseline.prob)} → {p.model}: {ms.pick} {pct(ms.prob)}
+        {" · "}{p.sample.replace("{n}", String(ms.n))} ({levelLabel(ms.cond_level, t)})
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <GoalChip label={p.over25} market={prediction.over25} t={t} />
+        <GoalChip label={p.btts} market={prediction.btts} t={t} />
       </div>
+    </div>
+  );
+}
 
-      {/* En sik skorlar */}
-      {stats.ftScoreCounts.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {stats.ftScoreCounts.map((s, i) => (
-            <span
-              key={s.score}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 font-bold"
-              style={{
-                fontSize: "var(--nv-text-xs)",
-                fontFamily: "var(--nv-font-mono)",
-                borderRadius: "var(--nv-radius-sm)",
-                backgroundColor: i === 0 ? stats.bgColor : "var(--nv-bg-elevated)",
-                color: i === 0 ? stats.color : "var(--nv-text-secondary)",
-              }}
-            >
-              {s.score}
-              <span style={{ opacity: 0.6, fontSize: "var(--nv-text-2xs)", fontWeight: 500 }}>
-                %{s.pct.toFixed(0)}
-              </span>
-            </span>
+function ArchiveRow({ summary }: { summary: LiveArchiveSummary }) {
+  const { t } = useLocale();
+  const p = t.live.prediction;
+  return (
+    <div className="flex flex-wrap items-center gap-2 py-1" style={{ fontSize: "var(--nv-text-xs)" }}>
+      <span className="font-bold" style={{ width: 28, color: "var(--nv-text-secondary)" }}>{summary.archive}</span>
+      <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-tertiary)" }}>
+        {p.sample.replace("{n}", String(summary.n))}
+      </span>
+      {summary.probs && summary.sufficient ? (
+        <span className="flex gap-2" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>
+          {OUTCOMES.map((o) => (
+            <span key={o}>{o} {pct(summary.probs?.[o])}</span>
           ))}
-        </div>
-      )}
-
-      {/* Eslesme detaylari (ilk 5) */}
-      {stats.matches.length > 0 && (
-        <div className="space-y-0.5 pt-1" style={{ borderTop: "1px solid var(--nv-border-subtle)" }}>
-          {stats.matches.slice(0, 5).map((m) => (
-            <div
-              key={m.match_id}
-              className="flex items-center gap-2 py-0.5"
-              style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}
-            >
-              <span className="truncate flex-1 min-w-0">
-                {m.home_team} - {m.away_team}
-              </span>
-              <span className="flex-shrink-0" style={{ color: "var(--nv-text-secondary)" }}>
-                {t.live.ht} {m.ht}
-              </span>
-              <span
-                className="flex-shrink-0 font-bold"
-                style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}
-              >
-                {t.live.ft} {m.ft}
-              </span>
-            </div>
-          ))}
-          {stats.matches.length > 5 && (
-            <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
-              {t.live.moreMatches.replace("{count}", String(stats.matches.length - 5))}
-            </span>
-          )}
-        </div>
+        </span>
+      ) : (
+        <span style={{ color: "var(--nv-text-tertiary)", fontStyle: "italic" }}>
+          {summary.n === 0 ? p.noArchive : p.insufficient}
+        </span>
       )}
     </div>
   );
 }
 
-interface ValidatedMatch {
-  match: LiveHTMatch;
-  stats: HTFilteredStats[];
+function ArchiveDetails({ match }: { match: LiveHTMatch }) {
+  const { t } = useLocale();
+  const p = t.live.prediction;
+  const [archives, setArchives] = useState<LiveArchiveSummary[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getLivePrediction(match.match_id, true)
+      .then((detail) => { if (!cancelled) setArchives(detail.archives ?? []); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [match.match_id]);
+
+  return (
+    <div className="px-3 pb-3 sm:px-4 sm:pb-4 nv-fade-in" style={{ borderTop: "1px solid var(--nv-border)", paddingTop: 12 }}>
+      <p className="font-semibold" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
+        {p.archivesTitle.replace("{home}", String(match.ht_home)).replace("{away}", String(match.ht_away))}
+      </p>
+      <p className="mb-1" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", opacity: 0.8 }}>
+        {p.archivesNote}
+      </p>
+      {failed && <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-accent-red)" }}>{t.live.liveDataError}</p>}
+      {!failed && archives === null && <div className="nv-skeleton" style={{ width: "70%", height: 12, borderRadius: 4 }} />}
+      {archives?.map((summary) => <ArchiveRow key={summary.archive} summary={summary} />)}
+    </div>
+  );
 }
 
-function MatchCard({ vm }: { vm: ValidatedMatch }) {
+function MatchCard({ match }: { match: LiveHTMatch }) {
   const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
-  const { match, stats } = vm;
-
   const { flag, short } = leagueDisplay(null, match.league_name);
 
-  const isHT = match.live_minute === "HT";
-  const isSecondHalf = !isHT && match.live_minute != null;
-  const minuteLabel = isHT ? t.live.halfTime : match.live_minute ? `${match.live_minute}'` : "";
-
+  const isHT = match.live_minute === "HT" || match.phase === "ht";
+  const isSecondHalf = !isHT;
+  const minuteLabel = isHT ? t.live.halfTime : match.live_minute ? `${match.live_minute}'` : t.periodTabs.h2Short;
   const homeName = match.home_team || "?";
   const awayName = match.away_team || "?";
-
   const hasLiveScore = match.live_home != null && match.live_away != null;
   const liveChanged = hasLiveScore && (match.live_home !== match.ht_home || match.live_away !== match.ht_away);
 
   return (
     <div className="nv-card nv-fade-in" style={{ borderRadius: "var(--nv-radius-lg)", overflow: "hidden" }}>
-      {/* Ust bar: lig + dakika */}
-      <div
-        className="flex items-center gap-2 px-3 py-1.5 sm:px-4"
-        style={{ backgroundColor: "var(--nv-bg-elevated)", borderBottom: "1px solid var(--nv-border-subtle)" }}
-      >
+      <div className="flex items-center gap-2 px-3 py-1.5 sm:px-4" style={{ backgroundColor: "var(--nv-bg-elevated)", borderBottom: "1px solid var(--nv-border-subtle)" }}>
         <span className="flex items-center gap-1 flex-shrink-0" title={match.league_name ?? ""}>
           <span className="text-sm leading-none" aria-hidden="true">{flag}</span>
           <span className="font-semibold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{short}</span>
         </span>
-
         {match.kickoff_time && (
           <span className="flex-shrink-0" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
             {formatTime(match.kickoff_time)}
           </span>
         )}
-
         <div className="flex-1" />
-
-        <span
-          className="inline-flex items-center gap-1 px-2 py-0.5 font-semibold"
-          style={{
-            fontSize: "var(--nv-text-2xs)",
-            borderRadius: "var(--nv-radius-full)",
-            backgroundColor: "var(--nv-live-dim)",
-            color: "var(--nv-live)",
-          }}
-        >
-          <span
-            className="nv-live-pulse"
-            style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--nv-live)" }}
-          />
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 font-semibold" style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-live-dim)", color: "var(--nv-live)" }}>
+          <span className="nv-live-pulse" style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--nv-live)" }} />
           {minuteLabel}
         </span>
       </div>
 
-      {/* Ana icerik: takimlar + skorlar */}
-      <div className="px-3 py-3 sm:px-4">
+      <div className="px-3 py-3 sm:px-4 space-y-3">
         <div className="flex items-center gap-3">
-          {/* Takım adları */}
           <div className="flex-1 min-w-0">
-            <div className="mb-1">
-              <span className="font-bold truncate block" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)", lineHeight: 1.3 }}>
-                {homeName}
-              </span>
-            </div>
-            <div>
-              <span className="font-bold truncate block" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)", lineHeight: 1.3 }}>
-                {awayName}
-              </span>
-            </div>
+            <span className="font-bold truncate block" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)", lineHeight: 1.4 }}>{homeName}</span>
+            <span className="font-bold truncate block" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)", lineHeight: 1.4 }}>{awayName}</span>
           </div>
-
-          {/* Skor bölümü */}
           <div className="flex-shrink-0 flex items-center gap-2">
-            {/* İY skoru */}
-            <div className="flex flex-col items-center gap-0.5">
-              <span
-                className="font-bold"
-                style={{
-                  fontFamily: "var(--nv-font-mono)",
-                  fontSize: isSecondHalf ? "var(--nv-text-lg)" : "var(--nv-text-2xl)",
-                  lineHeight: 1,
-                  color: "var(--nv-text-on-accent)",
-                  backgroundColor: "var(--nv-accent-blue)",
-                  borderRadius: "var(--nv-radius-md)",
-                  padding: isSecondHalf ? "4px 10px" : "6px 14px",
-                  letterSpacing: "0.05em",
-                  minWidth: isSecondHalf ? 52 : 72,
-                  textAlign: "center",
-                }}
-              >
-                {match.ht_home} - {match.ht_away}
-              </span>
-              <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
-                {t.live.ht}
-              </span>
-            </div>
-
-            {/* Güncel skor (2. yarıda değiştiyse göster) */}
+            <ScoreBox value={`${match.ht_home} - ${match.ht_away}`} caption={t.live.ht} tone="accent" compact={isSecondHalf} />
             {isSecondHalf && hasLiveScore && (
-              <div className="flex flex-col items-center gap-0.5">
-                <span
-                  className="font-bold"
-                  style={{
-                    fontFamily: "var(--nv-font-mono)",
-                    fontSize: "var(--nv-text-2xl)",
-                    lineHeight: 1,
-                    color: liveChanged ? "var(--nv-text-on-accent)" : "var(--nv-text-primary)",
-                    backgroundColor: liveChanged ? "var(--nv-live)" : "var(--nv-bg-elevated)",
-                    borderRadius: "var(--nv-radius-md)",
-                    padding: "6px 14px",
-                    letterSpacing: "0.05em",
-                    minWidth: 72,
-                    textAlign: "center",
-                  }}
-                >
-                  {match.live_home} - {match.live_away}
-                </span>
-                <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }}>
-                  {t.live.current}
-                </span>
-              </div>
+              <ScoreBox value={`${match.live_home} - ${match.live_away}`} caption={t.live.current} tone={liveChanged ? "live" : "plain"} />
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 mt-3">
+        {match.prediction && <PredictionPanel prediction={match.prediction} />}
+
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
@@ -419,77 +240,59 @@ function MatchCard({ vm }: { vm: ValidatedMatch }) {
               borderRadius: "var(--nv-radius-md)",
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M3 3v18h18" />
-              <path d="M7 16l4-8 4 4 6-6" />
-            </svg>
             {expanded ? t.common.hide : t.live.htArchiveAnalysis}
           </button>
           <Link
             href={`/analyze/${match.match_id}?home=${encodeURIComponent(homeName)}&away=${encodeURIComponent(awayName)}`}
             prefetch={false}
             className="flex items-center justify-center gap-1.5 px-4 py-2 font-semibold transition-colors"
-            style={{
-              fontSize: "var(--nv-text-xs)",
-              backgroundColor: "var(--nv-accent-blue-dim)",
-              color: "var(--nv-accent-blue)",
-              borderRadius: "var(--nv-radius-md)",
-            }}
+            style={{ fontSize: "var(--nv-text-xs)", backgroundColor: "var(--nv-accent-blue-dim)", color: "var(--nv-accent-blue)", borderRadius: "var(--nv-radius-md)" }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
             {t.common.detailedAnalysis}
           </Link>
         </div>
       </div>
 
-      {expanded && (
-        <div
-          className="px-3 pb-3 sm:px-4 sm:pb-4 space-y-2 nv-fade-in"
-          style={{ borderTop: "1px solid var(--nv-border)", paddingTop: 12 }}
-        >
-          <p className="font-semibold mb-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", letterSpacing: "0.05em" }}>
-            {t.live.htMatchPrefix.replace("{home}", String(match.ht_home)).replace("{away}", String(match.ht_away))}
-          </p>
-          {stats.map((s) => (
-            <ArchiveSection key={s.archive} stats={s} />
-          ))}
-        </div>
-      )}
+      {expanded && <ArchiveDetails match={match} />}
     </div>
   );
 }
 
-async function validateMatches(data: LiveHTMatch[]): Promise<ValidatedMatch[]> {
-  const validated: ValidatedMatch[] = [];
-  const tasks = data.map((m) => async () => {
-    const stats = await checkHTMatch(m.match_id, m.ht_home, m.ht_away);
-    if (stats) validated.push({ match: m, stats });
-  });
-  await runWithConcurrency(tasks, CONCURRENCY_LIMIT);
-  validated.sort((a, b) => minuteOrder(a.match.live_minute) - minuteOrder(b.match.live_minute));
-  return validated;
-}
-
-function minuteOrder(minute: string | null | undefined): number {
-  if (minute === "HT") return 45.5;
-  const [base, extra] = (minute ?? "").split("+");
-  const n = Number.parseInt(base, 10);
-  if (Number.isNaN(n)) return 999;
-  return n + (Number.parseInt(extra ?? "0", 10) || 0) / 100;
+function ScoreBox({ value, caption, tone, compact }: { value: string; caption: string; tone: "accent" | "live" | "plain"; compact?: boolean }) {
+  const colors = {
+    accent: { fg: "var(--nv-text-on-accent)", bg: "var(--nv-accent-blue)" },
+    live: { fg: "var(--nv-text-on-accent)", bg: "var(--nv-live)" },
+    plain: { fg: "var(--nv-text-primary)", bg: "var(--nv-bg-elevated)" },
+  }[tone];
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span
+        className="font-bold text-center"
+        style={{
+          fontFamily: "var(--nv-font-mono)",
+          fontSize: compact ? "var(--nv-text-lg)" : "var(--nv-text-2xl)",
+          lineHeight: 1,
+          color: colors.fg,
+          backgroundColor: colors.bg,
+          borderRadius: "var(--nv-radius-md)",
+          padding: compact ? "4px 10px" : "6px 14px",
+          minWidth: compact ? 52 : 72,
+        }}
+      >
+        {value}
+      </span>
+      <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+        {caption}
+      </span>
+    </div>
+  );
 }
 
 function ConnectionBadge({ status }: { status: WsStatus }) {
   const { t } = useLocale();
   if (status === "connected") {
     return (
-      <span
-        className="inline-flex items-center gap-1 px-1.5 py-0.5"
-        style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-accent-green-dim)", color: "var(--nv-accent-green)" }}
-        title={t.live.wsTooltip}
-      >
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5" style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-accent-green-dim)", color: "var(--nv-accent-green)" }} title={t.live.wsTooltip}>
         <span style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "currentColor" }} />
         WS
       </span>
@@ -497,11 +300,7 @@ function ConnectionBadge({ status }: { status: WsStatus }) {
   }
   if (status === "fallback") {
     return (
-      <span
-        className="inline-flex items-center gap-1 px-1.5 py-0.5"
-        style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }}
-        title={t.live.restTooltip}
-      >
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5" style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" }} title={t.live.restTooltip}>
         REST
       </span>
     );
@@ -509,91 +308,47 @@ function ConnectionBadge({ status }: { status: WsStatus }) {
   return null;
 }
 
+interface Snapshot {
+  matches: LiveHTMatch[];
+  at: Date;
+}
+
 export default function CanliPage() {
-  const { t } = useLocale();
-  const [validatedMatches, setValidatedMatches] = useState<ValidatedMatch[]>([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const lastMatchIdsRef = useRef("");
-  const pendingIdsRef = useRef("");
-  const reqSeqRef = useRef(0);
-
+  const { t, locale } = useLocale();
   const ws = useLiveWs();
-  const usingWs = ws.status === "connected";
-  const useFallback = ws.status === "fallback";
+  const usingWs = ws.status === "connected" && ws.lastUpdate !== null;
+  const [rest, setRest] = useState<Snapshot | null>(null);
+  const [error, setError] = useState("");
 
-  // WebSocket'ten gelen veriyi işle. Yeni yayın eski doğrulamayı iptal etmez;
-  // en son başlatılan doğrulama kazanır, liste sadece başarıyla bitince "işlendi" sayılır.
-  useEffect(() => {
-    if (!usingWs || ws.matches.length === 0) return;
-    const newIds = ws.matches.map((m) => `${m.match_id}:${m.live_minute}`).join(",");
-    if (newIds === lastMatchIdsRef.current || newIds === pendingIdsRef.current) return;
-    pendingIdsRef.current = newIds;
-    const seq = ++reqSeqRef.current;
-
-    validateMatches(ws.matches)
-      .then((validated) => {
-        if (seq !== reqSeqRef.current) return;
-        lastMatchIdsRef.current = newIds;
-        setValidatedMatches(validated);
-        setError("");
-        setLastUpdate(new Date());
-      })
-      .finally(() => {
-        if (seq !== reqSeqRef.current) return;
-        pendingIdsRef.current = "";
-        setLoading(false);
-      });
-  }, [usingWs, ws.matches]);
-
-  // WebSocket bağlantı açılırken veya boş veri gelirken ilk yükleme
-  useEffect(() => {
-    if (!usingWs) return;
-    if (ws.matches.length === 0 && ws.lastUpdate) {
-      reqSeqRef.current++;
-      lastMatchIdsRef.current = "";
-      pendingIdsRef.current = "";
-      setValidatedMatches([]);
-      setLoading(false);
-      setLastUpdate(ws.lastUpdate);
-    }
-  }, [usingWs, ws.matches.length, ws.lastUpdate]);
-
-  // REST fallback polling
   const fetchMatches = useCallback(async () => {
     try {
       const data = await getLiveHTMatches();
-      const validated = await validateMatches(data);
-      setValidatedMatches(validated);
+      setRest({ matches: data, at: new Date() });
       setError("");
-      setLastUpdate(new Date());
     } catch {
-      setValidatedMatches((prev) => {
-        if (prev.length === 0) setError(t.live.liveDataError);
-        return prev;
-      });
-    } finally {
-      setLoading(false);
+      setError(t.live.liveDataError);
     }
   }, [t]);
 
+  // WS bağlı değilken REST ile yükle: bağlantı kurulurken kısa bekleme, fallback'te hemen.
   useEffect(() => {
-    if (!useFallback) return;
-    fetchMatches();
+    if (usingWs) return;
+    const start = window.setTimeout(fetchMatches, ws.status === "fallback" ? 0 : WS_GRACE_MS);
     const timer = window.setInterval(fetchMatches, POLL_INTERVAL);
-    return () => window.clearInterval(timer);
-  }, [useFallback, fetchMatches]);
+    return () => {
+      window.clearTimeout(start);
+      window.clearInterval(timer);
+    };
+  }, [usingWs, ws.status, fetchMatches]);
 
-  // İlk bağlantı sırasında (connecting) başlangıç yüklemesi
-  useEffect(() => {
-    if (ws.status === "connecting" && loading) {
-      const timer = setTimeout(() => {
-        if (loading) fetchMatches();
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [ws.status, loading, fetchMatches]);
+  const source: Snapshot | null = usingWs && ws.lastUpdate ? { matches: ws.matches, at: ws.lastUpdate } : rest;
+  const matches = useMemo(
+    () => [...(source?.matches ?? [])].sort((a, b) => minuteOrder(a) - minuteOrder(b)),
+    [source?.matches],
+  );
+  const loading = source === null && !error;
+  const showError = source === null && !!error;
+  const timeLocale = locale === "en" ? "en-GB" : "tr-TR";
 
   return (
     <div className="flex flex-col h-full pb-[60px] md:pb-0">
@@ -603,21 +358,18 @@ export default function CanliPage() {
             <h1 className="font-bold" style={{ fontSize: "var(--nv-text-xl)", color: "var(--nv-text-primary)", letterSpacing: "var(--nv-tracking-tight)" }}>
               {t.live.title}
             </h1>
-            {validatedMatches.length > 0 && (
-              <span
-                className="inline-flex items-center gap-1 px-2 py-0.5 font-semibold"
-                style={{ fontSize: "var(--nv-text-xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-live-dim)", color: "var(--nv-live)" }}
-              >
+            {matches.length > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 font-semibold" style={{ fontSize: "var(--nv-text-xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-live-dim)", color: "var(--nv-live)" }}>
                 <span className="nv-live-pulse" style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--nv-live)" }} />
-                {validatedMatches.length} {t.common.match}
+                {matches.length} {t.common.match}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <ConnectionBadge status={ws.status} />
-            {lastUpdate && (
+            {source && (
               <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", fontFamily: "var(--nv-font-mono)" }}>
-                {lastUpdate.toLocaleTimeString("tr-TR", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                {source.at.toLocaleTimeString(timeLocale, { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
               </span>
             )}
           </div>
@@ -629,39 +381,22 @@ export default function CanliPage() {
 
       <div className="flex-1 overflow-y-auto">
         {loading && (
-          <div className="grid gap-3 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
+          <div className="grid gap-3 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }} aria-busy="true">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="nv-card" style={{ borderRadius: "var(--nv-radius-lg)", overflow: "hidden" }}>
-                <div className="px-3 py-1.5" style={{ backgroundColor: "var(--nv-bg-elevated)" }}>
-                  <div className="nv-skeleton" style={{ width: 80, height: 12, borderRadius: 4 }} />
-                </div>
-                <div className="p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 space-y-2">
-                      <div className="nv-skeleton" style={{ width: "60%", height: 14, borderRadius: 4 }} />
-                      <div className="nv-skeleton" style={{ width: "50%", height: 14, borderRadius: 4 }} />
-                    </div>
-                    <div className="nv-skeleton" style={{ width: 72, height: 44, borderRadius: 8 }} />
-                  </div>
-                </div>
+              <div key={i} className="nv-card p-3" style={{ borderRadius: "var(--nv-radius-lg)" }}>
+                <div className="nv-skeleton" style={{ width: "60%", height: 14, borderRadius: 4 }} />
+                <div className="nv-skeleton mt-2" style={{ width: "40%", height: 14, borderRadius: 4 }} />
               </div>
             ))}
           </div>
         )}
 
-        {!loading && error && (
+        {showError && (
           <div className="flex items-center justify-center py-24 px-[var(--nv-page-gutter)]">
             <div className="nv-card p-8 text-center space-y-4 max-w-sm w-full" style={{ borderRadius: "var(--nv-radius-lg)" }}>
-              <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center" style={{ backgroundColor: "var(--nv-accent-red-dim)" }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--nv-accent-red)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-              </div>
               <p className="font-medium" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{error}</p>
               <button
-                onClick={() => { setLoading(true); fetchMatches(); }}
+                onClick={() => { setError(""); fetchMatches(); }}
                 className="px-4 py-2 font-semibold transition-colors"
                 style={{ fontSize: "var(--nv-text-sm)", backgroundColor: "var(--nv-accent-blue)", color: "var(--nv-text-on-accent)", borderRadius: "var(--nv-radius-md)" }}
               >
@@ -671,21 +406,11 @@ export default function CanliPage() {
           </div>
         )}
 
-        {!loading && !error && validatedMatches.length === 0 && (
+        {source && matches.length === 0 && (
           <div className="flex items-center justify-center py-24 px-[var(--nv-page-gutter)]">
             <div className="nv-card p-8 text-center space-y-4 max-w-sm w-full" style={{ borderRadius: "var(--nv-radius-lg)" }}>
-              <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center" style={{ backgroundColor: "var(--nv-bg-elevated)" }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--nv-text-tertiary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12,6 12,12 16,14" />
-                </svg>
-              </div>
-              <p className="font-medium" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}>
-                {t.live.noLiveMatches}
-              </p>
-              <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-                {t.live.noLiveNote}
-              </p>
+              <p className="font-medium" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}>{t.live.noLiveMatches}</p>
+              <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{t.live.noLiveNote}</p>
               <Link href="/bulten" className="inline-block font-medium transition-colors" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-blue)" }}>
                 {t.live.viewBulletin}
               </Link>
@@ -693,11 +418,9 @@ export default function CanliPage() {
           </div>
         )}
 
-        {!loading && !error && validatedMatches.length > 0 && (
+        {matches.length > 0 && (
           <div className="grid gap-3 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
-            {validatedMatches.map((vm) => (
-              <MatchCard key={vm.match.match_id} vm={vm} />
-            ))}
+            {matches.map((match) => <MatchCard key={match.match_id} match={match} />)}
           </div>
         )}
       </div>

@@ -121,6 +121,45 @@ export async function getResults(date: string): Promise<ResultMatch[]> {
   }), true);
 }
 
+export type LiveOutcome = "1" | "X" | "2";
+export type LiveTier = "high" | "medium" | "low" | "insufficient";
+
+export interface LiveGoalMarket {
+  applicable: boolean;
+  reason?: string;
+  pick?: string;
+  prob?: number;
+  n?: number;
+  tier?: LiveTier;
+}
+
+export interface LiveArchiveSummary {
+  archive: "A1" | "A2" | "A3";
+  n: number;
+  sufficient: boolean;
+  probs: Record<LiveOutcome, number> | null;
+}
+
+export interface LivePrediction {
+  rule_version: string;
+  ht: { home: number; away: number };
+  ms: {
+    probs: Record<LiveOutcome, number>;
+    pick: LiveOutcome;
+    prob: number;
+    tier: LiveTier;
+    n: number;
+    cond_level: "score" | "diff" | "global_diff";
+    ht_baseline: { probs: Record<LiveOutcome, number>; pick: LiveOutcome; prob: number };
+  };
+  over25: LiveGoalMarket;
+  btts: LiveGoalMarket;
+  frozen: boolean;
+  frozen_at: string | null;
+  late?: boolean;
+  archives?: LiveArchiveSummary[];
+}
+
 export interface LiveHTMatch {
   match_id: string;
   home_team: string | null;
@@ -130,11 +169,20 @@ export interface LiveHTMatch {
   live_home: number | null;
   live_away: number | null;
   live_minute: string | null;
+  phase?: "1h" | "ht" | "2h" | null;
   league_name: string | null;
   kickoff_time: string | null;
+  prediction: LivePrediction | null;
 }
 
 export async function getLiveHTMatches(): Promise<LiveHTMatch[]> {
   return request<LiveHTMatch[]>("/api/live-ht", { cache: "no-store" });
+}
+
+export async function getLivePrediction(matchId: string, detail = false): Promise<LivePrediction> {
+  return request<LivePrediction>(
+    `/api/live-ht/${encodeURIComponent(matchId)}/prediction?${new URLSearchParams({ detail: detail ? "1" : "0" })}`,
+    { cache: "no-store" },
+  );
 }
 

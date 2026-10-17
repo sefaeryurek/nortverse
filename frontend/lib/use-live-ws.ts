@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import type { LiveHTMatch } from "./api";
 
 function getWsUrl(): string {
@@ -16,6 +16,8 @@ function getWsUrl(): string {
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000];
 const PING_INTERVAL = 30_000;
+/** REST'e düştükten sonra WS'ye sessizce yeniden bağlanma denemesi aralığı. */
+export const FALLBACK_RETRY_MS = 60_000;
 
 export type WsStatus = "connecting" | "connected" | "disconnected" | "fallback";
 
@@ -25,111 +27,98 @@ export interface UseLiveWsResult {
   lastUpdate: Date | null;
 }
 
+function isMatchList(value: unknown): value is LiveHTMatch[] {
+  return Array.isArray(value) && value.every((item) =>
+    item !== null && typeof item === "object" && typeof (item as LiveHTMatch).match_id === "string",
+  );
+}
+
 export function useLiveWs(): UseLiveWsResult {
   const [matches, setMatches] = useState<LiveHTMatch[]>([]);
   const [status, setStatus] = useState<WsStatus>("connecting");
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const retryCount = useRef(0);
-  const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const unmounted = useRef(false);
-
-  const cleanup = useCallback(() => {
-    if (pingTimer.current) {
-      clearInterval(pingTimer.current);
-      pingTimer.current = null;
-    }
-    if (reconnectTimer.current) {
-      clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = null;
-    }
-    if (wsRef.current) {
-      wsRef.current.onopen = null;
-      wsRef.current.onmessage = null;
-      wsRef.current.onerror = null;
-      wsRef.current.onclose = null;
-      if (wsRef.current.readyState <= WebSocket.OPEN) {
-        wsRef.current.close();
-      }
-      wsRef.current = null;
-    }
-  }, []);
-
-  const connect = useCallback(() => {
-    if (unmounted.current) return;
-    cleanup();
-
-    const url = getWsUrl();
-    if (!url) {
-      setStatus("fallback");
-      return;
-    }
-
-    setStatus("connecting");
-
-    try {
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        if (unmounted.current) return;
-        retryCount.current = 0;
-        setStatus("connected");
-        pingTimer.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send("ping");
-          }
-        }, PING_INTERVAL);
-      };
-
-      ws.onmessage = (event) => {
-        if (unmounted.current) return;
-        if (event.data === "pong") return;
-        try {
-          const data = JSON.parse(event.data) as LiveHTMatch[];
-          setMatches(data);
-          setLastUpdate(new Date());
-        } catch {
-          // parse hatası — yoksay
-        }
-      };
-
-      ws.onerror = () => {
-        // onclose tetiklenecek
-      };
-
-      ws.onclose = () => {
-        if (unmounted.current) return;
-        if (pingTimer.current) {
-          clearInterval(pingTimer.current);
-          pingTimer.current = null;
-        }
-        const idx = Math.min(retryCount.current, RECONNECT_DELAYS.length - 1);
-        const delay = RECONNECT_DELAYS[idx];
-        retryCount.current++;
-
-        if (retryCount.current > RECONNECT_DELAYS.length) {
-          setStatus("fallback");
-          return;
-        }
-
-        setStatus("disconnected");
-        reconnectTimer.current = setTimeout(connect, delay);
-      };
-    } catch {
-      setStatus("fallback");
-    }
-  }, [cleanup]);
 
   useEffect(() => {
-    unmounted.current = false;
-    connect();
-    return () => {
-      unmounted.current = true;
-      cleanup();
+    let ws: WebSocket | null = null;
+    let retryCount = 0;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
+
+    const clearTimers = () => {
+      if (pingTimer) clearInterval(pingTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      pingTimer = null;
+      reconnectTimer = null;
     };
-  }, [connect, cleanup]);
+
+    const closeSocket = () => {
+      if (!ws) return;
+      ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
+      if (ws.readyState <= WebSocket.OPEN) ws.close();
+      ws = null;
+    };
+
+    // quiet: fallback'teyken yeniden deneme — durum "fallback" kalır, REST akışı bozulmaz.
+    const connect = (quiet: boolean) => {
+      if (disposed) return;
+      clearTimers();
+      closeSocket();
+      const url = getWsUrl();
+      if (!url) {
+        setStatus("fallback");
+        return;
+      }
+      if (!quiet) setStatus("connecting");
+      try {
+        const socket = new WebSocket(url);
+        ws = socket;
+        socket.onopen = () => {
+          if (disposed) return;
+          retryCount = 0;
+          setStatus("connected");
+          pingTimer = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) socket.send("ping");
+          }, PING_INTERVAL);
+        };
+        socket.onmessage = (event) => {
+          if (disposed || event.data === "pong") return;
+          try {
+            const data: unknown = JSON.parse(event.data);
+            if (!isMatchList(data)) return;
+            setMatches(data);
+            setLastUpdate(new Date());
+          } catch {
+            // bozuk mesaj — yoksay
+          }
+        };
+        socket.onclose = () => {
+          if (disposed) return;
+          if (pingTimer) clearInterval(pingTimer);
+          pingTimer = null;
+          retryCount++;
+          if (retryCount > RECONNECT_DELAYS.length) {
+            setStatus("fallback");
+            retryCount = RECONNECT_DELAYS.length;
+            reconnectTimer = setTimeout(() => connect(true), FALLBACK_RETRY_MS);
+            return;
+          }
+          setStatus("disconnected");
+          reconnectTimer = setTimeout(() => connect(false), RECONNECT_DELAYS[retryCount - 1]);
+        };
+      } catch {
+        setStatus("fallback");
+        reconnectTimer = setTimeout(() => connect(true), FALLBACK_RETRY_MS);
+      }
+    };
+
+    connect(false);
+    return () => {
+      disposed = true;
+      clearTimers();
+      closeSocket();
+    };
+  }, []);
 
   return { matches, status, lastUpdate };
 }
