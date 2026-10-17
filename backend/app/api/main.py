@@ -46,6 +46,7 @@ from app.api.routes_analysis import router as analysis_router
 from app.api.routes_evaluation import router as evaluation_router
 from app.api.routes_fixture import router as fixture_router
 from app.api.routes_live_ht import router as live_ht_router, start_ws_broadcaster, stop_ws_broadcaster
+from app.api.routes_performance import router as performance_router
 from app.api.routes_results import router as results_router
 from app.api.services import bg_worker, init_bg_queue, shutdown_bg_queue
 
@@ -115,6 +116,8 @@ _CACHE_RULES: dict[str, str] = {
     "/api/matches": "public, s-maxage=300, stale-while-revalidate=60",
     "/api/health": "public, s-maxage=30",
     "/api/evaluation": "public, s-maxage=300, stale-while-revalidate=60",
+    "/api/performance/summary": "public, s-maxage=120, stale-while-revalidate=60",
+    "/api/performance/predictions": "public, s-maxage=60, stale-while-revalidate=30",
 }
 _RECENT_SCORE_CACHE = "public, s-maxage=15, stale-while-revalidate=15"
 
@@ -160,4 +163,5 @@ app.include_router(analysis_router)
 app.include_router(results_router)
 app.include_router(evaluation_router)
 app.include_router(live_ht_router)
+app.include_router(performance_router)
 app.include_router(admin_router)

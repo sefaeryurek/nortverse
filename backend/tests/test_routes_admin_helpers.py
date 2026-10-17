@@ -3,7 +3,7 @@
 import math
 import pytest
 
-from app.api.routes_admin import wilson_ci, paired_coverage_interval
+from app.analysis.stats_utils import wilson_ci, paired_coverage_interval
 
 
 class TestWilsonCI:

@@ -1,0 +1,3 @@
+# main.py loglama ve Windows event loop ayarını import'lardan önce yapmak zorunda.
+[lint.per-file-ignores]
+"app/api/main.py" = ["E402"]

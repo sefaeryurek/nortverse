@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -16,6 +15,7 @@ from app.analysis.correlation import compute_poisson_correlations
 from app.analysis.league_filter import CUP_KEYWORDS
 from app.analysis.repair import compute_quality_score
 from app.analysis.snapshots import BASELINE_VERSION, RULE_VERSION
+from app.analysis.stats_utils import paired_coverage_interval, sample_stage, wilson_ci
 from app.analysis.score_snapshots import SCORE_RULE_VERSION
 from app.api.schemas import AnalysisEvidence, AnalysisValidationV3, DataQuality, HealthResponse, MarketValidationV3, ScoreValidation
 from app.api.services import analysis_cache, bg_queue
@@ -141,21 +141,6 @@ _BRIER_NOTE = (
 )
 
 
-def wilson_ci(
-    successes: int, trials: int, z: float = 1.96,
-) -> tuple[float, float] | None:
-    if trials <= 0:
-        return None
-    p = successes / trials
-    z2 = z * z
-    denom = 1 + z2 / trials
-    center = p + z2 / (2 * trials)
-    spread = z * math.sqrt(p * (1 - p) / trials + z2 / (4 * trials * trials))
-    return (
-        max(0.0, (center - spread) / denom),
-        min(1.0, (center + spread) / denom),
-    )
-
 _SCORE_VALIDATION = text("""
     WITH eligible AS (
         SELECT s.model_scores, s.baseline_scores,
@@ -184,16 +169,6 @@ _SCORE_VALIDATION = text("""
         count(*) FILTER (WHERE jsonb_array_length(model_scores) > 0 AND baseline_scores IS NOT NULL AND NOT model_hit AND NOT baseline_hit)
     FROM eligible
 """)
-
-
-def paired_coverage_interval(model_only: int, baseline_only: int, paired: int) -> tuple[float, float, float] | None:
-    """Distribution-free 95% interval for paired coverage difference."""
-    if paired <= 0:
-        return None
-    difference = 100.0 * (model_only - baseline_only) / paired
-    # Paired difference is bounded in [-1, 1] (range width 2).
-    half_width = 100.0 * math.sqrt(2.0 * math.log(40.0) / paired)
-    return difference, max(-100.0, difference - half_width), min(100.0, difference + half_width)
 
 
 @router.api_route("/api/health", methods=["GET", "HEAD"], response_model=HealthResponse)
@@ -289,12 +264,7 @@ async def analysis_validation() -> AnalysisValidationV3:
          paired, both_hit, model_only, baseline_only, neither,
          model_hits, avg_freq, brier) = row
 
-        if resolved_issued < 30:
-            tier = "cok_erken"
-        elif resolved_issued < 100:
-            tier = "on_bulgu"
-        else:
-            tier = "tam"
+        tier = sample_stage(resolved_issued)
 
         cov_ci = wilson_ci(resolved_issued, issued)
         model_hits_paired = both_hit + model_only
