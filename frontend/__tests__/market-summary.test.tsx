@@ -46,7 +46,7 @@ describe("MarketSummary", () => {
     renderWithContext(<MarketSummary patternB={b} patternC={null} patternD={null} period="ft" />);
     expect(screen.getByText("Ana Pazar Özeti")).toBeDefined();
     expect(screen.getByText("A1 · 30")).toBeDefined();
-    expect(screen.getByText("A2")).toBeDefined();
+    expect(screen.getByText("A2 · —")).toBeDefined();
   });
 
   it("shows agreement marker when archives match", () => {

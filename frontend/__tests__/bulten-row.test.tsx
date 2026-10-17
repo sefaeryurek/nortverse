@@ -130,4 +130,11 @@ describe("BultenRow", () => {
     const href = link.getAttribute("href")!;
     expect(href).toContain("FC%20Z");
   });
+
+  it("A1+A2 uyumunda A3 rozeti de görünür", () => {
+    render(<BultenRow match={makeMatch()} timeStr="21:00" t={t} dateLocale="tr-TR"
+      patternStatus={{ has_b: true, has_c: true, has_d: true, agreement: true, agreement_bcd: false }} />);
+    expect(screen.getByText("A1+A2")).toBeTruthy();
+    expect(screen.getByText("A3")).toBeTruthy();
+  });
 });

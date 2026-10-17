@@ -216,12 +216,16 @@
     "no": "No"
   },
   "topPicks": {
-    "title": "Pre-match experimental picks",
-    "emptyMessage": "No pre-match picks found for this match. Detailed archive statistics are shown below for informational purposes.",
-    "disclaimer": "Picks are locked before kickoff and measured after the same record is finalized. Percentages are calibrated using league-specific base rates and log-odds shrinkage.",
+    "title": "Pre-match pick",
+    "emptyMessage": "No pick meets the publishing rule for this match (pool ≥30 matches and a probability at least 5 points above the league average). Detailed archive statistics are shown below for information.",
+    "disclaimer": "The pick is frozen before kickoff and its result is tracked on the Evaluation page. The percentage is the A1+A2+A3 pooled probability shrunk to the last-3-season league average; in backtests the shown probability matches the actual hit rate.",
     "selectionCount": "{count} picks",
     "rawPct": "raw %{pct}",
-    "rawPctTooltip": "Raw frequency percentage (before calibration)"
+    "rawPctTooltip": "Raw frequency percentage (before calibration)",
+    "signalHigh": "Strong signal",
+    "signalMedium": "Medium signal",
+    "signalLow": "Mild signal",
+    "priorLine": "League average {prior}% · edge +{edge} pts"
   },
   "analyze": {
     "powerScore": "Power Score",
@@ -279,8 +283,9 @@
     "title": "Market Summary",
     "subtitle": "most frequent selection in archive",
     "market": "Market",
-    "agreementTooltip": "Both archives agree on this selection",
-    "footer": "A1+A2 agree on same selection. Percentages are not verified match probabilities."
+    "agreementTooltip": "{n} archives agree on the same pick",
+    "footer": "number of archives agreeing on the same pick (✦2 / ✦3). Percentages are archive frequencies, not probabilities.",
+    "informational": "informational — no skill in backtests"
   },
   "iddaa": {
     "noData": "Insufficient archive data found for this period.",

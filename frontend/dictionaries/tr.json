@@ -216,12 +216,16 @@
     "no": "Yok"
   },
   "topPicks": {
-    "title": "İleri dönem deneysel seçimler",
-    "emptyMessage": "Bu maç için maç öncesi kaydedilmiş seçim bulunmuyor. Ayrıntılı arşiv istatistikleri aşağıda bilgi amacıyla gösteriliyor.",
-    "disclaimer": "Seçimler maç başlamadan sabitlenir ve aynı kayıt sonuçlandıktan sonra ölçülür. Yüzde, lig bazlı baz oranları ve log-odds shrinkage ile kalibre edilmiştir.",
+    "title": "Maç öncesi seçim",
+    "emptyMessage": "Bu maç için yayın şartını sağlayan bir seçim yok (havuz ≥30 maç ve lig ortalamasını ≥5 puan aşan olasılık gerekir). Ayrıntılı arşiv istatistikleri aşağıda bilgi amacıyla gösteriliyor.",
+    "disclaimer": "Seçim maç başlamadan sabitlenir ve sonucu Değerlendirme sayfasında izlenir. Yüzde, A1+A2+A3 havuzunun son 3 sezon lig ortalamasına çekilmiş olasılığıdır; geçmiş testte gösterilen olasılık ile gerçek isabet örtüşüyor.",
     "selectionCount": "{count} seçim",
     "rawPct": "ham %{pct}",
-    "rawPctTooltip": "Ham frekans yüzdesi (kalibrasyon öncesi)"
+    "rawPctTooltip": "Ham frekans yüzdesi (kalibrasyon öncesi)",
+    "signalHigh": "Güçlü sinyal",
+    "signalMedium": "Orta sinyal",
+    "signalLow": "Hafif sinyal",
+    "priorLine": "Lig ortalaması %{prior} · avantaj +{edge} puan"
   },
   "analyze": {
     "powerScore": "Güç Skoru",
@@ -279,8 +283,9 @@
     "title": "Ana Pazar Özeti",
     "subtitle": "arşivde en sık görülen seçim",
     "market": "Pazar",
-    "agreementTooltip": "İki arşiv aynı seçimde uyuşuyor",
-    "footer": "A1+A2 aynı seçimde uyuşuyor. Yüzdeler doğrulanmış maç olasılığı değildir."
+    "agreementTooltip": "{n} arşiv aynı seçimde uyuşuyor",
+    "footer": "aynı seçimde uyuşan arşiv sayısı (✦2 / ✦3). Yüzdeler arşivde görülme sıklığıdır, olasılık değildir.",
+    "informational": "bilgi amaçlı — geçmiş testte beceri yok"
   },
   "iddaa": {
     "noData": "Bu periyot için yeterli arşiv verisi bulunamadı.",

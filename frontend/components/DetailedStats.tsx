@@ -532,7 +532,7 @@ export default memo(function DetailedStats({ patternB, patternC, patternD, perio
             </div>
           )}
           {patternC ? (
-            <ArchiveDetailCard result={patternC} title={t.analyze.archive2Detail} accentColor="var(--nv-accent-purple)" badgeClass="nv-badge nv-badge-purple" period={period} t={t} />
+            <ArchiveDetailCard result={patternC} title={t.analyze.archive2Detail} accentColor="var(--nv-accent-green)" badgeClass="nv-badge nv-badge-green" period={period} t={t} />
           ) : (
             <div
               className="nv-card flex items-center justify-center"

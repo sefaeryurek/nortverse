@@ -23,6 +23,6 @@ describe("IddaaCoupon", () => {
 
   it("explains an empty frozen recommendation set independently of patterns", () => {
     render(<IddaaCoupon patternB={null} patternC={null} patternD={null} period="ft" recommendations={[]} />);
-    expect(screen.getByText(/kaydedilmiş seçim bulunmuyor/)).toBeDefined();
+    expect(screen.getByText(/yayın şartını sağlayan bir seçim yok/)).toBeDefined();
   });
 });

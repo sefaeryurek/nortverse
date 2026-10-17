@@ -23,10 +23,22 @@ function renderWithContext(ui: React.ReactElement) {
 describe("TopPicks", () => {
   it("shows only frozen full-time recommendations", () => {
     renderWithContext(<TopPicks recommendations={[recommendation]} period="ft" />);
-    expect(screen.getByText("İleri dönem deneysel seçimler")).toBeDefined();
+    expect(screen.getByText("Maç öncesi seçim")).toBeDefined();
     expect(screen.getByText("Ev Sahibi")).toBeDefined();
     expect(screen.getByText("%72")).toBeDefined();
     expect(screen.getByText("A1+A2")).toBeDefined();
+  });
+
+  it("shows v4 calibrated probability, league average and signal tier; cart gets calibrated pct", () => {
+    const v4: FTRecommendation = {
+      ...recommendation, recommendation_id: "ft-display-v4:result:2", selection: "2",
+      frequency_pct: 61, calibrated_pct: 48.2, margin: 17.6, confidence_tier: "high", prior_pct: 30.6,
+    };
+    renderWithContext(<TopPicks recommendations={[v4]} period="ft" />);
+    expect(screen.getAllByText("%48").length).toBeGreaterThan(0);
+    expect(screen.getByText("Güçlü sinyal")).toBeDefined();
+    expect(screen.getByText(/Lig ortalaması %30.6 · avantaj \+17.6 puan/)).toBeDefined();
+    expect(screen.getByText(/ft-display-v4/)).toBeDefined();
   });
 
   it("does not present untracked recommendations for half periods", () => {
@@ -36,7 +48,7 @@ describe("TopPicks", () => {
 
   it("states when no pre-match recommendation was frozen", () => {
     renderWithContext(<TopPicks recommendations={[]} period="ft" />);
-    expect(screen.getByText(/kaydedilmiş seçim bulunmuyor/)).toBeDefined();
+    expect(screen.getByText(/yayın şartını sağlayan bir seçim yok/)).toBeDefined();
   });
 
   it("adds the exact tracked selection to the cart", () => {

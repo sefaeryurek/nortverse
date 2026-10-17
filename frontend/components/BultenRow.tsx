@@ -152,54 +152,58 @@ export default memo(function BultenRow({ match, timeStr, patternStatus, t, dateL
               >
                 A1+A2+A3
               </span>
-            ) : patternStatus.has_b && patternStatus.has_c && patternStatus.agreement ? (
-              <span
-                title={t.bultenRow.archiveDual}
-                style={{
-                  fontSize: "var(--nv-text-xs)",
-                  fontWeight: 700,
-                  lineHeight: 1,
-                  padding: "2px 8px",
-                  borderRadius: "var(--nv-radius-sm)",
-                  background: "linear-gradient(135deg, var(--nv-accent-blue), var(--nv-accent-green))",
-                  color: "var(--nv-text-on-accent)",
-                }}
-              >
-                A1+A2
-              </span>
             ) : (
               <>
-                {patternStatus.has_b && (
+                {patternStatus.has_b && patternStatus.has_c && patternStatus.agreement ? (
                   <span
-                    title={t.bultenRow.archive1Match}
+                    title={t.bultenRow.archiveDual}
                     style={{
                       fontSize: "var(--nv-text-xs)",
                       fontWeight: 700,
                       lineHeight: 1,
-                      padding: "2px 6px",
+                      padding: "2px 8px",
                       borderRadius: "var(--nv-radius-sm)",
-                      backgroundColor: "var(--nv-accent-blue-dim)",
-                      color: "var(--nv-accent-blue)",
+                      background: "linear-gradient(135deg, var(--nv-accent-blue), var(--nv-accent-green))",
+                      color: "var(--nv-text-on-accent)",
                     }}
                   >
-                    A1
+                    A1+A2
                   </span>
-                )}
-                {patternStatus.has_c && (
-                  <span
-                    title={t.bultenRow.archive2Match}
-                    style={{
-                      fontSize: "var(--nv-text-xs)",
-                      fontWeight: 700,
-                      lineHeight: 1,
-                      padding: "2px 6px",
-                      borderRadius: "var(--nv-radius-sm)",
-                      backgroundColor: "var(--nv-accent-green-dim)",
-                      color: "var(--nv-accent-green)",
-                    }}
-                  >
-                    A2
-                  </span>
+                ) : (
+                  <>
+                    {patternStatus.has_b && (
+                      <span
+                        title={t.bultenRow.archive1Match}
+                        style={{
+                          fontSize: "var(--nv-text-xs)",
+                          fontWeight: 700,
+                          lineHeight: 1,
+                          padding: "2px 6px",
+                          borderRadius: "var(--nv-radius-sm)",
+                          backgroundColor: "var(--nv-accent-blue-dim)",
+                          color: "var(--nv-accent-blue)",
+                        }}
+                      >
+                        A1
+                      </span>
+                    )}
+                    {patternStatus.has_c && (
+                      <span
+                        title={t.bultenRow.archive2Match}
+                        style={{
+                          fontSize: "var(--nv-text-xs)",
+                          fontWeight: 700,
+                          lineHeight: 1,
+                          padding: "2px 6px",
+                          borderRadius: "var(--nv-radius-sm)",
+                          backgroundColor: "var(--nv-accent-green-dim)",
+                          color: "var(--nv-accent-green)",
+                        }}
+                      >
+                        A2
+                      </span>
+                    )}
+                  </>
                 )}
                 {patternStatus.has_d && (
                   <span

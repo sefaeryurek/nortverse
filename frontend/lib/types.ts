@@ -171,6 +171,9 @@ export interface FTRecommendation {
   calibrated_pct: number | null;
   margin: number | null;
   is_confident: boolean;
+  confidence_tier?: "high" | "medium" | "low" | null;
+  prior_pct?: number | null;
+  agreement?: number | null;
   archive_1_frequency_pct: number | null;
   archive_1_match_count: number | null;
   archive_2_frequency_pct: number | null;

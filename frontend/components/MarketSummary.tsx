@@ -84,7 +84,7 @@ export default function MarketSummary({ patternB, patternC, patternD, period }: 
       }}
     >
       <div className="flex items-center gap-2 mb-3">
-        <span style={{ color: "var(--nv-text-tertiary)" }}>📊</span>
+        <span aria-hidden="true" style={{ color: "var(--nv-text-tertiary)" }}>📊</span>
         <h3
           className="text-sm font-bold"
           style={{
@@ -113,19 +113,19 @@ export default function MarketSummary({ patternB, patternC, patternD, period }: 
           className="text-[10px] uppercase text-right"
           style={{ color: "var(--nv-accent-blue)" }}
         >
-          A1{patternB ? ` · ${patternB.match_count}` : ""}
+          A1 · {patternB ? patternB.match_count : "—"}
         </div>
         <div
           className="text-[10px] uppercase text-right"
-          style={{ color: "var(--nv-accent-purple)" }}
+          style={{ color: "var(--nv-accent-green)" }}
         >
-          A2{patternC ? ` · ${patternC.match_count}` : ""}
+          A2 · {patternC ? patternC.match_count : "—"}
         </div>
         <div
           className="text-[10px] uppercase text-right"
           style={{ color: "var(--nv-accent-amber)" }}
         >
-          A3{patternD ? ` · ${patternD.match_count}` : ""}
+          A3 · {patternD ? patternD.match_count : "—"}
         </div>
       </div>
 
@@ -136,36 +136,45 @@ export default function MarketSummary({ patternB, patternC, patternD, period }: 
             key={row.marketKey}
             className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 items-center py-1 px-1 rounded-lg transition-colors"
             style={{
-              backgroundColor: row.agreement ? "var(--nv-accent-amber-dim)" : "transparent",
+              backgroundColor: row.agreement ? "var(--nv-bg-elevated)" : "transparent",
+              opacity: row.informational ? 0.55 : 1,
             }}
           >
             <div className="flex items-center gap-1.5 min-w-0">
               {row.agreement && (
                 <span
-                  className="text-[8px] font-bold leading-none"
-                  style={{ color: "var(--nv-accent-amber)" }}
-                  title={t.marketSummary.agreementTooltip}
+                  className="text-[9px] font-bold leading-none flex-shrink-0"
+                  style={{ color: "var(--nv-text-primary)" }}
+                  title={t.marketSummary.agreementTooltip.replace("{n}", String(row.agreementCount))}
                 >
-                  ✦
+                  <span aria-hidden="true">✦</span>{row.agreementCount}
+                  <span className="sr-only">{t.marketSummary.agreementTooltip.replace("{n}", String(row.agreementCount))}</span>
                 </span>
               )}
-              <span
-                className="text-xs truncate"
-                style={{ color: "var(--nv-text-secondary)" }}
-              >
-                {row.marketLabel}
+              <span className="min-w-0">
+                <span
+                  className="text-xs truncate block"
+                  style={{ color: "var(--nv-text-secondary)" }}
+                >
+                  {row.marketLabel}
+                </span>
+                {row.informational && (
+                  <span className="text-[9px] block" style={{ color: "var(--nv-text-tertiary)" }}>
+                    {t.marketSummary.informational}
+                  </span>
+                )}
               </span>
             </div>
             <Cell
-              value={row.winnerA}
+              value={row.winnerA1}
               accent="var(--nv-accent-blue)"
             />
             <Cell
-              value={row.winnerB}
-              accent="var(--nv-accent-purple)"
+              value={row.winnerA2}
+              accent="var(--nv-accent-green)"
             />
             <Cell
-              value={row.winnerC}
+              value={row.winnerA3}
               accent="var(--nv-accent-amber)"
             />
           </div>
@@ -179,7 +188,7 @@ export default function MarketSummary({ patternB, patternC, patternD, period }: 
           borderTop: "1px solid var(--nv-border-subtle)",
         }}
       >
-        <span style={{ color: "var(--nv-accent-amber)" }}>✦</span> = {t.marketSummary.footer}
+        <span aria-hidden="true" style={{ color: "var(--nv-text-primary)" }}>✦</span> = {t.marketSummary.footer}
       </p>
     </div>
   );

@@ -389,11 +389,17 @@ function isMarketActive(market: MarketSpec, period: Period, sample: PatternResul
 export interface MarketSummaryRow {
   marketKey: string;
   marketLabel: string;
-  winnerA: { selectionLabel: string; pct: number } | null;
-  winnerB: { selectionLabel: string; pct: number } | null;
-  winnerC: { selectionLabel: string; pct: number } | null;
+  winnerA1: { selectionLabel: string; pct: number } | null;
+  winnerA2: { selectionLabel: string; pct: number } | null;
+  winnerA3: { selectionLabel: string; pct: number } | null;
+  /** Aynı seçimde uyuşan arşiv sayısı (0, 2 veya 3). */
+  agreementCount: number;
   agreement: boolean;
+  /** Maç öncesi geçmiş testte becerisi olmayan pazar — sadece bilgi amaçlı. */
+  informational: boolean;
 }
+
+const INFORMATIONAL_MARKETS = new Set(["ou_25", "kg"]);
 
 const SUMMARY_MARKET_KEYS = [
   "result",
@@ -408,7 +414,7 @@ const SUMMARY_MARKET_KEYS = [
 ];
 
 /**
- * Piyasa Özeti: sadece ana pazarların kazananlarını Arşiv-A ve Arşiv-B için ayrı gösterir.
+ * Ana Pazar Özeti: her ana pazarın A1 (B), A2 (C), A3 (D) kazananı; eşitlikte ilk seçenek.
  */
 export function getMarketSummary(
   archiveB: PatternResult | null,
@@ -436,18 +442,25 @@ export function getMarketSummary(
       return best;
     };
 
-    const winnerA = pickWinner(archiveB);
-    const winnerB = pickWinner(archiveC);
-    const winnerC = pickWinner(archiveD);
-    const agreement = !!winnerA && !!winnerB && winnerA.selectionLabel === winnerB.selectionLabel;
+    const winnerA1 = pickWinner(archiveB);
+    const winnerA2 = pickWinner(archiveC);
+    const winnerA3 = pickWinner(archiveD);
+    const votes = new Map<string, number>();
+    for (const winner of [winnerA1, winnerA2, winnerA3]) {
+      if (winner) votes.set(winner.selectionLabel, (votes.get(winner.selectionLabel) ?? 0) + 1);
+    }
+    const top = Math.max(0, ...votes.values());
+    const agreementCount = top >= 2 ? top : 0;
 
     rows.push({
       marketKey: key,
       marketLabel: market.label(lbl),
-      winnerA,
-      winnerB,
-      winnerC,
-      agreement,
+      winnerA1,
+      winnerA2,
+      winnerA3,
+      agreementCount,
+      agreement: agreementCount >= 2,
+      informational: INFORMATIONAL_MARKETS.has(key),
     });
   }
 

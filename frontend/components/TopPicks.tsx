@@ -43,6 +43,16 @@ function pctColor(pct: number) {
   return "var(--nv-text-tertiary)";
 }
 
+const TIER_COLOR: Record<string, string> = {
+  high: "var(--nv-accent-green)",
+  medium: "var(--nv-accent-blue)",
+  low: "var(--nv-text-secondary)",
+};
+
+function tierLabel(t: Dictionary, tier: string): string {
+  return { high: t.topPicks.signalHigh, medium: t.topPicks.signalMedium, low: t.topPicks.signalLow }[tier] ?? tier;
+}
+
 function archiveBadgeClass(archive: string) {
   if (archive.includes("+")) return "nv-badge nv-badge-purple";
   if (archive === "archive_1") return "nv-badge nv-badge-blue";
@@ -55,7 +65,8 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
   const { t } = useLocale();
   const calPct = recommendation.calibrated_pct != null ? Math.round(recommendation.calibrated_pct) : null;
   const pct = calPct ?? Math.round(recommendation.frequency_pct);
-  const color = pctColor(pct);
+  const tier = recommendation.confidence_tier ?? null;
+  const color = tier ? TIER_COLOR[tier] ?? pctColor(pct) : pctColor(pct);
   const archive = archiveLabel(recommendation.archive);
   const mktLabel = marketLabel(t, recommendation.market);
   const selLabel = selectionLabel(t, recommendation.selection);
@@ -93,11 +104,15 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
           <span className={archiveBadgeClass(recommendation.archive)}>
-            {archiveLabel(recommendation.archive)}
+            {archive}
           </span>
-          {recommendation.is_confident && (
+          {tier ? (
+            <span className="nv-badge" style={{ backgroundColor: "var(--nv-bg-elevated)", color, fontSize: "9px", fontWeight: 700 }}>
+              {tierLabel(t, tier)}
+            </span>
+          ) : recommendation.is_confident && (
             <span className="nv-badge" style={{
-              backgroundColor: "rgba(34,197,94,0.15)",
+              backgroundColor: "var(--nv-accent-green-dim)",
               color: "var(--nv-accent-green)",
               fontSize: "9px",
               fontWeight: 700,
@@ -121,13 +136,20 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
         >
           {selLabel}
         </div>
+        {recommendation.prior_pct != null && recommendation.margin != null && (
+          <div className="text-[10px]" style={{ color: "var(--nv-text-tertiary)" }}>
+            {t.topPicks.priorLine
+              .replace("{prior}", recommendation.prior_pct.toFixed(1))
+              .replace("{edge}", recommendation.margin.toFixed(1))}
+          </div>
+        )}
         {/* Percentage bar */}
         <div className="nv-pct-bar mt-1.5" style={{ height: "4px" }}>
           <div
             className="nv-pct-bar-fill"
             style={{
               width: `${pct}%`,
-              backgroundColor: pctColor(pct),
+              backgroundColor: color,
             }}
           />
         </div>
@@ -170,7 +192,7 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
         {match && <AddToCartButton item={{
           matchId: match.matchId, homeTeam: match.homeTeam, awayTeam: match.awayTeam,
           marketKey: recommendation.market, marketLabel: mktLabel,
-          selectionLabel: selLabel, pct: recommendation.frequency_pct,
+          selectionLabel: selLabel, pct: recommendation.calibrated_pct ?? recommendation.frequency_pct,
           archive, period: "ft",
         }} />}
       </div>
