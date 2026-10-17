@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
 from app.config import ISTANBUL_TZ
-from app.analysis.league_filter import is_main_league
+from app.analysis.league_filter import canonical_league_name, is_main_league
 from app.api.schemas import MatchSummary, ResultOut
 from app.api.live_snapshot import get_live_snapshot
 from app.api.score_state import _utc as _utc_datetime, resolve_match_state
@@ -39,7 +39,7 @@ async def list_matches(
             .limit(limit)
         )
         if league:
-            stmt = stmt.where(Match.league_code == league)
+            stmt = stmt.where(Match.league_code.in_({league, canonical_league_name(league)}))
         rows = (await session.execute(stmt)).all()
 
     return [

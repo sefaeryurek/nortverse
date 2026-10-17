@@ -239,12 +239,14 @@ async def analysis_evidence() -> AnalysisEvidence:
                 func.count(Match.id).filter(func.jsonb_typeof(Match.pattern_ft_c) == "object"),
                 func.count(Match.id).filter(shortlist),
                 func.count(Match.id).filter(exact_hit),
+                func.count(Match.id).filter(func.jsonb_typeof(Match.pattern_ft_d) == "object"),
             ).where(*eligible, *league_filter)
         )).one()
     return AnalysisEvidence(
         eligible_matches=row[0],
         archive_1_evaluated=row[1],
         archive_2_evaluated=row[2],
+        archive_3_evaluated=row[5],
         score_list_evaluated=row[3],
         score_list_hits=row[4],
     )

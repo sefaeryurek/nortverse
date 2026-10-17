@@ -202,12 +202,14 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
 
 _pattern_status_cache: OrderedDict[str, tuple[float, dict]] = OrderedDict()
 _PATTERN_STATUS_TTL = 300.0
+_PATTERN_STATUS_EMPTY_TTL = 30.0  # henüz pattern'i olmayan maç pipeline sonrası hızla güncellensin
 _PATTERN_STATUS_MAX = 500
 
 
 def _ps_cache_get(mid: str) -> dict | None:
     entry = _pattern_status_cache.get(mid)
-    if entry and time.monotonic() - entry[0] < _PATTERN_STATUS_TTL:
+    ttl = _PATTERN_STATUS_TTL if entry and entry[1] else _PATTERN_STATUS_EMPTY_TTL
+    if entry and time.monotonic() - entry[0] < ttl:
         _pattern_status_cache.move_to_end(mid)
         return entry[1]
     return None

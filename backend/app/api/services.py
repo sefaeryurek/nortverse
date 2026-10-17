@@ -298,7 +298,7 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         except StalePatternWrite:
             raise HTTPException(409, "Analiz bu sırada güncellendi. Lütfen yeniden deneyin.")
         except Exception:
-            log.warning("Pattern kaydedilemedi [%s]; hesaplanan yanıt kullanılacak", mid)
+            log.warning("Pattern kaydedilemedi [%s]; hesaplanan yanıt kullanılacak", mid, exc_info=True)
 
     ht_b, ht_c, ht_d = (_pat(patterns[f"pattern_ht_{f}"]) for f in FAMILIES)
     h2_b, h2_c, h2_d = (_pat(patterns[f"pattern_h2_{f}"]) for f in FAMILIES)

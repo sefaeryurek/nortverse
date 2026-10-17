@@ -478,6 +478,22 @@ def _fixture_score_revision(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+async def pending_result_days(days: int) -> list[date]:
+    """Son `days` günde başlama saati 3 saatten eski ama sonucu olmayan maçların İstanbul günleri."""
+    now = datetime.now(timezone.utc)
+    async with get_session() as session:
+        kickoffs = (await session.execute(
+            select(Match.kickoff_time).where(
+                Match.deleted_at.is_(None),
+                Match.actual_ft_home.is_(None),
+                Match.ft_scores_1.is_not(None),
+                Match.kickoff_time >= now - timedelta(days=days),
+                Match.kickoff_time <= now - timedelta(hours=3),
+            )
+        )).scalars().all()
+    return sorted({k.astimezone(ISTANBUL_TZ).date() for k in kickoffs})
+
+
 async def update_results(target_date: Optional[date] = None) -> dict:
     """Refresh scores from the source calendar pages and update analyzed matches."""
     if target_date:

@@ -11,7 +11,7 @@ from app.api import routes_admin
 @pytest.mark.asyncio
 async def test_evidence_reports_prematch_coverage_without_a_hit_rate(monkeypatch):
     session = AsyncMock()
-    session.execute.return_value = SimpleNamespace(one=lambda: (48, 5, 0, 24, 3))
+    session.execute.return_value = SimpleNamespace(one=lambda: (48, 5, 0, 24, 3, 7))
 
     @asynccontextmanager
     async def get_session():
@@ -23,6 +23,7 @@ async def test_evidence_reports_prematch_coverage_without_a_hit_rate(monkeypatch
     assert response.eligible_matches == 48
     assert response.archive_1_evaluated == 5
     assert response.archive_2_evaluated == 0
+    assert response.archive_3_evaluated == 7
     assert response.score_list_evaluated == 24
     assert response.score_list_hits == 3
     assert response.minimum_for_rate == 100

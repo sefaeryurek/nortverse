@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import collections
 import logging
+import os
 import time
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
@@ -36,6 +38,17 @@ _RATE_BUCKETS_MAX = 2000
 _rate_sweep_counter = 0
 _RATE_SWEEP_INTERVAL = 100
 
+# Proxy arkasında gerçek istemci IP'si: X-Forwarded-For sadece güvenilen proxy'den kabul edilir.
+_TRUSTED_PROXIES = {ip.strip() for ip in os.environ.get("TRUSTED_PROXIES", "").split(",") if ip.strip()}
+
+
+def _client_ip(request: Request) -> str:
+    host = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded and host in _TRUSTED_PROXIES:
+        return forwarded.split(",")[0].strip() or host
+    return host
+
 
 def _check_rate(ip: str, limit: int) -> None:
     global _rate_sweep_counter
@@ -59,13 +72,20 @@ def _check_rate(ip: str, limit: int) -> None:
         for k in stale_keys:
             del _rate_buckets[k]
 
+async def _kickoff_of(match_id: str) -> datetime | None:
+    async with get_session() as session:
+        return (await session.execute(
+            select(Match.kickoff_time).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+        )).scalar_one_or_none()
+
+
 @router.get("/api/analyze/{match_id}", response_model=AnalyzeResponse)
 async def get_analyze(
     request: Request,
     match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
 ) -> AnalyzeResponse:
     """Maçı analiz eder. Cache'te varsa anında döner, yoksa scrape eder."""
-    _check_rate(request.client.host if request.client else "unknown", _RATE_LIMIT_GET)
+    _check_rate(_client_ip(request), _RATE_LIMIT_GET)
     try:
         return await asyncio.wait_for(analyze_and_cache(match_id), timeout=ANALYSIS_TIMEOUT)
     except asyncio.TimeoutError:
@@ -77,8 +97,15 @@ async def post_analyze(
     request: Request,
     match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
 ) -> AnalyzeResponse:
-    """Maçı her zaman scrape eder ve cache'i günceller."""
-    _check_rate(request.client.host if request.client else "unknown", _RATE_LIMIT_POST)
+    """Maçı yeniden scrape eder ve cache'i günceller — yalnızca maç başlamadan.
+
+    Başlamış/bitmiş maçta yeniden analiz maç öncesi analizi ezip maçı "arşiv" sınıfına
+    taşırdı (değerlendirme bozulur); bu yüzden 409 döner.
+    """
+    _check_rate(_client_ip(request), _RATE_LIMIT_POST)
+    kickoff = await _kickoff_of(match_id)
+    if kickoff is not None and kickoff <= datetime.now(timezone.utc):
+        raise HTTPException(409, "Maç başladı; maç öncesi analiz korunuyor")
 
     async def refresh():
         async with get_or_make_lock(match_id):
@@ -93,8 +120,12 @@ async def post_analyze(
 
 
 @router.get("/api/match/{match_id}", response_model=MatchSummary)
-async def get_match(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> MatchSummary:
+async def get_match(
+    request: Request,
+    match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
+) -> MatchSummary:
     """Maçın özet bilgisi. DB'de yoksa Playwright ile çek + DB'ye kaydet, sonra dön."""
+    _check_rate(_client_ip(request), _RATE_LIMIT_GET)
     async with get_session() as session:
         row = (
             await session.execute(
@@ -104,10 +135,17 @@ async def get_match(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> MatchSumm
 
     if not row:
         log.info("/api/match miss — Playwright fallback: %s", match_id)
+
+        async def _scrape() -> None:
+            async with get_or_make_lock(match_id):
+                await do_analyze(match_id)
+
         try:
-            await asyncio.wait_for(do_analyze(match_id), timeout=25.0)
+            await asyncio.wait_for(_scrape(), timeout=25.0)
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail=f"Maç verisi çekilemedi (timeout): {match_id}")
+        except HTTPException:
+            raise
         except Exception as exc:
             log.warning("Maç fallback scrape başarısız [%s]: %s", match_id, exc)
             raise HTTPException(status_code=404, detail=f"Maç bulunamadı: {match_id}")
@@ -167,7 +205,7 @@ async def get_matched_matches(
                     Match.actual_ht_home, Match.actual_ht_away,
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.kickoff_time,
-                ).where(Match.match_id.in_(all_ids))
+                ).where(Match.match_id.in_(all_ids), Match.deleted_at.is_(None))
             )).all()
             details = {r.match_id: r for r in rows}
 
@@ -205,4 +243,8 @@ async def get_matched_matches(
         "archive_b": _family_list("b"),
         "archive_c": _family_list("c"),
         "archive_d": _family_list("d"),
+        # Eşleşme var ama liste saklanmamışsa (eski kayıt) arayüz "liste henüz yok" diyebilir.
+        "list_available": {
+            f"archive_{f}": not blobs[f] or "matched_ids" in blobs[f] for f in ("b", "c", "d")
+        },
     }

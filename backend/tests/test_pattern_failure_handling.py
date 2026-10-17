@@ -83,6 +83,7 @@ async def test_failed_refresh_is_503_and_preserves_cached_result(monkeypatch):
     svc.analysis_cache["123"] = "previous"
     monkeypatch.setattr(routes_analysis, "do_analyze", AsyncMock(
         side_effect=persist.PatternComputationError("sensitive internal error")))
+    monkeypatch.setattr(routes_analysis, "_kickoff_of", AsyncMock(return_value=None))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.app), base_url="http://test") as client:
         response = await client.post("/api/analyze/123")
     assert response.status_code == 503

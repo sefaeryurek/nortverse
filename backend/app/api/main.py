@@ -37,6 +37,11 @@ def _configure_logging() -> None:
 
 _configure_logging()
 
+# .env, app.config okunmadan yüklenmeli (aksi halde PATTERN_* ayarları API'de görünmez, CLI'da görünür).
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from app.config import ISTANBUL_TZ
 from app.analysis.persist import PatternComputationError
 from app.api.live_ledger import start_live_watcher, stop_live_watcher

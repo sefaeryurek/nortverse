@@ -428,9 +428,13 @@ def refresh_fixture_cache_cmd(
 
 def update_scores_cmd(
     target_date: Optional[str] = typer.Option(None, "--date", help="YYYY-MM-DD. Boşsa bugün (gece 00-04 arası ise dün)."),
+    pending_days: int = typer.Option(
+        0, "--pending-days",
+        help="Son N günde sonucu eksik maçı olan her günü de güncelle (kaçırılan günler için).",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """DB'deki maçların gerçek sonuçlarını günceller."""
+    """DB'deki maçların gerçek sonuçlarını günceller, ardından tahmin defterini çözer."""
     _setup_logging("DEBUG" if verbose else "INFO")
 
     dt: Optional[date] = None
@@ -439,16 +443,24 @@ def update_scores_cmd(
 
     from app.analysis.ledger import resolve_pending
     from app.pipeline import update_results
+    from app.pipeline.runner import pending_result_days
 
-    async def _run() -> None:
-        stats = await update_results(target_date=dt)
+    def _print_stats(label: str, stats: dict) -> None:
         console.print(
-            f"\n[bold green]Sonuç güncellemesi tamamlandı:[/bold green] "
+            f"[bold green]{label}:[/bold green] "
             f"[green]{stats['updated']} güncellendi[/green] · "
             f"[yellow]{stats['not_finished']} bitmemiş[/yellow] · "
             f"{stats['skipped']} atlandı · "
             f"[red]{stats['errors']} hata[/red]"
         )
+
+    async def _run() -> None:
+        _print_stats("\nSonuç güncellemesi", await update_results(target_date=dt))
+        if pending_days > 0:
+            for day in await pending_result_days(pending_days):
+                if day == dt:
+                    continue
+                _print_stats(f"Eksik gün {day.isoformat()}", await update_results(target_date=day))
         _print_resolution(await resolve_pending())
 
     asyncio.run(_run())

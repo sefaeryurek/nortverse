@@ -10,8 +10,8 @@ from app.api import services as svc
 from app.api import routes_analysis
 
 
-def _fake_request() -> SimpleNamespace:
-    return SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+def _fake_request(host: str = "127.0.0.1", headers: dict | None = None) -> SimpleNamespace:
+    return SimpleNamespace(client=SimpleNamespace(host=host), headers=headers or {})
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +20,7 @@ def isolated_cache(monkeypatch):
     monkeypatch.setattr(svc, "_analysis_cached_at", {})
     monkeypatch.setattr(routes_analysis, "ANALYSIS_TIMEOUT", 0.02)
     routes_analysis._rate_buckets.clear()
+    monkeypatch.setattr(routes_analysis, "_kickoff_of", AsyncMock(return_value=None))
 
 
 @pytest.mark.asyncio
@@ -61,3 +62,23 @@ async def test_successful_refresh_replaces_old_cache(monkeypatch):
     svc.cache_put("123", "previous")
     assert await routes_analysis.post_analyze(_fake_request(), "123") == "updated"
     assert svc.cache_get("123") == "updated"
+
+
+@pytest.mark.asyncio
+async def test_refresh_after_kickoff_is_rejected_and_keeps_prematch_analysis(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    scrape = AsyncMock()
+    monkeypatch.setattr(routes_analysis, "do_analyze", scrape)
+    monkeypatch.setattr(routes_analysis, "_kickoff_of",
+                        AsyncMock(return_value=datetime.now(timezone.utc) - timedelta(minutes=5)))
+    with pytest.raises(HTTPException) as error:
+        await routes_analysis.post_analyze(_fake_request(), "123")
+    assert error.value.status_code == 409
+    scrape.assert_not_called()
+
+
+def test_forwarded_ip_only_from_trusted_proxy(monkeypatch):
+    monkeypatch.setattr(routes_analysis, "_TRUSTED_PROXIES", {"10.0.0.1"})
+    headers = {"x-forwarded-for": "203.0.113.7, 10.0.0.1"}
+    assert routes_analysis._client_ip(_fake_request("10.0.0.1", headers)) == "203.0.113.7"
+    assert routes_analysis._client_ip(_fake_request("198.51.100.2", headers)) == "198.51.100.2"
