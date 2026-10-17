@@ -209,6 +209,8 @@ async def get_matched_matches(
     archive_c: list[dict] = []
     archive_d: list[dict] = []
 
+    league = target.league_name
+
     async with get_session() as session:
         if target.ft_scores_1 and target.ft_scores_x and target.ft_scores_2:
             b_filters = [
@@ -217,7 +219,17 @@ async def get_matched_matches(
                 Match.ft_scores_x.cast(JSONB) == cast(target.ft_scores_x, JSONB),
                 Match.ft_scores_2.cast(JSONB) == cast(target.ft_scores_2, JSONB),
             ]
+            if league:
+                b_filters.append(Match.league_name == league)
             rows = (await session.execute(select(*detail_cols).where(*b_filters).limit(50))).all()
+            if not rows and league:
+                b_filters_all = [
+                    *base_filters,
+                    Match.ft_scores_1.cast(JSONB) == cast(target.ft_scores_1, JSONB),
+                    Match.ft_scores_x.cast(JSONB) == cast(target.ft_scores_x, JSONB),
+                    Match.ft_scores_2.cast(JSONB) == cast(target.ft_scores_2, JSONB),
+                ]
+                rows = (await session.execute(select(*detail_cols).where(*b_filters_all).limit(50))).all()
             archive_b = [_row_to_dict(r) for r in rows]
 
         if target.ft_all_ratios:
@@ -226,6 +238,8 @@ async def get_matched_matches(
             tol_step = ANALYSIS.pattern_c_tolerance_step
             while tol <= max_tol + 1e-9:
                 c_filters = list(base_filters)
+                if league:
+                    c_filters.append(Match.league_name == league)
                 if tol == 0.0:
                     c_filters.append(
                         cast(Match.ft_all_ratios, JSONB) == cast(target.ft_all_ratios, JSONB),
@@ -239,6 +253,21 @@ async def get_matched_matches(
                 if len(rows) >= ANALYSIS.pattern_c_adaptive_min:
                     break
                 tol += tol_step
+            if not rows and league:
+                tol = ANALYSIS.pattern_c_tolerance
+                while tol <= max_tol + 1e-9:
+                    c_all = list(base_filters)
+                    if tol == 0.0:
+                        c_all.append(cast(Match.ft_all_ratios, JSONB) == cast(target.ft_all_ratios, JSONB))
+                    else:
+                        c_all.append(Match.ft_all_ratios.isnot(None))
+                        for key, target_val in target.ft_all_ratios.items():
+                            ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
+                            c_all.append(ratio_expr.between(target_val - tol, target_val + tol))
+                    rows = (await session.execute(select(*detail_cols).where(*c_all).limit(50))).all()
+                    if len(rows) >= ANALYSIS.pattern_c_adaptive_min:
+                        break
+                    tol += tol_step
             archive_c = [_row_to_dict(r) for r in rows]
 
         if target.ft_all_ratios:
@@ -247,6 +276,7 @@ async def get_matched_matches(
                 top_n=ANALYSIS.pattern_d_top_n,
                 min_similarity=ANALYSIS.pattern_d_min_similarity,
                 exclude_match_id=match_id,
+                league_name=league,
             )
             if d_matched:
                 d_ids = [mid for mid, _ in d_matched]
