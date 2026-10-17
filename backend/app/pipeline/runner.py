@@ -206,16 +206,22 @@ async def _upsert(
                 raise StaleAnalysisWrite(f"Newer analysis exists: {result.match_id}")
             picks: list[dict] | None = None
             if raw is not None:
-                picks, _ = await capture_v4_recommendations(
-                    session,
-                    match_id=result.match_id,
-                    analyzed_at=result.analyzed_at,
-                    captured_at=captured_at,
-                    kickoff_time=raw.kickoff_time,
-                    league_name=raw.league_name or canonical_league_name(raw.league_code),
-                    league_code=raw.league_code,
-                    patterns=patterns,
-                )
+                try:
+                    # Savepoint: dondurma/defter hatası maç kaydını geri almaz.
+                    async with session.begin_nested():
+                        picks, _ = await capture_v4_recommendations(
+                            session,
+                            match_id=result.match_id,
+                            analyzed_at=result.analyzed_at,
+                            captured_at=captured_at,
+                            kickoff_time=raw.kickoff_time,
+                            league_name=raw.league_name or canonical_league_name(raw.league_code),
+                            league_code=raw.league_code,
+                            patterns=patterns,
+                        )
+                except Exception:
+                    log.error("Maç öncesi seçim dondurulamadı [%s]", result.match_id, exc_info=True)
+                    picks = None
             if raw is not None:
                 await capture_score_snapshot(
                     session,

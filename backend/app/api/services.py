@@ -18,7 +18,7 @@ from sqlalchemy import cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 
 from app.config import ISTANBUL_TZ
-from app.api.schemas import AnalyzeResponse, PeriodOut
+from app.api.schemas import AnalyzeResponse, PeriodOut, RecommendationOut
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
 from app.analysis.pattern_stats import PatternResult
@@ -237,7 +237,9 @@ async def _refresh_cached_recommendations(response: AnalyzeResponse) -> AnalyzeR
     if snapshot is not None:
         _snapshot_finalized_put(snapshot_key)
     picks = snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []
-    if [item.model_dump() for item in response.ft_recommendations] == picks:
+    # İki taraf da aynı şemadan geçirilir: eski sürüm seçimlerinde olmayan yeni alanlar fark sayılmaz.
+    normalized = [RecommendationOut.model_validate(pick).model_dump() for pick in picks]
+    if [item.model_dump() for item in response.ft_recommendations] == normalized:
         return response
     refreshed = AnalyzeResponse.model_validate({
         **response.model_dump(), "ft_recommendations": picks,
@@ -302,7 +304,12 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
     h2_b, h2_c, h2_d = (_pat(patterns[f"pattern_h2_{f}"]) for f in FAMILIES)
     ft_b, ft_c, ft_d = (_pat(patterns[f"pattern_ft_{f}"]) for f in FAMILIES)
 
-    recommendations = await _frozen_recommendations(row, patterns)
+    try:
+        recommendations = await _frozen_recommendations(row, patterns)
+    except Exception:
+        # Tahmin dondurma hatası analiz sayfasını düşürmemeli; bir sonraki ziyarette yeniden denenir.
+        log.error("Maç öncesi seçim dondurulamadı [%s]", mid, exc_info=True)
+        recommendations = []
     return AnalyzeResponse(
         match_id=row.match_id,
         home_team=row.home_team,

@@ -19,17 +19,22 @@ from app.db.models import PredictionLedger, PredictionResolution
 log = logging.getLogger(__name__)
 
 
-def uniform_rows(rows: list[dict]) -> list[dict]:
-    """Çok satırlı INSERT ilk satırın anahtarlarını kullanır; eksik anahtarlar None ile doldurulur."""
+# Zorunlu (NOT NULL + varsayılanlı) tahmin kolonları: eksik anahtar NULL değil bu değerle doldurulur.
+PREDICTION_DEFAULTS = {"informational": False, "details": {}}
+
+
+def uniform_rows(rows: list[dict], defaults: dict | None = None) -> list[dict]:
+    """Çok satırlı INSERT ilk satırın anahtarlarını kullanır; eksikler varsayılan ya da None olur."""
+    defaults = defaults or {}
     keys = {key for row in rows for key in row}
-    return [{key: row.get(key) for key in keys} for row in rows]
+    return [{key: row[key] if key in row else defaults.get(key) for key in keys} for row in rows]
 
 
 async def record_predictions(session, rows: list[dict]) -> int:
     """Defter satırlarını ekler; zaten varsa atlar. Eklenen satır sayısını döner."""
     if not rows:
         return 0
-    stmt = insert(PredictionLedger).values(uniform_rows(rows)).on_conflict_do_nothing(
+    stmt = insert(PredictionLedger).values(uniform_rows(rows, PREDICTION_DEFAULTS)).on_conflict_do_nothing(
         constraint="uq_prediction_ledger_decision",
     )
     result = await session.execute(stmt)

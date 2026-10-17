@@ -5,7 +5,10 @@ from types import SimpleNamespace
 
 from sqlalchemy import CheckConstraint, UniqueConstraint
 
-from app.analysis.ledger import _outcome_row, uniform_rows
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import insert
+
+from app.analysis.ledger import PREDICTION_DEFAULTS, _outcome_row, uniform_rows
 from app.db.models import MatchHtObservation, PredictionBacktest, PredictionLedger, PredictionResolution
 
 
@@ -63,3 +66,20 @@ def test_outcome_row_deleted_match_is_void_with_all_keys():
 
 def test_outcome_row_unresolvable_without_ht_for_ht_market():
     assert _outcome_row(_row(period="ht", actual_ht_home=None, actual_ht_away=None)) is None
+
+
+def test_uniform_rows_uses_column_defaults_not_null():
+    rows = uniform_rows([{"a": 1, "informational": True}, {"a": 2}], PREDICTION_DEFAULTS)
+    assert rows[1]["informational"] is False
+
+
+def test_mixed_ledger_rows_compile_without_null_required_columns():
+    base = {"source": "top_pick", "rule_version": "v", "match_id": "1", "league_name": "L",
+            "kickoff_time": datetime(2026, 10, 20, tzinfo=timezone.utc),
+            "as_of": datetime(2026, 10, 19, tzinfo=timezone.utc), "period": "ft",
+            "market": "result", "selection": "1", "prob_shown_bp": 5000}
+    rows = uniform_rows([{**base, "details": {"x": 1}}, {**base, "market": "kg", "informational": True}],
+                        PREDICTION_DEFAULTS)
+    params = insert(PredictionLedger).values(rows).compile(dialect=postgresql.dialect()).params
+    assert params["informational_m0"] is False and params["informational_m1"] is True
+    assert params["details_m1"] == {}

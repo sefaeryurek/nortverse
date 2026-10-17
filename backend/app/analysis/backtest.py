@@ -19,7 +19,7 @@ from sqlalchemy import delete, func, insert, select
 from app.analysis.live_model import (
     ALPHA, LIVE_RULE_VERSION, OUTCOMES, PRIOR_SEASON_DAYS, CondTable, Counts, predict_live,
 )
-from app.analysis.ledger import uniform_rows
+from app.analysis.ledger import PREDICTION_DEFAULTS, uniform_rows
 from app.analysis.market_resolver import resolve
 from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 from app.db.connection import get_session
@@ -161,7 +161,8 @@ async def run_live_backtest(date_from: datetime, date_to: datetime, *, notes: st
             rows.extend(_rows_for(match, prediction, run_id, as_of))
         async with get_session() as session:
             for i in range(0, len(rows), 500):
-                await session.execute(insert(PredictionBacktest).values(uniform_rows(rows[i:i + 500])))
+                await session.execute(insert(PredictionBacktest).values(
+                    uniform_rows(rows[i:i + 500], PREDICTION_DEFAULTS)))
         written += len(rows)
         log.info("Canlı backtest #%d: %d/%d maç", run_id, min(start + _BATCH, len(target_ids)), len(target_ids))
     log.info("Canlı backtest #%d tamamlandı: %d satır", run_id, written)

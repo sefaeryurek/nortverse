@@ -144,6 +144,9 @@ class RecommendationOut(BaseModel):
     calibrated_pct: Optional[float] = None
     margin: Optional[float] = None
     is_confident: bool = False
+    confidence_tier: Optional[str] = None  # v4: avantaj büyüklüğü (high/medium/low)
+    prior_pct: Optional[float] = None      # v4: seçimin lig ortalaması olasılığı
+    agreement: Optional[int] = None        # v4: seçimde uyuşan arşiv sayısı
     archive_1_frequency_pct: Optional[float] = None
     archive_1_match_count: Optional[int] = None
     archive_2_frequency_pct: Optional[float] = None

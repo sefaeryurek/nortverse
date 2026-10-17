@@ -407,7 +407,9 @@ async def test_cached_analysis_refreshes_snapshot_written_by_another_process(mon
 
     refreshed = await services._refresh_cached_recommendations(response)
 
-    assert [item.model_dump() for item in refreshed.ft_recommendations] == picks
+    assert [item.model_dump(exclude_none=True) for item in refreshed.ft_recommendations] == [
+        {k: v for k, v in pick.items() if v is not None} for pick in picks
+    ]
     cache_put.assert_called_once_with("123", refreshed)
 
 
@@ -451,6 +453,7 @@ async def test_cached_analysis_does_not_query_after_snapshot_is_final(monkeypatc
 @pytest.mark.asyncio
 async def test_upsert_freezes_first_prekickoff_record_and_never_updates_it(monkeypatch):
     session = AsyncMock()
+    session.begin_nested = MagicMock(return_value=AsyncMock())
     session.execute.side_effect = [MagicMock(rowcount=1) for _ in range(6)]
 
     @asynccontextmanager
@@ -476,6 +479,7 @@ async def test_upsert_freezes_first_prekickoff_record_and_never_updates_it(monke
 @pytest.mark.asyncio
 async def test_upsert_after_kickoff_does_not_make_a_snapshot(monkeypatch):
     session = AsyncMock()
+    session.begin_nested = MagicMock(return_value=AsyncMock())
     session.execute.return_value = MagicMock(rowcount=1)
 
     @asynccontextmanager
