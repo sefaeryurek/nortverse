@@ -68,8 +68,8 @@ class AnalysisConfig:
     result_min_margin: float = field(default_factory=lambda: _env_float("RESULT_MIN_MARGIN", 10.0))
     pattern_b_match_cap: int = field(default_factory=lambda: _env_int("PATTERN_B_MATCH_CAP", 150))
     pattern_c_match_cap: int = field(default_factory=lambda: _env_int("PATTERN_C_MATCH_CAP", 150))
-    pattern_d_top_n: int = field(default_factory=lambda: _env_int("PATTERN_D_TOP_N", 30))
-    pattern_d_min_similarity: float = field(default_factory=lambda: _env_float("PATTERN_D_MIN_SIMILARITY", 0.80))
+    pattern_d_top_n: int = field(default_factory=lambda: _env_int("PATTERN_D_TOP_N", 15))
+    pattern_d_min_similarity: float = field(default_factory=lambda: _env_float("PATTERN_D_MIN_SIMILARITY", 0.97))
     temporal_decay_half_life_years: float = field(default_factory=lambda: _env_float("TEMPORAL_DECAY_HALF_LIFE", 3.0))
     min_archive_matches: int = field(default_factory=lambda: _env_int("MIN_ARCHIVE_MATCHES", 10))
 

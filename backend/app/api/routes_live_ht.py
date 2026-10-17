@@ -45,14 +45,18 @@ class LiveHTMatch(BaseModel):
 
 
 def _is_second_half_or_later(minute: str | None) -> bool:
-    """HT, 2. yarı veya uzatma dakikası mı?"""
+    """HT veya 2. yarı (46+) dakikası mı?
+
+    45 ve 45+N hâlâ 1. yarı uzatmasıdır — İY skoru kesinleşmemiştir.
+    Sadece "HT" (devre arası) veya 46+ dakikalar True döner.
+    """
     if not minute:
         return False
     if minute == "HT":
         return True
     try:
         base = int(minute.split("+")[0])
-        return base >= 45
+        return base >= 46
     except (ValueError, IndexError):
         return False
 

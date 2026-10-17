@@ -222,7 +222,7 @@ async def get_matched_matches(
             if league:
                 b_filters.append(Match.league_name == league)
             rows = (await session.execute(select(*detail_cols).where(*b_filters).limit(50))).all()
-            if not rows and league:
+            if len(rows) < 5 and league:
                 b_filters_all = [
                     *base_filters,
                     Match.ft_scores_1.cast(JSONB) == cast(target.ft_scores_1, JSONB),
@@ -253,7 +253,7 @@ async def get_matched_matches(
                 if len(rows) >= ANALYSIS.pattern_c_adaptive_min:
                     break
                 tol += tol_step
-            if not rows and league:
+            if len(rows) < ANALYSIS.pattern_c_adaptive_min and league:
                 tol = ANALYSIS.pattern_c_tolerance
                 while tol <= max_tol + 1e-9:
                     c_all = list(base_filters)

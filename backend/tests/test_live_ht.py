@@ -20,7 +20,7 @@ class TestIsSecondHalfOrLater:
         assert _is_second_half_or_later("HT") is True
 
     def test_minute_45(self):
-        assert _is_second_half_or_later("45") is True
+        assert _is_second_half_or_later("45") is False
 
     def test_minute_46(self):
         assert _is_second_half_or_later("46") is True
@@ -41,7 +41,7 @@ class TestIsSecondHalfOrLater:
         assert _is_second_half_or_later("90+3") is True
 
     def test_minute_45_plus(self):
-        assert _is_second_half_or_later("45+2") is True
+        assert _is_second_half_or_later("45+2") is False
 
     def test_minute_46_plus(self):
         assert _is_second_half_or_later("46+1") is True
