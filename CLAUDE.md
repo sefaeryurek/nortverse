@@ -489,7 +489,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 **Confidence-bazlı (Top Picks):** ≥0.80 yeşil dolu, 0.65-0.79 yeşil çerçeve, 0.50-0.64 gri, <0.50 silik.
 **Detailed (Sprint 8.4):** ≥%75 yeşil canlı, %60-74 sade gri, %40-59 silik gri, <%40 transparan.
 
-**Handikap convention:** `Hnd (2:0)` = ev sahibi +2 gol alır → `hnd_a20`. `Hnd (0:2)` = deplasman +2 gol alır → `hnd_h20`.
+**Handikap convention (güncel, `pattern_stats._hnd_result`):** `Hnd (2:0)` = ev sahibi +2 ile başlar → `hnd_h20`; `(1:0)` → `hnd_h10`; `(0:1)` → `hnd_a10`; `Hnd (0:2)` = deplasman +2 ile başlar → `hnd_a20`.
 
 ---
 
@@ -1563,7 +1563,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Pattern matching self-exclusion:** `find_pattern_b_matches` ve `find_pattern_c_all_periods` fonksiyonları `exclude_match_id` parametresi alır. Bülten maçı analiz edilirken kendi match_id'si geçilmeli — DB'de sonucu varsa kendi kendini analiz etmemesi için. `main.py`'deki `_build_from_db` ve `_do_analyze` bunu otomatik yapar.
 
-- **Handikap convention:** `Hnd(2:0)` → ev sahibi +2 head start alır = deplasman takımının 2 golü "silinir" → `hnd_a20` (`eff_h=h, eff_a=a-2`). `Hnd(0:2)` → deplasman +2 head start alır → `hnd_h20` (`eff_h=h-2, eff_a=a`). Eski kodda labellar takımlara ters bağlanmıştı (Sprint 7'de düzeltildi).
+- **Handikap convention (güncel):** `_hnd_result(h, a, home_start, away_start)` başlangıç skorunu ekler (`eff_h=h+home_start`, `eff_a=a+away_start`). `Hnd(2:0)` → ev +2 → `hnd_h20`; `Hnd(1:0)` → `hnd_h10`; `Hnd(0:1)` → `hnd_a10`; `Hnd(0:2)` → deplasman +2 → `hnd_a20`. `confidence.ts` ve `DetailedStats.tsx` bu eşlemeyi kullanır (Sprint 88'de DetailedStats'taki ters etiketler düzeltildi).
 
 - **Canlı maç tespiti:** Sonuçlar sayfasında `kickoff_time + 110 dakika > now` ise maç muhtemelen hâlâ oynuyor → "Canlı" rozeti gösterilir. `_score_updater` canlı skorları da kaydedebilir (gerçek bitişi takip etmiyor), bu yüzden frontend tarafı tespit yapılıyor.
 

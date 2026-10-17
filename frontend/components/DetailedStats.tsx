@@ -228,20 +228,20 @@ function ArchiveDetailCard({
       {isFT && (
         <Section title={lbl.hnd}>
           <Row items={[
-            { label: "1", sub: "Hnd (2:0)", value: result.hnd_a20_1_pct },
-            { label: "X", sub: "Hnd (2:0)", value: result.hnd_a20_x_pct },
-            { label: "2", sub: "Hnd (2:0)", value: result.hnd_a20_2_pct },
-            { label: "1", sub: "Hnd (1:0)", value: result.hnd_a10_1_pct },
-            { label: "X", sub: "Hnd (1:0)", value: result.hnd_a10_x_pct },
-            { label: "2", sub: "Hnd (1:0)", value: result.hnd_a10_2_pct },
+            { label: "1", sub: "Hnd (2:0)", value: result.hnd_h20_1_pct },
+            { label: "X", sub: "Hnd (2:0)", value: result.hnd_h20_x_pct },
+            { label: "2", sub: "Hnd (2:0)", value: result.hnd_h20_2_pct },
+            { label: "1", sub: "Hnd (1:0)", value: result.hnd_h10_1_pct },
+            { label: "X", sub: "Hnd (1:0)", value: result.hnd_h10_x_pct },
+            { label: "2", sub: "Hnd (1:0)", value: result.hnd_h10_2_pct },
           ]} />
           <Row items={[
-            { label: "1", sub: "Hnd (0:1)", value: result.hnd_h10_1_pct },
-            { label: "X", sub: "Hnd (0:1)", value: result.hnd_h10_x_pct },
-            { label: "2", sub: "Hnd (0:1)", value: result.hnd_h10_2_pct },
-            { label: "1", sub: "Hnd (0:2)", value: result.hnd_h20_1_pct },
-            { label: "X", sub: "Hnd (0:2)", value: result.hnd_h20_x_pct },
-            { label: "2", sub: "Hnd (0:2)", value: result.hnd_h20_2_pct },
+            { label: "1", sub: "Hnd (0:1)", value: result.hnd_a10_1_pct },
+            { label: "X", sub: "Hnd (0:1)", value: result.hnd_a10_x_pct },
+            { label: "2", sub: "Hnd (0:1)", value: result.hnd_a10_2_pct },
+            { label: "1", sub: "Hnd (0:2)", value: result.hnd_a20_1_pct },
+            { label: "X", sub: "Hnd (0:2)", value: result.hnd_a20_x_pct },
+            { label: "2", sub: "Hnd (0:2)", value: result.hnd_a20_2_pct },
           ]} />
         </Section>
       )}
