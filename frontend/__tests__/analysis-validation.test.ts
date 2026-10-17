@@ -46,22 +46,45 @@ it("accepts a skipped match without pattern data", () => {
   expect(validAnalysis({ ...analysis(), skipped: true, skip_reason: "h2h_insufficient", ft_b: null }, "123")).toBe(true);
 });
 
-it("enforces the frozen recommendation rule across fields", () => {
-  const valid = {
-    recommendation_id: "ft-display-v3:result:1", archive: "archive_1+archive_2", market: "result", selection: "1",
-    frequency_pct: 70, match_count: 20,
-    archive_1_frequency_pct: 75, archive_1_match_count: 30,
-    archive_2_frequency_pct: 70, archive_2_match_count: 20,
-    archive_3_frequency_pct: null, archive_3_match_count: null,
-  };
-  expect(validAnalysis({ ...analysis(), ft_recommendations: [valid] }, "123")).toBe(true);
+const validRec = {
+  recommendation_id: "ft-display-v3:result:1", archive: "archive_1+archive_2", market: "result", selection: "1",
+  frequency_pct: 70, match_count: 20,
+  archive_1_frequency_pct: 75, archive_1_match_count: 30,
+  archive_2_frequency_pct: 70, archive_2_match_count: 20,
+  archive_3_frequency_pct: null, archive_3_match_count: null,
+};
+
+it("accepts recommendations with backend minimum sample (10-19 matches)", () => {
+  const data = { ...analysis(), ft_recommendations: [{ ...validRec, match_count: 12 }] };
+  expect(validAnalysis(data, "123")).toBe(true);
+  expect(data.ft_recommendations).toHaveLength(1);
+});
+
+it("drops malformed recommendations instead of rejecting the whole analysis", () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
   for (const invalid of [
-    { ...valid, recommendation_id: "wrong" },
-    { ...valid, frequency_pct: 64 },
-    { ...valid, archive_2_frequency_pct: null, archive_2_match_count: null },
+    { ...validRec, recommendation_id: "wrong" },
+    { ...validRec, frequency_pct: 101 },
+    { ...validRec, archive_2_frequency_pct: null, archive_2_match_count: null },
   ]) {
-    expect(validAnalysis({ ...analysis(), ft_recommendations: [invalid] }, "123")).toBe(false);
+    const data = { ...analysis(), ft_recommendations: [validRec, invalid] as unknown[] };
+    expect(validAnalysis(data, "123")).toBe(true);
+    expect(data.ft_recommendations).toEqual([validRec]);
   }
-  expect(validAnalysis({ ...analysis(), ft_recommendations: [valid, { ...valid, recommendation_id: "ft-display-v3:result:2", selection: "2" }] }, "123")).toBe(false);
+});
+
+it("keeps only the first recommendation per market", () => {
+  const data = {
+    ...analysis(),
+    ft_recommendations: [validRec, { ...validRec, recommendation_id: "ft-display-v3:result:2", selection: "2" }],
+  };
+  expect(validAnalysis(data, "123")).toBe(true);
+  expect(data.ft_recommendations).toEqual([validRec]);
+});
+
+it("accepts future rule versions but rejects unknown formats", () => {
+  const v4 = { ...analysis(), recommendation_rule_version: "ft-display-v4" };
+  expect(validAnalysis(v4, "123")).toBe(true);
+  expect(validAnalysis({ ...analysis(), recommendation_rule_version: "other" }, "123")).toBe(false);
 });
 

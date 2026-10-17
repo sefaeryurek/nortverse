@@ -38,13 +38,16 @@ function trend(value: unknown): boolean {
     && Array.isArray(value.last_n_results) && value.last_n_results.every((v) => ["G", "B", "M"].includes(v));
 }
 
+const RULE_VERSION_PATTERN = /^ft-display-v[2-9]$/;
+
+// Yayın eşikleri (min frekans/örneklem) backend kuralıdır; burada sadece şekil doğrulanır.
 function recommendation(value: unknown, ruleVersion: string): boolean {
   if (!record(value)
     || !text(value.recommendation_id)
     || typeof value.archive !== "string" || !(value.archive as string).startsWith("archive_")
     || !["result", "over_25", "btts"].includes(String(value.market))
-    || !percentage(value.frequency_pct) || (value.frequency_pct as number) < 65
-    || !count(value.match_count) || (value.match_count as number) < 20) return false;
+    || !percentage(value.frequency_pct)
+    || !count(value.match_count) || (value.match_count as number) < 1) return false;
   const allowed: Record<string, string[]> = {
     result: ["1", "X", "2"], over_25: ["under", "over"], btts: ["yes", "no"],
   };
@@ -65,18 +68,31 @@ function recommendation(value: unknown, ruleVersion: string): boolean {
   return true;
 }
 
+/** Geçersiz veya tekrarlanan önerileri ayıklar; tek bozuk öneri tüm analizi düşürmez. */
+function sanitizeRecommendations(items: unknown[], ruleVersion: string): unknown[] {
+  const seenMarkets = new Set<string>();
+  const kept: unknown[] = [];
+  for (const item of items) {
+    if (!recommendation(item, ruleVersion)) {
+      console.warn("Geçersiz öneri ayıklandı:", item);
+      continue;
+    }
+    const market = String((item as Record<string, unknown>).market);
+    if (seenMarkets.has(market)) continue;
+    seenMarkets.add(market);
+    kept.push(item);
+  }
+  return kept.slice(0, 3);
+}
+
 export function validAnalysis(value: unknown, requestedId: string): value is AnalyzeResponse {
-  const ruleVersion = record(value) ? value.recommendation_rule_version : null;
+  if (!record(value)) return false;
+  const ruleVersion = String(value.recommendation_rule_version);
+  if (!RULE_VERSION_PATTERN.test(ruleVersion) || !Array.isArray(value.ft_recommendations)) return false;
+  value.ft_recommendations = sanitizeRecommendations(value.ft_recommendations, ruleVersion);
   return identity(value) && value.match_id === requestedId
     && typeof value.league_code === "string" && typeof value.season === "string"
     && typeof value.skipped === "boolean" && nullableText(value.skip_reason)
-    && ["ft-display-v2", "ft-display-v3"].includes(String(ruleVersion))
-    && Array.isArray(value.ft_recommendations) && value.ft_recommendations.length <= 3
-    && value.ft_recommendations.every((item) => recommendation(item, String(ruleVersion)))
-    && new Set(value.ft_recommendations.map((item) => record(item) ? item.recommendation_id : "")).size
-      === value.ft_recommendations.length
-    && new Set(value.ft_recommendations.map((item) => record(item) ? item.market : "")).size
-      === value.ft_recommendations.length
     && ["ht", "half2", "ft"].every((key) => period(value[key]))
     && ["ht_b", "ht_c", "h2_b", "h2_c", "ft_b", "ft_c"].every((key) => pattern(value[key]))
     && ["ht_d", "h2_d", "ft_d"].every((key) => value[key] === undefined || pattern(value[key]))
