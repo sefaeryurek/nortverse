@@ -1,14 +1,15 @@
 """Katman D — Cosine Similarity Pattern Matching (ARŞİV-3).
 
-Bülten maçının FT ham oran vektörünü (35 boyut) DB'deki tüm geçmiş maçlarla
-cosine similarity ile karşılaştırır ve en benzer Top-N maçı bulur.
+Bülten maçının FT ham oran vektörünü (35 boyut) aynı ligdeki geçmiş maçlarla
+cosine similarity ile karşılaştırır; min_similarity üzerindeki TÜM maçları alır
+(adet sınırı yok).
 
 IDF ağırlıklı: nadir skor oranlarındaki benzerlik daha fazla ayırt edici
 bilgi taşıdığından, her boyut IDF (Inverse Document Frequency) ile ağırlıklandırılır.
 
-Performans:
-    - 9,300+ vektör × 35 boyut = <15ms pure Python (numpy gerekmez)
-    - Candidate cache ile sonraki çağrılar <1ms
+Performans: aday havuzu bir kez yüklenir (1 saat TTL), vektörler IDF ile
+ağırlıklandırılıp normalize edilerek saklanır; her çağrı sadece nokta çarpımı yapar.
+Zaman (as_of) ve lig filtresi bellekte uygulanır → cache her maçta yeniden yüklenmez.
 """
 
 from __future__ import annotations
@@ -16,10 +17,12 @@ from __future__ import annotations
 import logging
 import math
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
+from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 from app.analysis.pattern_stats import PatternResult, compute_stats
 from app.analysis.scores import ALL_SCORES, score_key
 from app.config import ANALYSIS
@@ -28,11 +31,32 @@ from app.db.models import Match
 
 log = logging.getLogger(__name__)
 
-_candidate_cache: list[tuple] | None = None
-_candidate_cache_at: float = 0.0
-_candidate_cache_as_of: datetime | None = None
-_idf_weights: list[float] | None = None
 _CACHE_TTL = 3600.0
+
+
+@dataclass(frozen=True)
+class _Candidate:
+    match_id: str
+    unit_vec: tuple[float, ...]
+    league_name: str | None
+    kickoff_time: datetime
+    actual_ft_home: int | None
+    actual_ft_away: int | None
+    actual_ht_home: int | None
+    actual_ht_away: int | None
+    actual_h2_home: int | None
+    actual_h2_away: int | None
+
+
+@dataclass(frozen=True)
+class _Pool:
+    candidates: list[_Candidate]
+    by_league: dict[str | None, list[_Candidate]]
+    idf: list[float]
+    loaded_at: float
+
+
+_pool: _Pool | None = None
 
 
 def _to_vector(ratios: dict[str, float]) -> list[float]:
@@ -42,7 +66,7 @@ def _to_vector(ratios: dict[str, float]) -> list[float]:
 def _compute_idf_weights(candidates: list[tuple]) -> list[float]:
     """Her skor boyutu için IDF ağırlığı hesaplar.
 
-    IDF = log(N / (1 + df_i)) burada df_i = o boyutta sıfırdan farklı değere
+    IDF = log(1 + N / (1 + df_i)) burada df_i = o boyutta sıfırdan farklı değere
     sahip maç sayısı. Nadir skorlar yüksek ağırlık alır.
     """
     n = len(candidates)
@@ -77,199 +101,145 @@ def cosine_similarity(a: list[float], b: list[float], weights: list[float] | Non
     return dot / (norm_a * norm_b)
 
 
-async def _load_candidates(
-    exclude_match_id: str | None = None,
-    as_of: datetime | None = None,
-) -> list[tuple]:
-    global _candidate_cache, _candidate_cache_at, _candidate_cache_as_of, _idf_weights
+def _unit(vec: list[float], weights: list[float]) -> tuple[float, ...] | None:
+    weighted = [x * w for x, w in zip(vec, weights)]
+    norm = math.sqrt(sum(x * x for x in weighted))
+    if norm == 0.0:
+        return None
+    return tuple(x / norm for x in weighted)
 
-    now = time.monotonic()
-    cache_valid = (
-        _candidate_cache is not None
-        and (now - _candidate_cache_at) < _CACHE_TTL
-        and _candidate_cache_as_of == as_of
+
+def _build_pool(rows: list[tuple]) -> _Pool:
+    idf = _compute_idf_weights(rows)
+    candidates: list[_Candidate] = []
+    for r in rows:
+        if not isinstance(r[1], dict) or r[9] is None:
+            continue
+        unit = _unit(_to_vector(r[1]), idf)
+        if unit is None:
+            continue
+        kickoff = r[9] if r[9].tzinfo else r[9].replace(tzinfo=timezone.utc)
+        candidates.append(_Candidate(
+            match_id=str(r[0]), unit_vec=unit, league_name=r[8], kickoff_time=kickoff,
+            actual_ft_home=r[2], actual_ft_away=r[3],
+            actual_ht_home=r[4], actual_ht_away=r[5],
+            actual_h2_home=r[6], actual_h2_away=r[7],
+        ))
+    by_league: dict[str | None, list[_Candidate]] = {}
+    for c in candidates:
+        by_league.setdefault(c.league_name, []).append(c)
+    return _Pool(candidates=candidates, by_league=by_league, idf=idf, loaded_at=time.monotonic())
+
+
+async def _load_pool() -> _Pool:
+    """Sonucu bilinen tüm aktif maçları bir kez yükler (as_of'tan bağımsız)."""
+    global _pool
+    if _pool is not None and time.monotonic() - _pool.loaded_at < _CACHE_TTL:
+        return _pool
+    known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
+    stmt = select(
+        Match.match_id,
+        Match.ft_all_ratios,
+        Match.actual_ft_home, Match.actual_ft_away,
+        Match.actual_ht_home, Match.actual_ht_away,
+        Match.actual_h2_home, Match.actual_h2_away,
+        Match.league_name,
+        Match.kickoff_time,
+    ).where(
+        Match.ft_all_ratios.isnot(None),
+        Match.actual_ft_home.isnot(None),
+        Match.actual_ft_away.isnot(None),
+        Match.deleted_at.is_(None),
+        Match.kickoff_time.isnot(None),
+        known_at > Match.kickoff_time,
     )
-    if cache_valid:
-        rows = _candidate_cache
-    else:
-        async with get_session() as session:
-            filters = [
-                Match.ft_all_ratios.isnot(None),
-                Match.actual_ft_home.isnot(None),
-                Match.actual_ft_away.isnot(None),
-                Match.deleted_at.is_(None),
-                Match.analyzed_at.is_not(None),
-            ]
-            if as_of is not None:
-                known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
-                filters.extend([
-                    Match.kickoff_time < as_of,
-                    known_at > Match.kickoff_time,
-                    known_at <= as_of,
-                    Match.analyzed_at < Match.kickoff_time,
-                ])
-            stmt = select(
-                Match.match_id,
-                Match.ft_all_ratios,
-                Match.actual_ft_home, Match.actual_ft_away,
-                Match.actual_ht_home, Match.actual_ht_away,
-                Match.actual_h2_home, Match.actual_h2_away,
-                Match.league_name,
-                Match.kickoff_time,
-            ).where(*filters)
-            rows = list((await session.execute(stmt)).all())
-        _candidate_cache = rows
-        _candidate_cache_at = now
-        _candidate_cache_as_of = as_of
-        _idf_weights = _compute_idf_weights(rows)
-        log.info("Pattern D candidate cache yüklendi: %d maç, IDF ağırlıkları hesaplandı", len(rows))
+    async with get_session() as session:
+        rows = list((await session.execute(stmt)).all())
+    pool = _build_pool(rows)
+    _pool = pool
+    log.info("Pattern D aday havuzu yüklendi: %d maç", len(pool.candidates))
+    return pool
 
-    if exclude_match_id:
-        rows = [r for r in rows if r[0] != exclude_match_id]
-    return rows
+
+class _MatchedRow:
+    """compute_stats için satır — similarity, liste sırası için taşınır."""
+
+    __slots__ = (
+        "match_id", "similarity",
+        "actual_ft_home", "actual_ft_away",
+        "actual_ht_home", "actual_ht_away",
+        "actual_h2_home", "actual_h2_away",
+    )
+
+    def __init__(self, c: _Candidate, similarity: float):
+        self.match_id = c.match_id
+        self.similarity = round(similarity, 4)
+        self.actual_ft_home = c.actual_ft_home
+        self.actual_ft_away = c.actual_ft_away
+        self.actual_ht_home = c.actual_ht_home
+        self.actual_ht_away = c.actual_ht_away
+        self.actual_h2_home = c.actual_h2_home
+        self.actual_h2_away = c.actual_h2_away
 
 
 async def find_pattern_d_all_periods(
     ft_ratios: dict[str, float],
-    top_n: int = 20,
-    min_similarity: float = 0.85,
+    min_similarity: float = 0.97,
     exclude_match_id: str | None = None,
     as_of: datetime | None = None,
     league_name: str | None = None,
 ) -> tuple[PatternResult | None, PatternResult | None, PatternResult | None]:
-    """FT oran vektöründe cosine similarity ile en benzer Top-N maçı bulur.
+    """FT oran vektöründe benzerliği min_similarity üzerindeki tüm maçları bulur.
 
     Args:
         ft_ratios: 35 skorun oranları (score_key -> float)
-        top_n: Kaç aday seçilecek
-        min_similarity: Minimum cosine similarity eşiği
+        min_similarity: Minimum cosine similarity eşiği (adet sınırı yok)
         exclude_match_id: Analiz edilen maçın kendisi (self-exclusion)
-        as_of: Temporal filtre
-        league_name: Lig filtresi — önce aynı lig, yetersizse tüm liglere fallback
+        as_of: Sadece bu andan önce sonucu bilinen maçlar aday olur
+        league_name: Sadece aynı lig (başka lige düşülmez); None ise tüm ligler
 
     Returns:
-        (ht_result, h2_result, ft_result) — yeterli benzer maç yoksa None
+        (ht_result, h2_result, ft_result) — benzer maç yoksa None
     """
     if not ft_ratios:
         return None, None, None
-    if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
+    if as_of is None:
+        as_of = datetime.now(timezone.utc)
+    if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("as_of must be timezone-aware")
 
-    target_vec = _to_vector(ft_ratios)
-    if all(v == 0.0 for v in target_vec):
+    pool = await _load_pool()
+    target = _unit(_to_vector(ft_ratios), pool.idf)
+    if target is None:
         return None, None, None
 
-    candidates = await _load_candidates(exclude_match_id, as_of)
-    if not candidates:
-        return None, None, None
-
-    idf = _idf_weights
+    cutoff = as_of - RESULT_KNOWN_DELAY
+    candidates = pool.by_league.get(league_name, []) if league_name else pool.candidates
     half_life = ANALYSIS.temporal_decay_half_life_years
-    ref_time = as_of or datetime.now(timezone.utc)
-    _MIN_LEAGUE_MATCHES = 5
 
-    def _temporal_weight(kickoff: datetime | None) -> float:
-        if kickoff is None or half_life <= 0:
-            return 1.0
-        kt = kickoff if kickoff.tzinfo else kickoff.replace(tzinfo=timezone.utc)
-        age_years = (ref_time - kt).total_seconds() / (365.25 * 86400)
-        if age_years <= 0:
-            return 1.0
-        return 0.5 ** (age_years / half_life)
+    scored: list[tuple[float, float, _Candidate]] = []
+    for c in candidates:
+        if c.kickoff_time > cutoff or c.match_id == exclude_match_id:
+            continue
+        sim = sum(x * y for x, y in zip(target, c.unit_vec))
+        if sim < min_similarity:
+            continue
+        age_years = (as_of - c.kickoff_time).total_seconds() / (365.25 * 86400)
+        tw = 0.5 ** (max(0.0, age_years) / half_life) if half_life > 0 else 1.0
+        scored.append((sim, sim * tw, c))
 
-    def _score_candidates(rows: list[tuple]) -> list[tuple[float, tuple]]:
-        scored: list[tuple[float, tuple]] = []
-        for row in rows:
-            cand_ratios = row[1]
-            if not isinstance(cand_ratios, dict):
-                continue
-            cand_vec = _to_vector(cand_ratios)
-            sim = cosine_similarity(target_vec, cand_vec, idf)
-            if sim >= min_similarity:
-                tw = _temporal_weight(row[9])
-                scored.append((sim * tw, row))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return scored[:top_n]
-
-    if league_name:
-        league_candidates = [r for r in candidates if r[8] == league_name]
-        top = _score_candidates(league_candidates)
-        if len(top) < _MIN_LEAGUE_MATCHES:
-            log.info(
-                "Pattern D: aynı lig %d eşleşme (min %d) — tüm liglere fallback",
-                len(top), _MIN_LEAGUE_MATCHES,
-            )
-            top = _score_candidates(candidates)
-    else:
-        top = _score_candidates(candidates)
-
-    if not top:
-        log.info("Pattern D: min_similarity=%.2f üzerinde eşleşme yok", min_similarity)
+    if not scored:
+        log.debug("Pattern D: min_similarity=%.2f üzerinde eşleşme yok", min_similarity)
         return None, None, None
 
-    class _Row:
-        __slots__ = (
-            "actual_ft_home", "actual_ft_away",
-            "actual_ht_home", "actual_ht_away",
-            "actual_h2_home", "actual_h2_away",
-        )
-        def __init__(self, r: tuple):
-            self.actual_ft_home = r[2]
-            self.actual_ft_away = r[3]
-            self.actual_ht_home = r[4]
-            self.actual_ht_away = r[5]
-            self.actual_h2_home = r[6]
-            self.actual_h2_away = r[7]
-
-    matched_rows = [_Row(r) for _, r in top]
-    sim_weights = [s for s, _ in top]
-
-    log.info(
-        "Pattern D: %d eşleşme (top sim=%.3f, min sim=%.3f)",
-        len(matched_rows),
-        top[0][0] if top else 0,
-        top[-1][0] if top else 0,
-    )
-
-    results = [compute_stats(matched_rows, period, weights=sim_weights) for period in ("ht", "h2", "ft")]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    rows = [_MatchedRow(c, sim) for sim, _, c in scored]
+    weights = [w for _, w, _ in scored]
+    log.debug("Pattern D: %d eşleşme (en yüksek benzerlik=%.3f)", len(rows), scored[0][0])
+    results = [compute_stats(rows, period, weights=weights) for period in ("ht", "h2", "ft")]
     return tuple(results)
 
 
-async def find_matched_ids(
-    ft_ratios: dict[str, float],
-    top_n: int = 20,
-    min_similarity: float = 0.85,
-    exclude_match_id: str | None = None,
-    league_name: str | None = None,
-) -> list[tuple[str, float]]:
-    """En benzer maçların (match_id, similarity) listesini döndürür."""
-    if not ft_ratios:
-        return []
-
-    target_vec = _to_vector(ft_ratios)
-    if all(v == 0.0 for v in target_vec):
-        return []
-
-    candidates = await _load_candidates(exclude_match_id)
-    if league_name:
-        candidates = [r for r in candidates if r[8] == league_name]
-    weights = _idf_weights
-    scored: list[tuple[float, str]] = []
-    for row in candidates:
-        cand_ratios = row[1]
-        if not isinstance(cand_ratios, dict):
-            continue
-        sim = cosine_similarity(target_vec, _to_vector(cand_ratios), weights)
-        if sim >= min_similarity:
-            scored.append((sim, row[0]))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [(mid, sim) for sim, mid in scored[:top_n]]
-
-
 def invalidate_cache() -> None:
-    global _candidate_cache, _candidate_cache_at, _candidate_cache_as_of, _idf_weights
-    _candidate_cache = None
-    _candidate_cache_at = 0.0
-    _candidate_cache_as_of = None
-    _idf_weights = None
+    global _pool
+    _pool = None

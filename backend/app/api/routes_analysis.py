@@ -6,16 +6,10 @@ import asyncio
 import collections
 import logging
 import time
-from collections import OrderedDict
+from typing import Literal
 
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, HTTPException, Path, Request
-from sqlalchemy import Float, cast, func, select
-from sqlalchemy.dialects.postgresql import JSONB
-
-from app.analysis.pattern_d import find_matched_ids
-from app.config import ANALYSIS
+from fastapi import APIRouter, HTTPException, Path, Query, Request
+from sqlalchemy import select
 
 from app.api.schemas import AnalyzeResponse, MatchSummary
 from app.api.services import (
@@ -64,11 +58,6 @@ def _check_rate(ip: str, limit: int) -> None:
         stale_keys = [k for k, v in _rate_buckets.items() if not v or v[-1] < now - _RATE_WINDOW]
         for k in stale_keys:
             del _rate_buckets[k]
-
-_matched_cache: OrderedDict[str, tuple[float, dict]] = OrderedDict()
-_MATCHED_CACHE_TTL = 600.0
-_MATCHED_CACHE_MAX = 200
-
 
 @router.get("/api/analyze/{match_id}", response_model=AnalyzeResponse)
 async def get_analyze(
@@ -151,43 +140,36 @@ async def get_match(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> MatchSumm
 @router.get("/api/analyze/{match_id}/matched-matches")
 async def get_matched_matches(
     match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
+    period: Literal["ht", "h2", "ft"] = Query("ft"),
 ) -> dict:
-    """Analiz edilen maçın arşivde eşleşen maçlarını döndürür (B ve C)."""
-    cached = _matched_cache.get(match_id)
-    if cached and time.monotonic() - cached[0] < _MATCHED_CACHE_TTL:
-        _matched_cache.move_to_end(match_id)
-        return cached[1]
+    """Ana Pazar Özeti'ndeki sayıların dayandığı arşiv maçlarını döndürür.
 
-    now = datetime.now(timezone.utc)
-
+    Liste, pattern hesaplanırken saklanan matched_ids'ten okunur → istatistik
+    ile liste her periyotta birebir aynı maç kümesidir.
+    """
     async with get_session() as session:
         target = (
             await session.execute(
                 select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
             )
         ).scalar_one_or_none()
+        if not target:
+            raise HTTPException(404, "Maç bulunamadı")
 
-    if not target:
-        raise HTTPException(404, "Maç bulunamadı")
-
-    known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
-    base_filters = [
-        Match.match_id != match_id,
-        Match.deleted_at.is_(None),
-        Match.actual_ft_home.isnot(None),
-        Match.actual_ft_away.isnot(None),
-        Match.kickoff_time < now,
-        known_at > Match.kickoff_time,
-        known_at <= now,
-        Match.analyzed_at.is_not(None),
-        Match.analyzed_at < Match.kickoff_time,
-    ]
-    detail_cols = [
-        Match.match_id, Match.home_team, Match.away_team, Match.league_code,
-        Match.actual_ht_home, Match.actual_ht_away,
-        Match.actual_ft_home, Match.actual_ft_away,
-        Match.kickoff_time,
-    ]
+        blobs = {f: getattr(target, f"pattern_{period}_{f}") or {} for f in ("b", "c", "d")}
+        ids_by_family = {f: [str(i) for i in blob.get("matched_ids") or []] for f, blob in blobs.items()}
+        all_ids = {mid for ids in ids_by_family.values() for mid in ids}
+        details = {}
+        if all_ids:
+            rows = (await session.execute(
+                select(
+                    Match.match_id, Match.home_team, Match.away_team, Match.league_code,
+                    Match.actual_ht_home, Match.actual_ht_away,
+                    Match.actual_ft_home, Match.actual_ft_away,
+                    Match.kickoff_time,
+                ).where(Match.match_id.in_(all_ids))
+            )).all()
+            details = {r.match_id: r for r in rows}
 
     def _row_to_dict(r) -> dict:
         ht_h, ht_a = r.actual_ht_home, r.actual_ht_away
@@ -205,99 +187,22 @@ async def get_matched_matches(
             "kickoff_time": r.kickoff_time.isoformat() if r.kickoff_time else None,
         }
 
-    archive_b: list[dict] = []
-    archive_c: list[dict] = []
-    archive_d: list[dict] = []
+    def _family_list(family: str) -> list[dict]:
+        sims = blobs[family].get("matched_sims") or []
+        out = []
+        for idx, mid in enumerate(ids_by_family[family]):
+            r = details.get(mid)
+            if r is None:
+                continue
+            item = _row_to_dict(r)
+            if family == "d" and idx < len(sims):
+                item["similarity"] = sims[idx]
+            out.append(item)
+        return out
 
-    league = target.league_name
-
-    async with get_session() as session:
-        if target.ft_scores_1 and target.ft_scores_x and target.ft_scores_2:
-            b_filters = [
-                *base_filters,
-                Match.ft_scores_1.cast(JSONB) == cast(target.ft_scores_1, JSONB),
-                Match.ft_scores_x.cast(JSONB) == cast(target.ft_scores_x, JSONB),
-                Match.ft_scores_2.cast(JSONB) == cast(target.ft_scores_2, JSONB),
-            ]
-            if league:
-                b_filters.append(Match.league_name == league)
-            rows = (await session.execute(select(*detail_cols).where(*b_filters).limit(50))).all()
-            if len(rows) < 5 and league:
-                b_filters_all = [
-                    *base_filters,
-                    Match.ft_scores_1.cast(JSONB) == cast(target.ft_scores_1, JSONB),
-                    Match.ft_scores_x.cast(JSONB) == cast(target.ft_scores_x, JSONB),
-                    Match.ft_scores_2.cast(JSONB) == cast(target.ft_scores_2, JSONB),
-                ]
-                rows = (await session.execute(select(*detail_cols).where(*b_filters_all).limit(50))).all()
-            archive_b = [_row_to_dict(r) for r in rows]
-
-        if target.ft_all_ratios:
-            tol = ANALYSIS.pattern_c_tolerance
-            max_tol = ANALYSIS.pattern_c_max_tolerance
-            tol_step = ANALYSIS.pattern_c_tolerance_step
-            while tol <= max_tol + 1e-9:
-                c_filters = list(base_filters)
-                if league:
-                    c_filters.append(Match.league_name == league)
-                if tol == 0.0:
-                    c_filters.append(
-                        cast(Match.ft_all_ratios, JSONB) == cast(target.ft_all_ratios, JSONB),
-                    )
-                else:
-                    c_filters.append(Match.ft_all_ratios.isnot(None))
-                    for key, target_val in target.ft_all_ratios.items():
-                        ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
-                        c_filters.append(ratio_expr.between(target_val - tol, target_val + tol))
-                rows = (await session.execute(select(*detail_cols).where(*c_filters).limit(50))).all()
-                if len(rows) >= ANALYSIS.pattern_c_adaptive_min:
-                    break
-                tol += tol_step
-            if len(rows) < ANALYSIS.pattern_c_adaptive_min and league:
-                tol = ANALYSIS.pattern_c_tolerance
-                while tol <= max_tol + 1e-9:
-                    c_all = list(base_filters)
-                    if tol == 0.0:
-                        c_all.append(cast(Match.ft_all_ratios, JSONB) == cast(target.ft_all_ratios, JSONB))
-                    else:
-                        c_all.append(Match.ft_all_ratios.isnot(None))
-                        for key, target_val in target.ft_all_ratios.items():
-                            ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
-                            c_all.append(ratio_expr.between(target_val - tol, target_val + tol))
-                    rows = (await session.execute(select(*detail_cols).where(*c_all).limit(50))).all()
-                    if len(rows) >= ANALYSIS.pattern_c_adaptive_min:
-                        break
-                    tol += tol_step
-            archive_c = [_row_to_dict(r) for r in rows]
-
-        if target.ft_all_ratios:
-            d_matched = await find_matched_ids(
-                target.ft_all_ratios,
-                top_n=ANALYSIS.pattern_d_top_n,
-                min_similarity=ANALYSIS.pattern_d_min_similarity,
-                exclude_match_id=match_id,
-                league_name=league,
-            )
-            if d_matched:
-                d_ids = [mid for mid, _ in d_matched]
-                sim_map = {mid: sim for mid, sim in d_matched}
-                d_rows = (await session.execute(
-                    select(*detail_cols).where(
-                        Match.match_id.in_(d_ids),
-                        Match.deleted_at.is_(None),
-                    )
-                )).all()
-                for r in d_rows:
-                    d = _row_to_dict(r)
-                    d["similarity"] = round(sim_map.get(r.match_id, 0), 4)
-                    archive_d.append(d)
-                archive_d.sort(key=lambda x: x.get("similarity", 0), reverse=True)
-
-    result = {"archive_b": archive_b, "archive_c": archive_c, "archive_d": archive_d}
-
-    _matched_cache[match_id] = (time.monotonic(), result)
-    _matched_cache.move_to_end(match_id)
-    while len(_matched_cache) > _MATCHED_CACHE_MAX:
-        _matched_cache.popitem(last=False)
-
-    return result
+    return {
+        "period": period,
+        "archive_b": _family_list("b"),
+        "archive_c": _family_list("c"),
+        "archive_d": _family_list("d"),
+    }

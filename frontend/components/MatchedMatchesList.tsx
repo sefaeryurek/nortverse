@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { getMatchedMatches } from "@/lib/api";
 import type { MatchedMatchesResponse, MatchedMatch } from "@/lib/api";
 import { useLocale } from "@/lib/locale-context";
+import type { Period } from "@/lib/labels";
 
 interface Props {
   matchId: string;
+  period?: Period;
   hasPatternB: boolean;
   hasPatternC: boolean;
   hasPatternD?: boolean;
@@ -70,7 +72,7 @@ function MatchRow({ match, showSimilarity, htLabel, h2Label, ftLabel }: { match:
   );
 }
 
-export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, hasPatternD }: Props) {
+export default function MatchedMatchesList({ matchId, period = "ft", hasPatternB, hasPatternC, hasPatternD }: Props) {
   const { t } = useLocale();
   const [data, setData] = useState<MatchedMatchesResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -80,19 +82,19 @@ export default function MatchedMatchesList({ matchId, hasPatternB, hasPatternC, 
   useEffect(() => {
     setData(null);
     setError(false);
-  }, [matchId]);
+  }, [matchId, period]);
 
   useEffect(() => {
     if (!open || data) return;
     let cancelled = false;
     setLoading(true);
     setError(false);
-    getMatchedMatches(matchId)
+    getMatchedMatches(matchId, period)
       .then((d) => { if (!cancelled) setData(d); })
       .catch((err) => { console.error("Matched matches fetch failed:", err); if (!cancelled) setError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [open, matchId, data]);
+  }, [open, matchId, period, data]);
 
   if (!hasPatternB && !hasPatternC && !hasPatternD) return null;
 

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 
 class PatternResult(BaseModel):
+    # Eşleşen arşiv maçları — API yanıtına girmez, persist JSONB'ye ayrıca yazar.
+    _matched_ids: list[str] = PrivateAttr(default_factory=list)
+    _matched_sims: list[float] = PrivateAttr(default_factory=list)
+
     match_count: int
 
     # Maç Sonucu
@@ -531,4 +535,7 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
         result.iy_ms_2x_pct = fp(iy_ms_ctr.get("2x", 0.0))
         result.iy_ms_22_pct = fp(iy_ms_ctr.get("22", 0.0))
 
+    # Liste ile match_count aynı geçerli satırlardan üretilir → asla ayrışmaz.
+    result._matched_ids = [str(r.match_id) for r, _, _ in valid if getattr(r, "match_id", None) is not None]
+    result._matched_sims = [float(r.similarity) for r, _, _ in valid if getattr(r, "similarity", None) is not None]
     return result

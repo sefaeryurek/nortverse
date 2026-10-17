@@ -91,15 +91,20 @@ export interface MatchedMatch {
 }
 
 export interface MatchedMatchesResponse {
+  period?: "ht" | "h2" | "ft";
   archive_b: MatchedMatch[];
   archive_c: MatchedMatch[];
   archive_d?: MatchedMatch[];
 }
 
-export async function getMatchedMatches(matchId: string): Promise<MatchedMatchesResponse> {
-  return request<MatchedMatchesResponse>(`/api/analyze/${encodeURIComponent(matchId)}/matched-matches`, {
-    cache: "no-store",
-  });
+export async function getMatchedMatches(
+  matchId: string,
+  period: "ht" | "h2" | "ft" = "ft",
+): Promise<MatchedMatchesResponse> {
+  return request<MatchedMatchesResponse>(
+    `/api/analyze/${encodeURIComponent(matchId)}/matched-matches?${new URLSearchParams({ period })}`,
+    { cache: "no-store" },
+  );
 }
 
 export async function getEvaluation(date: string): Promise<DailyEvaluation> {

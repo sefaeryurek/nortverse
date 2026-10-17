@@ -67,6 +67,8 @@ python -m app.cli.main repair-archive                # Sorunlu kayıtları tespi
 python -m app.cli.main repair-archive --apply        # Sorunlu kayıtları soft-delete et
 python -m app.cli.main normalize-leagues             # Lig adlarını normalize et (dry-run)
 python -m app.cli.main normalize-leagues --apply     # Lig adlarını kanonik forma çevir
+python -m app.cli.main recompute-patterns --stale-only            # Sadece ayarı eskimiş pattern'leri yenile (devam edebilir)
+python -m app.cli.main recompute-patterns --stale-only --family d # Sadece A3 (Pattern D)
 
 # Backtest (Sprint 76)
 python -m app.cli.main backtest --from 2025-01-01 --to 2025-12-31  # tarih aralığında strateji testi
@@ -1477,6 +1479,15 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Test güncellemeleri:** `bulten-row.test.tsx` (t + dateLocale props), `day-tabs-render.test.tsx` (aria-label güncelleme), `matched-matches-list.test.tsx` (LocaleProvider wrapper), `live-match-badge.test.tsx` (LocaleProvider wrapper)
 - **Sonuç:** 936 backend + 288 frontend + 28 E2E = **1252 toplam test** (tümü yeşil)
 
+### Sprint 87 — TAMAMLANDI ✅ (Arşiv Havuzu + Katı Lig + Tek Kaynak Eşleşme Listesi + Ayar Parmak İzi)
+- **Arşiv havuza katıldı:** A1/A2/A3 aday kuralındaki `analyzed_at < kickoff_time` kaldırıldı (toplu çekilen ~24K arşiv maçı hiç aday olamıyordu; ENG PR havuzda sadece 4 maçtı). Yeni kural `pattern_b.candidate_filters(as_of)`: `kickoff_time <= as_of - 3 saat` + sonuç kickoff'tan sonra kaydedilmiş. Oranlar `history.select_history(before=kickoff)` ile zaten maç öncesi veriden → sızıntı yok.
+- **`pattern_as_of(analyzed_at, kickoff)`:** maçtan sonra analiz edilen (arşiv) maçlar kickoff anındaki arşivle hesaplanır → backtest/değerlendirmede gelecek bilgisi yok. `pattern_computed_at` = kullanılan as_of.
+- **Sadece aynı lig:** B/C/D'de tüm liglere fallback kaldırıldı. C önce aynı ligde toleransı genişletir (0.5→1.0).
+- **A3:** adet sınırı (`pattern_d_top_n`) kaldırıldı, sadece `min_similarity=0.97`. Aday havuzu bir kez yüklenip vektörler önceden normalize edilir (eskiden her maçta yeniden yükleniyordu) → recompute ~3x hızlı.
+- **Tek kaynak:** pattern JSONB'lerine `matched_ids` (+ D için `matched_sims`) yazılır; `/api/analyze/{id}/matched-matches?period=ht|h2|ft` kendi sorgusunu yapmaz, bunları okur → Ana Pazar Özeti ile liste her periyotta birebir aynı. Frontend `MatchedMatchesList` aktif periyodu geçirir.
+- **Ayar parmak izi:** migration `u5h8c3d9f907` — `pattern_b/c/d_hash` kolonları; `persist.pattern_hashes()`. Ayar değişince sadece ilgili aile bayat sayılır; yaklaşan maçlar okunurken otomatik yenilenir, bitmiş maçlar saklı değeri korur. `recompute-patterns --stale-only [--family d]` sadece bayatları işler, kesilirse kaldığı yerden devam eder. Algoritma değişince `persist.PATTERN_ALGO_VERSION` artırılır.
+- Pattern JSONB kolonları `none_as_null=True` (eşleşme yok = SQL NULL, JSON 'null' değil).
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1654,7 +1665,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **volumeWeight sadeleştirme (Sprint 53e, öncesi Sprint 43):** 100+ decay kaldırıldı — match cap (150) ve lig filtresi sinyal seyrelmesini zaten önlediği için. `volumeWeight = Math.min(1.0, Math.log(matchCount + 1) / Math.log(30))` — 30+ maçta 1.0 plateau.
 
-- **Lig filtresi Pattern B/C/D (Sprint 53a):** Tüm pattern matching fonksiyonları `league_name` parametresi alır. Önce aynı lig aranır; eşleşme < min_matches ise tüm liglere fallback. Cross-league kirlilik (Premier League ↔ Egyptian Premier League) engellenir.
+- **Lig filtresi Pattern B/C/D (Sprint 53a → Sprint 87 katı):** Tüm pattern matching fonksiyonları `league_name` parametresi alır ve SADECE aynı ligde arar (Sprint 87'de tüm liglere fallback kaldırıldı). `persist.compute_all_patterns` lig adını `canonical_league_name` ile normalize eder.
 
 - **Match cap Pattern B/C (Sprint 53b):** SQL'e `ORDER BY Match.kickoff_time DESC LIMIT :cap` eklendi. Config: `PATTERN_B_MATCH_CAP` (default 150), `PATTERN_C_MATCH_CAP` (default 150). En yakın N maç seçilir → güncellik korunur, popülasyon ortalamasına kayma engellenir.
 

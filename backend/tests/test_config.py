@@ -230,18 +230,6 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.pattern_c_match_cap == 100
 
-    def test_default_pattern_d_top_n(self, monkeypatch):
-        monkeypatch.delenv("PATTERN_D_TOP_N", raising=False)
-        from app.config import AnalysisConfig
-        cfg = AnalysisConfig()
-        assert cfg.pattern_d_top_n == 15
-
-    def test_override_pattern_d_top_n(self, monkeypatch):
-        monkeypatch.setenv("PATTERN_D_TOP_N", "50")
-        from app.config import AnalysisConfig
-        cfg = AnalysisConfig()
-        assert cfg.pattern_d_top_n == 50
-
     def test_default_pattern_d_min_similarity(self, monkeypatch):
         monkeypatch.delenv("PATTERN_D_MIN_SIMILARITY", raising=False)
         from app.config import AnalysisConfig

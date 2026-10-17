@@ -70,7 +70,7 @@ async def test_changed_analysis_does_not_return_stale_backfill(monkeypatch):
     with pytest.raises(HTTPException) as error:
         await svc.build_from_db(row)
     assert error.value.status_code == 409
-    write.assert_awaited_once_with("123", {}, expected_analyzed_at=version)
+    write.assert_awaited_once_with("123", {}, expected_analyzed_at=version, computed_as_of=version)
 
 
 @pytest.mark.asyncio

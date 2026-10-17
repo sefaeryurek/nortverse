@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from sqlalchemy import cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 
-from app.config import ANALYSIS, ISTANBUL_TZ
+from app.config import ISTANBUL_TZ
 from app.api.schemas import AnalyzeResponse, PeriodOut
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league
@@ -25,10 +25,13 @@ from app.analysis.pattern_stats import PatternResult
 from app.analysis.snapshots import RULE_VERSION, capture_v3_recommendations
 
 
-from app.analysis.pattern_d import find_pattern_d_all_periods
 from app.analysis.persist import (
+    FAMILIES,
     StalePatternWrite,
     compute_all_patterns,
+    pattern_as_of,
+    pattern_keys,
+    stale_families,
     update_match_patterns,
 )
 from app.analysis.skip_cache import get_recent_skip, save_skip
@@ -264,62 +267,40 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
     ft_ratios = row.ft_all_ratios or {}
     mid = row.match_id
 
-    if row.pattern_computed_at is not None:
-        log.debug("Hızlı yol — saklı pattern'ler kullanıldı: %s", mid)
-        ht_b, ht_c = _pat(row.pattern_ht_b), _pat(row.pattern_ht_c)
-        h2_b, h2_c = _pat(row.pattern_h2_b), _pat(row.pattern_h2_c)
-        ft_b, ft_c = _pat(row.pattern_ft_b), _pat(row.pattern_ft_c)
-        ht_d, h2_d, ft_d = _pat(row.pattern_ht_d), _pat(row.pattern_h2_d), _pat(row.pattern_ft_d)
-        patterns = {
-            "pattern_ht_b": row.pattern_ht_b, "pattern_ht_c": row.pattern_ht_c,
-            "pattern_h2_b": row.pattern_h2_b, "pattern_h2_c": row.pattern_h2_c,
-            "pattern_ft_b": row.pattern_ft_b, "pattern_ft_c": row.pattern_ft_c,
-            "pattern_ht_d": row.pattern_ht_d, "pattern_h2_d": row.pattern_h2_d,
-            "pattern_ft_d": row.pattern_ft_d,
-        }
-        if ft_d is None and ft_ratios:
-            log.info("Pattern D eksik, lazy backfill: %s", mid)
-            try:
-                _ht_d, _h2_d, _ft_d = await find_pattern_d_all_periods(
-                    ft_ratios,
-                    top_n=ANALYSIS.pattern_d_top_n,
-                    min_similarity=ANALYSIS.pattern_d_min_similarity,
-                    exclude_match_id=mid,
-                    as_of=row.analyzed_at,
-                    league_name=row.league_name,
-                )
-                patterns["pattern_ht_d"] = _ht_d.model_dump() if _ht_d else None
-                patterns["pattern_h2_d"] = _h2_d.model_dump() if _h2_d else None
-                patterns["pattern_ft_d"] = _ft_d.model_dump() if _ft_d else None
-                ht_d, h2_d, ft_d = _ht_d, _h2_d, _ft_d
-                try:
-                    await update_match_patterns(mid, patterns, expected_analyzed_at=row.analyzed_at)
-                except Exception:
-                    log.warning("Pattern D lazy backfill kaydedilemedi [%s]", mid)
-            except Exception:
-                log.warning("Pattern D lazy backfill hesaplanamadı [%s]", mid, exc_info=True)
-    else:
-        log.info("Yavaş yol — pattern durumu bilinmiyor, hesaplanıyor: %s", mid)
-        patterns = await compute_all_patterns(
+    patterns: dict[str, dict | None] = {
+        key: getattr(row, key)
+        for family in FAMILIES for key in pattern_keys(family)
+    }
+    # Hiç hesaplanmamış maç her zaman hesaplanır; ayarı eskimiş aileler sadece
+    # maç başlamadan yenilenir (bitmiş maçın tahmin anındaki sonucu sabit kalır).
+    stale = stale_families(row)
+    upcoming = row.kickoff_time is not None and row.kickoff_time > datetime.now(timezone.utc)
+    to_compute = stale if (row.pattern_computed_at is None or upcoming) else []
+    if to_compute:
+        log.info("Pattern hesaplanıyor %s: %s", to_compute, mid)
+        as_of = pattern_as_of(row.analyzed_at, row.kickoff_time)
+        fresh = await compute_all_patterns(
             match_id=mid,
             ht_scores=(ht_s1, ht_sx, ht_s2),
             h2_scores=(h2_s1, h2_sx, h2_s2),
             ft_scores=(ft_s1, ft_sx, ft_s2),
             ft_ratios=ft_ratios,
-            as_of=row.analyzed_at,
+            as_of=as_of,
             league_name=row.league_name,
+            families=to_compute,
         )
+        patterns.update(fresh)
         try:
-            await update_match_patterns(mid, patterns, expected_analyzed_at=row.analyzed_at)
+            await update_match_patterns(mid, fresh, expected_analyzed_at=row.analyzed_at,
+                                        computed_as_of=as_of)
         except StalePatternWrite:
             raise HTTPException(409, "Analiz bu sırada güncellendi. Lütfen yeniden deneyin.")
         except Exception:
-            log.warning("Lazy backfill kaydedilemedi [%s]; hesaplanan yanıt kullanılacak", mid)
+            log.warning("Pattern kaydedilemedi [%s]; hesaplanan yanıt kullanılacak", mid)
 
-        ht_b, ht_c = _pat(patterns["pattern_ht_b"]), _pat(patterns["pattern_ht_c"])
-        h2_b, h2_c = _pat(patterns["pattern_h2_b"]), _pat(patterns["pattern_h2_c"])
-        ft_b, ft_c = _pat(patterns["pattern_ft_b"]), _pat(patterns["pattern_ft_c"])
-        ht_d, h2_d, ft_d = _pat(patterns["pattern_ht_d"]), _pat(patterns["pattern_h2_d"]), _pat(patterns["pattern_ft_d"])
+    ht_b, ht_c, ht_d = (_pat(patterns[f"pattern_ht_{f}"]) for f in FAMILIES)
+    h2_b, h2_c, h2_d = (_pat(patterns[f"pattern_h2_{f}"]) for f in FAMILIES)
+    ft_b, ft_c, ft_d = (_pat(patterns[f"pattern_ft_{f}"]) for f in FAMILIES)
 
     recommendations = await _frozen_recommendations(row, patterns)
     return AnalyzeResponse(
@@ -474,7 +455,7 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
         h2_scores=(result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
         ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
         ft_ratios=result.ft.all_ratios,
-        as_of=result.analyzed_at,
+        as_of=pattern_as_of(result.analyzed_at, raw.kickoff_time),
         league_name=raw.league_name,
     )
 

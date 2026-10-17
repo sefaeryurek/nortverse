@@ -1,15 +1,17 @@
 """Pattern D (Cosine Similarity) birim testleri."""
 
 import math
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.analysis.pattern_d import (
+    _build_pool,
     _compute_idf_weights,
     _to_vector,
     cosine_similarity,
-    find_matched_ids,
+    find_pattern_d_all_periods,
 )
 from app.analysis.pattern_stats import compute_stats
 from app.analysis.scores import ALL_SCORES, score_key
@@ -123,89 +125,96 @@ class TestScoreKey:
         assert len(ALL_SCORES) == 35
 
 
-# ─── find_matched_ids ───────────────────────────────────────────────────────
+# ─── find_pattern_d_all_periods ─────────────────────────────────────────────
+
+_AS_OF = datetime(2026, 10, 1, tzinfo=timezone.utc)
+_LEAGUE = "English Premier League"
 
 
 def _make_ratios(base: float = 3.0) -> dict[str, float]:
     return {score_key(h, a): base + i * 0.1 for i, (h, a) in enumerate(ALL_SCORES)}
 
 
-def _make_candidate(match_id: str, ratios: dict[str, float]):
-    return (match_id, ratios, 2, 1, 1, 0, 1, 1)
+def _make_candidate(match_id: str, ratios: dict[str, float], league: str = _LEAGUE,
+                    kickoff: datetime | None = None):
+    kickoff = kickoff or _AS_OF - timedelta(days=30)
+    return (match_id, ratios, 2, 1, 1, 0, 1, 1, league, kickoff)
 
 
-class TestFindMatchedIds:
+async def _run_d(target, candidates, **kwargs):
+    pool = _build_pool(candidates)
+    with patch("app.analysis.pattern_d._load_pool", new_callable=AsyncMock, return_value=pool):
+        kwargs.setdefault("as_of", _AS_OF)
+        kwargs.setdefault("league_name", _LEAGUE)
+        return await find_pattern_d_all_periods(target, **kwargs)
+
+
+class TestFindPatternD:
     @pytest.mark.asyncio
-    async def test_empty_ratios_returns_empty(self):
-        result = await find_matched_ids({})
-        assert result == []
+    async def test_empty_ratios_returns_none(self):
+        assert await find_pattern_d_all_periods({}) == (None, None, None)
 
     @pytest.mark.asyncio
-    async def test_zero_vector_returns_empty(self):
+    async def test_zero_vector_returns_none(self):
         ratios = {score_key(h, a): 0.0 for h, a in ALL_SCORES}
-        result = await find_matched_ids(ratios)
-        assert result == []
+        result = await _run_d(ratios, [_make_candidate("100", _make_ratios())])
+        assert result == (None, None, None)
 
     @pytest.mark.asyncio
-    async def test_returns_similar_matches(self):
-        target = _make_ratios(3.0)
-        similar = _make_ratios(3.01)
+    async def test_returns_only_similar_matches(self):
         different = {score_key(h, a): 0.0 for h, a in ALL_SCORES}
         different[score_key(0, 0)] = 10.0
-
-        candidates = [
-            _make_candidate("100", similar),
-            _make_candidate("200", different),
-        ]
-
-        with patch("app.analysis.pattern_d._load_candidates", new_callable=AsyncMock, return_value=candidates):
-            result = await find_matched_ids(target, top_n=5, min_similarity=0.9)
-
-        ids = [mid for mid, _ in result]
-        assert "100" in ids
-        assert "200" not in ids
+        candidates = [_make_candidate("100", _make_ratios(3.01)), _make_candidate("200", different)]
+        _, _, ft = await _run_d(_make_ratios(3.0), candidates, min_similarity=0.9)
+        assert ft._matched_ids == ["100"]
 
     @pytest.mark.asyncio
     async def test_exclude_match_id(self):
-        target = _make_ratios(3.0)
         same = _make_ratios(3.0)
-
-        all_candidates = [_make_candidate("100", same), _make_candidate("200", same)]
-
-        async def mock_load(exclude_match_id=None, as_of=None):
-            if exclude_match_id:
-                return [c for c in all_candidates if c[0] != exclude_match_id]
-            return all_candidates
-
-        with patch("app.analysis.pattern_d._load_candidates", side_effect=mock_load):
-            result = await find_matched_ids(target, exclude_match_id="100")
-
-        ids = [mid for mid, _ in result]
-        assert "100" not in ids
-        assert "200" in ids
+        candidates = [_make_candidate("100", same), _make_candidate("200", same)]
+        _, _, ft = await _run_d(same, candidates, exclude_match_id="100")
+        assert ft._matched_ids == ["200"]
 
     @pytest.mark.asyncio
-    async def test_top_n_limit(self):
-        target = _make_ratios(3.0)
-        candidates = [_make_candidate(str(i), _make_ratios(3.0 + i * 0.001)) for i in range(10)]
-
-        with patch("app.analysis.pattern_d._load_candidates", new_callable=AsyncMock, return_value=candidates):
-            result = await find_matched_ids(target, top_n=3, min_similarity=0.5)
-
-        assert len(result) <= 3
+    async def test_no_count_limit(self):
+        candidates = [_make_candidate(str(i), _make_ratios(3.0 + i * 0.001)) for i in range(40)]
+        _, _, ft = await _run_d(_make_ratios(3.0), candidates, min_similarity=0.5)
+        assert ft.match_count == 40
 
     @pytest.mark.asyncio
-    async def test_similarity_score_included(self):
-        target = _make_ratios(3.0)
-        candidates = [_make_candidate("100", _make_ratios(3.01))]
+    async def test_same_league_only_no_fallback(self):
+        candidates = [
+            _make_candidate("100", _make_ratios(3.0), league="Spanish La Liga"),
+            _make_candidate("200", _make_ratios(3.0)),
+        ]
+        _, _, ft = await _run_d(_make_ratios(3.0), candidates)
+        assert ft._matched_ids == ["200"]
 
-        with patch("app.analysis.pattern_d._load_candidates", new_callable=AsyncMock, return_value=candidates):
-            result = await find_matched_ids(target, min_similarity=0.5)
+    @pytest.mark.asyncio
+    async def test_other_league_only_returns_none(self):
+        candidates = [_make_candidate("100", _make_ratios(3.0), league="Spanish La Liga")]
+        assert await _run_d(_make_ratios(3.0), candidates) == (None, None, None)
 
-        assert len(result) == 1
-        mid, sim = result[0]
-        assert mid == "100"
-        assert 0.99 < sim <= 1.0
+    @pytest.mark.asyncio
+    async def test_future_matches_excluded(self):
+        candidates = [
+            _make_candidate("old", _make_ratios(3.0)),
+            _make_candidate("future", _make_ratios(3.0), kickoff=_AS_OF + timedelta(days=1)),
+            _make_candidate("too_recent", _make_ratios(3.0), kickoff=_AS_OF - timedelta(hours=1)),
+        ]
+        _, _, ft = await _run_d(_make_ratios(3.0), candidates)
+        assert ft._matched_ids == ["old"]
+
+    @pytest.mark.asyncio
+    async def test_sorted_by_similarity_with_sims(self):
+        candidates = [
+            _make_candidate("far", _make_ratios(3.5)),
+            _make_candidate("near", _make_ratios(3.0)),
+        ]
+        _, _, ft = await _run_d(_make_ratios(3.0), candidates, min_similarity=0.5)
+        assert ft._matched_ids[0] == "near"
+        assert ft._matched_sims[0] >= ft._matched_sims[1]
+        assert ft._matched_sims[0] == pytest.approx(1.0, abs=1e-3)
 
 
 # ─── IDF ağırlıkları ────────────────────────────────────────────────────────

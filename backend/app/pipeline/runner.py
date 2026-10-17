@@ -19,7 +19,7 @@ from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import canonical_league_name, is_supported_league
 from app.analysis.score_snapshots import capture_score_snapshot
 from app.analysis.snapshots import capture_v3_recommendations
-from app.analysis.persist import compute_all_patterns
+from app.analysis.persist import FAMILIES, compute_all_patterns, hash_columns, pattern_as_of
 from app.analysis.skip_cache import save_skip
 from app.analysis.trends import compute_trends
 from app.db.connection import get_session
@@ -127,7 +127,13 @@ def _result_to_row(
                 "pattern_ft_b", "pattern_ft_c",
                 "pattern_ht_d", "pattern_h2_d", "pattern_ft_d"):
         row[key] = patterns.get(key) if patterns is not None else None
-    row["pattern_computed_at"] = r.analyzed_at if patterns is not None else None
+    row["pattern_computed_at"] = (
+        pattern_as_of(r.analyzed_at, raw.kickoff_time if raw else None) if patterns is not None else None
+    )
+    for family in FAMILIES:
+        row[f"pattern_{family}_hash"] = None
+    if patterns is not None:
+        row.update(hash_columns(patterns))
     if raw is not None:
         try:
             row["trends"] = compute_trends(raw).model_dump()
@@ -363,7 +369,7 @@ async def run_pipeline(
                     h2_scores=(result.half2.scores_1, result.half2.scores_x, result.half2.scores_2),
                     ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
                     ft_ratios=result.ft.all_ratios,
-                    as_of=result.analyzed_at,
+                    as_of=pattern_as_of(result.analyzed_at, raw.kickoff_time),
                     league_name=raw.league_name,
                 )
                 await _upsert(result, raw, patterns)

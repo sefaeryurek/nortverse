@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import ISTANBUL_TZ
-from app.analysis.league_filter import is_main_league, is_supported_league
+from app.analysis.league_filter import is_main_league
 from app.api.schemas import FixtureMatchOut
 from app.api.live_snapshot import get_live_snapshot
 from app.api.score_state import _utc, resolve_match_state

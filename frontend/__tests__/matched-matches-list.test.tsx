@@ -46,7 +46,7 @@ describe("MatchedMatchesList", () => {
     render(<MatchedMatchesList matchId="123" hasPatternB={true} hasPatternC={false} />, { wrapper: Wrapper });
     fireEvent.click(screen.getByRole("button"));
     const { getMatchedMatches } = await import("@/lib/api");
-    expect(getMatchedMatches).toHaveBeenCalledWith("123");
+    expect(getMatchedMatches).toHaveBeenCalledWith("123", "ft");
   });
 
   it("renders archive_b matches after click", async () => {

@@ -392,6 +392,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
 
                 <MatchedMatchesList
                   matchId={data.match_id}
+                  period={activePeriod}
                   hasPatternB={!!patternB && patternB.match_count >= 5}
                   hasPatternC={!!patternC && patternC.match_count >= 1}
                   hasPatternD={!!patternD && patternD.match_count >= 1}

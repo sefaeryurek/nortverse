@@ -16,10 +16,10 @@ import logging
 import math
 from datetime import datetime
 
-from sqlalchemy import Float, cast, func, select
+from sqlalchemy import Float, cast, select
 from sqlalchemy.dialects.postgresql import JSONB
 
-from app.analysis.pattern_b import _temporal_weights
+from app.analysis.pattern_b import _temporal_weights, candidate_filters
 from app.analysis.pattern_stats import PatternResult, compute_stats
 from app.db.connection import get_session
 from app.db.models import Match
@@ -67,7 +67,7 @@ async def find_pattern_c_all_periods(
 
     Args:
         exclude_match_id: Bu match_id'yi sonuçlardan çıkar (analiz edilen maçın kendisi)
-        league_name: Lig filtresi — önce aynı lig, yetersizse tüm liglere fallback
+        league_name: Lig filtresi — sadece aynı lig (başka lige düşülmez)
         match_cap: Maksimum eşleşme sayısı (en yakın N maç, sinyal seyrelmesini önler)
 
     Returns:
@@ -84,87 +84,40 @@ async def find_pattern_c_all_periods(
     if not _ratios_match(ft_ratios, ft_ratios, 0):
         raise ValueError("ratios must contain finite non-negative numbers")
 
-    async def _query(use_league: bool) -> list:
-        if tolerance == 0.0:
-            async with get_session() as session:
-                filters = [
-                    cast(Match.ft_all_ratios, JSONB) == cast(ft_ratios, JSONB),
-                    Match.actual_ft_home.isnot(None),
-                    Match.actual_ft_away.isnot(None),
-                    Match.deleted_at.is_(None),
-                ]
-                if use_league and league_name:
-                    filters.append(Match.league_name == league_name)
-                if exclude_match_id:
-                    filters.append(Match.match_id != exclude_match_id)
-                known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
-                filters.extend([
-                    Match.kickoff_time < as_of,
-                    known_at > Match.kickoff_time,
-                    known_at <= as_of,
-                    Match.analyzed_at.is_not(None),
-                    Match.analyzed_at < Match.kickoff_time,
-                ])
-                stmt = select(
-                    Match.actual_ft_home, Match.actual_ft_away,
-                    Match.actual_ht_home, Match.actual_ht_away,
-                    Match.actual_h2_home, Match.actual_h2_away,
-                    Match.kickoff_time,
-                ).where(*filters).order_by(Match.kickoff_time.desc())
-                if match_cap and match_cap > 0:
-                    stmt = stmt.limit(match_cap)
-                return list((await session.execute(stmt)).all())
-        else:
-            async with get_session() as session:
-                filters = [
-                    Match.ft_all_ratios.isnot(None),
-                    Match.actual_ft_home.isnot(None),
-                    Match.actual_ft_away.isnot(None),
-                    Match.deleted_at.is_(None),
-                ]
-                if use_league and league_name:
-                    filters.append(Match.league_name == league_name)
-                if exclude_match_id:
-                    filters.append(Match.match_id != exclude_match_id)
-                known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
-                filters.extend([
-                    Match.kickoff_time < as_of,
-                    known_at > Match.kickoff_time,
-                    known_at <= as_of,
-                    Match.analyzed_at.is_not(None),
-                    Match.analyzed_at < Match.kickoff_time,
-                ])
-                for key, target_val in ft_ratios.items():
-                    ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
-                    filters.append(ratio_expr.between(target_val - tolerance, target_val + tolerance))
-                stmt = select(
-                    Match.actual_ft_home, Match.actual_ft_away,
-                    Match.actual_ht_home, Match.actual_ht_away,
-                    Match.actual_h2_home, Match.actual_h2_away,
-                    Match.kickoff_time,
-                ).where(*filters).order_by(Match.kickoff_time.desc())
-                if match_cap and match_cap > 0:
-                    stmt = stmt.limit(match_cap)
-                return list((await session.execute(stmt)).all())
-
-    matched = await _query(use_league=True)
-    if len(matched) < min_matches and league_name:
-        log.info(
-            "Katman C: aynı lig %d eşleşme (min %d) — tüm liglere fallback",
-            len(matched), min_matches,
-        )
-        matched = await _query(use_league=False)
+    filters = [
+        Match.ft_all_ratios.isnot(None),
+        Match.actual_ft_home.isnot(None),
+        Match.actual_ft_away.isnot(None),
+        *candidate_filters(as_of),
+    ]
+    if league_name:
+        filters.append(Match.league_name == league_name)
+    if exclude_match_id:
+        filters.append(Match.match_id != exclude_match_id)
+    if tolerance == 0.0:
+        filters.append(cast(Match.ft_all_ratios, JSONB) == cast(ft_ratios, JSONB))
+    else:
+        for key, target_val in ft_ratios.items():
+            ratio_expr = cast(Match.ft_all_ratios[key].as_string(), Float)
+            filters.append(ratio_expr.between(target_val - tolerance, target_val + tolerance))
+    stmt = select(
+        Match.match_id,
+        Match.actual_ft_home, Match.actual_ft_away,
+        Match.actual_ht_home, Match.actual_ht_away,
+        Match.actual_h2_home, Match.actual_h2_away,
+        Match.kickoff_time,
+    ).where(*filters).order_by(Match.kickoff_time.desc())
+    if match_cap and match_cap > 0:
+        stmt = stmt.limit(match_cap)
+    async with get_session() as session:
+        matched = list((await session.execute(stmt)).all())
 
     if len(matched) < min_matches:
-        log.info(
-            "Katman C: %d eşleşme (minimum %d, tolerans ±%.1f) — atlandı",
-            len(matched),
-            min_matches,
-            tolerance,
-        )
+        log.debug("Katman C: %d eşleşme (minimum %d, tolerans ±%.2f) — atlandı",
+                  len(matched), min_matches, tolerance)
         return None, None, None
 
-    log.info("Katman C: %d eşleşme bulundu (tolerance=%.1f)", len(matched), tolerance)
+    log.debug("Katman C: %d eşleşme bulundu (tolerance=%.2f)", len(matched), tolerance)
     weights = _temporal_weights(matched, as_of, temporal_half_life) if temporal_half_life > 0 else None
     results = [compute_stats(matched, period, weights=weights) for period in ("ht", "h2", "ft")]
     return tuple(result if result is not None and result.match_count >= min_matches else None
@@ -204,16 +157,8 @@ async def find_pattern_c_adaptive(
         last_result = result
         ft_result = result[2]
         if ft_result is not None and ft_result.match_count >= min_matches:
-            if tol > base_tolerance:
-                log.info(
-                    "Katman C adaptive: tolerance=%.2f ile %d eşleşme bulundu",
-                    tol, ft_result.match_count,
-                )
             return result
         tol += tolerance_step
 
-    log.info(
-        "Katman C adaptive: max_tolerance=%.2f'ye kadar yeterli eşleşme bulunamadı",
-        max_tolerance,
-    )
+    log.debug("Katman C adaptive: max_tolerance=%.2f'ye kadar min %d eşleşme yok", max_tolerance, min_matches)
     return last_result

@@ -55,15 +55,20 @@ class Match(Base):
 
     # Pattern sonuçları (kaydedilmiş — sub-saniye analiz için)
     # exclude_match_id=match_id ile hesaplanmıştır, okurken ek filtre gerekmez
-    pattern_ht_b: Mapped[dict | None] = mapped_column(JSONB)
-    pattern_ht_c: Mapped[dict | None] = mapped_column(JSONB)
-    pattern_h2_b: Mapped[dict | None] = mapped_column(JSONB)
-    pattern_h2_c: Mapped[dict | None] = mapped_column(JSONB)
-    pattern_ft_b: Mapped[dict | None] = mapped_column(JSONB)
-    pattern_ft_c: Mapped[dict | None] = mapped_column(JSONB)
-    pattern_ht_d: Mapped[dict | None] = mapped_column(JSONB)
-    pattern_h2_d: Mapped[dict | None] = mapped_column(JSONB)
-    pattern_ft_d: Mapped[dict | None] = mapped_column(JSONB)
+    # none_as_null: "eşleşme yok" SQL NULL olarak yazılır (JSON 'null' değil).
+    pattern_ht_b: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    pattern_ht_c: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    pattern_h2_b: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    pattern_h2_c: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    pattern_ft_b: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    pattern_ft_c: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    pattern_ht_d: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    pattern_h2_d: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    pattern_ft_d: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    # Ayar parmak izi — ayar değişince sadece ilgili aile yeniden hesaplanır.
+    pattern_b_hash: Mapped[str | None] = mapped_column(String(16))
+    pattern_c_hash: Mapped[str | None] = mapped_column(String(16))
+    pattern_d_hash: Mapped[str | None] = mapped_column(String(16))
 
     # Form & H2H trendleri (Sprint 8.8) — TrendsData JSON
     trends: Mapped[dict | None] = mapped_column(JSONB)
