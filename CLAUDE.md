@@ -339,14 +339,19 @@ nortverse/
 │   │   ├── confidence.ts          # Confidence hesaplama + MarketSummary (Sprint 8.4, Sprint 40 dead code temizliği)
 │   │   ├── dates.ts               # Tarih yardımcıları (Sprint 12 denetim)
 │   │   ├── env.ts                 # getApiBase + getProxyTarget (Sprint 10)
-│   │   ├── labels.ts              # Periyot etiketleri (Sprint 8.4)
+│   │   ├── i18n.ts                # Çoklu dil altyapısı — getDictionary, isLocale, Dictionary tipi (Sprint 84)
+│   │   ├── labels.ts              # Periyot etiketleri — locale-aware (Sprint 8.4, Sprint 84)
 │   │   ├── leagues.ts             # Lig adı → bayrak + kısa kod sözlüğü (Sprint 8.3)
 │   │   ├── list-validation.ts     # Liste veri doğrulama (Sprint 12 denetim)
+│   │   ├── locale-context.tsx     # LocaleProvider + useLocale hook — client component dil bağlamı (Sprint 84)
 │   │   ├── match-context.tsx      # MatchProvider — match metadata paylaşımı (Sprint 8.7)
 │   │   ├── pattern-fields.ts      # Pattern alan isimleri (Sprint 12 denetim)
 │   │   ├── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
 │   │   └── use-live-ws.ts         # useLiveWs hook — WebSocket canlı maç + REST fallback (Sprint 82)
-│   ├── __tests__/                 # 294 vitest test
+│   ├── dictionaries/              # i18n dil dosyaları (Sprint 84)
+│   │   ├── tr.json                # Türkçe sözlük — 300+ anahtar
+│   │   └── en.json                # İngilizce sözlük — tam çeviri
+│   ├── __tests__/                 # 288 vitest test
 │   │   ├── fixtures.ts            # Test factory'leri
 │   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
 │   │   ├── cart.test.ts           # Sepet helper'ları (~14 test)
@@ -1438,6 +1443,40 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Testler:** 7 yeni `_ConnectionManager` testi (connect, disconnect, broadcast, dead cleanup)
 - **Type fix'ler:** Sprint 80'den kalan FTRecommendation test fixture eksiklikleri düzeltildi
 
+### Sprint 83 — TAMAMLANDI ✅ (Isotonic Regression Confidence Kalibrasyonu)
+- **Bağlam:** Confidence skoru olasılık olarak yorumlanmamalıydı — Platt scaling / isotonic regression ile gerçek olasılığa kalibre edildi
+- **Backend `evaluation.py`:** Shrunk yüzdeler gerçek olasılığa dönüştürülüyor
+
+### Sprint 84 — TAMAMLANDI ✅ (i18n Çoklu Dil Desteği — Türkçe + İngilizce)
+- **Bağlam:** Tüm frontend UI metinleri hardcoded Türkçe'ydi. Cookie-bazlı dil sistemi ile Türkçe + İngilizce desteği eklendi.
+- **Mimari kararlar:**
+  - Cookie-bazlı (`nv_lang`, varsayılan `"tr"`, desteklenen `["tr", "en"]`)
+  - URL değişmez, yeni npm bağımlılığı yok, `[lang]` route segment yok
+  - Server component'ler `cookies()` ile okur, client component'ler `useLocale()` context hook kullanır
+  - `{placeholder}` interpolasyon `.replace("{key}", value)` ile
+- **Yeni dosyalar:**
+  - `frontend/dictionaries/tr.json`: 300+ anahtar, tüm UI metinleri Türkçe
+  - `frontend/dictionaries/en.json`: Tam İngilizce çeviri (aynı yapı)
+  - `frontend/lib/i18n.ts`: `getDictionary()`, `isLocale()`, `Dictionary` tipi, sabitler
+  - `frontend/lib/locale-context.tsx`: `LocaleProvider` + `useLocale()` hook (locale, t, setLocale)
+- **Güncellenen dosyalar (27 component/sayfa):**
+  - `layout.tsx`: async, cookie'den locale okur, `<html lang>` dinamik, `LocaleProvider` wrapper
+  - `error.tsx`, `not-found.tsx`: `useLocale()` / cookie okuma
+  - `bulten/page.tsx`, `sonuclar/page.tsx`, `degerlendirme/page.tsx`: Server component, cookie okuma, dictionary threading
+  - `canli/page.tsx`: Client component, `useLocale()`
+  - `AnalyzeClient.tsx`: Tüm loading/error/skip/period/layer A metinleri dictionary'den
+  - `Sidebar.tsx`: Nav items + dil değiştirme butonu (TR/EN toggle, 1 yıl cookie)
+  - `DayTabs.tsx`: `locale` prop, gün adları dile göre
+  - `BultenRow.tsx`: `t` + `dateLocale` props (server component)
+  - `BetCart.tsx`, `RetryButton.tsx`, `AddToCartButton.tsx`: `useLocale()`
+  - `TopPicks.tsx`, `MarketSummary.tsx`, `IddaaCoupon.tsx`: `useLocale()`, dictionary-driven labels
+  - `TrendsPanel.tsx`, `PowerScoreGauge.tsx`, `MatchedMatchesList.tsx`: `useLocale()`
+  - `DetailedStats.tsx`: `useLocale()`, ~130 alan sözlükten
+  - `LiveMatchBadge.tsx`: `useLocale()`, canlı skor metinleri
+  - `labels.ts`: `periodLabels(period, t?)` opsiyonel sözlük parametresi (backward compat)
+- **Test güncellemeleri:** `bulten-row.test.tsx` (t + dateLocale props), `day-tabs-render.test.tsx` (aria-label güncelleme), `matched-matches-list.test.tsx` (LocaleProvider wrapper), `live-match-badge.test.tsx` (LocaleProvider wrapper)
+- **Sonuç:** 936 backend + 288 frontend + 28 E2E = **1252 toplam test** (tümü yeşil)
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1699,7 +1738,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-14 — Sprint 82 TAMAMLANDI, Local Development)
+## Kaldığımız Yer (2026-10-17 — Sprint 84 TAMAMLANDI, Local Development)
 
 ### ✅ Mevcut Durum — Local Development
 
@@ -1715,26 +1754,24 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 **Eski cloud deployment (Render + Vercel + Neon):** Konfigürasyon korunuyor ama aktif değil.
 
-### Test Durumu (Sprint 82 sonrası)
+### Test Durumu (Sprint 84 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
 | **Backend** | pytest | 936 | ✅ Yeşil |
-| **Frontend birim** | vitest | 294 | ✅ Yeşil |
+| **Frontend birim** | vitest | 288 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 1258 | — |
+| **Toplam** | — | 1252 | — |
 
 ### Son Tamamlanan Sprint'ler
 
-- ✅ **Sprint 80:** Frontend/Backend strateji birleştirme — `calibrate_pattern()` ile log-odds shrinkage TopPicks'e entegre
-- ✅ **Sprint 81:** Ensemble meta-model (B+C+D) — LogisticRegression ile 3 ayrı model (result/O-U/BTTS), CLI eğitim + backtest entegrasyonu
 - ✅ **Sprint 82:** Canlı maç WebSocket — 45sn polling → 15sn WebSocket broadcast, REST fallback, `useLiveWs` hook
+- ✅ **Sprint 83:** Isotonic regression confidence kalibrasyonu — shrunk yüzdeler gerçek olasılığa dönüştürülüyor
+- ✅ **Sprint 84:** i18n çoklu dil desteği — Türkçe + İngilizce cookie-bazlı dil seçimi, 27 component/sayfa güncellendi, 0 yeni npm bağımlılığı
 
 ### Bekleyen Konular
 
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
-- **Platt scaling:** Confidence skoru hâlâ olasılık olarak yorumlanmamalı — gelecekte Platt scaling veya isotonic regression ile gerçek olasılığa kalibre edilebilir
-- **i18n (çoklu dil):** Yeni npm bağımlılığı gerektirir (next-intl veya react-i18next) — onay gerekir
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
 
 ### Bilinen Açık Konular
