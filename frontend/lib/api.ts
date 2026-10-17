@@ -114,6 +114,75 @@ export async function getEvaluation(date: string): Promise<DailyEvaluation> {
   );
 }
 
+export type PredictionSource = "live_ht" | "top_pick" | "market_summary";
+export type SampleStage = "cok_erken" | "on_bulgu" | "tam";
+
+export interface PerformanceStats {
+  total: number;
+  resolved: number;
+  pending: number;
+  void: number;
+  hits: number;
+  hit_pct: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  avg_prob_pct: number | null;
+  calibration_gap: number | null;
+  brier: number | null;
+  baseline_resolved: number;
+  baseline_hit_pct: number | null;
+  lift_pct: number | null;
+  stage: SampleStage;
+}
+
+export interface PerformanceSummary {
+  source: PredictionSource;
+  rule_versions: string[];
+  overall: PerformanceStats;
+  groups: Record<string, (PerformanceStats & { key: string })[]>;
+  calibration: { lower: number; upper: number; n: number; avg_prob_pct: number; hit_pct: number }[];
+}
+
+export interface LedgerPrediction {
+  id: number;
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  league_name: string;
+  kickoff_time: string;
+  recorded_at: string;
+  rule_version: string;
+  period: "ht" | "h2" | "ft";
+  market: string;
+  selection: string;
+  archive: string | null;
+  prob_pct: number;
+  tier: string | null;
+  informational: boolean;
+  sample_n: number | null;
+  baseline_selection: string | null;
+  baseline_outcome: "hit" | "miss" | null;
+  ht: string | null;
+  final_ht: string | null;
+  final_ft: string | null;
+  outcome: "hit" | "miss" | "void" | "pending";
+  late: boolean;
+}
+
+export async function getPerformanceSummary(source: PredictionSource, groupBy = "tier,market"): Promise<PerformanceSummary> {
+  return request<PerformanceSummary>(
+    `/api/performance/summary?${new URLSearchParams({ source, group_by: groupBy })}`,
+    { next: { revalidate: 120 } },
+  );
+}
+
+export async function getPerformancePredictions(source: PredictionSource, day: string): Promise<LedgerPrediction[]> {
+  return request<LedgerPrediction[]>(
+    `/api/performance/predictions?${new URLSearchParams({ source, day })}`,
+    { next: { revalidate: 60 } },
+  );
+}
+
 export async function getResults(date: string): Promise<ResultMatch[]> {
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   return checkedList(await request<ResultMatch[]>(`/api/results?${new URLSearchParams({ date })}`, {

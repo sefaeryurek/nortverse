@@ -21,9 +21,11 @@ interface Props {
   referenceDate?: string;
   range?: "upcoming" | "past";
   locale?: Locale;
+  /** Tarih bağlantılarına eklenecek ek sorgu (örn. "tab=canli"). */
+  extraQuery?: string;
 }
 
-export default function DayTabs({ activeDate, basePath = "/bulten", referenceDate, range = "upcoming", locale = defaultLocale }: Props) {
+export default function DayTabs({ activeDate, basePath = "/bulten", referenceDate, range = "upcoming", locale = defaultLocale, extraQuery }: Props) {
   const effectiveRange = basePath === "/sonuclar" ? "past" : range;
   const days = getRollingDates(undefined, referenceDate, effectiveRange, locale);
   const t = getDictionary(locale);
@@ -118,7 +120,7 @@ export default function DayTabs({ activeDate, basePath = "/bulten", referenceDat
           ) : (
             <Link
               key={date}
-              href={`${basePath}?date=${date}`}
+              href={`${basePath}?date=${date}${extraQuery ? `&${extraQuery}` : ""}`}
               prefetch={false}
               aria-label={t.dayTabs.dateLabel.replace("{date}", date)}
               className="nv-daytab-inactive"
