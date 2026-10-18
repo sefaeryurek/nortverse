@@ -343,8 +343,6 @@ export interface LiveHTMatch {
   frozen?: boolean;
   frozen_at?: string | null;
   archive_view?: LiveArchiveView | null;
-  /** Analiz yoksa: kural dışı bırakılma sebebi (yoksa hiç analiz edilmemiş). */
-  skip_reason?: string | null;
 }
 
 export async function getLiveHTMatches(): Promise<LiveHTMatch[]> {

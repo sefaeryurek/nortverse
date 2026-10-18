@@ -118,14 +118,7 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
             <ArchiveTable view={match.archive_view} />
           </>
         ) : (
-          <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-            {match.skip_reason
-              ? t.live.archive.skipped.replace(
-                  "{reason}",
-                  (t.skipReasons as Record<string, string>)[match.skip_reason] ?? match.skip_reason,
-                )
-              : t.live.archive.noAnalysis}
-          </p>
+          <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{t.live.archive.noAnalysis}</p>
         )}
 
         <div className="flex items-center gap-2">

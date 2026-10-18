@@ -91,13 +91,6 @@ describe("Canlı sayfa", () => {
     expect(screen.queryByText("Canlı veri alınamadı.")).toBeNull();
   });
 
-  it("shows the rule that excluded a match instead of 'not analysed'", () => {
-    wsState = { matches: [match("5", "HT", { archive_view: null, frozen: false, skip_reason: "h2h_insufficient" })], status: "connected", lastUpdate: new Date() };
-    render(ui());
-    expect(screen.getByText(/Kural dışı/)).toBeTruthy();
-    expect(screen.queryByText(/başlamadan analiz edilmemiş/)).toBeNull();
-  });
-
   it("loads matched game lists only when expanded", async () => {
     wsState = { matches: [match("3", "HT")], status: "connected", lastUpdate: new Date() };
     getLivePrediction.mockResolvedValueOnce({

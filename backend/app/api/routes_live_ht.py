@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Path, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -21,11 +20,10 @@ from app.analysis import live_archive
 from app.analysis.live_model import LIVE_RULE_VERSION
 from app.api.live_ledger import match_phase, observed_ht
 from app.api.live_snapshot import get_live_snapshot
-from app.config import ISTANBUL_TZ
 from app.db.connection import get_session
 from app.analysis.ledger import INVALIDATED_VERSION
 from app.db.models import (
-    FixtureCache, Match, MatchHtObservation, PredictionLedger, PredictionResolution, SkippedAnalysis,
+    Match, MatchHtObservation, PredictionLedger, PredictionResolution,
 )
 from app.scraper.fixture_scores import phase_from_minute
 
@@ -48,8 +46,6 @@ class LiveHTMatch(BaseModel):
     frozen: bool = False
     frozen_at: str | None = None
     archive_view: dict | None = None
-    # Analiz yoksa sebebi: kural dışı (h2h_insufficient …) ya da None (hiç analiz edilmemiş)
-    skip_reason: str | None = None
 
 
 def _is_second_half_or_later(minute: str | None, phase: str | None = None) -> bool:
@@ -128,23 +124,6 @@ async def _view_for(match: Match, ht: tuple[int, int], frozen: dict | None, *, w
     return view
 
 
-async def _fixture_cache_info(session, missing: list[str]) -> dict[str, tuple]:
-    info: dict[str, tuple] = {}
-    today = datetime.now(ISTANBUL_TZ).date()
-    for day in (today, today - timedelta(days=1)):
-        fc = (await session.execute(
-            select(FixtureCache.matches_json).where(FixtureCache.date == day.isoformat())
-        )).scalar_one_or_none()
-        if not isinstance(fc, list):
-            continue
-        for raw in fc:
-            mid = str(raw.get("match_id", ""))
-            if mid in missing and mid not in info:
-                info[mid] = (raw.get("home_team"), raw.get("away_team"),
-                             raw.get("league_name") or raw.get("league_code"), None, None)
-    return info
-
-
 @router.get("/api/live-ht")
 async def get_live_ht_matches() -> list[LiveHTMatch]:
     snap = await get_live_snapshot()
@@ -159,34 +138,27 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
 
     async with get_session() as session:
         observations = await _latest_ht_observations(session, ids)
+        # Bülten gibi: sadece analiz edilmiş maçlar (kural dışı / analizsiz maçta gösterilecek veri yok).
         db_rows = (await session.execute(select(Match).where(
-            Match.match_id.in_(ids), Match.deleted_at.is_(None),
+            Match.match_id.in_(ids), Match.deleted_at.is_(None), Match.ft_scores_1.isnot(None),
         ))).scalars().all()
         by_id = {m.match_id: m for m in db_rows}
-        info = {m.match_id: (m.home_team, m.away_team, m.league_name, m.kickoff_time, m) for m in db_rows}
-        missing = [mid for mid in ids if mid not in info]
-        if missing:
-            info.update(await _fixture_cache_info(session, missing))
         frozen = await _frozen_info(session, list(by_id))
-        skipped = dict((await session.execute(
-            select(SkippedAnalysis.match_id, SkippedAnalysis.reason)
-            .where(SkippedAnalysis.match_id.in_([mid for mid in ids if mid not in by_id]))
-        )).all()) if len(by_id) < len(ids) else {}
 
     result: list[LiveHTMatch] = []
     for mid, fs in live.items():
-        row = info.get(mid)
-        if row is None:
+        match = by_id.get(mid)
+        if match is None:
             continue
-        home, away, league, kickoff, match = row
-        league = canonical_league_name(league) if league else None
+        home, away, kickoff = match.home_team, match.away_team, match.kickoff_time
+        league = canonical_league_name(match.league_name) if match.league_name else None
         if not is_main_league(league):
             continue
         ht = observations.get(mid) or observed_ht(fs)
         if ht is None:
             continue
         record = frozen.get(mid)
-        view = await _view_for(match, ht, record) if match is not None else None
+        view = await _view_for(match, ht, record)
         result.append(LiveHTMatch(
             match_id=mid, home_team=home, away_team=away,
             ht_home=ht[0], ht_away=ht[1], live_home=fs.home, live_away=fs.away,
@@ -194,7 +166,6 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
             kickoff_time=kickoff.isoformat() if kickoff else None,
             frozen=record is not None, frozen_at=record["frozen_at"] if record else None,
             archive_view=view,
-            skip_reason=skipped.get(mid) if match is None else None,
         ))
     return result
 
