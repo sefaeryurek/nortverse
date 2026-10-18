@@ -505,7 +505,35 @@ async function EvalList({ date, t }: { date: string; t: Dictionary }) {
 /* ------------------------------------------------------------------ */
 
 interface Props {
-  searchParams: Promise<{ date?: string | string[]; tab?: string | string[]; run?: string | string[] }>;
+  searchParams: Promise<{ date?: string | string[]; tab?: string | string[]; run?: string | string[]; aralik?: string | string[] }>;
+}
+
+/** Özet aralığı: seçili gün, o güne kadar 7 gün, ya da tüm kayıtlar. */
+const RANGES = ["gun", "7g", "tum"] as const;
+type Range = (typeof RANGES)[number];
+
+function resolveRange(raw: string | string[] | undefined): Range {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return (RANGES as readonly string[]).includes(value ?? "") ? (value as Range) : "tum";
+}
+
+function shiftDay(day: string, delta: number): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function rangeBounds(range: Range, day: string): { from?: string; to?: string } {
+  if (range === "gun") return { from: day, to: day };
+  if (range === "7g") return { from: shiftDay(day, -6), to: day };
+  return {};
+}
+
+function rangeHeadline(range: Range, day: string, t: Dictionary): string {
+  const p = t.evaluation.perf;
+  if (range === "gun") return p.headline_day.replace("{day}", day);
+  if (range === "7g") return p.headline_week.replace("{from}", shiftDay(day, -6)).replace("{to}", day);
+  return p.allTime;
 }
 
 const TABS = ["canli", "mac-oncesi", "backtest", "pattern"] as const;
@@ -521,6 +549,32 @@ const TAB_GROUPS = {
 function resolveTab(raw: string | string[] | undefined): Tab {
   const value = Array.isArray(raw) ? raw[0] : raw;
   return (TABS as readonly string[]).includes(value ?? "") ? (value as Tab) : "canli";
+}
+
+function RangeBar({ active, date, tab, t }: { active: Range; date: string; tab: Tab; t: Dictionary }) {
+  const p = t.evaluation.perf;
+  const labels: Record<Range, string> = { gun: p.range_day, "7g": p.range_week, tum: p.range_all };
+  return (
+    <div role="group" aria-label={p.rangeLabel} className="flex flex-wrap items-center gap-1">
+      <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{p.rangeLabel}:</span>
+      {RANGES.map((r) => (
+        <Link
+          key={r}
+          href={`/degerlendirme?date=${date}&tab=${tab}&aralik=${r}`}
+          aria-current={r === active ? "true" : undefined}
+          className="px-2.5 py-1 font-semibold"
+          style={{
+            fontSize: "var(--nv-text-xs)",
+            borderRadius: "var(--nv-radius-full)",
+            backgroundColor: r === active ? "var(--nv-accent-blue-dim)" : "var(--nv-bg-elevated)",
+            color: r === active ? "var(--nv-accent-blue)" : "var(--nv-text-secondary)",
+          }}
+        >
+          {labels[r]}
+        </Link>
+      ))}
+    </div>
+  );
 }
 
 function TabBar({ active, date, t }: { active: Tab; date: string; t: Dictionary }) {
@@ -561,6 +615,8 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
   const date = resolvePageDate(params.date, today);
   if (date === null) redirect("/degerlendirme");
   const tab = resolveTab(params.tab);
+  const range = resolveRange(params.aralik);
+  const bounds = rangeBounds(range, date);
   const rawRun = Array.isArray(params.run) ? params.run[0] : params.run;
   const runId = rawRun && /^\d{1,9}$/.test(rawRun) ? Number(rawRun) : null;
 
@@ -609,7 +665,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
           basePath="/degerlendirme"
           range="past"
           locale={locale}
-          extraQuery={`tab=${tab}`}
+          extraQuery={`tab=${tab}&aralik=${range}`}
         />
       )}
 
@@ -631,6 +687,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
           </>
         ) : (
           <div className="grid gap-4 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
+            <RangeBar active={range} date={date} tab={tab} t={t} />
             <Suspense fallback={<EvalSkeleton />}>
               <PerformanceOverview
                 source={TAB_SOURCE[tab]}
@@ -638,6 +695,9 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
                 groups={TAB_GROUPS[tab]}
                 ruleVersion={tab === "canli" ? LIVE_ARCHIVE_RULE_VERSION : undefined}
                 hint={tab === "canli" ? t.evaluation.perf.liveSummaryNote : undefined}
+                dateFrom={bounds.from}
+                dateTo={bounds.to}
+                headline={rangeHeadline(range, date, t)}
               />
             </Suspense>
             <Suspense fallback={<EvalSkeleton />}>
@@ -651,6 +711,9 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
                   groups={["archive", "period_market"]}
                   title={t.evaluation.perf.marketSummaryTitle}
                   hint={t.evaluation.perf.marketSummaryHint}
+                  dateFrom={bounds.from}
+                  dateTo={bounds.to}
+                  headline={rangeHeadline(range, date, t)}
                 />
               </Suspense>
             )}

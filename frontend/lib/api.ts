@@ -174,9 +174,12 @@ export interface LedgerPrediction {
 
 export async function getPerformanceSummary(
   source: PredictionSource, groupBy = "tier,market", ruleVersion?: string,
+  dateFrom?: string, dateTo?: string,
 ): Promise<PerformanceSummary> {
   const params = new URLSearchParams({ source, group_by: groupBy });
   if (ruleVersion) params.set("rule_version", ruleVersion);
+  if (dateFrom) params.set("date_from", dateFrom);
+  if (dateTo) params.set("date_to", dateTo);
   return request<PerformanceSummary>(
     `/api/performance/summary?${params}`,
     { next: { revalidate: 120 } },

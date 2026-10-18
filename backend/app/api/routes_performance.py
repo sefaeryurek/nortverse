@@ -11,6 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import text
 
+from app.analysis.league_filter import is_main_league
 from app.analysis.market_resolver import resolve
 from app.analysis.performance import (
     GROUP_FIELDS,
@@ -28,15 +29,15 @@ Source = Literal["live_ht", "top_pick", "market_summary"]
 Informational = Literal["all", "main", "info"]
 
 _LEDGER_SQL = """
-    SELECT l.id, l.source, l.rule_version, l.match_id, l.league_name, l.kickoff_time, l.recorded_at,
+    SELECT l.id, l.source, l.rule_version, l.match_id, l.league_name, m.kickoff_time, l.recorded_at,
            l.period, l.market, l.selection, l.archive, l.prob_shown_bp, l.confidence_tier,
            l.informational, l.sample_n, l.agreement, l.baseline_selection, l.ht_home, l.ht_away, l.details,
            l.outcome, l.res_ft_home, l.res_ft_away, l.res_ht_home, l.res_ht_away,
            m.home_team, m.away_team
     FROM prediction_ledger_resolved l
     JOIN matches m ON m.match_id = l.match_id
-    WHERE l.source = :source {filters}
-    ORDER BY l.kickoff_time DESC, l.match_id, l.market
+    WHERE l.source = :source AND l.resolver_version IS DISTINCT FROM 'invalidated' {filters}
+    ORDER BY m.kickoff_time DESC, l.match_id, l.market
     LIMIT :limit
 """
 
@@ -62,10 +63,10 @@ async def _load(source: str, rule_version: str | None, date_from: date | None, d
         filters.append("AND l.rule_version = :rule_version")
         params["rule_version"] = rule_version
     if date_from:
-        filters.append("AND l.kickoff_time >= :date_from")
+        filters.append("AND m.kickoff_time >= :date_from")
         params["date_from"] = datetime.combine(date_from, datetime.min.time(), ISTANBUL_TZ)
     if date_to:
-        filters.append("AND l.kickoff_time < :date_to")
+        filters.append("AND m.kickoff_time < :date_to")
         params["date_to"] = datetime.combine(date_to + timedelta(days=1), datetime.min.time(), ISTANBUL_TZ)
     if informational == "main":
         filters.append("AND NOT l.informational")
@@ -73,7 +74,8 @@ async def _load(source: str, rule_version: str | None, date_from: date | None, d
         filters.append("AND l.informational")
     async with get_session() as session:
         rows = (await session.execute(text(_LEDGER_SQL.format(filters=" ".join(filters))), params)).all()
-    return [_with_baseline(r) for r in rows]
+    # Ekranda olmayan küçük lig / silinmiş lig kayıtları (eski v3 kopyaları dahil) panelde sayılmaz.
+    return [_with_baseline(r) for r in rows if is_main_league(r.league_name)]
 
 
 @router.get("/api/performance/summary")
@@ -212,13 +214,14 @@ async def backtest_summary(run_id: int) -> dict:
 
 _LIVE_MATCHES_SQL = """
     SELECT l.match_id, l.rule_version, l.market, l.period, l.selection, l.archive, l.prob_shown_bp,
-           l.sample_n, l.confidence_tier, l.details, l.recorded_at, l.kickoff_time, l.ht_home, l.ht_away,
+           l.sample_n, l.confidence_tier, l.details, l.recorded_at, m.kickoff_time, l.ht_home, l.ht_away,
            l.outcome, l.res_ft_home, l.res_ft_away, l.res_ht_home, l.res_ht_away,
            m.home_team, m.away_team, m.league_name
     FROM prediction_ledger_resolved l
     JOIN matches m ON m.match_id = l.match_id
-    WHERE l.source = 'live_ht' AND l.kickoff_time >= :start AND l.kickoff_time < :end
-    ORDER BY l.kickoff_time, l.match_id, l.id
+    WHERE l.source = 'live_ht' AND m.kickoff_time >= :start AND m.kickoff_time < :end
+      AND l.resolver_version IS DISTINCT FROM 'invalidated'
+    ORDER BY m.kickoff_time, l.match_id, l.id
 """
 
 
@@ -243,8 +246,6 @@ async def live_matches(day: date = Query(..., description="İstanbul günü (ma�
     async with get_session() as session:
         rows = (await session.execute(text(_LIVE_MATCHES_SQL),
                                       {"start": start, "end": start + timedelta(days=1)})).all()
-    from app.analysis.league_filter import is_main_league
-
     matches: dict[str, dict] = {}
     for r in rows:
         if not is_main_league(r.league_name):

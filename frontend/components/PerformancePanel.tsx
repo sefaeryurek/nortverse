@@ -252,7 +252,7 @@ function SummaryBody({ summary, t, headline, groups }: {
   );
 }
 
-export async function PerformanceOverview({ source, t, groups = ["tier", "market"], title, hint, ruleVersion }: {
+export async function PerformanceOverview({ source, t, groups = ["tier", "market"], title, hint, ruleVersion, dateFrom, dateTo, headline }: {
   source: PredictionSource;
   t: Dictionary;
   groups?: readonly string[];
@@ -260,11 +260,15 @@ export async function PerformanceOverview({ source, t, groups = ["tier", "market
   hint?: string;
   /** Sadece bu kural sürümünün kayıtları (canlıda: arşiv işaretleri, eski model gizli). */
   ruleVersion?: string;
+  /** İstanbul günü aralığı (maç başlama); verilmezse tüm kayıtlar. */
+  dateFrom?: string;
+  dateTo?: string;
+  headline?: string;
 }) {
   const p = t.evaluation.perf;
   let summary: PerformanceSummary;
   try {
-    summary = await getPerformanceSummary(source, groups.join(","), ruleVersion);
+    summary = await getPerformanceSummary(source, groups.join(","), ruleVersion, dateFrom, dateTo);
   } catch {
     return <LoadError t={t} />;
   }
@@ -276,7 +280,7 @@ export async function PerformanceOverview({ source, t, groups = ["tier", "market
       </div>
     );
   }
-  const body = <SummaryBody summary={summary} t={t} headline={p.allTime} groups={groupSpecs(groups, p, t)} />;
+  const body = <SummaryBody summary={summary} t={t} headline={headline ?? p.allTime} groups={groupSpecs(groups, p, t)} />;
   if (!title && !hint) return body;
   return (
     <section className="space-y-2">
