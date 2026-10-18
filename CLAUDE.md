@@ -1864,7 +1864,8 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 ### Bilinen Açık Konular
 
-- **Sabah pipeline'ı çalışmıyor (27 Eylül'den beri):** Task Scheduler görevi ve bilgisayarın 08:00'de açık olması kontrol edilmeli.
+- **Zamanlanmış görevler (Sprint 90.6):** `scripts/install-tasks.ps1` (yönetici PowerShell ile bir kez) → BackupDB 07:00, RunPipeline 08:00, UpdateScores1 18:00–23:00 saat başı, UpdateScores2 00:30. Görevler `run-hidden.vbs` ile **pencere açmadan** çalışır (eskiden açılan cmd kapatılınca iş yarıda kalıyordu: 13 Ekim `^C`, 17 Ekim 0xC000013A), kaçırılan çalışma PC açılınca yapılır, `ensure-docker.bat` Docker Desktop'ı gerekirse başlatıp DB'yi bekler. PC kapalıyken hiçbir şey çalışmaz (bulut kararı bekliyor).
+- **Yedekler 27 Eylül'den beri hiç alınmamıştı:** `wmic` Windows 11'de yok (dosya adı bozuluyordu) + konteyner adı yanlıştı (`nortverse-db-1` ≠ `nortverse-codex-db-1`). `backup-db.bat` düzeltildi (`docker compose exec -T db`, 10 MB altı yedek başarısız sayılır); 18 Ekim yedeği alındı ve `pg_restore --list` ile doğrulandı.
 - **Docker Desktop otostart:** Docker Desktop Windows ile otomatik başlatılmalı — aksi takdirde pipeline/skor cron'ları çalışmaz (28-30 Eylül 3 günlük veri kaybı yaşandı)
 - **Task Scheduler "missed run":** Kaçırılan görevlerin yeniden çalıştırılması ayarı etkinleştirilmeli
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)

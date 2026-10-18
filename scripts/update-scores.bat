@@ -1,38 +1,28 @@
 @echo off
-REM Nortverse - Skor guncelleme (biten maclarin skorlarini ceker)
-REM Task Scheduler ile 22:00 ve 00:30'da calistirilir
-REM --pending-days 3: son 3 gunde sonucu eksik kalan gunleri de yakalar; sonunda tahmin defteri cozulur
+REM Nortverse - Skor guncelleme + tahmin defteri cozumu (pencere acmadan)
+REM Gorev Zamanlayici: 18:00-23:00 saat basi ve 00:30.
+REM --pending-days 3: son 3 gunde sonucu eksik kalan gunleri de yakalar; sonunda defter cozulur.
 
 set PYTHONIOENCODING=utf-8
-set LOGFILE=C:\Users\Sefa\Desktop\NORTVERSE - CODEX\scripts\logs\scores.log
-set ERRORLOG=C:\Users\Sefa\Desktop\NORTVERSE - CODEX\scripts\logs\scores_errors.log
+set "ROOT=C:\Users\Sefa\Desktop\NORTVERSE - CODEX"
+set "LOGFILE=%ROOT%\scripts\logs\scores.log"
+set "ERRORLOG=%ROOT%\scripts\logs\scores_errors.log"
 
-cd /d "C:\Users\Sefa\Desktop\NORTVERSE - CODEX\backend"
-
-REM Docker PostgreSQL kontrolu
-docker ps --filter "name=nortverse" --format "{{.Names}}" | findstr /i "nortverse" >nul 2>&1
+call "%~dp0ensure-docker.bat" "%LOGFILE%"
 if errorlevel 1 (
-    echo [%date% %time%] Docker PostgreSQL calismyor, baslatiliyor... >> "%LOGFILE%"
-    cd /d "C:\Users\Sefa\Desktop\NORTVERSE - CODEX"
-    docker compose up -d >> "%LOGFILE%" 2>&1
-    if errorlevel 1 (
-        echo [%date% %time%] HATA: Docker baslatma basarisiz >> "%LOGFILE%"
-        echo [%date% %time%] HATA: Docker baslatma basarisiz >> "%ERRORLOG%"
-        exit /b 1
-    )
-    timeout /t 5 /nobreak >nul
-    cd /d "C:\Users\Sefa\Desktop\NORTVERSE - CODEX\backend"
+    echo [%date% %time%] HATA: Docker/PostgreSQL hazir degil, skor guncellenmedi >> "%ERRORLOG%"
+    exit /b 1
 )
 
+cd /d "%ROOT%\backend"
 echo [%date% %time%] Skor guncelleme basliyor... >> "%LOGFILE%"
 python -m app.cli.main update-scores --pending-days 3 >> "%LOGFILE%" 2>&1
 set EXITCODE=%errorlevel%
 
 if %EXITCODE% equ 0 (
-    echo [%date% %time%] Skor guncelleme basarili tamamlandi >> "%LOGFILE%"
+    echo [%date% %time%] Skor guncelleme basarili >> "%LOGFILE%"
 ) else (
     echo [%date% %time%] HATA: Skor guncelleme basarisiz (exit code: %EXITCODE%) >> "%LOGFILE%"
     echo [%date% %time%] HATA: Skor guncelleme basarisiz (exit code: %EXITCODE%) >> "%ERRORLOG%"
 )
-
 exit /b %EXITCODE%

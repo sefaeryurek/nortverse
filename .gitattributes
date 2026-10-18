@@ -1,0 +1,5 @@
+# Windows betikleri CRLF ister (LF ile goto/etiketler bozulabilir)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.vbs text eol=crlf
+*.ps1 text eol=crlf
