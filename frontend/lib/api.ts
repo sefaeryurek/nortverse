@@ -317,6 +317,13 @@ export interface LiveHighlight {
   n: number;
   risky: boolean;
   historical?: LiveHistorical | null;
+  /** live-arch-v2: aynı seçimi işaret eden arşivler (tek karar). v1 kayıtlarında yok. */
+  sources?: string[];
+  /** v2: kazanan arşivin oranı (ikincil); `pct` = aynı lig + aynı İY geçmişinin oranı. */
+  archive_pct?: number | null;
+  cond_n?: number | null;
+  cond_level?: "league" | "global";
+  conflict?: boolean;
 }
 
 export interface LiveArchiveView {

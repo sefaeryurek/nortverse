@@ -47,9 +47,9 @@ class IncrementalCondTable(CondTable):
     def add(self, league: str, ht_h: int, ht_a: int, ft_h: int, ft_a: int, kickoff: datetime) -> None:
         key = (ht_h, ht_a)
         diff = max(-3, min(3, ht_h - ht_a))
-        self.by_score.setdefault(league, {}).setdefault(key, Counts()).add(ft_h, ft_a)
+        self.by_score.setdefault(league, {}).setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
         self.by_diff.setdefault(league, {}).setdefault(diff, Counts()).add(ft_h, ft_a)
-        self.global_by_score.setdefault(key, Counts()).add(ft_h, ft_a)
+        self.global_by_score.setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
         self.global_by_diff.setdefault(diff, Counts()).add(ft_h, ft_a)
         self.prior.setdefault(league, Counts()).add(ft_h, ft_a)
         self._prior_queue.append((kickoff, league, ft_h, ft_a))
@@ -232,7 +232,7 @@ async def run_prematch_backtest(strategy: str, date_from: datetime, date_to: dat
 
 async def run_live_archive_backtest(date_from: datetime, date_to: datetime, *, notes: str | None = None,
                                     replace_run: int | None = None) -> int:
-    """Canlı arşiv görünümü (live-arch-v1): her maçın %85+ işaretleri, gerçek İY/MS ile çözülür.
+    """Canlı arşiv kararları (güncel live-arch kuralı), gerçek İY/MS ile çözülür. COND kapısı artımlı tablodan.
 
     Arşiv üyelikleri maç öncesi `matched_ids`'ten (sonucu kickoff − 3 saatten önce bilinen maçlar) → sızıntısız.
     """
@@ -254,7 +254,10 @@ async def run_live_archive_backtest(date_from: datetime, date_to: datetime, *, n
         ht = (match.actual_ht_home, match.actual_ht_away)
         ft = (match.actual_ft_home, match.actual_ft_away)
         blobs = {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d}
-        view = live_archive.build_view(live_archive.ht_filtered_rows(blobs, results, ht), ht)
+        league = match.league_name or ""
+        view = live_archive.build_view(
+            live_archive.ht_filtered_rows(blobs, results, ht), ht,
+            lambda period, market, sel: live_archive.cond_probability(_table, league, ht, period, market, sel))
         common = {"match_id": match.match_id, "league_name": match.league_name,
                   "kickoff_time": match.kickoff_time, "as_of": as_of}
         return [{**row, "run_id": run_id, "ht_home": ht[0], "ht_away": ht[1], "ft_home": ft[0], "ft_away": ft[1],

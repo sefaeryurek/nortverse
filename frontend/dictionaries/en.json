@@ -103,6 +103,8 @@
       "range_all": "All",
       "headline_day": "Matches on {day}",
       "headline_week": "{from} – {to}",
+      "liveOldTitle": "Old rule (live-arch-v1)",
+      "liveOldHint": "Rule used until 18 Oct: per-archive 85%+ signals, including samples under 5 matches. Shown ~98% but hit ~66%, so it was replaced; its history stays here.",
       "hitsOf": "{hits}/{n} predictions",
       "ci": "95% interval {low}%–{high}%",
       "lift": "Lift over baseline",
@@ -186,7 +188,7 @@
       "noPicks": "No 85%+ signal in this match",
       "emptyLiveDay": "No recorded live matches on this day.",
       "recordedAt": "Recorded {time}",
-      "liveSummaryNote": "85%+ archive signals recorded at half-time; marked hit/miss when the match ends.",
+      "liveSummaryNote": "Decisions recorded at half-time: an archive with 5+ matches at 85%+ and the same-league, same half-time history at 85%+; one decision per market. Marked hit/miss when the match ends.",
       "strategy_live_archive": "Live archive (85%+)"
     }
   },
@@ -235,6 +237,15 @@
       "similarity": "Similarity (A3)"
     },
     "archive": {
+      "decisionsTitle": "Decisions ({pct}%+)",
+      "noDecisions": "No decision meets the rule for this match",
+      "decisionRule": "Rule: an archive with at least {min} matches says {pct}%+ AND past matches in the same league with the same half-time score also say {pct}%+. The shown rate is the league history rate; the archive rate is next to it. One decision per market.",
+      "condLeague": "league history · {n} matches",
+      "condGlobal": "all leagues · {n} matches",
+      "condTooltip": "Rate of this selection in {n} past matches with the same half-time score (realistic estimate).",
+      "archiveLabel": "Archive",
+      "conflict": "conflict",
+      "conflictTooltip": "Archives pointed to different selections; the archive with the largest sample won.",
       "highlightsTitle": "Highlights ({pct}%+)",
       "noHighlights": "No rate above {pct}%",
       "risky": "Risky",

@@ -46,11 +46,84 @@ export function groupHighlights(highlights: LiveHighlight[]): Group[] {
   return [...groups.values()].sort((a, b) => Number(a.risky) - Number(b.risky) || b.pct - a.pct || b.items.length - a.items.length);
 }
 
+function archiveName(label: string, generalLabel: string): string {
+  return label.toLowerCase() === "genel" ? generalLabel : label;
+}
+
+/** live-arch-v2 kararı: pazar başına tek satır; ana oran lig geçmişinden, arşiv oranı ikincil. */
+function DecisionRow({ h }: { h: LiveHighlight }) {
+  const { t } = useLocale();
+  const a = t.live.archive;
+  const generalLabel = t.evaluation.perf.archive_genel;
+  return (
+    <li
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1.5"
+      style={{ borderRadius: "var(--nv-radius-md)", backgroundColor: "var(--nv-accent-green-dim)", border: "1px solid var(--nv-border-subtle)" }}
+    >
+      <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>{liveMarketLabel(h.period, h.market, t)}</span>
+      <span className="font-bold" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>{liveSelectionLabel(h.selection, t)}</span>
+      <span
+        className="font-extrabold"
+        style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-green)" }}
+        title={a.condTooltip.replace("{n}", String(h.cond_n ?? "?"))}
+      >
+        {fmtPct(h.pct)}
+      </span>
+      <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
+        {(h.cond_level === "global" ? a.condGlobal : a.condLeague).replace("{n}", String(h.cond_n ?? "?"))}
+      </span>
+      <span className="flex-1" />
+      <span className="inline-flex flex-wrap items-center gap-1" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ color: "var(--nv-text-tertiary)" }}>{a.archiveLabel}:</span>
+        <span className="font-semibold">{(h.sources ?? [h.label]).map((l) => archiveName(l, generalLabel)).join(" + ")}</span>
+        {h.archive_pct != null && <span style={{ fontFamily: "var(--nv-font-mono)" }}>{fmtPct(h.archive_pct)}</span>}
+        <span style={{ color: "var(--nv-text-tertiary)" }}>({h.n})</span>
+        {h.conflict && (
+          <span title={a.conflictTooltip} style={{ color: "var(--nv-accent-amber)" }}>
+            <span aria-hidden="true">⚠</span> {a.conflict}
+          </span>
+        )}
+        {h.historical && (
+          <span
+            className="px-1.5"
+            style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-surface)", color: "var(--nv-text-primary)", fontFamily: "var(--nv-font-mono)" }}
+            title={a.historicalTooltip.replace("{bucket}", h.historical.bucket).replace("{n}", String(h.historical.n))
+              + (h.historical.pooled ? ` ${a.historicalPooled}` : "")}
+          >
+            {a.historical.replace("{pct}", h.historical.pct.toFixed(0))}
+          </span>
+        )}
+      </span>
+    </li>
+  );
+}
+
 export function HighlightList({ view }: { view: LiveArchiveView }) {
   const { t } = useLocale();
   const a = t.live.archive;
-  const groups = groupHighlights(view.highlights);
   const threshold = String(view.threshold_pct);
+  const decisions = view.highlights.filter((h) => h.sources);
+  if (decisions.length > 0 || view.rule_version !== "live-arch-v1") {
+    return (
+      <section className="space-y-1.5" aria-label={a.decisionsTitle.replace("{pct}", threshold)}>
+        <h4 className="font-bold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", letterSpacing: "var(--nv-tracking-wide)" }}>
+          {a.decisionsTitle.replace("{pct}", threshold)}
+        </h4>
+        {decisions.length === 0 ? (
+          <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{a.noDecisions}</p>
+        ) : (
+          <ul className="flex flex-col gap-1.5">
+            {decisions.map((h) => <DecisionRow key={`${h.period}:${h.market}`} h={h} />)}
+          </ul>
+        )}
+        <p style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
+          {a.decisionRule.replace(/\{pct\}/g, threshold).replace("{min}", String(view.risky_below_n))}
+        </p>
+      </section>
+    );
+  }
+  // Eski (live-arch-v1) kayıtlı maçlar: arşiv başına işaretler, aynı seçim tek satırda
+  const groups = groupHighlights(view.highlights);
   return (
     <section className="space-y-1.5" aria-label={a.highlightsTitle.replace("{pct}", threshold)}>
       <h4 className="font-bold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", letterSpacing: "var(--nv-tracking-wide)" }}>

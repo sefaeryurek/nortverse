@@ -538,11 +538,13 @@ function rangeHeadline(range: Range, day: string, t: Dictionary): string {
 
 const TABS = ["canli", "mac-oncesi", "backtest", "pattern"] as const;
 type Tab = (typeof TABS)[number];
-/** Canlı sekmesi sadece arşiv %85+ işaretlerini ölçer (eski COND modeli arka planda). */
-const LIVE_ARCHIVE_RULE_VERSION = "live-arch-v1";
+/** Canlı sekmesi güncel arşiv karar kuralını ölçer (eski COND modeli arka planda). */
+const LIVE_ARCHIVE_RULE_VERSION = "live-arch-v2";
+/** Eski kural (18 Ekim 2026'ya kadar): arşiv başına işaret, n<5 dahil — geçmiş ayrı gösterilir. */
+const LIVE_ARCHIVE_OLD_VERSION = "live-arch-v1";
 const TAB_SOURCE = { canli: "live_ht", "mac-oncesi": "top_pick" } as const;
 const TAB_GROUPS = {
-  canli: ["risk", "archive", "period_market", "league", "week"],
+  canli: ["period_market", "archive", "league", "week"],
   "mac-oncesi": ["tier", "agreement", "market", "league", "week"],
 } as const satisfies Record<keyof typeof TAB_SOURCE, readonly string[]>;
 
@@ -703,6 +705,21 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
             <Suspense fallback={<EvalSkeleton />}>
               {tab === "canli" ? <LiveDayList day={date} t={t} /> : <PredictionDayList source={TAB_SOURCE[tab]} day={date} t={t} />}
             </Suspense>
+            {tab === "canli" && (
+              <Suspense fallback={<EvalSkeleton />}>
+                <PerformanceOverview
+                  source="live_ht"
+                  t={t}
+                  groups={["risk", "archive"]}
+                  ruleVersion={LIVE_ARCHIVE_OLD_VERSION}
+                  title={t.evaluation.perf.liveOldTitle}
+                  hint={t.evaluation.perf.liveOldHint}
+                  dateFrom={bounds.from}
+                  dateTo={bounds.to}
+                  headline={rangeHeadline(range, date, t)}
+                />
+              </Suspense>
+            )}
             {tab === "mac-oncesi" && (
               <Suspense fallback={<EvalSkeleton />}>
                 <PerformanceOverview

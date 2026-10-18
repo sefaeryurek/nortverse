@@ -103,6 +103,8 @@
       "range_all": "Tümü",
       "headline_day": "{day} maçları",
       "headline_week": "{from} – {to}",
+      "liveOldTitle": "Eski kural (live-arch-v1)",
+      "liveOldHint": "18 Ekim'e kadar kullanılan kural: arşiv başına %85+ işaret, 5 maçtan az örneklem dahil. Gösterilen ~%98 iken gerçekte ~%66 tuttuğu için değiştirildi; geçmiş burada kalır.",
       "hitsOf": "{hits}/{n} tahmin",
       "ci": "%95 aralık %{low}–%{high}",
       "lift": "Tabana göre fark",
@@ -186,7 +188,7 @@
       "noPicks": "Bu maçta %85+ işaret yoktu",
       "emptyLiveDay": "Bu gün canlıya giren kayıtlı maç yok.",
       "recordedAt": "Kayıt {time}",
-      "liveSummaryNote": "Devre arasında kaydedilen %85+ arşiv işaretleri; maç bitince tuttu/tutmadı olarak işaretlenir.",
+      "liveSummaryNote": "Devre arasında kaydedilen kararlar: en az 5 maçlık arşiv %85+ ve aynı lig + aynı İY geçmişi %85+; pazar başına tek karar. Maç bitince tuttu/tutmadı olarak işaretlenir.",
       "strategy_live_archive": "Canlı arşiv (%85+)"
     }
   },
@@ -235,6 +237,15 @@
       "similarity": "Benzerlik (A3)"
     },
     "archive": {
+      "decisionsTitle": "Kararlar (%{pct}+)",
+      "noDecisions": "Bu maçta kurala uyan karar yok",
+      "decisionRule": "Kural: en az {min} maçlık bir arşiv %{pct}+ diyor VE aynı lig + aynı İY skoruyla biten geçmiş maçlar da %{pct}+ diyor. Gösterilen oran lig geçmişinin oranı; arşiv oranı yanında. Pazar başına tek karar.",
+      "condLeague": "lig geçmişi · {n} maç",
+      "condGlobal": "tüm ligler · {n} maç",
+      "condTooltip": "Aynı İY skoruyla biten {n} geçmiş maçta bu seçimin oranı (gerçekçi tahmin).",
+      "archiveLabel": "Arşiv",
+      "conflict": "çelişki",
+      "conflictTooltip": "Arşivler farklı seçimi işaret etti; en büyük örneklemli arşiv kazandı.",
       "highlightsTitle": "Öne çıkanlar (%{pct}+)",
       "noHighlights": "%{pct} üzeri oran yok",
       "risky": "Riskli",

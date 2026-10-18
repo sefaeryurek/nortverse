@@ -1560,6 +1560,24 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Defter:** hatalı arşivle yazılmış 3.707 kayıt silinmeden `invalidated` çözümüyle kalıcı void (`ledger.invalidate_predictions`, audit_log'da sebep); öncesinde doğru arşivle yazılmış 129 kayıt geçerli kaldı. `resolve_pending` invalidated satırları tekrar çözmez.
 - **Canlı sayfa:** analiz yoksa sebep gösterilir — kural dışı (`skipped_analysis.reason`, ör. H2H yetersiz) ya da başlamadan analiz edilmemiş.
 
+### Sprint 91 — DEVAM EDİYOR (7 ajan raporu sonrası yol haritası — `docs/sprint-91-plan.md`)
+**Faz 0 — hatalar ve dürüst sayım (TAMAMLANDI ✅):**
+- **Tekil sayım:** `performance.dedupe_decisions` — aynı maçta aynı periyot/pazar/seçim tek karar (A1/A2/A3/Genel dört kez sayılıyordu). 18 Ekim: ham 216/262 (%82) → tekil 93/123 (%76). "Arşiv" kırılımı her arşivi ayrı sayar; özet `raw_resolved` ile ham sayıyı da verir.
+- **Skor güncelleme maç başına dayanıklı:** kaynak tek maçta İY > MS verirse sadece o maç atlanır (eskiden bütün günün yazımı geri alınıyordu).
+- **Ertelenen maç:** bülten önbelleğinde listeden düşüp taşınan kayıtlar `carried: true`; saat senkronu bunları kullanmaz, çakışmada en son çekilen liste kazanır.
+- **Maç öncesi kayıt koruması:** `prematch_v4.match_already_started` — DB saati yer tutucu olsa da sonuç/İY gözlemi/bültenin güncel saati ve durumu kontrol edilir. 3026756'nın maçtan sonra yazılmış 23 kaydı geçersiz sayıldı.
+- **Canlı arşiv kaydı sadece devre arası / 2. yarı ≤50. dk** (`live_ledger.archive_freeze_allowed`); geç dondurma "skor hâlâ İY skoru" koşuluyla sonucu ayıklıyordu. `details.late` yazılır.
+- **Görünüm önbelleği** eşleşme listesi özetiyle anahtarlanır (arşiv yeniden hesaplanınca eski görünüm dönmez).
+- **Panel:** gün süzme gerçek maç saatine (`matches.kickoff_time`) göre; geçersiz sayılanlar ve ana lig dışı kayıtlar sayılmaz; özet aralığı gün / 7 gün / tümü (`?aralik=gun|7g|tum`).
+- **Lig adı tek kaynak:** `league_filter.match_league_name(code, name)` (pipeline, API, CLI aynı). `pattern_as_of` başlama saati yoksa uyarır.
+
+**Faz 1 — live-arch-v2 (TAMAMLANDI ✅):**
+- **Neden:** v1'in %85+ işaretleri gösterilen ~%98 iken gerçekte %66 tutuyordu (n=1 %58); arşivler "aynı lig + aynı İY" geçmişine bilgi katmıyordu.
+- **Kural (`live_archive.decide`):** 6 pazar (MS 1X2, ÇŞ, Ü/A 1.5/2.5/3.5, 2Y Ü/A 0.5 — 2Y sonuç, 2Y 1.5, MS KG, 2Y KG çıkarıldı); arşiv n≥5 ve ≥%85; **COND kapısı** — aynı lig + aynı İY skorlu geçmiş (≥30 maç, yoksa tüm ligler) de ≥%85 (`cond_probability`, `Counts.pairs` (İY,MS) sayacından her pazar çözülür); pazar başına tek karar, çelişkide büyük örneklem kazanır; **gösterilen oran = COND oranı**, arşiv oranı ikincil (`archive_pct`, `sources`).
+- **Backtest #9 (2023-07 → 2026-10, sızıntısız):** 3.333 tekil karar / 2.822 maç (6.075'in %46'sı), isabet **%92,6**, gösterilen ort. %92,2 (kalibre). Pazarlar: ÇŞ %90,7 · Ü/A 3.5 %94,8 · MS %91,5 · 2Y 0.5 %92,1 · 1.5 %91,3 · 2.5 %94,4.
+- **Ekran:** canlı sayfada "Kararlar (%85+)" — pazar başına tek satır, lig geçmişi oranı + maç sayısı, arşivler (A1 + Genel …) ve arşiv oranı, çelişki uyarısı, geçmiş isabet çipi (backtest #9). Arşiv tablosu (A1/A2/A3/Genel, 10 pazar) bilgi olarak duruyor. Değerlendirme → Canlı İY: v2 ana özet, v1 "Eski kural" bölümünde.
+- v1 kayıtları defterde kalır (`LIVE_ARCHIVE_RULE_VERSIONS`); yeni kayıtlar sadece v2. Eski kayıtlı maçlar ekranda v1 düzeninde gösterilir.
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**

@@ -150,7 +150,7 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
     if status == "ready":
         view = await live_archive.load_view(
             match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
-            observed_ht(fs))
+            observed_ht(fs), league=match.league_name or "", table=await get_cond_table())
     if report is not None:
         report["prediction"] = prediction
         report["view"] = view

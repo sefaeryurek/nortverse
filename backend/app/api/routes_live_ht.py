@@ -82,7 +82,7 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
                PredictionLedger.details)
         .where(
             PredictionLedger.source == "live_ht",
-            PredictionLedger.rule_version.in_([LIVE_RULE_VERSION, live_archive.LIVE_ARCHIVE_RULE_VERSION]),
+            PredictionLedger.rule_version.in_([LIVE_RULE_VERSION, *live_archive.LIVE_ARCHIVE_RULE_VERSIONS]),
             PredictionLedger.match_id.in_(ids),
             # Hatalı veriyle üretilip geçersiz sayılan kayıtlar ekranda "kayıt" gibi gösterilmez.
             ~exists().where(
@@ -96,8 +96,8 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
     for r in rows:
         entry = out.setdefault(r.match_id, {"frozen_at": r.recorded_at.isoformat(), "highlights": [], "archived": False})
         if r.rule_version == LIVE_RULE_VERSION and r.market == "result":
-            entry["archived"] = (r.details or {}).get("archive_rule_version") == live_archive.LIVE_ARCHIVE_RULE_VERSION
-        if r.rule_version != live_archive.LIVE_ARCHIVE_RULE_VERSION:
+            entry["archived"] = (r.details or {}).get("archive_rule_version") in live_archive.LIVE_ARCHIVE_RULE_VERSIONS
+        if r.rule_version not in live_archive.LIVE_ARCHIVE_RULE_VERSIONS:
             continue
         details = r.details or {}
         entry["archived"] = True
@@ -106,6 +106,9 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
             "pct": r.prob_shown_bp / 100, "archive": r.archive or live_archive.GENERAL,
             "label": details.get("label") or (r.archive or "genel").upper(),
             "n": r.sample_n or 0, "risky": bool(details.get("risky")),
+            "sources": details.get("sources") or [details.get("label") or (r.archive or "genel").upper()],
+            "archive_pct": details.get("archive_pct"), "cond_n": details.get("cond_n"),
+            "conflict": bool(details.get("conflict")), "rule_version": r.rule_version,
         })
     for entry in out.values():
         entry["highlights"].sort(key=lambda h: (h["risky"], -h["pct"], -h["n"]))
@@ -114,7 +117,8 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
 
 async def _view_for(match: Match, ht: tuple[int, int], frozen: dict | None, *, with_matches: bool = False) -> dict:
     blobs = {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d}
-    view = await live_archive.load_view(match.match_id, blobs, ht, with_matches=with_matches)
+    view = await live_archive.load_view(match.match_id, blobs, ht, league=match.league_name or "",
+                                        with_matches=with_matches)
     if frozen and frozen.get("archived"):
         try:
             table = await live_archive.load_hit_table()

@@ -1,11 +1,16 @@
-"""Canlı İY arşiv görünümü (live-arch-v1).
+"""Canlı İY arşiv görünümü (tablo: A1/A2/A3/Genel) + öne çıkan kararlar (live-arch-v2).
 
 Maçın A1/A2/A3 eşleşen arşiv maçlarından İY skoru aynı bitenler alınır; her arşiv için ayrı
-ve üçünün birleşimi (Genel, tekrarsız) için pazar oranları hesaplanır.
+ve üçünün birleşimi (Genel, tekrarsız) için pazar oranları hesaplanır (tablo, sadece bilgi).
 
-- İY skorunun zaten kesinleştirdiği pazarlar (ör. İY 2-1'de MS KG Var) gösterilmez.
-- Oranı ≥%85 olan seçimler "öne çıkanlar"dır ve devre arasında deftere yazılır.
-- Örneklem 5 maçtan azsa öne çıkan seçim "riskli" işaretlenir (yine gösterilir ve kaydedilir).
+Öne çıkan karar kuralı (live-arch-v2, Sprint 91 — 7 ajan ölçümü sonrası):
+- v1'de %85+ gösterilen işaretler gerçekte %66 tutuyordu: n=1 %58, 2-4 %71; arşivler "aynı lig +
+  aynı İY skoru" geçmişine bilgi katmıyordu (lift ≈ 0). Bu yüzden:
+- Örneklemi 5'ten küçük arşiv karar üretmez; zayıf 4 pazar (2Y sonuç, 2Y Ü/A 1.5, MS KG, 2Y KG) yok.
+- COND kapısı: aynı lig + aynı İY skorlu geçmiş (≥30 maç; yoksa tüm ligler) de seçimi ≥%85 bulmalı.
+- Pazar başına tek karar: arşivler çelişirse büyük örneklem kazanır; aynı seçimi işaret eden arşivler
+  `sources`'ta listelenir (tek defter satırı → tekil sayım).
+- Gösterilen oran COND oranıdır (gerçekçi); arşiv oranı ikincil bilgi.
 
 Arşiv üyelikleri maç öncesi (kickoff) hesaplanmış `matched_ids`'ten gelir → sızıntısız.
 """
@@ -21,18 +26,28 @@ from app.analysis.market_catalog import get_market
 from app.analysis.market_resolver import resolve
 from app.analysis.pattern_stats import compute_stats
 
-LIVE_ARCHIVE_RULE_VERSION = "live-arch-v1"
+LIVE_ARCHIVE_RULE_VERSION = "live-arch-v2"
+LIVE_ARCHIVE_RULE_VERSIONS = ("live-arch-v1", "live-arch-v2")  # değerlendirme geçmişi için
 RULE_PARAMS = {
     "threshold_pct": 85.0,
-    "risky_below_n": 5,
+    "min_n": 5,
+    "cond_gate_pct": 85.0,
+    "cond_min_n": 30,
+    "shown": "cond",
     "markets": [
-        ["ft", "result"], ["ft", "dc"], ["ft", "ou_15"], ["ft", "ou_25"], ["ft", "ou_35"], ["ft", "kg"],
-        ["h2", "result"], ["h2", "ou_05"], ["h2", "ou_15"], ["h2", "kg"],
+        ["ft", "result"], ["ft", "dc"], ["ft", "ou_15"], ["ft", "ou_25"], ["ft", "ou_35"], ["h2", "ou_05"],
     ],
 }
 THRESHOLD_PCT = RULE_PARAMS["threshold_pct"]
-RISKY_BELOW_N = RULE_PARAMS["risky_below_n"]
-LIVE_MARKETS: tuple[tuple[str, str], ...] = tuple((p, m) for p, m in RULE_PARAMS["markets"])
+MIN_N = RULE_PARAMS["min_n"]
+COND_GATE_PCT = RULE_PARAMS["cond_gate_pct"]
+COND_MIN_N = RULE_PARAMS["cond_min_n"]
+DECISION_MARKETS: tuple[tuple[str, str], ...] = tuple((p, m) for p, m in RULE_PARAMS["markets"])
+# Tablo (sadece bilgi): A1/A2/A3/Genel'in tüm canlı pazarlardaki oranları
+LIVE_MARKETS: tuple[tuple[str, str], ...] = (
+    ("ft", "result"), ("ft", "dc"), ("ft", "ou_15"), ("ft", "ou_25"), ("ft", "ou_35"), ("ft", "kg"),
+    ("h2", "result"), ("h2", "ou_05"), ("h2", "ou_15"), ("h2", "kg"),
+)
 SOURCES = (("b", "a1", "A1"), ("c", "a2", "A2"), ("d", "a3", "A3"))
 GENERAL = "genel"
 
@@ -96,8 +111,59 @@ def market_cells(rows: list[ArchiveMatch], ht: tuple[int, int]) -> list[dict]:
     return cells
 
 
-def build_view(rows_by_source: dict[str, list[ArchiveMatch]], ht: tuple[int, int]) -> dict:
-    """A1/A2/A3 + Genel tablo ve ≥%85 öne çıkanlar."""
+@lru_cache(maxsize=65536)
+def _pair_hit(period: str, market: str, selection: str, pair: tuple[int, int, int, int]) -> bool:
+    return resolve(period, market, selection, pair[:2], pair[2:]) == "hit"
+
+
+def cond_probability(table, league: str, ht: tuple[int, int], period: str, market: str,
+                     selection: str) -> dict | None:
+    """Aynı lig + aynı İY skorlu geçmişte seçimin oranı (Laplace 0.5). Lig ≥30 maç değilse tüm ligler;
+    o da yetmezse None (kapı geçilemez). `table`: live_model.CondTable (sızıntısız kesimli)."""
+    for level, counts in (("league", table.by_score.get(league, {}).get(tuple(ht))),
+                          ("global", table.global_by_score.get(tuple(ht)))):
+        if counts is None or counts.n < COND_MIN_N:
+            continue
+        hits = sum(c for pair, c in counts.pairs.items() if c > 0 and _pair_hit(period, market, selection, pair))
+        n = sum(c for c in counts.pairs.values() if c > 0)
+        if n < COND_MIN_N:
+            continue
+        return {"pct": round(100 * (hits + 0.5) / (n + 1), 1), "n": n, "level": level}
+    return None
+
+
+def decide(sources: list[dict], cond_of) -> list[dict]:
+    """Pazar başına tek karar (live-arch-v2). `cond_of(period, market, selection)` → cond_probability."""
+    decisions = []
+    for period, market in DECISION_MARKETS:
+        candidates = [
+            {**cell, "archive": src["archive"], "label": src["label"], "n": src["n"]}
+            for src in sources if src["n"] >= MIN_N
+            for cell in src["cells"]
+            if cell["period"] == period and cell["market"] == market and cell["pct"] >= THRESHOLD_PCT
+        ]
+        if not candidates:
+            continue
+        # Çelişkide büyük örneklem kazanır (eşitse yüksek oran)
+        best = max(candidates, key=lambda c: (c["n"], c["pct"]))
+        cond = cond_of(period, market, best["selection"])
+        if cond is None or cond["pct"] < COND_GATE_PCT:
+            continue
+        agree = [c for c in candidates if c["selection"] == best["selection"]]
+        decisions.append({
+            "period": period, "market": market, "selection": best["selection"],
+            "pct": cond["pct"], "cond_n": cond["n"], "cond_level": cond["level"],
+            "archive": best["archive"], "label": best["label"], "n": best["n"],
+            "archive_pct": best["pct"], "options": best["options"], "risky": False,
+            "sources": [c["label"] for c in agree],
+            "conflict": len({c["selection"] for c in candidates}) > 1,
+        })
+    decisions.sort(key=lambda d: (-d["pct"], -d["n"]))
+    return decisions
+
+
+def build_view(rows_by_source: dict[str, list[ArchiveMatch]], ht: tuple[int, int], cond_of=None) -> dict:
+    """A1/A2/A3 + Genel tablo ve öne çıkan kararlar (cond_of verilmezse karar yok)."""
     general: dict[str, ArchiveMatch] = {}
     for _, short, _ in SOURCES:
         for row in rows_by_source.get(short, []):
@@ -109,18 +175,13 @@ def build_view(rows_by_source: dict[str, list[ArchiveMatch]], ht: tuple[int, int
     ):
         n = len(rows)
         sources.append({
-            "archive": short, "label": label, "n": n, "risky": 0 < n < RISKY_BELOW_N,
+            "archive": short, "label": label, "n": n, "risky": 0 < n < MIN_N,
             "cells": market_cells(rows, ht),
         })
-    highlights = [
-        {**cell, "archive": src["archive"], "label": src["label"], "n": src["n"], "risky": src["risky"]}
-        for src in sources for cell in src["cells"] if cell["pct"] >= THRESHOLD_PCT
-    ]
-    highlights.sort(key=lambda h: (h["risky"], -h["pct"], -h["n"]))
     return {
         "rule_version": LIVE_ARCHIVE_RULE_VERSION, "ht": {"home": ht[0], "away": ht[1]},
-        "threshold_pct": THRESHOLD_PCT, "risky_below_n": RISKY_BELOW_N,
-        "sources": sources, "highlights": highlights,
+        "threshold_pct": THRESHOLD_PCT, "risky_below_n": MIN_N, "cond_gate_pct": COND_GATE_PCT,
+        "sources": sources, "highlights": decide(sources, cond_of) if cond_of is not None else [],
     }
 
 
@@ -142,7 +203,7 @@ def ht_filtered_rows(blobs: dict[str, dict | None], results: dict[str, tuple], h
 
 
 def ledger_rows(view: dict, common: dict, *, late: bool = False) -> list[dict]:
-    """Öne çıkan her seçim için defter satırı (Genel → archive NULL)."""
+    """Her karar için tek defter satırı (kazanan arşiv; Genel → archive NULL). Gösterilen = COND oranı."""
     rows = []
     for h in view["highlights"]:
         rows.append({
@@ -150,9 +211,11 @@ def ledger_rows(view: dict, common: dict, *, late: bool = False) -> list[dict]:
             "period": h["period"], "market": h["market"], "selection": h["selection"],
             "archive": None if h["archive"] == GENERAL else h["archive"],
             "prob_shown_bp": round(h["pct"] * 100), "sample_n": h["n"] or None,
-            "confidence_tier": "insufficient" if h["risky"] else "high",
-            "details": {"risky": h["risky"], "label": h["label"], "options": h["options"],
-                        "params": rule_params_fingerprint(), "historical": h.get("historical"), "late": late},
+            "confidence_tier": "high",
+            "details": {"label": h["label"], "sources": h["sources"], "archive_pct": h["archive_pct"],
+                        "cond_n": h["cond_n"], "cond_level": h["cond_level"], "conflict": h["conflict"],
+                        "options": h["options"], "params": rule_params_fingerprint(),
+                        "historical": h.get("historical"), "late": late},
         })
     return rows
 
@@ -173,7 +236,7 @@ def _blobs_digest(blobs: dict[str, dict | None]) -> str:
 
 
 async def load_view(match_id: str, blobs: dict[str, dict | None], ht: tuple[int, int],
-                    *, with_matches: bool = False) -> dict:
+                    *, league: str = "", with_matches: bool = False, table=None) -> dict:
     """Maçın canlı arşiv görünümü. with_matches=True: her kaynağın maç listesi (en yeni önce)."""
     import time
 
@@ -182,7 +245,7 @@ async def load_view(match_id: str, blobs: dict[str, dict | None], ht: tuple[int,
     from app.db.connection import get_session
     from app.db.models import Match
 
-    key = (match_id, tuple(ht), with_matches, _blobs_digest(blobs))
+    key = (match_id, tuple(ht), with_matches, league, _blobs_digest(blobs))
     cached = _view_cache.get(key)
     if cached is not None and time.monotonic() - cached[0] < _VIEW_TTL:
         return cached[1]
@@ -198,7 +261,12 @@ async def load_view(match_id: str, blobs: dict[str, dict | None], ht: tuple[int,
             )
             info = {r[0]: tuple(r[1:]) for r in result.all()}
     rows_by_source = ht_filtered_rows(blobs, {k: v[:4] for k, v in info.items()}, ht)
-    view = build_view(rows_by_source, ht)
+    if table is None:
+        from app.analysis.live_model import get_cond_table
+
+        table = await get_cond_table()
+    view = build_view(rows_by_source, ht,
+                      lambda period, market, sel: cond_probability(table, league, ht, period, market, sel))
     try:
         view["highlights"] = annotate(view["highlights"], await load_hit_table())
     except Exception:  # geçmiş isabet sadece bilgi — hesaplanamazsa görünüm yine döner

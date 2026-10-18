@@ -145,8 +145,8 @@ _backtest_cache: dict[int, dict] = {}
 
 
 def _backtest_groups(strategy: str, rule_version: str) -> tuple[str, ...]:
-    from app.analysis.live_archive import LIVE_ARCHIVE_RULE_VERSION
-    if rule_version == LIVE_ARCHIVE_RULE_VERSION:
+    from app.analysis.live_archive import LIVE_ARCHIVE_RULE_VERSIONS
+    if rule_version in LIVE_ARCHIVE_RULE_VERSIONS:
         return ("risk", "archive", "period_market", "league")
     return _BACKTEST_GROUPS.get(strategy, ("market",))
 
@@ -225,7 +225,7 @@ _LIVE_MATCHES_SQL = """
 """
 
 
-def _merge_pick(picks: list[dict], pick: dict) -> None:
+def _merge_pick(picks: list[dict], pick: dict, sources: list[str] | None = None) -> None:
     """Aynı periyot/pazar/seçim farklı arşivlerden geldiyse tek işaret: kaynaklar `labels`'a eklenir,
     gösterilen yüzde/örneklem en büyük örneklemli kaynaktan (tekil sayım)."""
     for existing in picks:
@@ -234,13 +234,13 @@ def _merge_pick(picks: list[dict], pick: dict) -> None:
             if (pick["n"], pick["pct"]) > (existing["n"], existing["pct"]):
                 existing.update({k: pick[k] for k in ("archive", "label", "pct", "n", "risky")})
             return
-    picks.append({**pick, "labels": [pick["label"]]})
+    picks.append({**pick, "labels": list(sources) if sources else [pick["label"]]})
 
 
 @router.get("/api/performance/live-matches")
 async def live_matches(day: date = Query(..., description="İstanbul günü (maç başlama)")) -> list[dict]:
     """Canlıya giren (devre arasında kaydedilen) her maç: %85+ arşiv işaretleri ve tuttu/tutmadı."""
-    from app.analysis.live_archive import LIVE_ARCHIVE_RULE_VERSION
+    from app.analysis.live_archive import LIVE_ARCHIVE_RULE_VERSIONS
 
     start = datetime.combine(day, datetime.min.time(), ISTANBUL_TZ)
     async with get_session() as session:
@@ -259,15 +259,17 @@ async def live_matches(day: date = Query(..., description="İstanbul günü (ma�
         if r.res_ft_home is not None:
             entry["final_ft"] = f"{r.res_ft_home}-{r.res_ft_away}"
             entry["final_ht"] = None if r.res_ht_home is None else f"{r.res_ht_home}-{r.res_ht_away}"
-        if r.rule_version != LIVE_ARCHIVE_RULE_VERSION:
+        if r.rule_version not in LIVE_ARCHIVE_RULE_VERSIONS:
             continue  # eski COND modeli ekranda yok; sadece arka planda ölçülür
         details = r.details or {}
+        label = details.get("label") or (r.archive or "genel").upper()
         _merge_pick(entry["picks"], {
             "period": r.period, "market": r.market, "selection": r.selection,
-            "archive": r.archive or "genel", "label": details.get("label") or (r.archive or "genel").upper(),
+            "archive": r.archive or "genel", "label": label,
             "pct": round(r.prob_shown_bp / 100, 1), "n": r.sample_n or 0,
             "risky": r.confidence_tier == "insufficient", "outcome": r.outcome or "pending",
-        })
+            "rule_version": r.rule_version, "archive_pct": details.get("archive_pct"),
+        }, sources=details.get("sources"))
     for entry in matches.values():
         resolved = [p for p in entry["picks"] if p["outcome"] in ("hit", "miss")]
         entry["hits"] = sum(p["outcome"] == "hit" for p in resolved)

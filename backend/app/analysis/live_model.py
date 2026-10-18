@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
@@ -48,12 +49,16 @@ class Counts:
     n2: int = 0
     over25: int = 0
     btts: int = 0
+    # (İY ev, İY dep, MS ev, MS dep) → adet: her pazarın koşullu oranı buradan çözülür (live-arch-v2 kapısı)
+    pairs: Counter = field(default_factory=Counter)
 
     @property
     def n(self) -> int:
         return self.n1 + self.nx + self.n2
 
-    def add(self, ft_h: int, ft_a: int, sign: int = 1) -> None:
+    def add(self, ft_h: int, ft_a: int, sign: int = 1, ht: tuple[int, int] | None = None) -> None:
+        if ht is not None:
+            self.pairs[(ht[0], ht[1], ft_h, ft_a)] += sign
         if ft_h > ft_a:
             self.n1 += sign
         elif ft_h == ft_a:
@@ -87,9 +92,9 @@ class CondTable:
 
     def add(self, league: str, ht_h: int, ht_a: int, ft_h: int, ft_a: int, kickoff: datetime) -> None:
         key, diff = (ht_h, ht_a), _diff_key(ht_h, ht_a)
-        self.by_score.setdefault(league, {}).setdefault(key, Counts()).add(ft_h, ft_a)
+        self.by_score.setdefault(league, {}).setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
         self.by_diff.setdefault(league, {}).setdefault(diff, Counts()).add(ft_h, ft_a)
-        self.global_by_score.setdefault(key, Counts()).add(ft_h, ft_a)
+        self.global_by_score.setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
         self.global_by_diff.setdefault(diff, Counts()).add(ft_h, ft_a)
         if kickoff >= self.prior_from:
             self.prior.setdefault(league, Counts()).add(ft_h, ft_a)
