@@ -111,3 +111,11 @@ class TestCanonicalLeagueName:
         assert canonical_league_name("EPL") == "English Premier League"
         assert canonical_league_name("epl") == "English Premier League"
         assert canonical_league_name("ePl") == "English Premier League"
+
+
+def test_match_league_name_single_source():
+    from app.analysis.league_filter import match_league_name
+    assert match_league_name("ENG PR", "") == "English Premier League"
+    assert match_league_name("", "English Premier League") == "English Premier League"
+    assert match_league_name(None, "TUR D1") == canonical_league_name("TUR D1")
+    assert match_league_name(None, None) == ""

@@ -224,6 +224,19 @@ def is_main_league(*names: str | None) -> bool:
     return False
 
 
+def match_league_name(league_code: str | None, league_name: str | None) -> str:
+    """Maçın pattern/defter için lig adı — tek kaynak.
+
+    Önce kısa kod (H2H sayfasından, tutarlı), sonra kaynak adı; ikisi de kanonik forma çevrilir.
+    Boş lig adı lig süzgecini kapatıp başka liglerle eşleşmeye yol açıyordu (Sprint 90).
+    """
+    for candidate in (league_code, league_name):
+        canonical = canonical_league_name(candidate)
+        if canonical:
+            return canonical
+    return ""
+
+
 def canonical_league_name(name: str | None) -> str:
     """Lig adını kanonik forma çevir. Tanınmıyorsa orijinali (trimmed) döner."""
     if not name:

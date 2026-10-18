@@ -89,9 +89,11 @@ def pattern_as_of(analyzed_at: datetime, kickoff_time: datetime | None) -> datet
     Maç öncesi analizde analiz anı; maçtan sonra analiz edilen (arşiv) maçlarda
     kickoff anı — böylece hiçbir maç kendinden sonra oynanan maçları görmez.
     """
-    if kickoff_time is not None and kickoff_time < analyzed_at:
-        return kickoff_time
-    return analyzed_at
+    if kickoff_time is None:
+        # Başlama saati bilinmiyorsa analiz anı kullanılır; maç sonrası analizde gelecek bilgisi sızabilir.
+        log.warning("pattern_as_of: başlama saati yok, analiz anı kullanıldı (%s)", analyzed_at)
+        return analyzed_at
+    return min(kickoff_time, analyzed_at)
 
 
 def _dump(result: PatternResult | None) -> dict | None:

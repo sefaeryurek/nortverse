@@ -61,3 +61,12 @@ def test_ordering_recent_to_old():
     ]
     weights = _temporal_weights(rows, as_of, half_life_years=3.0)
     assert weights[0] > weights[1] > weights[2]
+
+
+def test_pattern_as_of_never_after_kickoff():
+    from datetime import datetime, timedelta, timezone
+    from app.analysis.persist import pattern_as_of
+    ko = datetime(2026, 10, 1, 18, tzinfo=timezone.utc)
+    assert pattern_as_of(ko + timedelta(days=30), ko) == ko          # arşiv maçı: kickoff anı
+    assert pattern_as_of(ko - timedelta(hours=5), ko) == ko - timedelta(hours=5)  # maç öncesi: analiz anı
+    assert pattern_as_of(ko, None) == ko                               # saat yok: analiz anı (uyarılı)

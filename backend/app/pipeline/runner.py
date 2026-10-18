@@ -16,7 +16,7 @@ from sqlalchemy.orm import load_only
 
 from app.config import ISTANBUL_TZ
 from app.analysis import analyze_match, check_match_filters
-from app.analysis.league_filter import canonical_league_name, is_supported_league
+from app.analysis.league_filter import canonical_league_name, is_supported_league, match_league_name
 from app.analysis.score_snapshots import capture_score_snapshot
 from app.analysis.prematch_v4 import capture_v4_recommendations
 from app.analysis.persist import FAMILIES, compute_all_patterns, hash_columns, pattern_as_of
@@ -216,7 +216,7 @@ async def _upsert(
                             analyzed_at=result.analyzed_at,
                             captured_at=captured_at,
                             kickoff_time=raw.kickoff_time,
-                            league_name=raw.league_name or canonical_league_name(raw.league_code),
+                            league_name=match_league_name(raw.league_code, raw.league_name),
                             league_code=raw.league_code,
                             patterns=patterns,
                         )
@@ -432,7 +432,7 @@ async def run_pipeline(
                     ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
                     ft_ratios=result.ft.all_ratios,
                     as_of=pattern_as_of(result.analyzed_at, raw.kickoff_time),
-                    league_name=raw.league_code or raw.league_name,
+                    league_name=match_league_name(raw.league_code, raw.league_name),
                 )
                 await _upsert(result, raw, patterns)
                 stats["analyzed"] += 1

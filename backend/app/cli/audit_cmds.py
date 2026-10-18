@@ -571,7 +571,7 @@ def self_test_cmd(
     """Sprint 8.9 — Sistem sağlık E2E testi: tek maç üzerinden tüm boru hattı."""
     _setup_logging("DEBUG" if verbose else "WARNING")
 
-    from app.analysis.league_filter import is_supported_league
+    from app.analysis.league_filter import is_supported_league, match_league_name
     from app.analysis.persist import compute_all_patterns
     from app.analysis.trends import compute_trends
     from app.pipeline.runner import _validate_row, _result_to_row
@@ -616,7 +616,7 @@ def self_test_cmd(
             ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
             ft_ratios=result.ft.all_ratios,
             as_of=result.analyzed_at,
-            league_name=raw.league_code or raw.league_name,
+            league_name=match_league_name(raw.league_code, raw.league_name),
         )
         ft_b_count = (patterns["pattern_ft_b"] or {}).get("match_count", 0)
         ft_c_count = (patterns["pattern_ft_c"] or {}).get("match_count", 0)

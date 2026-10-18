@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 from app.config import ISTANBUL_TZ
 from app.api.schemas import AnalyzeResponse, PeriodOut, RecommendationOut
 from app.analysis import analyze_match, check_match_filters
-from app.analysis.league_filter import is_supported_league
+from app.analysis.league_filter import is_supported_league, match_league_name
 from app.analysis.pattern_stats import PatternResult
 from app.analysis.prematch_v4 import V4_RULE_VERSION as RULE_VERSION, capture_v4_recommendations
 
@@ -475,7 +475,7 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
         ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
         ft_ratios=result.ft.all_ratios,
         as_of=pattern_as_of(result.analyzed_at, raw.kickoff_time),
-        league_name=raw.league_code or raw.league_name,
+        league_name=match_league_name(raw.league_code, raw.league_name),
     )
 
     frozen_recommendations: list[dict] = []
