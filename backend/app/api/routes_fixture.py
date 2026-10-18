@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.config import ISTANBUL_TZ
 from app.analysis.league_filter import is_main_league
+from app.analysis.prematch_v4 import RULE_PARAMS
 from app.api.schemas import FixtureMatchOut
 from app.api.live_snapshot import get_live_snapshot
 from app.api.score_state import _utc, resolve_match_state
@@ -31,6 +32,29 @@ from app.scraper import fetch_istanbul_fixture
 
 log = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def pattern_status(b_data: dict | None, c_data: dict | None, d_data: dict | None) -> dict | None:
+    """Bülten rozetleri: arşiv, maç öncesi kararın (v4) kullandığı eşiği geçiyorsa (≥10 maç) sayılır.
+
+    Uyum: aktif arşivlerin MS kazananı (argmax) aynı mı. Hiç aktif arşiv yoksa None.
+    """
+    minimum = RULE_PARAMS["min_archive_matches"]
+    active = {
+        label: data for label, data in (("b", b_data), ("c", c_data), ("d", d_data))
+        if isinstance(data, dict) and (data.get("match_count") or 0) >= minimum
+    }
+    if not active:
+        return None
+    winners = {
+        label: max(["1", "x", "2"], key=lambda k, d=data: d.get(f"result_{k}_pct", 0))
+        for label, data in active.items()
+    }
+    return {
+        "has_b": "b" in active, "has_c": "c" in active, "has_d": "d" in active,
+        "agreement": "b" in winners and "c" in winners and winners["b"] == winners["c"],
+        "agreement_bcd": len(winners) == 3 and len(set(winners.values())) == 1,
+    }
 
 
 async def _enrich_prediction_status(items: list[dict]) -> dict[str, bool]:
@@ -262,24 +286,8 @@ async def get_pattern_status(
             b_data = row[1]
             c_data = row[2]
             d_data = row[3]
-            has_b = bool(b_data and isinstance(b_data, dict) and b_data.get("match_count", 0) >= 5)
-            has_c = bool(c_data and isinstance(c_data, dict) and c_data.get("match_count", 0) >= 1)
-            has_d = bool(d_data and isinstance(d_data, dict) and d_data.get("match_count", 0) >= 1)
-            if has_b or has_c or has_d:
-                agreement = False
-                agreement_bcd = False
-                winners: dict[str, str] = {}
-                for label, data, active in [("b", b_data, has_b), ("c", c_data, has_c), ("d", d_data, has_d)]:
-                    if active:
-                        winners[label] = max(
-                            ["1", "x", "2"],
-                            key=lambda k, d=data: d.get(f"result_{k}_pct", 0),
-                        )
-                if "b" in winners and "c" in winners:
-                    agreement = winners["b"] == winners["c"]
-                if "b" in winners and "c" in winners and "d" in winners:
-                    agreement_bcd = len(set(winners.values())) == 1
-                val = {"has_b": has_b, "has_c": has_c, "has_d": has_d, "agreement": agreement, "agreement_bcd": agreement_bcd}
+            val = pattern_status(b_data, c_data, d_data)
+            if val is not None:
                 _ps_cache_put(row[0], val)
                 result[row[0]] = val
             else:
