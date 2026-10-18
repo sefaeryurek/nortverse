@@ -24,14 +24,10 @@ from app.cli.archive_cmds import (
 from app.cli.audit_cmds import (
     audit_db_cmd,
     audit_patterns_cmd,
-    backtest_cmd,
-    backtest_ledger_cmd,
     prune_non_league_cmd,
     recompute_patterns_cmd,
     restore_deleted_cmd,
     self_test_cmd,
-    train_calibrator_cmd,
-    train_ensemble_cmd,
 )
 from app.cli.pipeline_cmds import (
     analyze,
@@ -47,6 +43,9 @@ from app.cli.pipeline_cmds import (
     update_scores_cmd,
 )
 
+from app.cli.model_cmds import backtest_cmd, train_calibrator_cmd, train_ensemble_cmd
+from app.cli.ledger_cmds import backtest_ledger_cmd, live_freeze_cmd
+
 app = typer.Typer(help="Nortverse - futbol tahmin sistemi CLI", no_args_is_help=True)
 
 # --- Pipeline / Analiz ---
@@ -60,6 +59,7 @@ app.command("capture-recommendations")(capture_recommendations_cmd)
 app.command("refresh-fixture-cache")(refresh_fixture_cache_cmd)
 app.command("update-scores")(update_scores_cmd)
 app.command("resolve-predictions")(resolve_predictions_cmd)
+app.command("live-freeze")(live_freeze_cmd)
 app.command()(serve)
 
 # --- Arşiv / Onarım ---

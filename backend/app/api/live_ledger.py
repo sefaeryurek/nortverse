@@ -105,30 +105,44 @@ async def _ht_observation_id(session, match: Match, ht: tuple[int, int], phase: 
     return obs_id
 
 
-async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: bool = False) -> str:
-    """İY gözlemini ve tahmini bir kez kaydeder. Durum kodunu döner."""
+async def plan_live_freeze(match: Match, fs: FixtureScore) -> tuple[str, dict | None]:
+    """Dondurma kararı (yazmadan): ('ready', tahmin) ya da (neden, None)."""
     ht = observed_ht(fs)
     phase = match_phase(fs)
     if ht is None or phase not in ("ht", "2h"):
-        return "no_ht"
-    now = datetime.now(timezone.utc)
-    if match.kickoff_time is None or now <= match.kickoff_time:
-        return "not_started"
-    late = phase == "2h"
-    if late and (fs.home, fs.away) != ht:
+        return "no_ht", None
+    if match.kickoff_time is None or datetime.now(timezone.utc) <= match.kickoff_time:
+        return "not_started", None
+    if phase == "2h" and (fs.home, fs.away) != ht:
         # 2. yarıda gol gördükten sonra "tahmin" yazılmaz.
-        log.info("Canlı tahmin dondurulmadı (2. yarıda skor değişmiş) [%s]", match.match_id)
-        return "late_score_changed"
+        return "late_score_changed", None
     table = await get_cond_table()
     prediction = predict_live(
         table, match.league_name or "", ht,
         [match.pattern_ft_b, match.pattern_ft_c, match.pattern_ft_d],
     )
+    return "ready", prediction
+
+
+async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: bool = False,
+                                 report: dict | None = None) -> str:
+    """İY gözlemini ve tahmini bir kez kaydeder. Durum kodunu döner (tahmin `report`'a yazılır)."""
+    status, prediction = await plan_live_freeze(match, fs)
+    if report is not None:
+        report["prediction"] = prediction
+    if status == "late_score_changed":
+        log.info("Canlı tahmin dondurulmadı (2. yarıda skor değişmiş) [%s]", match.match_id)
+    if status != "ready":
+        return status
     if dry_run:
         return "dry_run"
+    ht = observed_ht(fs)
+    phase = match_phase(fs)
+    now = datetime.now(timezone.utc)
     async with get_session() as session:
         obs_id = await _ht_observation_id(session, match, ht, phase, now)
-        written = await record_predictions(session, ledger_rows(match, prediction, now, obs_id, late))
+        written = await record_predictions(
+            session, ledger_rows(match, prediction, now, obs_id, late=phase == "2h"))
     if written:
         log.info("Canlı tahmin donduruldu [%s] İY %s-%s → %s %%%.1f",
                  match.match_id, ht[0], ht[1], prediction["ms"]["pick"], prediction["ms"]["prob"] * 100)
@@ -136,7 +150,11 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
     return "already_frozen"
 
 
-async def _tick() -> None:
+async def run_tick(*, dry_run: bool = False, snapshot=None) -> list[dict]:
+    """İzleyicinin bir turu. Her aday maç için {match, score, status, prediction} döner.
+
+    `snapshot` verilmezse süreç içi canlı görüntü kullanılır (CLI tam yenilenmiş görüntü verir).
+    """
     now = datetime.now(timezone.utc)
     async with get_session() as session:
         candidates = (await session.execute(
@@ -145,10 +163,10 @@ async def _tick() -> None:
                 Match.ft_scores_1.isnot(None),
                 Match.kickoff_time >= now - WINDOW_START,
                 Match.kickoff_time <= now - WINDOW_END,
-            )
+            ).order_by(Match.kickoff_time)
         )).scalars().all()
         if not candidates:
-            return
+            return []
         frozen = set((await session.execute(
             select(PredictionLedger.match_id).where(
                 PredictionLedger.source == "live_ht",
@@ -156,20 +174,33 @@ async def _tick() -> None:
                 PredictionLedger.match_id.in_([m.match_id for m in candidates]),
             )
         )).scalars().all())
+    report = [{"match": m, "score": None, "status": "already_frozen", "prediction": None}
+              for m in candidates if m.match_id in frozen]
     pending = [m for m in candidates if m.match_id not in frozen]
     if not pending:
-        return
-    snapshot = await get_live_snapshot()
+        return report
     if snapshot is None:
-        return
+        snapshot = await get_live_snapshot()
     for match in pending:
+        entry = {"match": match, "score": None, "status": "no_snapshot", "prediction": None}
+        report.append(entry)
+        if snapshot is None:
+            continue
         fs = snapshot.scores.get(match.match_id)
+        entry["score"] = fs
         if fs is None or fs.status != "live":
+            entry["status"] = "not_live"
             continue
         try:
-            await freeze_live_prediction(match, fs)
+            entry["status"] = await freeze_live_prediction(match, fs, dry_run=dry_run, report=entry)
         except Exception:
+            entry["status"] = "error"
             log.warning("Canlı tahmin dondurulamadı [%s]", match.match_id, exc_info=True)
+    return report
+
+
+async def _tick() -> None:
+    await run_tick()
 
 
 async def _watch_loop() -> None:

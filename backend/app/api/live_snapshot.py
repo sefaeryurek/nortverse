@@ -142,6 +142,11 @@ async def get_live_snapshot() -> LiveSnapshot | None:
         return _cached if _cached is not None and time.monotonic() - _cached_at < _LIVE_FRESH_SECONDS else None
 
 
+async def refresh_live_snapshot() -> LiveSnapshot | None:
+    """Tam yenileme bekler (CLI için — sunucu yolu `get_live_snapshot` kullanır)."""
+    return await _refresh()
+
+
 async def shutdown_live_snapshot() -> None:
     global _refresh_task
     task = _refresh_task

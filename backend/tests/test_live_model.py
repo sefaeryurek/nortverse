@@ -161,3 +161,45 @@ async def test_freeze_dry_run_computes_without_writing(monkeypatch):
 async def test_freeze_requires_ht_phase():
     fs = FixtureScore("900", "live", 0, 0, minute="30")
     assert await freeze_live_prediction(_match(), fs) == "no_ht"
+
+
+@pytest.mark.asyncio
+async def test_run_tick_dry_run_reports_every_candidate_without_writing(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    kickoff = datetime.now(timezone.utc) - timedelta(minutes=55)
+    ht_match = _match(match_id="1", kickoff_time=kickoff)
+    first_half = _match(match_id="2", kickoff_time=kickoff)
+    missing = _match(match_id="3", kickoff_time=kickoff)
+    done = _match(match_id="4", kickoff_time=kickoff)
+    results = iter([[ht_match, first_half, missing, done], ["4"]])
+
+    class _Result:
+        def __init__(self, items):
+            self._items = items
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self._items
+
+    class _Session:
+        async def execute(self, _stmt):
+            return _Result(next(results))
+
+    @asynccontextmanager
+    async def fake_session():
+        yield _Session()
+
+    monkeypatch.setattr(live_ledger, "get_session", fake_session)
+    monkeypatch.setattr(live_ledger, "record_predictions", AsyncMock(side_effect=AssertionError("yazmamalı")))
+    monkeypatch.setattr(live_ledger, "get_cond_table", AsyncMock(return_value=_table(_many(LEAGUE, (1, 0), (1, 0), 40))))
+    snapshot = SimpleNamespace(scores={
+        "1": FixtureScore("1", "live", 1, 0, minute="HT"),
+        "2": FixtureScore("2", "live", 0, 0, minute="30"),
+    })
+    report = await live_ledger.run_tick(dry_run=True, snapshot=snapshot)
+    status = {e["match"].match_id: e["status"] for e in report}
+    assert status == {"4": "already_frozen", "1": "dry_run", "2": "no_ht", "3": "not_live"}
+    assert next(e for e in report if e["match"].match_id == "1")["prediction"]["ms"]["pick"] == "1"

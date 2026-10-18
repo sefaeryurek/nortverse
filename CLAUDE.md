@@ -74,6 +74,9 @@ python -m app.cli.main recompute-patterns --stale-only --include-finished  # Bit
 # Tahmin defteri (Sprint 88)
 python -m app.cli.main update-scores --pending-days 3   # skorlar + son 3 günün eksik sonuçları + defteri çöz
 python -m app.cli.main resolve-predictions              # sadece bekleyen tahminleri tuttu/tutmadı olarak çöz
+python -m app.cli.main live-freeze                      # canlı dondurma denemesi: izleyici şu an ne yapardı (yazmaz)
+python -m app.cli.main live-freeze --apply              # bir turu gerçekten çalıştır (backend kapalıyken kaçan devre arası)
+python -m app.cli.main live-freeze --match 2813084 --ht 1-0  # o İY skoruyla tahmin ne olurdu (asla yazmaz)
 python -m app.cli.main backtest-ledger --strategy live_ht --from 2023-07-01 --to 2026-10-18         # canlı İY→MS
 python -m app.cli.main backtest-ledger --strategy top_pick --from 2023-07-01 --to 2026-10-18        # Top Picks v4
 python -m app.cli.main backtest-ledger --strategy market_summary --from 2023-07-01 --to 2026-10-18  # Ana Pazar Özeti
@@ -264,7 +267,9 @@ nortverse/
 │   │       ├── _helpers.py        # Ortak yardımcılar: console, logging, render (Sprint 21)
 │   │       ├── pipeline_cmds.py   # analyze, fetch-fixture, run-pipeline, serve (Sprint 21)
 │   │       ├── archive_cmds.py    # build-archive, repair-archive, normalize-leagues (Sprint 21)
-│   │       └── audit_cmds.py      # audit-db, self-test, prune-non-league, backtest, train-ensemble (Sprint 21+76+81)
+│   │       ├── audit_cmds.py      # audit-db, self-test, prune-non-league, recompute-patterns (Sprint 21)
+│       ├── model_cmds.py      # backtest (pattern), train-ensemble, train-calibrator (Sprint 76+81+83)
+│       └── ledger_cmds.py     # live-freeze, backtest-ledger — tahmin defteri (Sprint 88)
 │   ├── alembic/                   # DB migration (15 migration)
 │   ├── tests/                     # 936 test
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
