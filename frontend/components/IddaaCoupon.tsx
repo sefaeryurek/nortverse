@@ -17,9 +17,9 @@ interface Props {
 
 export default function IddaaCoupon({ patternB, patternC, patternD, period, recommendations }: Props) {
   const { t } = useLocale();
-  const hasB = patternB !== null && patternB.match_count >= 5;
-  const hasC = patternC !== null && patternC.match_count >= 1;
-  const hasD = patternD !== null && patternD.match_count >= 1;
+  const hasB = patternB != null && patternB.match_count >= 5;
+  const hasC = patternC != null && patternC.match_count >= 1;
+  const hasD = patternD != null && patternD.match_count >= 1;
   const recommendationPanel = <TopPicks recommendations={recommendations} period={period} />;
 
   if (!hasB && !hasC && !hasD) {

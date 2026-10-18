@@ -262,7 +262,10 @@
     "homeWins": "Home Wins",
     "drawLabel": "Draw",
     "awayWins": "Away Wins",
-    "noScores": "No scores with 3.5+ ratio found for this period"
+    "noScores": "No scores with 3.5+ ratio found for this period",
+    "showMore": "Show {count} more matches",
+    "listNotStored": "Matches exist but the list is not stored for this record yet (it will appear after recompute).",
+    "matchNo": "Match #{id}"
   },
   "skipReasons": {
     "not_league_match": "This is not a league match (cup or friendly). No prediction can be generated.",
@@ -309,7 +312,8 @@
   "powerScore": {
     "title": "Match Power Score",
     "tripleArchive": "Triple archive confirmation",
-    "dualArchive": "Dual archive confirmation"
+    "dualArchive": "Dual archive confirmation",
+    "trend": "Trend"
   },
   "detailedStats": {
     "title": "Detailed Analysis",

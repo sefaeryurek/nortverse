@@ -5,6 +5,7 @@ import type { PatternResult } from "@/lib/types";
 import type { Period } from "@/lib/labels";
 import { getMarketSummary } from "@/lib/confidence";
 import { useLocale } from "@/lib/locale-context";
+import { localizeLabel } from "@/lib/label-i18n";
 
 interface Props {
   patternB: PatternResult | null;
@@ -27,6 +28,7 @@ function Cell({
   value: { selectionLabel: string; pct: number } | null;
   accent: string;
 }) {
+  const { locale } = useLocale();
   if (!value) {
     return (
       <div
@@ -43,7 +45,7 @@ function Cell({
     <div className="flex flex-col items-end gap-1" style={{ opacity }}>
       <div className="flex items-center gap-2">
         <span className="text-[11px] truncate" style={{ color }}>
-          {value.selectionLabel}
+          {localizeLabel(value.selectionLabel, locale)}
         </span>
         <span
           className="text-xs font-extrabold px-1.5 py-0.5"
@@ -70,7 +72,7 @@ function Cell({
 }
 
 export default function MarketSummary({ patternB, patternC, patternD, period }: Props) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const rows = useMemo(() => getMarketSummary(patternB, patternC, period, patternD), [patternB, patternC, patternD, period]);
 
   if (rows.length === 0) return null;
@@ -156,7 +158,7 @@ export default function MarketSummary({ patternB, patternC, patternD, period }: 
                   className="text-xs truncate block"
                   style={{ color: "var(--nv-text-secondary)" }}
                 >
-                  {row.marketLabel}
+                  {localizeLabel(row.marketLabel, locale)}
                 </span>
                 {row.informational && (
                   <span className="text-[9px] block" style={{ color: "var(--nv-text-tertiary)" }}>

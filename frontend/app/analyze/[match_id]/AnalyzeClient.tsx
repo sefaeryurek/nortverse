@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import type { AnalyzeResponse, PatternResult } from "@/lib/types";
+import type { AnalyzeResponse } from "@/lib/types";
 import { analyzeMatch } from "@/lib/api";
 import ScoreList from "@/components/ScoreList";
 import PowerScoreGauge, { computePowerScore } from "@/components/PowerScoreGauge";
@@ -158,7 +158,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                   fontSize: "var(--nv-text-2xl)",
                 }}
               >
-                Maç #{match_id}
+                {t.analyze.matchNo.replace("{id}", match_id)}
               </h1>
             )}
           </div>
@@ -272,10 +272,12 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
             {!data.skipped && (
               <>
                 {/* Period tabs */}
-                <div className="flex gap-2">
+                <div className="flex gap-2" role="tablist">
                   {PERIOD_KEYS.map((key) => (
                     <button
                       key={key}
+                      role="tab"
+                      aria-selected={activePeriod === key}
                       onClick={() => changePeriod(key)}
                       className="px-4 py-2 text-sm font-semibold transition-all"
                       style={{

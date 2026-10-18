@@ -6,6 +6,8 @@ import type { MatchedMatchesResponse, MatchedMatch } from "@/lib/api";
 import { useLocale } from "@/lib/locale-context";
 import type { Period } from "@/lib/labels";
 
+const LIST_LIMIT = 50;
+
 interface Props {
   matchId: string;
   period?: Period;
@@ -74,27 +76,39 @@ function MatchRow({ match, showSimilarity, htLabel, h2Label, ftLabel }: { match:
 
 export default function MatchedMatchesList({ matchId, period = "ft", hasPatternB, hasPatternC, hasPatternD }: Props) {
   const { t } = useLocale();
-  const [data, setData] = useState<MatchedMatchesResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
   const [open, setOpen] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [showAll, setShowAll] = useState<Record<string, boolean>>({});
+  // Sonuç maç+periyot anahtarıyla saklanır; yükleniyor durumu türetilir (effect içinde senkron setState yok).
+  const key = `${matchId}:${period}`;
+  const [result, setResult] = useState<{ key: string; data: MatchedMatchesResponse | null; error: boolean } | null>(null);
 
   useEffect(() => {
-    setData(null);
-    setError(false);
-  }, [matchId, period]);
-
-  useEffect(() => {
-    if (!open || data) return;
+    if (!open) return;
     let cancelled = false;
-    setLoading(true);
-    setError(false);
     getMatchedMatches(matchId, period)
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch((err) => { console.error("Matched matches fetch failed:", err); if (!cancelled) setError(true); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then((d) => { if (!cancelled) setResult({ key, data: d, error: false }); })
+      .catch((err) => {
+        console.error("Matched matches fetch failed:", err);
+        if (!cancelled) setResult({ key, data: null, error: true });
+      });
     return () => { cancelled = true; };
-  }, [open, matchId, period, data]);
+  }, [open, key, matchId, period, reload]);
+
+  const current = result?.key === key ? result : null;
+  const loading = open && current === null;
+  const error = current?.error ?? false;
+  const data = current?.data ?? null;
+  const visible = (list: MatchedMatch[], id: string) => (showAll[`${key}:${id}`] ? list : list.slice(0, LIST_LIMIT));
+  const moreButton = (list: MatchedMatch[], id: string) => list.length > LIST_LIMIT && !showAll[`${key}:${id}`] && (
+    <button
+      onClick={() => setShowAll((prev) => ({ ...prev, [`${key}:${id}`]: true }))}
+      className="text-xs font-semibold mt-1"
+      style={{ color: "var(--nv-accent-blue)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+    >
+      {t.analyze.showMore.replace("{count}", String(list.length - LIST_LIMIT))}
+    </button>
+  );
 
   if (!hasPatternB && !hasPatternC && !hasPatternD) return null;
 
@@ -155,7 +169,7 @@ export default function MatchedMatchesList({ matchId, period = "ft", hasPatternB
             <div className="flex items-center gap-2" style={{ padding: "var(--nv-space-md) 0" }}>
               <span className="text-xs" style={{ color: "var(--nv-text-tertiary)" }}>{t.analyze.loadError}</span>
               <button
-                onClick={() => { setError(false); setData(null); }}
+                onClick={() => { setResult(null); setReload((r) => r + 1); }}
                 className="text-xs font-semibold"
                 style={{ color: "var(--nv-accent-blue)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
               >
@@ -179,9 +193,10 @@ export default function MatchedMatchesList({ matchId, period = "ft", hasPatternB
                       {data.archive_b.length} {t.common.match}
                     </span>
                   </div>
-                  {data.archive_b.map((m) => (
+                  {visible(data.archive_b, "b").map((m) => (
                     <MatchRow key={`b-${m.match_id}`} match={m} htLabel={t.periodTabs.htShort} h2Label={t.periodTabs.h2Short} ftLabel={t.periodTabs.ftShort} />
                   ))}
+                  {moreButton(data.archive_b, "b")}
                 </div>
               )}
 
@@ -198,9 +213,10 @@ export default function MatchedMatchesList({ matchId, period = "ft", hasPatternB
                       {data.archive_c.length} {t.common.match}
                     </span>
                   </div>
-                  {data.archive_c.map((m) => (
+                  {visible(data.archive_c, "c").map((m) => (
                     <MatchRow key={`c-${m.match_id}`} match={m} htLabel={t.periodTabs.htShort} h2Label={t.periodTabs.h2Short} ftLabel={t.periodTabs.ftShort} />
                   ))}
+                  {moreButton(data.archive_c, "c")}
                 </div>
               )}
 
@@ -217,15 +233,18 @@ export default function MatchedMatchesList({ matchId, period = "ft", hasPatternB
                       {data.archive_d.length} {t.common.match}
                     </span>
                   </div>
-                  {data.archive_d.map((m) => (
+                  {visible(data.archive_d, "d").map((m) => (
                     <MatchRow key={`d-${m.match_id}`} match={m} showSimilarity htLabel={t.periodTabs.htShort} h2Label={t.periodTabs.h2Short} ftLabel={t.periodTabs.ftShort} />
                   ))}
+                  {moreButton(data.archive_d, "d")}
                 </div>
               )}
 
               {data.archive_b.length === 0 && data.archive_c.length === 0 && (!data.archive_d || data.archive_d.length === 0) && (
                 <div className="text-xs" style={{ color: "var(--nv-text-tertiary)", padding: "var(--nv-space-md) 0" }}>
-                  {t.analyze.noMatchesFound}
+                  {data.list_available && Object.values(data.list_available).some((ok) => !ok)
+                    ? t.analyze.listNotStored
+                    : t.analyze.noMatchesFound}
                 </div>
               )}
             </>

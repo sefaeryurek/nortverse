@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useLocale } from "@/lib/locale-context";
 
 const NAV_ICONS = [
@@ -48,20 +48,27 @@ const NAV_ICONS = [
   },
 ];
 
+function subscribeSidebar(listener: () => void) {
+  window.addEventListener("storage", listener);
+  return () => window.removeEventListener("storage", listener);
+}
+
+function readSidebar(): boolean {
+  try { return localStorage.getItem("nv_sidebar") === "1"; } catch { return false; }
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { locale, t, setLocale } = useLocale();
-  const [expanded, setExpanded] = useState(false);
-
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("nv_sidebar") === "1") setExpanded(true);
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    try { localStorage.setItem("nv_sidebar", expanded ? "1" : "0"); } catch { /* ignore */ }
-  }, [expanded]);
+  // Kayıtlı tercih depodan okunur (SSR'da kapalı); kullanıcı değiştirince override + kayıt.
+  const savedExpanded = useSyncExternalStore(subscribeSidebar, readSidebar, () => false);
+  const [override, setOverride] = useState<boolean | null>(null);
+  const expanded = override ?? savedExpanded;
+  const setExpanded = (update: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof update === "function" ? update(expanded) : update;
+    setOverride(next);
+    try { localStorage.setItem("nv_sidebar", next ? "1" : "0"); } catch { /* ignore */ }
+  };
 
   const navItems = NAV_ICONS.map((item) => ({
     ...item,

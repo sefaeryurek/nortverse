@@ -9,7 +9,6 @@ const nullableText = (value: unknown) => value === null || typeof value === "str
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const count = (value: unknown) => finite(value) && Number.isSafeInteger(value) && value >= 0;
 const percentage = (value: unknown) => finite(value) && value >= 0 && value <= 100;
-const score = (value: unknown) => value === null || count(value) && (value as number) <= 30;
 const scoreLabel = (value: unknown) => typeof value === "string" && /^(?:[0-9]|[12][0-9]|30)-(?:[0-9]|[12][0-9]|30)$/.test(value);
 const scores = (value: unknown) => Array.isArray(value) && value.every(scoreLabel);
 

@@ -262,7 +262,10 @@
     "homeWins": "Ev Kazanır",
     "drawLabel": "Berabere",
     "awayWins": "Dep. Kazanır",
-    "noScores": "Bu periyotta 3.5+ oranı olan skor bulunamadı"
+    "noScores": "Bu periyotta 3.5+ oranı olan skor bulunamadı",
+    "showMore": "+{count} maç daha göster",
+    "listNotStored": "Eşleşme var ama bu kayıt için maç listesi henüz saklanmamış (yeniden hesaplamadan sonra görünecek).",
+    "matchNo": "Maç #{id}"
   },
   "skipReasons": {
     "not_league_match": "Bu maç lig maçı değil (kupa veya özel maç). Tahmin üretilemez.",
@@ -309,7 +312,8 @@
   "powerScore": {
     "title": "Maç Güç Skoru",
     "tripleArchive": "Üçlü arşiv onayı",
-    "dualArchive": "Çift arşiv onayı"
+    "dualArchive": "Çift arşiv onayı",
+    "trend": "Trend"
   },
   "detailedStats": {
     "title": "Detaylı Analiz",

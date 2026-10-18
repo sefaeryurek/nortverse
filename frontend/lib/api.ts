@@ -95,6 +95,7 @@ export interface MatchedMatchesResponse {
   archive_b: MatchedMatch[];
   archive_c: MatchedMatch[];
   archive_d?: MatchedMatch[];
+  list_available?: Record<"archive_b" | "archive_c" | "archive_d", boolean>;
 }
 
 export async function getMatchedMatches(

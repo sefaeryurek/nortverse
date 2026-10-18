@@ -4,6 +4,7 @@ import { memo, useSyncExternalStore, useState } from "react";
 import type { PatternResult } from "@/lib/types";
 import { type Period, periodLabels } from "@/lib/labels";
 import { useLocale } from "@/lib/locale-context";
+import { localizeLabel } from "@/lib/label-i18n";
 import type { Dictionary } from "@/lib/i18n";
 
 interface Props {
@@ -29,6 +30,7 @@ interface OddCellProps {
   sub?: string;
 }
 function OddCell({ label, value, sub }: OddCellProps) {
+  const { locale } = useLocale();
   const pct = Math.round(value);
   const s = pctStyle(pct);
   return (
@@ -46,11 +48,11 @@ function OddCell({ label, value, sub }: OddCellProps) {
         className="text-[9px] font-medium leading-tight"
         style={{ color: "var(--nv-text-tertiary)" }}
       >
-        {label}
+        {localizeLabel(label, locale)}
       </span>
       {sub && (
         <span className="text-[8px] leading-tight" style={{ color: "var(--nv-text-tertiary)", opacity: 0.6 }}>
-          {sub}
+          {localizeLabel(sub, locale)}
         </span>
       )}
       <span
@@ -102,13 +104,23 @@ function SubLabel({ text }: { text: string }) {
   return <p className="text-[9px] mt-1" style={{ color: "var(--nv-text-tertiary)" }}>{text}</p>;
 }
 
+/** Ağırlıklı skor sıklıkları yüzdeye çevrilir; en sık 10 skor azalan sırada. */
+export function topScoreShares(freq: Record<string, number>, limit = 10): [string, number][] {
+  const total = Object.values(freq).reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return [];
+  return Object.entries(freq)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([score, value]) => [score, (value / total) * 100]);
+}
+
 function ScoreFreq({ freq }: { freq: Record<string, number> | null | undefined }) {
   if (!freq) return null;
-  const entries = Object.entries(freq).slice(0, 10);
+  const entries = topScoreShares(freq);
   if (entries.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1.5">
-      {entries.map(([score, count]) => (
+      {entries.map(([score, share]) => (
         <span
           key={score}
           className="text-xs px-2 py-0.5"
@@ -120,7 +132,7 @@ function ScoreFreq({ freq }: { freq: Record<string, number> | null | undefined }
           }}
         >
           <span style={{ color: "var(--nv-text-primary)", fontWeight: 600 }}>{score}</span>
-          <span style={{ color: "var(--nv-text-tertiary)" }}> -- {count}x</span>
+          <span style={{ color: "var(--nv-text-tertiary)" }}> %{share.toFixed(1)}</span>
         </span>
       ))}
     </div>

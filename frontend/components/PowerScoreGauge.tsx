@@ -179,7 +179,7 @@ export default function PowerScoreGauge({ score, patternB, patternC, patternD, t
                   fontSize: "var(--nv-text-xs)",
                 }}
               >
-                Trend: {trendCount}/3
+                {t.powerScore.trend}: {trendCount}/3
               </span>
             )}
             {(() => {

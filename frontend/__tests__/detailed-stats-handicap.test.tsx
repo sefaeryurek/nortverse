@@ -22,3 +22,10 @@ it.each([
   const cell = screen.getByText(`%${value}`).parentElement;
   expect(cell?.textContent).toContain(label);
 });
+
+it("score frequencies are shown as sorted shares, not raw weights", async () => {
+  const { topScoreShares } = await import("@/components/DetailedStats");
+  const shares = topScoreShares({ "0-0": 1.5, "1-0": 29.79, "2-1": 10.0 });
+  expect(shares.map(([score]) => score)).toEqual(["1-0", "2-1", "0-0"]);
+  expect(shares[0][1]).toBeCloseTo(72.1, 1);
+});
