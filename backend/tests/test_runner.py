@@ -327,3 +327,75 @@ async def test_sync_kickoffs_updates_only_changed_unfinished_matches():
     update = session.execute.await_args_list[1].args[0]
     assert update.table.name == "matches"
     assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_carried_cache_items_do_not_set_kickoff():
+    """Kaynak listesinden düşmüş (ertelenmiş olabilecek) maçın eski saati geri yazılmaz."""
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock
+    from app.pipeline import runner
+
+    stale = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
+    session = AsyncMock()
+    items = [{"match_id": "1", "kickoff_time": stale.isoformat(), "carried": True}]
+    assert await runner.sync_kickoffs(session, items) == 0
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cache_sync_prefers_most_recently_fetched_day(monkeypatch):
+    """Maç D gününden D+1'e ertelendi; D'nin eski listesi ile D+1'in yeni listesi çakışırsa yeni kazanır."""
+    from contextlib import asynccontextmanager
+    from datetime import date, datetime, timezone
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from app.pipeline import runner
+
+    old_time = datetime(2026, 10, 18, 17, 0, tzinfo=timezone.utc)
+    new_time = datetime(2026, 10, 19, 17, 0, tzinfo=timezone.utc)
+    caches = {
+        "2026-10-18": SimpleNamespace(cached_at=datetime(2026, 10, 17, 8, tzinfo=timezone.utc),
+                                      matches_json=[{"match_id": "9", "kickoff_time": old_time.isoformat()}]),
+        "2026-10-19": SimpleNamespace(cached_at=datetime(2026, 10, 18, 9, tzinfo=timezone.utc),
+                                      matches_json=[{"match_id": "9", "kickoff_time": new_time.isoformat()}]),
+    }
+    session = AsyncMock()
+    session.get.side_effect = lambda _model, key: caches.get(key)
+    captured = {}
+
+    async def fake_sync(_session, items):
+        captured["items"] = items
+        return 1
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(runner, "get_session", fake_session)
+    monkeypatch.setattr(runner, "sync_kickoffs", fake_sync)
+    # Gün sırası ters verilse de sonuç aynı: belirleyici olan çekilme zamanı
+    assert await runner.sync_kickoffs_from_cache([date(2026, 10, 19), date(2026, 10, 18)]) == 1
+    assert captured["items"] == [{"match_id": "9", "kickoff_time": new_time.isoformat()}]
+
+
+@pytest.mark.asyncio
+async def test_retained_cache_items_are_marked_carried(monkeypatch):
+    from contextlib import asynccontextmanager
+    from datetime import date, datetime, timezone
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from app.pipeline import runner
+
+    kickoff = datetime(2026, 10, 19, 17, tzinfo=timezone.utc)
+    session = AsyncMock()
+    session.get.return_value = SimpleNamespace(matches_json=[{"match_id": "5", "kickoff_time": kickoff.isoformat()}])
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(runner, "get_session", fake_session)
+    monkeypatch.setattr(runner, "sync_kickoffs_from_cache", AsyncMock(return_value=0))
+    assert await runner.save_fixture_cache(date(2026, 10, 19), []) == 1
+    assert session.merge.await_args.args[0].matches_json[0]["carried"] is True

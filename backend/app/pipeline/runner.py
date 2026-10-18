@@ -248,8 +248,8 @@ async def sync_kickoffs(session, items: list[dict]) -> int:
     wanted: dict[str, datetime] = {}
     for item in items:
         mid, raw = item.get("match_id"), item.get("kickoff_time")
-        if not mid or not raw:
-            continue
+        if not mid or not raw or item.get("carried"):
+            continue  # taşınan kayıt kaynağın son listesinde yok → saati bayat olabilir (ertelenen maç)
         try:
             kickoff = raw if isinstance(raw, datetime) else datetime.fromisoformat(raw)
         except (TypeError, ValueError):
@@ -276,13 +276,16 @@ async def sync_kickoffs(session, items: list[dict]) -> int:
 
 async def sync_kickoffs_from_cache(days: list[date]) -> int:
     """fixture_cache'teki günlerin başlama saatlerini maçlara uygular (canlı izleyici her turda çağırır)."""
-    changed = 0
     async with get_session() as session:
-        for day in days:
-            cache = await session.get(FixtureCache, day.isoformat())
-            if cache is not None and isinstance(cache.matches_json, list):
-                changed += await sync_kickoffs(session, [i for i in cache.matches_json if isinstance(i, dict)])
-    return changed
+        caches = [c for c in [await session.get(FixtureCache, d.isoformat()) for d in days]
+                  if c is not None and isinstance(c.matches_json, list)]
+        # Aynı maç iki günün listesinde varsa (ertelendi) en son çekilen liste kazanır.
+        latest: dict[str, dict] = {}
+        for cache in sorted(caches, key=lambda c: c.cached_at):
+            for item in cache.matches_json:
+                if isinstance(item, dict) and item.get("match_id") and not item.get("carried"):
+                    latest[str(item["match_id"])] = item
+        return await sync_kickoffs(session, list(latest.values()))
 
 
 async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> int:
@@ -318,7 +321,8 @@ async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> i
                 except (ValueError, TypeError):
                     continue
                 if old_day == cache_day:
-                    cache_json.append(old)
+                    # Kaynak listeden düşen (bitmiş/ertelenmiş) maç korunur ama saati artık kaynak değil.
+                    cache_json.append({**old, "carried": True})
         await session.merge(FixtureCache(
             date=cache_date,
             matches_json=cache_json,
