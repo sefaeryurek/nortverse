@@ -52,10 +52,11 @@ def build_result_features(
     pattern_c: dict | None,
     pattern_d: dict | None,
     league_name: str | None = None,
+    base_rates: dict[str, float] | None = None,
 ) -> np.ndarray:
     """3 pattern'den 12 feature'lık vektör oluştur (result pazarı)."""
-    base = get_base_rates(league_name)
-    result_base = {"1": base["1"], "X": base.get("X", 24.9), "2": base["2"]}
+    base = base_rates or get_base_rates(league_name)
+    result_base = {"1": base["1"], "X": base["X"], "2": base["2"]}
 
     features = []
     for pat in (pattern_b, pattern_c, pattern_d):
@@ -72,10 +73,11 @@ def build_ou_features(
     pattern_c: dict | None,
     pattern_d: dict | None,
     league_name: str | None = None,
+    base_rates: dict[str, float] | None = None,
 ) -> np.ndarray:
     """3 pattern'den 6 feature'lık vektör oluştur (Üst/Alt 2.5 pazarı)."""
-    base = get_base_rates(league_name)
-    ou_base = base.get("ou25", 52.7)
+    base = base_rates or get_base_rates(league_name)
+    ou_base = base["ou25"]
 
     features = []
     for pat in (pattern_b, pattern_c, pattern_d):
@@ -94,10 +96,11 @@ def build_btts_features(
     pattern_c: dict | None,
     pattern_d: dict | None,
     league_name: str | None = None,
+    base_rates: dict[str, float] | None = None,
 ) -> np.ndarray:
     """3 pattern'den 6 feature'lık vektör oluştur (KG pazarı)."""
-    base = get_base_rates(league_name)
-    btts_base = base.get("btts", 53.2)
+    base = base_rates or get_base_rates(league_name)
+    btts_base = base["btts"]
 
     features = []
     for pat in (pattern_b, pattern_c, pattern_d):
@@ -152,15 +155,15 @@ def train_ensemble(
         actual_btts = row.get("actual_btts")
 
         if actual_result in ("1", "X", "2"):
-            result_X.append(build_result_features(pb, pc, pd, league))
+            result_X.append(build_result_features(pb, pc, pd, league, row.get("base_rates")))
             result_y.append(actual_result)
 
         if actual_ou is not None:
-            ou_X.append(build_ou_features(pb, pc, pd, league))
+            ou_X.append(build_ou_features(pb, pc, pd, league, row.get("base_rates")))
             ou_y.append(1 if actual_ou else 0)
 
         if actual_btts is not None:
-            btts_X.append(build_btts_features(pb, pc, pd, league))
+            btts_X.append(build_btts_features(pb, pc, pd, league, row.get("base_rates")))
             btts_y.append(1 if actual_btts else 0)
 
     if len(result_y) < 50:
@@ -225,10 +228,11 @@ def predict(
     pattern_d: dict | None,
     league_name: str | None = None,
     min_margin: float = 10.0,
+    base_rates: dict[str, float] | None = None,
 ) -> EnsemblePrediction:
     """Eğitilmiş ensemble ile tahmin üret."""
     X_result = models.result_scaler.transform(
-        build_result_features(pattern_b, pattern_c, pattern_d, league_name).reshape(1, -1)
+        build_result_features(pattern_b, pattern_c, pattern_d, league_name, base_rates).reshape(1, -1)
     )
     probs = models.result_model.predict_proba(X_result)[0]
     classes = models.result_model.classes_
@@ -239,13 +243,13 @@ def predict(
     result_pick = max(prob_dict, key=lambda k: prob_dict[k])
 
     X_ou = models.ou_scaler.transform(
-        build_ou_features(pattern_b, pattern_c, pattern_d, league_name).reshape(1, -1)
+        build_ou_features(pattern_b, pattern_c, pattern_d, league_name, base_rates).reshape(1, -1)
     )
     ou_prob = float(models.ou_model.predict_proba(X_ou)[0][1]) * 100
     ou_pick = "over" if ou_prob > 50 else "under"
 
     X_btts = models.btts_scaler.transform(
-        build_btts_features(pattern_b, pattern_c, pattern_d, league_name).reshape(1, -1)
+        build_btts_features(pattern_b, pattern_c, pattern_d, league_name, base_rates).reshape(1, -1)
     )
     btts_prob = float(models.btts_model.predict_proba(X_btts)[0][1]) * 100
     btts_pick = "yes" if btts_prob > 50 else "no"

@@ -19,6 +19,7 @@ from app.analysis.evaluation import (
     pct,
     brier_avg,
 )
+from app.analysis.league_priors import load_prior_book
 from app.api.schemas import (
     DailyEvaluation,
     EvaluationSummary,
@@ -89,6 +90,7 @@ async def daily_evaluation(
         )
         rows = (await session.execute(stmt)).all()
 
+    priors = await load_prior_book(day_start)
     matches: list[MatchEvaluation] = []
     summary_score_hit = 0
     score_list_evaluated = 0
@@ -118,7 +120,7 @@ async def daily_evaluation(
         eval_kwargs = dict(
             actual_result=actual_result, actual_over_25=actual_over_25,
             actual_btts=actual_btts, min_matches=ANALYSIS.eval_min_matches,
-            league_name=row.league_name,
+            league_name=row.league_name, priors=priors,
         )
         pat_b = evaluate_pattern(row.pattern_ft_b, **eval_kwargs)
         pat_c = evaluate_pattern(row.pattern_ft_c, **eval_kwargs)

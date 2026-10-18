@@ -59,8 +59,10 @@ class TestBuildFeatures:
         assert f[3] == 42.0  # 4. eleman = B match_count
 
     def test_league_name_affects_base(self):
-        f1 = build_result_features(None, None, None, league_name=None)
-        f2 = build_result_features(None, None, None, league_name="German Bundesliga")
+        low = {"1": 40.0, "X": 30.0, "2": 30.0, "ou25": 50.0, "btts": 50.0}
+        high = {"1": 50.0, "X": 25.0, "2": 25.0, "ou25": 60.0, "btts": 60.0}
+        f1 = build_result_features(None, None, None, base_rates=low)
+        f2 = build_result_features(None, None, None, base_rates=high)
         assert not np.array_equal(f1, f2)
 
 

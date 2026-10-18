@@ -3,8 +3,6 @@
 import pytest
 
 from app.analysis.evaluation import (
-    BASE_RESULT,
-    LEAGUE_BASE_RATES,
     EvalAccumulator,
     PatternEval,
     brier_avg,
@@ -12,26 +10,48 @@ from app.analysis.evaluation import (
     get_base_rates,
     pct,
 )
+from app.analysis.league_priors import DEFAULT_RATES, book_from_counts, prior_from_counts
 
 
-# --- get_base_rates ---
+# --- get_base_rates / league_priors (tek kaynak) ---
 
-def test_get_base_rates_known_league():
-    rates = get_base_rates("English Premier League")
-    assert rates["1"] == 45.2
-    assert rates["X"] == 24.6
+_BOOK = book_from_counts(None, [
+    ("English Premier League", 450, 250, 300, 530, 520),
+    ("ENG PR", 50, 25, 25, 50, 50),          # takma ad kanonik ada eklenir
+    ("Turkish Super Lig", 46, 24, 30, 57, 56),
+])
 
-def test_get_base_rates_case_insensitive():
-    rates = get_base_rates("english premier league")
-    assert rates == LEAGUE_BASE_RATES["English Premier League"]
 
-def test_get_base_rates_unknown_league():
-    rates = get_base_rates("Unknown Fantasy League")
-    assert rates is BASE_RESULT
+def test_get_base_rates_uses_prior_book_for_league():
+    rates = get_base_rates("English Premier League", _BOOK)
+    assert rates["1"] == pytest.approx(500.5 / 1101.5 * 100)
+    assert rates["ou25"] == pytest.approx(580.5 / 1101 * 100)
 
-def test_get_base_rates_none():
-    rates = get_base_rates(None)
-    assert rates is BASE_RESULT
+
+def test_get_base_rates_alias_and_case_resolve_to_same_league():
+    assert get_base_rates("ENG PR", _BOOK) == get_base_rates("English Premier League", _BOOK)
+
+
+def test_get_base_rates_unknown_league_falls_back_to_all_leagues():
+    overall = get_base_rates("Unknown Fantasy League", _BOOK)
+    assert overall["1"] == pytest.approx((450 + 50 + 46 + 0.5) / (1200 + 1.5) * 100)
+
+
+def test_get_base_rates_without_book_is_generic_default():
+    assert get_base_rates(None) == DEFAULT_RATES
+    assert get_base_rates("English Premier League") == DEFAULT_RATES
+
+
+def test_live_cond_table_and_prior_book_share_formula():
+    from datetime import datetime, timezone
+    from app.analysis.live_model import CondTable
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    table = CondTable(cutoff=now, prior_from=datetime(2020, 1, 1, tzinfo=timezone.utc))
+    for ft in [(2, 1)] * 3 + [(0, 0)] * 2 + [(0, 3)]:
+        table.add("English Premier League", 0, 0, *ft, now)
+    expected = prior_from_counts(3, 2, 1, 4, 3)
+    assert table.league_prior("English Premier League") == expected.result
+    assert table.league_goal_prior("English Premier League") == {"over25": expected.over25, "btts": expected.btts}
 
 
 # --- pct / brier_avg ---

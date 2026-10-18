@@ -63,8 +63,6 @@ class AnalysisConfig:
     eval_min_matches: int = field(default_factory=lambda: _env_int("EVAL_MIN_MATCHES", 5))
     result_shrinkage: float = field(default_factory=lambda: _env_float("RESULT_SHRINKAGE", 0.45))
     shrinkage_half_life: float = field(default_factory=lambda: _env_float("SHRINKAGE_HALF_LIFE", 15.0))
-    over_25_base_rate: float = field(default_factory=lambda: _env_float("OVER_25_BASE_RATE", 55.0))
-    btts_base_rate: float = field(default_factory=lambda: _env_float("BTTS_BASE_RATE", 56.0))
     result_min_margin: float = field(default_factory=lambda: _env_float("RESULT_MIN_MARGIN", 10.0))
     pattern_b_match_cap: int = field(default_factory=lambda: _env_int("PATTERN_B_MATCH_CAP", 150))
     pattern_c_match_cap: int = field(default_factory=lambda: _env_int("PATTERN_C_MATCH_CAP", 150))

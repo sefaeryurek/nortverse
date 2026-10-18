@@ -5,29 +5,15 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from app.analysis.league_priors import DEFAULT_RATES, PriorBook
 from app.config import ANALYSIS
 
 
-BASE_RESULT: dict[str, float] = {"1": 45.3, "X": 24.9, "2": 29.8, "ou25": 52.7, "btts": 53.2}
-
-LEAGUE_BASE_RATES: dict[str, dict[str, float]] = {
-    "English Premier League": {"1": 45.2, "X": 24.6, "2": 30.3, "ou25": 52.9, "btts": 52.0},
-    "Spanish La Liga": {"1": 46.9, "X": 24.9, "2": 28.2, "ou25": 49.9, "btts": 51.9},
-    "Italy Serie A": {"1": 44.3, "X": 25.8, "2": 29.9, "ou25": 50.4, "btts": 52.9},
-    "German Bundesliga": {"1": 44.9, "X": 24.8, "2": 30.3, "ou25": 63.3, "btts": 60.8},
-    "French Ligue 1": {"1": 44.4, "X": 23.3, "2": 32.3, "ou25": 55.4, "btts": 55.6},
-    "Turkish Super Lig": {"1": 46.0, "X": 24.5, "2": 29.5, "ou25": 57.3, "btts": 56.2},
-    "Dutch Eredivisie": {"1": 43.9, "X": 24.8, "2": 31.2, "ou25": 61.3, "btts": 57.7},
-}
-
-
-def get_base_rates(league_name: str | None) -> dict[str, float]:
-    if league_name:
-        ln = league_name.lower()
-        for key, rates in LEAGUE_BASE_RATES.items():
-            if key.lower() == ln:
-                return rates
-    return BASE_RESULT
+def get_base_rates(league_name: str | None, priors: PriorBook | None = None) -> dict[str, float]:
+    """Lig ortalaması (yüzde) — tek kaynak `league_priors`. priors verilmezse genel varsayılan."""
+    if priors is not None:
+        return priors.rates(league_name)
+    return dict(DEFAULT_RATES)
 
 
 @dataclass
@@ -54,6 +40,7 @@ def evaluate_pattern(
     actual_btts: bool,
     min_matches: int = 1,
     league_name: str | None = None,
+    priors: PriorBook | None = None,
 ) -> PatternEval | None:
     if not pattern_data or not isinstance(pattern_data, dict):
         return None
@@ -67,7 +54,7 @@ def evaluate_pattern(
         "2": pattern_data.get("result_2_pct", 0) or 0,
     }
 
-    base_rates = get_base_rates(league_name)
+    base_rates = get_base_rates(league_name, priors)
     shrink = ANALYSIS.result_shrinkage / (1 + mc / ANALYSIS.shrinkage_half_life)
 
     adjusted_pcts: dict[str, float] = {}
@@ -86,8 +73,8 @@ def evaluate_pattern(
     result_pick = max(adjusted_pcts, key=lambda k: adjusted_pcts[k])
     result_hit = result_pick == actual_result
 
-    ou_base = base_rates.get("ou25", ANALYSIS.over_25_base_rate)
-    btts_base = base_rates.get("btts", ANALYSIS.btts_base_rate)
+    ou_base = base_rates["ou25"]
+    btts_base = base_rates["btts"]
 
     over_pct = pattern_data.get("ust_25_pct", 0) or 0
     over_raw_p = max(1.0, min(99.0, over_pct)) / 100.0

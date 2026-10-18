@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.analysis.evaluation import evaluate_pattern as _evaluate_pattern, pct as _pct
+from app.analysis.league_priors import PriorBook, book_from_counts
 from app.config import AnalysisConfig
 
 
@@ -199,7 +200,7 @@ class TestEvaluatePattern:
 
 # ─── Beraberlik (X) shrinkage ───────────────────────────────────────────────────
 #
-# Not: BASE_RESULT = {"1": 44.4, "X": 24.6, "2": 30.9} — "1" popülasyonda en
+# Not: genel varsayılan (DEFAULT_RATES) "1": 45.3, "X": 24.9, "2": 29.8 — "1" popülasyonda en
 # yüksek taban orana sahip. Additive shrink formülü (raw*(1-s) + base*s) her
 # zaman "1"i güçlendirdiği için X, zaten armgax olmadığı bir senaryoda asla
 # devreye giremiyor (base_X üç değerin en küçüğü). Aşağıdaki testler bu
@@ -337,111 +338,42 @@ class TestDrawShrinkage:
 
 # ─── Kalibre edilmiş eşikler (over_25_threshold / btts_threshold) ─────────────
 
-class TestCalibratedThresholds:
-    """Sistem %59.8 Üst / %61.6 KG Var tahmin ediyordu ama gerçek oran %55.4 idi
-    (sistematik önyargı — sonuçlar naif baseline'ın altına düşüyordu). Eşikler
-    50'den kalibre edilmiş taban orana (55.0) çekildi — pattern verisi popülasyon
-    ortalamasının üzerinde göstermedikçe "Üst"/"KG Var" tahmin edilmez.
-    """
+def _book(over: int, btts: int, n: int = 1000) -> PriorBook:
+    """Tek ligli lig ortalaması kitabı: over/btts n maç içindeki sayılar."""
+    return book_from_counts(None, [("English Premier League", n // 2, n // 4, n - n // 2 - n // 4, over, btts)])
 
-    def test_default_base_rates(self):
-        cfg = AnalysisConfig()
-        assert cfg.over_25_base_rate == 55.0
-        assert cfg.btts_base_rate == 56.0
+
+class TestLeagueBaseRates:
+    """Ü/A ve KG kararı lig ortalamasına doğru çekilir — oranlar tek kaynaktan (league_priors)."""
+
+    _data = {"match_count": 30, "result_1_pct": 40.0, "result_x_pct": 30.0, "result_2_pct": 30.0}
+
+    def _eval(self, monkeypatch, priors, **pcts):
+        monkeypatch.setattr("app.analysis.evaluation.ANALYSIS", AnalysisConfig(result_shrinkage=0.45))
+        return _evaluate_pattern({**self._data, **pcts}, "1", False, False,
+                                 league_name="English Premier League", priors=priors)
 
     def test_low_ust_predicts_alt_after_shrinkage(self, monkeypatch):
-        # Shrinkage + baz oran (55%) ile 45% gözlem → adjusted ~46.9% < 50 → "Alt"
-        monkeypatch.setattr(
-            "app.analysis.evaluation.ANALYSIS",
-            AnalysisConfig(over_25_base_rate=55.0, btts_base_rate=56.0,
-                           result_shrinkage=0.45),
-        )
-        data = {
-            "match_count": 30,
-            "result_1_pct": 40.0,
-            "result_x_pct": 30.0,
-            "result_2_pct": 30.0,
-            "ust_25_pct": 45.0,
-            "kg_var_pct": 50.0,
-        }
-        result = _evaluate_pattern(data, "1", False, False)
-        assert result is not None
-        assert result.over_25_pick == "Alt"
+        assert self._eval(monkeypatch, _book(550, 560), ust_25_pct=45.0, kg_var_pct=50.0).over_25_pick == "Alt"
 
     def test_pattern_56_still_predicts_over(self, monkeypatch):
-        monkeypatch.setattr(
-            "app.analysis.evaluation.ANALYSIS",
-            AnalysisConfig(),
-        )
-        data = {
-            "match_count": 30,
-            "result_1_pct": 40.0,
-            "result_x_pct": 30.0,
-            "result_2_pct": 30.0,
-            "ust_25_pct": 56.0,
-            "kg_var_pct": 50.0,
-        }
-        result = _evaluate_pattern(data, "1", True, False)
-        assert result is not None
-        assert result.over_25_pick == "Üst"
-        assert result.over_25_hit is True
+        assert self._eval(monkeypatch, _book(550, 560), ust_25_pct=56.0, kg_var_pct=50.0).over_25_pick == "Üst"
 
     def test_low_btts_predicts_no_after_shrinkage(self, monkeypatch):
-        # Shrinkage + baz oran (56%) ile 44% gözlem → adjusted ~46.5% < 50 → "KG Yok"
-        monkeypatch.setattr(
-            "app.analysis.evaluation.ANALYSIS",
-            AnalysisConfig(over_25_base_rate=55.0, btts_base_rate=56.0,
-                           result_shrinkage=0.45),
-        )
-        data = {
-            "match_count": 30,
-            "result_1_pct": 40.0,
-            "result_x_pct": 30.0,
-            "result_2_pct": 30.0,
-            "ust_25_pct": 50.0,
-            "kg_var_pct": 44.0,
-        }
-        result = _evaluate_pattern(data, "1", False, False)
-        assert result is not None
-        assert result.btts_pick == "KG Yok"
+        assert self._eval(monkeypatch, _book(550, 560), ust_25_pct=50.0, kg_var_pct=44.0).btts_pick == "KG Yok"
 
     def test_btts_above_base_rate_predicts_yes(self, monkeypatch):
-        monkeypatch.setattr(
-            "app.analysis.evaluation.ANALYSIS",
-            AnalysisConfig(btts_base_rate=56.0),
-        )
-        data = {
-            "match_count": 30,
-            "result_1_pct": 40.0,
-            "result_x_pct": 30.0,
-            "result_2_pct": 30.0,
-            "ust_25_pct": 50.0,
-            "kg_var_pct": 65.0,
-        }
-        result = _evaluate_pattern(data, "1", False, True)
-        assert result is not None
-        assert result.btts_pick == "KG Var"
-        assert result.btts_hit is True
+        assert self._eval(monkeypatch, _book(550, 560), ust_25_pct=50.0, kg_var_pct=65.0).btts_pick == "KG Var"
 
-    def test_base_rate_override_via_config(self, monkeypatch):
-        # Düşük baz oran (40%) — pattern 35% → adjusted < 40 → "Alt"
-        monkeypatch.setattr(
-            "app.analysis.evaluation.ANALYSIS",
-            AnalysisConfig(over_25_base_rate=40.0, btts_base_rate=40.0,
-                           result_shrinkage=0.45),
-        )
-        data = {
-            "match_count": 30,
-            "result_1_pct": 40.0,
-            "result_x_pct": 30.0,
-            "result_2_pct": 30.0,
-            "ust_25_pct": 35.0,
-            "kg_var_pct": 35.0,
-        }
-        result = _evaluate_pattern(data, "1", False, False)
-        assert result is not None
-        assert result.over_25_pick == "Alt"
-        assert result.btts_pick == "KG Yok"
+    def test_low_league_rate_pulls_decision_down(self, monkeypatch):
+        result = self._eval(monkeypatch, _book(400, 400), ust_25_pct=50.0, kg_var_pct=50.0)
+        assert result.over_25_pick == "Alt" and result.btts_pick == "KG Yok"
+
+    def test_same_pattern_flips_with_league_rate(self, monkeypatch):
+        """Aynı pattern, gollü ligde Üst, golsüz ligde Alt — taban oran gerçekten kullanılıyor."""
+        high = self._eval(monkeypatch, _book(700, 700), ust_25_pct=49.0, kg_var_pct=49.0)
+        low = self._eval(monkeypatch, _book(300, 300), ust_25_pct=49.0, kg_var_pct=49.0)
+        assert high.over_25_pick == "Üst" and low.over_25_pick == "Alt"
 
 
 class TestMarginAndConfident:
@@ -630,6 +562,7 @@ def test_score_list_rate_ignores_matches_without_list(monkeypatch):
     from contextlib import asynccontextmanager
     from datetime import datetime, timezone
     from types import SimpleNamespace
+    from unittest.mock import AsyncMock
 
     from app.api import routes_evaluation
 
@@ -657,6 +590,7 @@ def test_score_list_rate_ignores_matches_without_list(monkeypatch):
         yield _Session()
 
     monkeypatch.setattr(routes_evaluation, "get_session", fake_session)
+    monkeypatch.setattr(routes_evaluation, "load_prior_book", AsyncMock(return_value=None))
     out = asyncio.run(routes_evaluation.daily_evaluation(target_date="2026-10-01"))
     assert out.summary.total_matches == 4
     assert out.summary.score_list_evaluated == 2

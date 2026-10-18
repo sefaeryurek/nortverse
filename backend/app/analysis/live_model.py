@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
+from app.analysis.league_priors import PRIOR_SEASON_DAYS, prior_from_counts
 from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 from app.db.connection import get_session
 from app.db.models import Match
@@ -26,7 +27,6 @@ log = logging.getLogger(__name__)
 
 LIVE_RULE_VERSION = "live-ms-v1"
 MIN_COND_N = 30
-PRIOR_SEASON_DAYS = 3 * 365
 PREMATCH_K = 20.0
 # Backtest (6071 maç, 2023-07..2026-10): α=0.5 Brier .5048 / α=1 .5079 / α=2 .5340; iki dönemde de 0.5 önde.
 ALPHA = 0.5
@@ -105,16 +105,18 @@ class CondTable:
             return same
         return self.global_by_score.get(ht, Counts())
 
+    def _league_prior(self, league: str):
+        """Lig ortalaması — `league_priors.prior_from_counts` (tüm modüllerle aynı formül)."""
+        c = self.prior.get(league, Counts())
+        return prior_from_counts(c.n1, c.nx, c.n2, c.over25, c.btts)
+
     def league_prior(self, league: str) -> dict[str, float]:
-        return self.prior.get(league, Counts()).result_dist()
+        return self._league_prior(league).result
 
     def league_goal_prior(self, league: str) -> dict[str, float]:
         """Lig son 3 sezon MS Üst 2.5 ve KG oranı (Laplace 0.5)."""
-        counts = self.prior.get(league, Counts())
-        return {
-            "over25": (counts.over25 + 0.5) / (counts.n + 1.0),
-            "btts": (counts.btts + 0.5) / (counts.n + 1.0),
-        }
+        prior = self._league_prior(league)
+        return {"over25": prior.over25, "btts": prior.btts}
 
 
 def prematch_posterior(

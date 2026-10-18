@@ -6,6 +6,7 @@ import typer
 from rich.panel import Panel
 from rich.table import Table
 
+from app.analysis.league_priors import istanbul_day_start, load_prior_book
 from app.cli._helpers import _setup_logging, console
 
 
@@ -51,7 +52,7 @@ def backtest_cmd(
         async with get_session() as session:
             stmt = (
                 select(
-                    Match.match_id, Match.league_name,
+                    Match.match_id, Match.league_name, Match.kickoff_time,
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.pattern_ft_b, Match.pattern_ft_c, Match.pattern_ft_d,
                     Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
@@ -94,10 +95,11 @@ def backtest_cmd(
             actual_over_25 = (ft_h + ft_a) > 2
             actual_btts = ft_h > 0 and ft_a > 0
 
+            priors = await load_prior_book(istanbul_day_start(row.kickoff_time))
             eval_kwargs = dict(
                 actual_result=actual_result, actual_over_25=actual_over_25,
                 actual_btts=actual_btts, min_matches=min_matches,
-                league_name=row.league_name,
+                league_name=row.league_name, priors=priors,
             )
             pat_b = evaluate_pattern(row.pattern_ft_b, **eval_kwargs)
             pat_c = evaluate_pattern(row.pattern_ft_c, **eval_kwargs)
@@ -109,7 +111,8 @@ def backtest_cmd(
 
             if ens_models:
                 from app.analysis.evaluation import PatternEval
-                ens_pred = predict(ens_models, row.pattern_ft_b, row.pattern_ft_c, row.pattern_ft_d, row.league_name)
+                ens_pred = predict(ens_models, row.pattern_ft_b, row.pattern_ft_c, row.pattern_ft_d,
+                                   row.league_name, base_rates=priors.rates(row.league_name))
                 ens_result_hit = ens_pred.result_pick == actual_result
                 ens_over_hit = (ens_pred.over_25_pick == "over") == actual_over_25
                 ens_btts_hit = (ens_pred.btts_pick == "yes") == actual_btts
@@ -247,7 +250,7 @@ def train_ensemble_cmd(
         async with get_session() as session:
             stmt = (
                 select(
-                    Match.match_id, Match.league_name,
+                    Match.match_id, Match.league_name, Match.kickoff_time,
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.pattern_ft_b, Match.pattern_ft_c, Match.pattern_ft_d,
                 )
@@ -284,6 +287,7 @@ def train_ensemble_cmd(
                 "actual_over_25": (ft_h + ft_a) > 2,
                 "actual_btts": ft_h > 0 and ft_a > 0,
                 "league_name": row.league_name,
+                "base_rates": (await load_prior_book(istanbul_day_start(row.kickoff_time))).rates(row.league_name),
             })
 
         console.print(f"[cyan]Eğitim verisi: {len(training_data)} maç ({d_from} → {d_to})[/cyan]")
