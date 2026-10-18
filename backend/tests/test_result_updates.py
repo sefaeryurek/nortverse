@@ -246,3 +246,36 @@ def test_finished_score_is_not_downgraded_by_later_live_snapshot():
         old, {"123": FixtureScore("123", "live", 1, 1)}, datetime.now(timezone.utc))
     assert merged[0]["score_status"] == "finished"
     assert (merged[0]["score_home"], merged[0]["score_away"]) == (2, 1)
+
+
+@pytest.mark.asyncio
+async def test_one_inconsistent_score_does_not_roll_back_the_whole_day(monkeypatch):
+    """Kaynak bir maç için İY > MS verirse sadece o maç atlanır, diğerleri yazılır."""
+    kickoff = datetime(2026, 9, 14, 9, 0, tzinfo=timezone.utc)
+    good = Match(match_id="1", home_team="A", away_team="B", league_code="ENG PR", kickoff_time=kickoff)
+    bad = Match(match_id="2", home_team="C", away_team="D", league_code="ENG PR", kickoff_time=kickoff)
+    read_session = AsyncMock()
+    read_session.get.return_value = None
+    selected = MagicMock()
+    selected.scalars.return_value.all.return_value = [good, bad]
+    read_session.execute.return_value = selected
+    write_session = AsyncMock()
+    latest = MagicMock()
+    latest.scalars.return_value.all.return_value = []
+    write_session.execute.side_effect = [latest, MagicMock(), MagicMock(), MagicMock(), MagicMock()]
+    sessions = [read_session, write_session]
+
+    @asynccontextmanager
+    async def get_session():
+        yield sessions.pop(0)
+
+    monkeypatch.setattr(runner, "get_session", get_session)
+    monkeypatch.setattr(runner, "fetch_fixture_scores", AsyncMock(return_value={
+        "1": FixtureScore("1", "finished", 2, 1, 1, 0),
+        "2": FixtureScore("2", "finished", 1, 0, 2, 0),   # İY 2-0 ama MS 1-0 → tutarsız
+    }))
+    stats = await runner.update_results(date(2026, 9, 14))
+    updates = [c.args[0] for c in write_session.execute.await_args_list
+               if getattr(getattr(c.args[0], "table", None), "name", None) == "matches"]
+    assert len(updates) == 1                       # sadece sağlam maç yazıldı
+    assert stats["errors"] == 1 and stats["updated"] == 1

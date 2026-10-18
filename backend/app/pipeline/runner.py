@@ -604,6 +604,7 @@ async def update_results(target_date: Optional[date] = None) -> dict:
     stats["not_finished"] = len(wanted_ids) - stats["updated"]
 
     async def _save():
+        bad_scores.clear()
         async with get_session() as session:
             new_observations: list[dict] = []
             ht_observations: list[dict] = []
@@ -635,7 +636,15 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                     actual_ft_home=snapshot.home, actual_ft_away=snapshot.away,
                     actual_ht_home=snapshot.ht_home, actual_ht_away=snapshot.ht_away,
                 )
-                scores = _merge_result_scores(raw, existing)
+                try:
+                    scores = _merge_result_scores(raw, existing)
+                except ValueError as exc:
+                    # Kaynak tek maç için tutarsız skor verirse (İY > MS, eksik yarı) sadece o maç atlanır;
+                    # eskiden bu hata bütün günün güncellemesini ve defter çözümünü geri alıyordu.
+                    bad_scores.append(match_id)
+                    log.warning("Tutarsız skor atlandı [%s]: %s (kaynak %s-%s, İY %s-%s)", match_id, exc,
+                                snapshot.home, snapshot.away, snapshot.ht_home, snapshot.ht_away)
+                    continue
                 await session.execute(
                     sa_update(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
                     .values(
@@ -694,7 +703,10 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                     )
                 )
 
+    bad_scores: list[str] = []
     await _with_retry(_save, label=f"update_results[{d}]")
+    stats["errors"] += len(bad_scores)
+    stats["updated"] -= len(bad_scores)
 
     log.info(
         "Sonuç güncellemesi tamamlandı: %d güncellendi, %d bitmemiş, %d atlandı, %d hata",
