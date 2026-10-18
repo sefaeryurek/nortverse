@@ -1541,7 +1541,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Değerlendirme (89.8):** Canlı İY kırılımları kademe/pazar/lig/hafta; Maç Öncesi kademe/arşiv uyumu/pazar/lig/hafta + Ana Pazar Özeti kazananları bölümü; SVG kalibrasyon grafiği (<30 maçlık kovalar soluk).
 - **Öneri ayar parmak izi (89.9):** v4 seçimi `pattern_hash` ile dondurulur; `AnalyzeResponse.pattern_hash` / `recommendation_pattern_hash` farklıysa Top Picks not düşer. `persist.hash_string` ortak biçim.
 - **`outcomes.py` (89.10):** skor→sonuç ilkeleri tek kaynak (davranış değişmedi, 1200 rastgele karşılaştırma). **Test lint (89.11):** CI ruff `tests/`'i de tarıyordu → temizlendi.
-- **CI notu:** `test_api_regressions.py` `httpx` ister ama `requirements-dev.txt`'te yok → CI pytest adımı bu yüzden kırmızı (Linux konteynerde httpx ile 1067 geçti, 1 atlandı). Ekleme kullanıcı onayı bekliyor.
+- **CI yeşile döndü (89.12):** `httpx==0.27.2` `requirements-dev.txt`'ye eklendi (kullanıcı onaylı; sadece test ortamı) — `test_api_regressions.py` için gerekiyordu.
 - **Sonuç:** 1068 backend + 304 frontend + 28 E2E
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
