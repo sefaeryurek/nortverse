@@ -127,6 +127,13 @@ _BACKTEST_GROUPS = {
 _backtest_cache: dict[int, dict] = {}
 
 
+def _backtest_groups(strategy: str, rule_version: str) -> tuple[str, ...]:
+    from app.analysis.live_archive import LIVE_ARCHIVE_RULE_VERSION
+    if rule_version == LIVE_ARCHIVE_RULE_VERSION:
+        return ("risk", "archive", "period_market", "league")
+    return _BACKTEST_GROUPS.get(strategy, ("market",))
+
+
 @router.get("/api/performance/backtest/runs")
 async def backtest_runs() -> list[dict]:
     async with get_session() as session:
@@ -144,6 +151,9 @@ async def backtest_runs() -> list[dict]:
 
 def _is_current(strategy: str, params: dict) -> bool:
     """Koşu bugünkü ayarlarla mı üretildi? (deneme koşuları seçicide ikincil gösterilir)"""
+    if strategy == "live_ht" and "rule_params" in params:
+        from app.analysis.live_archive import rule_params_fingerprint as live_fp
+        return params.get("params_fingerprint") == live_fp()
     if strategy == "live_ht":
         from app.analysis.live_model import ALPHA
         return params.get("alpha") == ALPHA
@@ -171,10 +181,61 @@ async def backtest_summary(run_id: int) -> dict:
         "run_id": run.id, "source": run.strategy, "rule_versions": [run.rule_version],
         "overall": summarize(main),
         "informational": summarize([r for r in rows if r["informational"]]),
-        "groups": {g: group_summaries(rows, g) for g in _BACKTEST_GROUPS.get(run.strategy, ("market",))},
+        "groups": {g: group_summaries(rows, g) for g in _backtest_groups(run.strategy, run.rule_version)},
         "calibration": calibration_buckets(main),
     }
     if len(_backtest_cache) >= 8:
         _backtest_cache.pop(next(iter(_backtest_cache)))
     _backtest_cache[run_id] = result
     return result
+
+
+# ── Canlı İY: canlıya giren her maç ve devre arası %85+ işaretlerinin sonucu ──
+
+_LIVE_MATCHES_SQL = """
+    SELECT l.match_id, l.rule_version, l.market, l.period, l.selection, l.archive, l.prob_shown_bp,
+           l.sample_n, l.confidence_tier, l.details, l.recorded_at, l.kickoff_time, l.ht_home, l.ht_away,
+           l.outcome, l.res_ft_home, l.res_ft_away, l.res_ht_home, l.res_ht_away,
+           m.home_team, m.away_team, m.league_name
+    FROM prediction_ledger_resolved l
+    JOIN matches m ON m.match_id = l.match_id
+    WHERE l.source = 'live_ht' AND l.kickoff_time >= :start AND l.kickoff_time < :end
+    ORDER BY l.kickoff_time, l.match_id, l.id
+"""
+
+
+@router.get("/api/performance/live-matches")
+async def live_matches(day: date = Query(..., description="İstanbul günü (maç başlama)")) -> list[dict]:
+    """Canlıya giren (devre arasında kaydedilen) her maç: %85+ arşiv işaretleri ve tuttu/tutmadı."""
+    from app.analysis.live_archive import LIVE_ARCHIVE_RULE_VERSION
+
+    start = datetime.combine(day, datetime.min.time(), ISTANBUL_TZ)
+    async with get_session() as session:
+        rows = (await session.execute(text(_LIVE_MATCHES_SQL),
+                                      {"start": start, "end": start + timedelta(days=1)})).all()
+    matches: dict[str, dict] = {}
+    for r in rows:
+        entry = matches.setdefault(r.match_id, {
+            "match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
+            "league_name": r.league_name, "kickoff_time": r.kickoff_time.isoformat(),
+            "recorded_at": r.recorded_at.isoformat(), "ht": f"{r.ht_home}-{r.ht_away}",
+            "final_ht": None, "final_ft": None, "picks": [],
+        })
+        if r.res_ft_home is not None:
+            entry["final_ft"] = f"{r.res_ft_home}-{r.res_ft_away}"
+            entry["final_ht"] = None if r.res_ht_home is None else f"{r.res_ht_home}-{r.res_ht_away}"
+        if r.rule_version != LIVE_ARCHIVE_RULE_VERSION:
+            continue  # eski COND modeli ekranda yok; sadece arka planda ölçülür
+        details = r.details or {}
+        entry["picks"].append({
+            "period": r.period, "market": r.market, "selection": r.selection,
+            "archive": r.archive or "genel", "label": details.get("label") or (r.archive or "genel").upper(),
+            "pct": round(r.prob_shown_bp / 100, 1), "n": r.sample_n or 0,
+            "risky": r.confidence_tier == "insufficient", "outcome": r.outcome or "pending",
+        })
+    for entry in matches.values():
+        resolved = [p for p in entry["picks"] if p["outcome"] in ("hit", "miss")]
+        entry["hits"] = sum(p["outcome"] == "hit" for p in resolved)
+        entry["resolved"] = len(resolved)
+        entry["picks"].sort(key=lambda p: (p["risky"], -p["pct"]))
+    return list(matches.values())

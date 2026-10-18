@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
-import { BacktestOverview, PerformanceOverview, PredictionDayList } from "@/components/PerformancePanel";
+import { BacktestOverview, LiveDayList, PerformanceOverview, PredictionDayList } from "@/components/PerformancePanel";
 import RetryButton from "@/components/RetryButton";
 import { getEvaluation } from "@/lib/api";
 import { resolvePageDate } from "@/lib/dates";
@@ -510,9 +510,11 @@ interface Props {
 
 const TABS = ["canli", "mac-oncesi", "backtest", "pattern"] as const;
 type Tab = (typeof TABS)[number];
+/** Canlı sekmesi sadece arşiv %85+ işaretlerini ölçer (eski COND modeli arka planda). */
+const LIVE_ARCHIVE_RULE_VERSION = "live-arch-v1";
 const TAB_SOURCE = { canli: "live_ht", "mac-oncesi": "top_pick" } as const;
 const TAB_GROUPS = {
-  canli: ["tier", "market", "league", "week"],
+  canli: ["risk", "archive", "period_market", "league", "week"],
   "mac-oncesi": ["tier", "agreement", "market", "league", "week"],
 } as const satisfies Record<keyof typeof TAB_SOURCE, readonly string[]>;
 
@@ -630,10 +632,16 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
         ) : (
           <div className="grid gap-4 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
             <Suspense fallback={<EvalSkeleton />}>
-              <PerformanceOverview source={TAB_SOURCE[tab]} t={t} groups={TAB_GROUPS[tab]} />
+              <PerformanceOverview
+                source={TAB_SOURCE[tab]}
+                t={t}
+                groups={TAB_GROUPS[tab]}
+                ruleVersion={tab === "canli" ? LIVE_ARCHIVE_RULE_VERSION : undefined}
+                hint={tab === "canli" ? t.evaluation.perf.liveSummaryNote : undefined}
+              />
             </Suspense>
             <Suspense fallback={<EvalSkeleton />}>
-              <PredictionDayList source={TAB_SOURCE[tab]} day={date} t={t} />
+              {tab === "canli" ? <LiveDayList day={date} t={t} /> : <PredictionDayList source={TAB_SOURCE[tab]} day={date} t={t} />}
             </Suspense>
             {tab === "mac-oncesi" && (
               <Suspense fallback={<EvalSkeleton />}>

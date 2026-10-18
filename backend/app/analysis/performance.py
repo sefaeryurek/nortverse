@@ -21,6 +21,7 @@ GROUP_FIELDS = {
     "archive": lambda r: r.get("archive") or "-",
     "agreement": lambda r: "-" if r.get("agreement") is None else str(r["agreement"]),
     "informational": lambda r: "info" if r.get("informational") else "main",
+    "risk": lambda r: "risky" if r.get("confidence_tier") == "insufficient" else "normal",
     "week": lambda r: _iso_week(r["kickoff_time"]),
     "day": lambda r: r["kickoff_time"].astimezone(ISTANBUL_TZ).date().isoformat(),
 }

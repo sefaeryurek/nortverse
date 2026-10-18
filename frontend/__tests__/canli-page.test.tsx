@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { LocaleProvider } from "@/lib/locale-context";
-import type { LiveHTMatch, LivePrediction } from "@/lib/api";
+import type { LiveArchiveView, LiveHTMatch } from "@/lib/api";
 import type { UseLiveWsResult } from "@/lib/use-live-ws";
 import { minuteOrder } from "@/lib/live-order";
 
@@ -20,23 +20,34 @@ import CanliPage from "@/app/canli/page";
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-const prediction: LivePrediction = {
-  rule_version: "live-ms-v1",
-  ht: { home: 1, away: 0 },
-  ms: {
-    probs: { "1": 0.72, X: 0.19, "2": 0.09 }, pick: "1", prob: 0.72, tier: "high", n: 640,
-    cond_level: "score", ht_baseline: { probs: { "1": 0.7, X: 0.2, "2": 0.1 }, pick: "1", prob: 0.7 },
-  },
-  over25: { applicable: true, pick: "under", prob: 0.55, n: 640, tier: "medium" },
-  btts: { applicable: false, reason: "already_both" },
-  frozen: true, frozen_at: "2026-10-18T15:47:00+00:00",
+const view: LiveArchiveView = {
+  rule_version: "live-arch-v1", ht: { home: 1, away: 0 }, threshold_pct: 85, risky_below_n: 5,
+  sources: [
+    { archive: "a1", label: "A1", n: 12, risky: false, cells: [
+      { period: "ft", market: "dc", selection: "1X", pct: 91.7, options: { "1X": 91.7, X2: 25, "12": 83.3 } },
+      { period: "ft", market: "result", selection: "1", pct: 66.7, options: { "1": 66.7, X: 25, "2": 8.3 } },
+    ] },
+    { archive: "a2", label: "A2", n: 0, risky: false, cells: [] },
+    { archive: "a3", label: "A3", n: 2, risky: true, cells: [
+      { period: "h2", market: "ou_05", selection: "over", pct: 100, options: { under: 0, over: 100 } },
+    ] },
+    { archive: "genel", label: "Genel", n: 13, risky: false, cells: [
+      { period: "ft", market: "dc", selection: "1X", pct: 92.3, options: { "1X": 92.3, X2: 23.1, "12": 84.6 } },
+    ] },
+  ],
+  highlights: [
+    { period: "ft", market: "dc", selection: "1X", pct: 92.3, archive: "genel", label: "Genel", n: 13, risky: false },
+    { period: "ft", market: "dc", selection: "1X", pct: 91.7, archive: "a1", label: "A1", n: 12, risky: false },
+    { period: "h2", market: "ou_05", selection: "over", pct: 100, archive: "a3", label: "A3", n: 2, risky: true },
+  ],
 };
 
 function match(id: string, minute: string | null, extra: Partial<LiveHTMatch> = {}): LiveHTMatch {
   return {
     match_id: id, home_team: `Ev ${id}`, away_team: `Dep ${id}`, ht_home: 1, ht_away: 0,
     live_home: 1, live_away: 0, live_minute: minute, phase: minute === "HT" ? "ht" : "2h",
-    league_name: "English Premier League", kickoff_time: null, prediction, ...extra,
+    league_name: "English Premier League", kickoff_time: null,
+    frozen: true, frozen_at: "2026-10-18T15:47:00+00:00", archive_view: view, ...extra,
   };
 }
 
@@ -45,16 +56,22 @@ function ui() {
 }
 
 describe("Canlı sayfa", () => {
-  it("renders the frozen model prediction from WebSocket data", async () => {
+  it("shows archive highlights on top, grouped, with a risky mark — no main model prediction", async () => {
     wsState = { matches: [match("1", "HT")], status: "connected", lastUpdate: new Date() };
     render(ui());
     expect(screen.getByText("Ev 1")).toBeTruthy();
-    expect(screen.getByText(/Yüksek güven/)).toBeTruthy();
+    expect(screen.getByText("Öne çıkanlar (%85+)")).toBeTruthy();
+    expect(screen.getAllByText("MS ÇŞ").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Riskli").length).toBe(1);          // sadece A3 (2 maç)
     expect(screen.getByText(/Kaydedildi/)).toBeTruthy();
-    expect(screen.getByText(/İY tabanı: 1 %70.0/)).toBeTruthy();
-    expect(screen.getByText(/MS 2.5 Alt/)).toBeTruthy();
-    expect(screen.queryByText(/KG Var|KG Yok/)).toBeNull();
+    expect(screen.queryByText(/MS Tahmini|İY tabanı/)).toBeNull();
     expect(getLiveHTMatches).not.toHaveBeenCalled();
+  });
+
+  it("states when no rate reaches the threshold", () => {
+    wsState = { matches: [match("2", "HT", { archive_view: { ...view, highlights: [] } })], status: "connected", lastUpdate: new Date() };
+    render(ui());
+    expect(screen.getByText("%85 üzeri oran yok")).toBeTruthy();
   });
 
   it("falls back to REST when WebSocket is unavailable", async () => {
@@ -64,30 +81,28 @@ describe("Canlı sayfa", () => {
     expect(await screen.findByText("Ev 7")).toBeTruthy();
   });
 
-  it("loads secondary archive summaries only when expanded", async () => {
+  it("explains unanalysed matches instead of offering a detail request that would fail", () => {
+    wsState = { matches: [match("4", "60", { archive_view: null, frozen: false })], status: "connected", lastUpdate: new Date() };
+    render(ui());
+    expect(screen.getByText(/Bu maç analiz edilmemiş/)).toBeTruthy();
+    expect(screen.queryByText("Arşiv detayı")).toBeNull();
+    expect(screen.queryByText("Canlı veri alınamadı.")).toBeNull();
+  });
+
+  it("loads matched game lists only when expanded", async () => {
     wsState = { matches: [match("3", "HT")], status: "connected", lastUpdate: new Date() };
     getLivePrediction.mockResolvedValueOnce({
-      ...prediction,
-      archives: [
-        { archive: "A1", n: 12, sufficient: true, probs: { "1": 0.5, X: 0.25, "2": 0.25 } },
-        {
-          archive: "A3", n: 2, sufficient: false, probs: { "1": 1, X: 0, "2": 0 },
-          matches: [
-            { match_id: "91", home_team: "Ev FK", away_team: "Dep SK", kickoff_time: "2025-03-01T15:00:00Z",
-              ht: "0-1", ft: "2-1", result: "1", similarity: 0.981 },
-          ],
-        },
-      ],
+      frozen: true, frozen_at: null,
+      archive_view: { ...view, sources: view.sources.map((s) => s.archive === "a3" ? { ...s, matches: [
+        { match_id: "91", home_team: "Ev FK", away_team: "Dep SK", kickoff_time: "2025-03-01T15:00:00Z",
+          ht: "1-0", ft: "2-1", result: "1", similarity: 0.981 },
+      ] } : { ...s, matches: [] }) },
     });
     render(ui());
     expect(getLivePrediction).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Arşiv detayı"));
     expect(getLivePrediction).toHaveBeenCalledWith("3", true);
-    // Az maçlı arşiv de yüzdesiyle gösterilir ("yetersiz örneklem" yok).
-    expect(await screen.findByText("Maçları göster (1)")).toBeTruthy();
-    expect(screen.queryByText("yetersiz örneklem")).toBeNull();
-    fireEvent.click(screen.getByText("Maçları göster (1)"));
-    expect(screen.getByText("Ev FK - Dep SK")).toBeTruthy();
+    expect(await screen.findByText("Ev FK - Dep SK")).toBeTruthy();
     expect(screen.getByText("MS 2-1")).toBeTruthy();
     expect(screen.getByText("%98.1")).toBeTruthy();
   });

@@ -3,231 +3,48 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getLiveHTMatches, getLivePrediction } from "@/lib/api";
-import type { LiveArchiveSummary, LiveGoalMarket, LiveHTMatch, LiveOutcome, LivePrediction, LiveTier } from "@/lib/api";
+import type { LiveArchiveSource, LiveHTMatch } from "@/lib/api";
+import { ArchiveMatchList, ArchiveTable, HighlightList } from "@/components/LiveArchiveView";
 import { leagueDisplay } from "@/lib/leagues";
 import { formatTime } from "@/lib/dates";
 import { minuteOrder } from "@/lib/live-order";
 import { useLiveWs } from "@/lib/use-live-ws";
 import type { WsStatus } from "@/lib/use-live-ws";
 import { useLocale } from "@/lib/locale-context";
-import type { Dictionary } from "@/lib/i18n";
 
 const POLL_INTERVAL = 45_000;
 const WS_GRACE_MS = 3_000;
-const OUTCOMES: LiveOutcome[] = ["1", "X", "2"];
-const OUTCOME_COLORS: Record<LiveOutcome, string> = {
-  "1": "var(--nv-win)",
-  X: "var(--nv-draw)",
-  "2": "var(--nv-loss)",
-};
-
-function pct(prob: number | undefined): string {
-  return `%${((prob ?? 0) * 100).toFixed(1)}`;
-}
-
-function tierStyle(tier: LiveTier): { bg: string; color: string } {
-  if (tier === "high") return { bg: "var(--nv-accent-green-dim)", color: "var(--nv-accent-green)" };
-  if (tier === "medium") return { bg: "var(--nv-accent-blue-dim)", color: "var(--nv-accent-blue)" };
-  return { bg: "var(--nv-bg-elevated)", color: "var(--nv-text-tertiary)" };
-}
-
-function tierLabel(tier: LiveTier, t: Dictionary): string {
-  const p = t.live.prediction;
-  return { high: p.tierHigh, medium: p.tierMedium, low: p.tierLow, insufficient: p.tierInsufficient }[tier];
-}
-
-function levelLabel(level: LivePrediction["ms"]["cond_level"], t: Dictionary): string {
-  const p = t.live.prediction;
-  return { score: p.levelScore, diff: p.levelDiff, global_diff: p.levelGlobal }[level];
-}
-
-function PctBar({ label, value, color, highlight }: { label: string; value: number; color: string; highlight?: boolean }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="flex-shrink-0 font-semibold text-right" style={{ width: 20, fontSize: "var(--nv-text-xs)", color: highlight ? color : "var(--nv-text-secondary)" }}>
-        {label}
-      </span>
-      <div className="flex-1" style={{ height: 8, borderRadius: 4, backgroundColor: "var(--nv-bg-elevated)", overflow: "hidden" }}>
-        <div style={{ width: `${Math.min(value * 100, 100)}%`, height: "100%", borderRadius: 4, backgroundColor: color, opacity: highlight ? 1 : 0.45 }} />
-      </div>
-      <span className="flex-shrink-0 font-bold text-right" style={{ width: 52, fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-xs)", color: highlight ? color : "var(--nv-text-primary)" }}>
-        {pct(value)}
-      </span>
-    </div>
-  );
-}
-
-function GoalChip({ label, market, t }: { label: string; market: LiveGoalMarket; t: Dictionary }) {
-  if (!market.applicable || !market.pick || !market.tier) return null;
-  const p = t.live.prediction;
-  const pickLabel = { over: p.over, under: p.under, yes: p.yes, no: p.no }[market.pick] ?? market.pick;
-  const style = tierStyle(market.tier);
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 px-2 py-1 font-semibold"
-      style={{ fontSize: "var(--nv-text-xs)", borderRadius: "var(--nv-radius-md)", backgroundColor: style.bg, color: style.color }}
-      title={tierLabel(market.tier, t)}
-    >
-      {label} {pickLabel}
-      <span style={{ fontFamily: "var(--nv-font-mono)" }}>{pct(market.prob)}</span>
-    </span>
-  );
-}
-
-function PredictionPanel({ prediction }: { prediction: LivePrediction }) {
-  const { t } = useLocale();
-  const p = t.live.prediction;
-  const { ms } = prediction;
-  const tier = tierStyle(ms.tier);
-  return (
-    <div className="space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-bold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", letterSpacing: "var(--nv-tracking-wide)" }}>
-          {p.title}
-        </span>
-        <span
-          className="font-extrabold"
-          style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-lg)", color: OUTCOME_COLORS[ms.pick] }}
-        >
-          {ms.pick} {pct(ms.prob)}
-        </span>
-        <span className="px-2 py-0.5 font-semibold" style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: tier.bg, color: tier.color }}>
-          {tierLabel(ms.tier, t)}
-        </span>
-        <span className="flex-1" />
-        <span
-          className="px-2 py-0.5 font-semibold"
-          style={{
-            fontSize: "var(--nv-text-2xs)",
-            borderRadius: "var(--nv-radius-full)",
-            backgroundColor: prediction.frozen ? "var(--nv-accent-green-dim)" : "var(--nv-bg-elevated)",
-            color: prediction.frozen ? "var(--nv-accent-green)" : "var(--nv-text-tertiary)",
-          }}
-          title={p.frozenTooltip}
-        >
-          {prediction.frozen ? p.frozen : p.notFrozen}
-          {prediction.frozen && prediction.frozen_at ? ` ${formatTime(prediction.frozen_at)}` : ""}
-          {prediction.late ? ` · ${p.lateNote}` : ""}
-        </span>
-      </div>
-      <div className="space-y-1">
-        {OUTCOMES.map((o) => (
-          <PctBar key={o} label={o} value={ms.probs[o]} color={OUTCOME_COLORS[o]} highlight={o === ms.pick} />
-        ))}
-      </div>
-      <p style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
-        {p.htBaseline}: {ms.ht_baseline.pick} {pct(ms.ht_baseline.prob)} → {p.model}: {ms.pick} {pct(ms.prob)}
-        {" · "}{p.sample.replace("{n}", String(ms.n))} ({levelLabel(ms.cond_level, t)})
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <GoalChip label={p.over25} market={prediction.over25} t={t} />
-        <GoalChip label={p.btts} market={prediction.btts} t={t} />
-      </div>
-    </div>
-  );
-}
-
-function ArchiveMatchList({ matches }: { matches: NonNullable<LiveArchiveSummary["matches"]> }) {
-  const { t, locale } = useLocale();
-  const p = t.live.prediction;
-  return (
-    <ul className="space-y-1 pl-2 sm:pl-8 pb-1">
-      {matches.map((m) => (
-        <li key={m.match_id}>
-          <Link
-            href={`/analyze/${m.match_id}?home=${encodeURIComponent(m.home_team)}&away=${encodeURIComponent(m.away_team)}`}
-            className="grid items-center gap-2 py-0.5 hover:underline"
-            style={{ gridTemplateColumns: "64px minmax(0,1fr) auto", fontSize: "var(--nv-text-2xs)", fontVariantNumeric: "tabular-nums" }}
-          >
-            <span style={{ color: "var(--nv-text-tertiary)" }}>
-              {m.kickoff_time ? new Date(m.kickoff_time).toLocaleDateString(locale === "en" ? "en-GB" : "tr-TR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}
-            </span>
-            <span className="truncate" style={{ color: "var(--nv-text-secondary)" }}>
-              {m.home_team} - {m.away_team}
-            </span>
-            <span className="flex items-center gap-2" style={{ fontFamily: "var(--nv-font-mono)" }}>
-              <span style={{ color: "var(--nv-text-tertiary)" }}>{t.live.ht} {m.ht}</span>
-              <span className="font-bold" style={{ color: "var(--nv-text-primary)" }}>{t.live.ft} {m.ft}</span>
-              <span className="inline-flex items-center gap-1" style={{ color: "var(--nv-text-primary)" }}>
-                <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: OUTCOME_COLORS[m.result] }} />
-                {m.result}
-              </span>
-              {m.similarity != null && (
-                <span style={{ color: "var(--nv-text-tertiary)" }} title={p.similarity}>%{(m.similarity * 100).toFixed(1)}</span>
-              )}
-            </span>
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ArchiveRow({ summary }: { summary: LiveArchiveSummary }) {
-  const { t } = useLocale();
-  const p = t.live.prediction;
-  const [open, setOpen] = useState(false);
-  const matches = summary.matches ?? [];
-  return (
-    <div>
-    <div className="flex flex-wrap items-center gap-2 py-1" style={{ fontSize: "var(--nv-text-xs)" }}>
-      <span className="font-bold" style={{ width: 28, color: "var(--nv-text-secondary)" }}>{summary.archive}</span>
-      <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-tertiary)" }}>
-        {p.sample.replace("{n}", String(summary.n))}
-      </span>
-      {summary.probs ? (
-        <span className="flex gap-2" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>
-          {OUTCOMES.map((o) => (
-            <span key={o}>{o} {pct(summary.probs?.[o])}</span>
-          ))}
-        </span>
-      ) : (
-        <span style={{ color: "var(--nv-text-tertiary)", fontStyle: "italic" }}>
-          {p.noArchive}
-        </span>
-      )}
-      {matches.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          className="ml-auto px-2 py-0.5"
-          style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", border: "1px solid var(--nv-border-subtle)", color: "var(--nv-text-secondary)" }}
-        >
-          {open ? p.hideMatches : p.showMatches.replace("{n}", String(matches.length))}
-        </button>
-      )}
-    </div>
-    {open && <ArchiveMatchList matches={matches} />}
-    </div>
-  );
-}
-
 function ArchiveDetails({ match }: { match: LiveHTMatch }) {
   const { t } = useLocale();
-  const p = t.live.prediction;
-  const [archives, setArchives] = useState<LiveArchiveSummary[] | null>(null);
+  const a = t.live.archive;
+  const [sources, setSources] = useState<LiveArchiveSource[] | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     getLivePrediction(match.match_id, true)
-      .then((detail) => { if (!cancelled) setArchives(detail.archives ?? []); })
+      .then((detail) => { if (!cancelled) setSources(detail.archive_view.sources.filter((s) => s.archive !== "genel")); })
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
   }, [match.match_id]);
 
   return (
-    <div className="px-3 pb-3 sm:px-4 sm:pb-4 nv-fade-in" style={{ borderTop: "1px solid var(--nv-border)", paddingTop: 12 }}>
+    <div className="px-3 pb-3 sm:px-4 sm:pb-4 nv-fade-in space-y-2" style={{ borderTop: "1px solid var(--nv-border)", paddingTop: 12 }}>
       <p className="font-semibold" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
-        {p.archivesTitle.replace("{home}", String(match.ht_home)).replace("{away}", String(match.ht_away))}
-      </p>
-      <p className="mb-1" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", opacity: 0.8 }}>
-        {p.archivesNote}
+        {a.matchesTitle.replace("{home}", String(match.ht_home)).replace("{away}", String(match.ht_away))}
       </p>
       {failed && <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-accent-red)" }}>{t.live.liveDataError}</p>}
-      {!failed && archives === null && <div className="nv-skeleton" style={{ width: "70%", height: 12, borderRadius: 4 }} />}
-      {archives?.map((summary) => <ArchiveRow key={summary.archive} summary={summary} />)}
+      {!failed && sources === null && <div className="nv-skeleton" style={{ width: "70%", height: 12, borderRadius: 4 }} />}
+      {sources?.map((src) => (
+        <div key={src.archive}>
+          <div className="flex items-center gap-2" style={{ fontSize: "var(--nv-text-xs)" }}>
+            <span className="font-bold" style={{ color: "var(--nv-text-secondary)" }}>{src.label}</span>
+            <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-tertiary)" }}>({src.n})</span>
+            {src.n === 0 && <span style={{ color: "var(--nv-text-tertiary)", fontStyle: "italic" }}>{a.noMatches}</span>}
+          </div>
+          {src.matches && src.matches.length > 0 && <ArchiveMatchList matches={src.matches} />}
+        </div>
+      ))}
     </div>
   );
 }
@@ -278,9 +95,32 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
           </div>
         </div>
 
-        {match.prediction && <PredictionPanel prediction={match.prediction} />}
+        <div className="flex justify-end">
+          <span
+            className="px-2 py-0.5 font-semibold"
+            style={{
+              fontSize: "var(--nv-text-2xs)",
+              borderRadius: "var(--nv-radius-full)",
+              backgroundColor: match.frozen ? "var(--nv-accent-green-dim)" : "var(--nv-bg-elevated)",
+              color: match.frozen ? "var(--nv-accent-green)" : "var(--nv-text-tertiary)",
+            }}
+            title={t.live.archive.frozenTooltip}
+          >
+            {match.frozen ? t.live.archive.frozen : t.live.archive.notFrozen}
+            {match.frozen && match.frozen_at ? ` ${formatTime(match.frozen_at)}` : ""}
+          </span>
+        </div>
+        {match.archive_view ? (
+          <>
+            <HighlightList view={match.archive_view} />
+            <ArchiveTable view={match.archive_view} />
+          </>
+        ) : (
+          <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{t.live.archive.noAnalysis}</p>
+        )}
 
         <div className="flex items-center gap-2">
+          {match.archive_view && (
           <button
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
@@ -294,6 +134,7 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
           >
             {expanded ? t.common.hide : t.live.htArchiveAnalysis}
           </button>
+          )}
           <Link
             href={`/analyze/${match.match_id}?home=${encodeURIComponent(homeName)}&away=${encodeURIComponent(awayName)}`}
             prefetch={false}
@@ -305,7 +146,7 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
         </div>
       </div>
 
-      {expanded && <ArchiveDetails match={match} />}
+      {expanded && match.archive_view && <ArchiveDetails match={match} />}
     </div>
   );
 }

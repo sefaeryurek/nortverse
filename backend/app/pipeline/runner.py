@@ -239,6 +239,52 @@ async def _upsert(
     return await _with_retry(_do, label=f"_upsert[{result.match_id}]")
 
 
+async def sync_kickoffs(session, items: list[dict]) -> int:
+    """Bültendeki güncel başlama saatini, henüz bitmemiş analizli maçlara yazar.
+
+    Haftalar önce analiz edilen maçlar resmi saat açıklanmadan yer tutucu saatle kaydediliyor;
+    canlı izleyici ve "maç öncesi" kuralı doğru saate dayanmalı. Değişen maç sayısını döner.
+    """
+    wanted: dict[str, datetime] = {}
+    for item in items:
+        mid, raw = item.get("match_id"), item.get("kickoff_time")
+        if not mid or not raw:
+            continue
+        try:
+            kickoff = raw if isinstance(raw, datetime) else datetime.fromisoformat(raw)
+        except (TypeError, ValueError):
+            continue
+        if kickoff.tzinfo is not None:
+            wanted[str(mid)] = kickoff
+    if not wanted:
+        return 0
+    current = (await session.execute(
+        select(Match.match_id, Match.kickoff_time).where(
+            Match.match_id.in_(wanted), Match.deleted_at.is_(None), Match.actual_ft_home.is_(None),
+        )
+    )).all()
+    changed = 0
+    for mid, old in current:
+        new = wanted[mid]
+        if old is not None and old == new:
+            continue
+        await session.execute(sa_update(Match).where(Match.match_id == mid).values(kickoff_time=new))
+        log.warning("Başlama saati güncellendi [%s]: %s → %s", mid, old, new)
+        changed += 1
+    return changed
+
+
+async def sync_kickoffs_from_cache(days: list[date]) -> int:
+    """fixture_cache'teki günlerin başlama saatlerini maçlara uygular (canlı izleyici her turda çağırır)."""
+    changed = 0
+    async with get_session() as session:
+        for day in days:
+            cache = await session.get(FixtureCache, day.isoformat())
+            if cache is not None and isinstance(cache.matches_json, list):
+                changed += await sync_kickoffs(session, [i for i in cache.matches_json if isinstance(i, dict)])
+    return changed
+
+
 async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> int:
     """Keep compact source competition labels and already observed scores."""
     cache_date = cache_day.isoformat()
@@ -278,6 +324,11 @@ async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> i
             matches_json=cache_json,
             cached_at=datetime.now(timezone.utc),
         ))
+    # Ayrı adım: saat senkronu başarısız olsa da bülten kaydı korunur.
+    try:
+        await sync_kickoffs_from_cache([cache_day])
+    except Exception:
+        log.warning("Başlama saatleri senkronlanamadı (%s)", cache_date, exc_info=True)
     log.info("fixture_cache yazıldı: %s (%d kaynak maçı)", cache_date, len(cache_json))
     return len(cache_json)
 

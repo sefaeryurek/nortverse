@@ -170,9 +170,13 @@ export interface LedgerPrediction {
   late: boolean;
 }
 
-export async function getPerformanceSummary(source: PredictionSource, groupBy = "tier,market"): Promise<PerformanceSummary> {
+export async function getPerformanceSummary(
+  source: PredictionSource, groupBy = "tier,market", ruleVersion?: string,
+): Promise<PerformanceSummary> {
+  const params = new URLSearchParams({ source, group_by: groupBy });
+  if (ruleVersion) params.set("rule_version", ruleVersion);
   return request<PerformanceSummary>(
-    `/api/performance/summary?${new URLSearchParams({ source, group_by: groupBy })}`,
+    `/api/performance/summary?${params}`,
     { next: { revalidate: 120 } },
   );
 }
@@ -197,11 +201,46 @@ export interface BacktestSummary extends PerformanceSummary {
 }
 
 export async function getBacktestRuns(): Promise<BacktestRun[]> {
-  return request<BacktestRun[]>("/api/performance/backtest/runs", { next: { revalidate: 300 } });
+  return request<BacktestRun[]>("/api/performance/backtest/runs", { next: { revalidate: 30 } });
 }
 
 export async function getBacktestSummary(runId: number): Promise<BacktestSummary> {
   return request<BacktestSummary>(`/api/performance/backtest/${runId}/summary`, { next: { revalidate: 3600 } });
+}
+
+export interface LiveMatchPick {
+  period: "ft" | "h2";
+  market: string;
+  selection: string;
+  archive: LiveArchiveKey;
+  label: string;
+  pct: number;
+  n: number;
+  risky: boolean;
+  outcome: "hit" | "miss" | "void" | "pending";
+}
+
+export interface LiveMatchEvaluation {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  league_name: string;
+  kickoff_time: string;
+  recorded_at: string;
+  ht: string;
+  final_ht: string | null;
+  final_ft: string | null;
+  picks: LiveMatchPick[];
+  hits: number;
+  resolved: number;
+}
+
+/** Canlıya giren (devre arasında kaydedilen) her maç ve %85+ işaretlerinin sonucu. */
+export async function getLiveMatchEvaluations(day: string): Promise<LiveMatchEvaluation[]> {
+  return request<LiveMatchEvaluation[]>(
+    `/api/performance/live-matches?${new URLSearchParams({ day })}`,
+    { next: { revalidate: 60 } },
+  );
 }
 
 export async function getPerformancePredictions(source: PredictionSource, day: string): Promise<LedgerPrediction[]> {
@@ -219,15 +258,15 @@ export async function getResults(date: string): Promise<ResultMatch[]> {
 }
 
 export type LiveOutcome = "1" | "X" | "2";
-export type LiveTier = "high" | "medium" | "low" | "insufficient";
+export type LiveArchiveKey = "a1" | "a2" | "a3" | "genel";
 
-export interface LiveGoalMarket {
-  applicable: boolean;
-  reason?: string;
-  pick?: string;
-  prob?: number;
-  n?: number;
-  tier?: LiveTier;
+/** Bir pazarın en yüksek seçimi ve tüm seçimlerin oranları (yüzde). */
+export interface LiveArchiveCell {
+  period: "ft" | "h2";
+  market: string;
+  selection: string;
+  pct: number;
+  options: Record<string, number>;
 }
 
 export interface LiveArchiveMatch {
@@ -241,33 +280,42 @@ export interface LiveArchiveMatch {
   similarity: number | null;
 }
 
-export interface LiveArchiveSummary {
-  archive: "A1" | "A2" | "A3";
+export interface LiveArchiveSource {
+  archive: LiveArchiveKey;
+  label: string;
   n: number;
-  sufficient: boolean;
-  probs: Record<LiveOutcome, number> | null;
-  /** İY skoru aynı olan tüm eşleşen maçlar, en yeni önce. */
+  /** 0 < n < risky_below_n */
+  risky: boolean;
+  cells: LiveArchiveCell[];
+  /** Sadece detay isteğinde: İY'si aynı biten eşleşen maçlar, en yeni önce. */
   matches?: LiveArchiveMatch[];
 }
 
-export interface LivePrediction {
+export interface LiveHighlight {
+  period: "ft" | "h2";
+  market: string;
+  selection: string;
+  pct: number;
+  archive: LiveArchiveKey;
+  label: string;
+  n: number;
+  risky: boolean;
+}
+
+export interface LiveArchiveView {
   rule_version: string;
   ht: { home: number; away: number };
-  ms: {
-    probs: Record<LiveOutcome, number>;
-    pick: LiveOutcome;
-    prob: number;
-    tier: LiveTier;
-    n: number;
-    cond_level: "score" | "diff" | "global_diff";
-    ht_baseline: { probs: Record<LiveOutcome, number>; pick: LiveOutcome; prob: number };
-  };
-  over25: LiveGoalMarket;
-  btts: LiveGoalMarket;
+  threshold_pct: number;
+  risky_below_n: number;
+  sources: LiveArchiveSource[];
+  /** ≥ threshold_pct seçimler; maç kaydedildiyse defterdeki kayıt. */
+  highlights: LiveHighlight[];
+}
+
+export interface LiveArchiveDetail {
   frozen: boolean;
   frozen_at: string | null;
-  late?: boolean;
-  archives?: LiveArchiveSummary[];
+  archive_view: LiveArchiveView;
 }
 
 export interface LiveHTMatch {
@@ -282,15 +330,17 @@ export interface LiveHTMatch {
   phase?: "1h" | "ht" | "2h" | null;
   league_name: string | null;
   kickoff_time: string | null;
-  prediction: LivePrediction | null;
+  frozen?: boolean;
+  frozen_at?: string | null;
+  archive_view?: LiveArchiveView | null;
 }
 
 export async function getLiveHTMatches(): Promise<LiveHTMatch[]> {
   return request<LiveHTMatch[]>("/api/live-ht", { cache: "no-store" });
 }
 
-export async function getLivePrediction(matchId: string, detail = false): Promise<LivePrediction> {
-  return request<LivePrediction>(
+export async function getLivePrediction(matchId: string, detail = false): Promise<LiveArchiveDetail> {
+  return request<LiveArchiveDetail>(
     `/api/live-ht/${encodeURIComponent(matchId)}/prediction?${new URLSearchParams({ detail: detail ? "1" : "0" })}`,
     { cache: "no-store" },
   );

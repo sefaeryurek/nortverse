@@ -122,7 +122,7 @@ def live_freeze_cmd(
 
 
 def backtest_ledger_cmd(
-    strategy: str = typer.Option("live_ht", "--strategy", help="live_ht | top_pick | market_summary"),
+    strategy: str = typer.Option("live_ht", "--strategy", help="live_ht | live_archive | top_pick | market_summary"),
     from_date: str = typer.Option(..., "--from", help="Başlangıç (YYYY-MM-DD)"),
     to_date: str = typer.Option(..., "--to", help="Bitiş, hariç (YYYY-MM-DD)"),
     alpha: float = typer.Option(0.5, "--alpha", help="Maç öncesi LR üssü (live_model.ALPHA)"),
@@ -134,13 +134,13 @@ def backtest_ledger_cmd(
     _setup_logging("DEBUG" if verbose else "INFO")
     from datetime import datetime
     from app.analysis.backtest import (
-        load_backtest_rows, ms_brier_report, run_live_backtest, run_prematch_backtest,
+        load_backtest_rows, ms_brier_report, run_live_archive_backtest, run_live_backtest, run_prematch_backtest,
     )
     from app.analysis.performance import group_summaries, summarize
     from app.config import ISTANBUL_TZ
 
-    if strategy not in ("live_ht", "top_pick", "market_summary"):
-        console.print("[red]--strategy: live_ht | top_pick | market_summary[/red]")
+    if strategy not in ("live_ht", "live_archive", "top_pick", "market_summary"):
+        console.print("[red]--strategy: live_ht | live_archive | top_pick | market_summary[/red]")
         raise typer.Exit(1)
     start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
     end = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
@@ -154,7 +154,10 @@ def backtest_ledger_cmd(
         )
 
     async def _run() -> None:
-        if strategy == "live_ht":
+        if strategy == "live_archive":
+            run_id = await run_live_archive_backtest(start, end, notes=notes, replace_run=replace_run)
+            title = f"Canlı arşiv (%85+) backtest #{run_id} ({from_date} → {to_date})"
+        elif strategy == "live_ht":
             run_id = await run_live_backtest(start, end, notes=notes, alpha=alpha, replace_run=replace_run)
             title = f"Canlı İY→MS backtest #{run_id} ({from_date} → {to_date}, α={alpha})"
         else:
@@ -163,7 +166,7 @@ def backtest_ledger_cmd(
         rows = await load_backtest_rows(run_id)
         brier = ms_brier_report(rows)
         console.print(f"\n[bold cyan]{title}[/bold cyan]")
-        breakdown = "archive" if strategy == "market_summary" else "tier"
+        breakdown = "archive" if strategy in ("market_summary", "live_archive") else "tier"
         for period in ("ht", "h2", "ft"):
             for market in sorted({r["market"] for r in rows if r["period"] == period}):
                 market_rows = [r for r in rows if r["market"] == market and r["period"] == period]

@@ -230,6 +230,41 @@ async def run_prematch_backtest(strategy: str, date_from: datetime, date_to: dat
     return run_id
 
 
+async def run_live_archive_backtest(date_from: datetime, date_to: datetime, *, notes: str | None = None,
+                                    replace_run: int | None = None) -> int:
+    """Canlı arşiv görünümü (live-arch-v1): her maçın %85+ işaretleri, gerçek İY/MS ile çözülür.
+
+    Arşiv üyelikleri maç öncesi `matched_ids`'ten (sonucu kickoff − 3 saatten önce bilinen maçlar) → sızıntısız.
+    """
+    from app.analysis import live_archive
+
+    run_id, history, target_ids = await _start_run(
+        "live_ht", live_archive.LIVE_ARCHIVE_RULE_VERSION,
+        {"rule_params": live_archive.RULE_PARAMS, "params_fingerprint": live_archive.rule_params_fingerprint(),
+         "ht_capture_offset_min": 47},
+        date_from, date_to, notes, replace_run,
+    )
+    async with get_session() as session:
+        results = {r[0]: tuple(r[1:]) for r in (await session.execute(select(
+            Match.match_id, Match.actual_ht_home, Match.actual_ht_away, Match.actual_ft_home, Match.actual_ft_away,
+        ).where(Match.deleted_at.is_(None), Match.actual_ft_home.isnot(None), Match.actual_ht_home.isnot(None)))).all()}
+    log.info("Canlı arşiv backtest #%d: %d hedef maç", run_id, len(target_ids))
+
+    def rows_of(_table, match, as_of):
+        ht = (match.actual_ht_home, match.actual_ht_away)
+        ft = (match.actual_ft_home, match.actual_ft_away)
+        blobs = {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d}
+        view = live_archive.build_view(live_archive.ht_filtered_rows(blobs, results, ht), ht)
+        common = {"match_id": match.match_id, "league_name": match.league_name,
+                  "kickoff_time": match.kickoff_time, "as_of": as_of}
+        return [{**row, "run_id": run_id, "ht_home": ht[0], "ht_away": ht[1], "ft_home": ft[0], "ft_away": ft[1],
+                 "outcome": resolve(row["period"], row["market"], row["selection"], ht, ft)}
+                for row in live_archive.ledger_rows(view, common)]
+
+    await _replay(run_id, history, target_ids, date_from, lambda ko: ko + HT_CAPTURE_OFFSET, rows_of)
+    return run_id
+
+
 async def load_backtest_rows(run_id: int) -> list[dict]:
     async with get_session() as session:
         rows = (await session.execute(

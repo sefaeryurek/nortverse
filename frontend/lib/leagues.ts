@@ -71,6 +71,7 @@ const ALIASES: Record<string, string> = {
   "Liga Portugal 1": "Portuguese Primeira Liga",
   "Holland Eredivisie": "Netherlands Eredivisie",
   "Turkey Super Lig": "Turkish Super League",
+  "Turkish Super Lig": "Turkish Super League",
   "Switzerland Super League": "Swiss Super League",
   "Poland Ekstraklasa": "Polish Ekstraklasa",
   "Norway Eliteserien": "Norwegian Eliteserien",

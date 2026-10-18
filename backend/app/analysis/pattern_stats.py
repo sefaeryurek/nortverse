@@ -35,6 +35,10 @@ class PatternResult(BaseModel):
     alt_35_pct: float
     ust_35_pct: float
 
+    # Alt/Üst 0.5 (canlıda 2. yarı gol var/yok için; eski kayıtlarda yok → 0)
+    alt_05_pct: float = 0.0
+    ust_05_pct: float = 0.0
+
     # Karşılıklı Gol
     kg_var_pct: float
     kg_yok_pct: float
@@ -207,6 +211,7 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
 
     r1 = rx = r2 = 0.0
     alt15 = ust15 = alt25 = ust25 = alt35 = ust35 = 0.0
+    ust05 = 0.0
     kg_var = kg_yok = 0.0
     hnd_h20: dict[str, float] = {"1": 0.0, "x": 0.0, "2": 0.0}
     hnd_h10: dict[str, float] = {"1": 0.0, "x": 0.0, "2": 0.0}
@@ -243,6 +248,7 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
         ust25 += w if total_goals >= 3 else 0
         alt35 += w if total_goals < 4 else 0
         ust35 += w if total_goals >= 4 else 0
+        ust05 += w if total_goals >= 1 else 0
 
         is_kg = both_scored(h, a)
         if is_kg:
@@ -308,6 +314,8 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
         dc_1x_pct=pct(r1 + rx),
         dc_x2_pct=pct(rx + r2),
         dc_12_pct=pct(r1 + r2),
+        alt_05_pct=pct(total - ust05),
+        ust_05_pct=pct(ust05),
         alt_15_pct=pct(alt15),
         ust_15_pct=pct(ust15),
         alt_25_pct=pct(alt25),

@@ -83,7 +83,7 @@ class TestLiveHTMatchModel:
         m = LiveHTMatch(match_id="123", ht_home=1, ht_away=0)
         assert m.live_home is None
         assert m.live_away is None
-        assert m.prediction is None
+        assert m.archive_view is None and m.frozen is False
 
 
 class _FakeWebSocket:

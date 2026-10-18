@@ -169,7 +169,17 @@
       "chartY": "Observed hit rate",
       "chartDiagonal": "Perfect calibration",
       "chartPoint": "{low}–{high}% bucket: shown avg {avg}%, observed {hit}% (n={n})",
-      "chartAria": "Calibration chart: shown probability vs observed hit rate; the diagonal is perfect calibration."
+      "chartAria": "Calibration chart: shown probability vs observed hit rate; the diagonal is perfect calibration.",
+      "archive_genel": "General",
+      "byRisk": "By sample risk",
+      "risk_risky": "Risky (under 5 matches)",
+      "risk_normal": "Normal (5+ matches)",
+      "liveDayTitle": "Matches that went live",
+      "noPicks": "No 85%+ signal in this match",
+      "emptyLiveDay": "No recorded live matches on this day.",
+      "recordedAt": "Recorded {time}",
+      "liveSummaryNote": "85%+ archive signals recorded at half-time; marked hit/miss when the match ends.",
+      "strategy_live_archive": "Live archive (85%+)"
     }
   },
   "live": {
@@ -179,9 +189,9 @@
     "current": "Current",
     "ft": "FT",
     "htArchiveAnalysis": "Archive detail",
-    "htDescription": "Full-time prediction for matches at half-time or in the second half: past matches with the same league and half-time score, adjusted by the pre-match A1+A2+A3 view.",
+    "htDescription": "Half-time and second-half matches: results of pre-match A1/A2/A3 matches that had the same HT score. Rates above 85% on top; samples under 5 matches are marked risky.",
     "noLiveMatches": "No top-league match is at half-time or in the second half right now.",
-    "noLiveNote": "When matches reach half-time, the full-time prediction appears here and is recorded at that moment.",
+    "noLiveNote": "When matches reach half-time, archive rates appear here and 85%+ signals are recorded at that moment.",
     "viewBulletin": "View bulletin matches",
     "liveDataError": "Failed to fetch live data.",
     "wsTooltip": "Real-time updates via WebSocket",
@@ -215,6 +225,39 @@
       "showMatches": "Show matches ({n})",
       "hideMatches": "Hide",
       "similarity": "Similarity (A3)"
+    },
+    "archive": {
+      "highlightsTitle": "Highlights ({pct}%+)",
+      "noHighlights": "No rate above {pct}%",
+      "risky": "Risky",
+      "riskyTooltip": "This archive has {n} matches (under {min}) — small sample, the rate may be high by chance.",
+      "tableTitle": "Rates by archive (ending HT {home}-{away})",
+      "market": "Market",
+      "noMatches": "no matches",
+      "generalNote": "General = union of A1+A2+A3 matches (each match counted once). Markets already decided by the HT score are hidden.",
+      "matchesTitle": "Matched games (HT {home}-{away})",
+      "frozen": "Recorded",
+      "notFrozen": "Not recorded yet",
+      "frozenTooltip": "85%+ signals were recorded immutably at half-time; their results are tracked under Evaluation → Live HT.",
+      "markets": {
+        "ft_result": "FT",
+        "ft_dc": "FT DC",
+        "ft_ou_15": "FT 1.5",
+        "ft_ou_25": "FT 2.5",
+        "ft_ou_35": "FT 3.5",
+        "ft_kg": "FT BTTS",
+        "h2_result": "2H",
+        "h2_ou_05": "2H 0.5",
+        "h2_ou_15": "2H 1.5",
+        "h2_kg": "2H BTTS"
+      },
+      "selections": {
+        "under": "Under",
+        "over": "Over",
+        "yes": "Yes",
+        "no": "No"
+      },
+      "noAnalysis": "This match was not analysed — no archive matches, so no rates or recorded signals."
     }
   },
   "error": {

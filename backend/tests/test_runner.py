@@ -308,3 +308,22 @@ class TestStaleAnalysisWrite:
     def test_message(self):
         exc = StaleAnalysisWrite("stale 123")
         assert "stale 123" in str(exc)
+
+
+@pytest.mark.asyncio
+async def test_sync_kickoffs_updates_only_changed_unfinished_matches():
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, MagicMock
+    from app.pipeline import runner
+
+    old = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
+    new = datetime(2026, 10, 18, 10, 30, tzinfo=timezone.utc)
+    session = AsyncMock()
+    session.execute.side_effect = [MagicMock(all=lambda: [("1", old), ("2", new)]), MagicMock()]
+    items = [{"match_id": "1", "kickoff_time": new.isoformat()},
+             {"match_id": "2", "kickoff_time": new.isoformat()},
+             {"match_id": "3", "kickoff_time": None}]
+    assert await runner.sync_kickoffs(session, items) == 1
+    update = session.execute.await_args_list[1].args[0]
+    assert update.table.name == "matches"
+    assert session.execute.await_count == 2

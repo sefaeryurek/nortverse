@@ -11,9 +11,10 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
+from app.analysis import live_archive
 from app.analysis.ledger import record_predictions
 from app.analysis.live_model import LIVE_RULE_VERSION, get_cond_table, predict_live
 from app.analysis.persist import hash_string
@@ -68,7 +69,7 @@ def ledger_rows(match: Match, prediction: dict, as_of: datetime, ht_observation_
         "baseline_selection": ms["ht_baseline"]["pick"],
         "baseline_prob_bp": round(ms["ht_baseline"]["prob"] * 10000),
         "confidence_tier": ms["tier"], "sample_n": ms["n"] or None,
-        "details": {**prediction, "late": late},
+        "details": {**prediction, "late": late, "archive_rule_version": live_archive.LIVE_ARCHIVE_RULE_VERSION},
     }]
     for market, key in (("ou_25", "over25"), ("kg", "btts")):
         block = prediction[key]
@@ -128,8 +129,14 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
                                  report: dict | None = None) -> str:
     """İY gözlemini ve tahmini bir kez kaydeder. Durum kodunu döner (tahmin `report`'a yazılır)."""
     status, prediction = await plan_live_freeze(match, fs)
+    view = None
+    if status == "ready":
+        view = await live_archive.load_view(
+            match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
+            observed_ht(fs))
     if report is not None:
         report["prediction"] = prediction
+        report["view"] = view
     if status == "late_score_changed":
         log.info("Canlı tahmin dondurulmadı (2. yarıda skor değişmiş) [%s]", match.match_id)
     if status != "ready":
@@ -141,11 +148,18 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
     now = datetime.now(timezone.utc)
     async with get_session() as session:
         obs_id = await _ht_observation_id(session, match, ht, phase, now)
-        written = await record_predictions(
-            session, ledger_rows(match, prediction, now, obs_id, late=phase == "2h"))
+        rows = ledger_rows(match, prediction, now, obs_id, late=phase == "2h")
+        # Canlı arşiv %85+ işaretleri (live-arch-v1): ana kayıt ile aynı İY gözlemine bağlı.
+        rows += live_archive.ledger_rows(view, {
+            "match_id": match.match_id, "league_name": match.league_name or "",
+            "kickoff_time": match.kickoff_time, "as_of": now, "pattern_hash": pattern_hash(match),
+            "ht_home": ht[0], "ht_away": ht[1], "ht_observation_id": obs_id,
+        })
+        written = await record_predictions(session, rows)
     if written:
-        log.info("Canlı tahmin donduruldu [%s] İY %s-%s → %s %%%.1f",
-                 match.match_id, ht[0], ht[1], prediction["ms"]["pick"], prediction["ms"]["prob"] * 100)
+        log.info("Canlı tahmin donduruldu [%s] İY %s-%s → %s %%%.1f · %d arşiv işareti (%%85+)",
+                 match.match_id, ht[0], ht[1], prediction["ms"]["pick"], prediction["ms"]["prob"] * 100,
+                 len(view["highlights"]))
         return "frozen"
     return "already_frozen"
 
@@ -156,6 +170,13 @@ async def run_tick(*, dry_run: bool = False, snapshot=None) -> list[dict]:
     `snapshot` verilmezse süreç içi canlı görüntü kullanılır (CLI tam yenilenmiş görüntü verir).
     """
     now = datetime.now(timezone.utc)
+    try:
+        from app.config import ISTANBUL_TZ
+        from app.pipeline.runner import sync_kickoffs_from_cache
+        today = now.astimezone(ISTANBUL_TZ).date()
+        await sync_kickoffs_from_cache([today - timedelta(days=1), today])
+    except Exception:
+        log.warning("Başlama saatleri senkronlanamadı", exc_info=True)
     async with get_session() as session:
         candidates = (await session.execute(
             select(Match).where(
@@ -170,9 +191,17 @@ async def run_tick(*, dry_run: bool = False, snapshot=None) -> list[dict]:
         frozen = set((await session.execute(
             select(PredictionLedger.match_id).where(
                 PredictionLedger.source == "live_ht",
-                PredictionLedger.rule_version == LIVE_RULE_VERSION,
                 PredictionLedger.match_id.in_([m.match_id for m in candidates]),
-            )
+                or_(
+                    # Arşiv işaretleriyle birlikte kaydedilmiş ana satır …
+                    (PredictionLedger.rule_version == LIVE_RULE_VERSION)
+                    & (PredictionLedger.market == "result")
+                    & (PredictionLedger.details["archive_rule_version"].astext
+                       == live_archive.LIVE_ARCHIVE_RULE_VERSION),
+                    # … ya da eski sürümde kaydedilip arşiv işaretleri sonradan tamamlanmış maç.
+                    PredictionLedger.rule_version == live_archive.LIVE_ARCHIVE_RULE_VERSION,
+                ),
+            ).distinct()
         )).scalars().all())
     report = [{"match": m, "score": None, "status": "already_frozen", "prediction": None}
               for m in candidates if m.match_id in frozen]

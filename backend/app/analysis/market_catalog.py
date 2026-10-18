@@ -88,7 +88,12 @@ MARKETS: tuple[MarketSpec, ...] = (
                exclude_periods=_NO_HT_H2),
 )
 
-MARKETS_BY_KEY: dict[str, MarketSpec] = {m.key: m for m in MARKETS}
+# Sadece canlı İY arşiv görünümünde (2. yarı gol var/yok): frontend MARKETS'te yok, eski kayıtlarda alan 0.
+LIVE_ONLY_MARKETS: tuple[MarketSpec, ...] = (
+    MarketSpec("ou_05", (("alt_05_pct", "under"), ("ust_05_pct", "over"))),
+)
+
+MARKETS_BY_KEY: dict[str, MarketSpec] = {m.key: m for m in MARKETS + LIVE_ONLY_MARKETS}
 
 # Ana Pazar Özeti'nde gösterilen pazarlar (confidence.ts SUMMARY_MARKET_KEYS ile aynı sıra).
 SUMMARY_MARKET_KEYS: tuple[str, ...] = (

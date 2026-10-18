@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { getBacktestRuns, getBacktestSummary, getPerformancePredictions, getPerformanceSummary } from "@/lib/api";
+import { getBacktestRuns, getBacktestSummary, getLiveMatchEvaluations, getPerformancePredictions, getPerformanceSummary } from "@/lib/api";
+import { liveMarketLabel, liveSelectionLabel } from "@/lib/live-labels";
 import type {
-  BacktestRun, BacktestSummary, LedgerPrediction, PerformanceStats, PerformanceSummary, PredictionSource,
+  BacktestRun, BacktestSummary, LedgerPrediction, LiveMatchEvaluation, PerformanceStats, PerformanceSummary, PredictionSource,
 } from "@/lib/api";
 import type { Dictionary } from "@/lib/i18n";
 import { leagueDisplay } from "@/lib/leagues";
@@ -168,13 +169,14 @@ function CalibrationList({ buckets, p }: { buckets: PerformanceSummary["calibrat
 
 type GroupSpec = { key: string; title: string; labelOf: (key: string) => string };
 
-function groupSpecs(keys: readonly string[], p: Perf): GroupSpec[] {
+function groupSpecs(keys: readonly string[], p: Perf, t?: Dictionary): GroupSpec[] {
   const lookup = (prefix: string, k: string) => (p as Record<string, string>)[`${prefix}_${k}`] ?? k;
   const specs: Record<string, GroupSpec> = {
     tier: { key: "tier", title: p.byTier, labelOf: (k) => lookup("tier", k) },
     market: { key: "market", title: p.byMarket, labelOf: (k) => marketLabel(k, p) },
     league: { key: "league", title: p.byLeague, labelOf: (k) => k },
-    archive: { key: "archive", title: p.byArchive, labelOf: (k) => lookup("archive", k) },
+    archive: { key: "archive", title: p.byArchive, labelOf: (k) => (k === "-" || k === "genel" ? p.archive_genel : lookup("archive", k)) },
+    risk: { key: "risk", title: p.byRisk, labelOf: (k) => lookup("risk", k) },
     agreement: {
       key: "agreement",
       title: p.byAgreement,
@@ -186,7 +188,8 @@ function groupSpecs(keys: readonly string[], p: Perf): GroupSpec[] {
       title: p.byPeriodMarket,
       labelOf: (k) => {
         const [period, market] = k.split(":");
-        return `${lookup("period", period)} · ${marketLabel(market, p)}`;
+        const live = t ? (t.live.archive.markets as Record<string, string>)[`${period}_${market}`] : undefined;
+        return live ?? `${lookup("period", period)} · ${marketLabel(market, p)}`;
       },
     },
   };
@@ -246,17 +249,19 @@ function SummaryBody({ summary, t, headline, groups }: {
   );
 }
 
-export async function PerformanceOverview({ source, t, groups = ["tier", "market"], title, hint }: {
+export async function PerformanceOverview({ source, t, groups = ["tier", "market"], title, hint, ruleVersion }: {
   source: PredictionSource;
   t: Dictionary;
   groups?: readonly string[];
   title?: string;
   hint?: string;
+  /** Sadece bu kural sürümünün kayıtları (canlıda: arşiv işaretleri, eski model gizli). */
+  ruleVersion?: string;
 }) {
   const p = t.evaluation.perf;
   let summary: PerformanceSummary;
   try {
-    summary = await getPerformanceSummary(source, groups.join(","));
+    summary = await getPerformanceSummary(source, groups.join(","), ruleVersion);
   } catch {
     return <LoadError t={t} />;
   }
@@ -268,11 +273,11 @@ export async function PerformanceOverview({ source, t, groups = ["tier", "market
       </div>
     );
   }
-  const body = <SummaryBody summary={summary} t={t} headline={p.allTime} groups={groupSpecs(groups, p)} />;
-  if (!title) return body;
+  const body = <SummaryBody summary={summary} t={t} headline={p.allTime} groups={groupSpecs(groups, p, t)} />;
+  if (!title && !hint) return body;
   return (
     <section className="space-y-2">
-      <h2 className="font-semibold" style={{ fontSize: "var(--nv-text-base)", color: "var(--nv-text-primary)" }}>{title}</h2>
+      {title && <h2 className="font-semibold" style={{ fontSize: "var(--nv-text-base)", color: "var(--nv-text-primary)" }}>{title}</h2>}
       {hint && <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{hint}</p>}
       {body}
     </section>
@@ -299,7 +304,8 @@ export function pickBacktestRun(runs: BacktestRun[], requested: number | null): 
 }
 
 function runLabel(run: BacktestRun, p: Perf): string {
-  const strategy = (p as Record<string, string>)[`strategy_${run.strategy}`] ?? run.strategy;
+  const key = run.rule_version.startsWith("live-arch") ? "live_archive" : run.strategy;
+  const strategy = (p as Record<string, string>)[`strategy_${key}`] ?? run.strategy;
   return `#${run.id} · ${strategy}`;
 }
 
@@ -353,7 +359,7 @@ export async function BacktestOverview({ runId, t }: { runId: number | null; t: 
         summary={summary}
         t={t}
         headline={`${runLabel(run, p)} · ${range}`}
-        groups={groupSpecs(BACKTEST_GROUPS[run.strategy] ?? ["market"], p)}
+        groups={groupSpecs(Object.keys(summary.groups).length ? Object.keys(summary.groups) : (BACKTEST_GROUPS[run.strategy] ?? ["market"]), p, t)}
       />
       {info.total > 0 && (
         <div className="nv-card p-4 min-w-0" style={{ opacity: 0.85 }}>
@@ -426,6 +432,64 @@ export async function PredictionDayList({ source, day, t }: { source: Prediction
                 </div>
               ))}
             </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export async function LiveDayList({ day, t }: { day: string; t: Dictionary }) {
+  const p = t.evaluation.perf;
+  let matches: LiveMatchEvaluation[];
+  try {
+    matches = await getLiveMatchEvaluations(day);
+  } catch {
+    return <p className="nv-card p-4" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{t.common.loadError}</p>;
+  }
+  if (matches.length === 0) {
+    return <p className="nv-card p-4 text-center" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-tertiary)" }}>{p.emptyLiveDay}</p>;
+  }
+  return (
+    <div className="space-y-2">
+      <h3 className="font-semibold" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>{p.liveDayTitle}</h3>
+      {matches.map((m) => {
+        const { flag, short } = leagueDisplay(null, m.league_name);
+        return (
+          <div key={m.match_id} className="nv-card p-3 space-y-2 min-w-0">
+            <div className="flex flex-wrap items-center gap-2" style={{ fontSize: "var(--nv-text-xs)" }}>
+              <span aria-hidden="true">{flag}</span>
+              <span style={{ color: "var(--nv-text-tertiary)" }}>{short} · {formatTime(m.kickoff_time)}</span>
+              <span className="font-semibold min-w-0 truncate" style={{ color: "var(--nv-text-primary)" }}>{m.home_team} - {m.away_team}</span>
+              <span className="flex-1" />
+              <span style={{ color: "var(--nv-text-tertiary)", fontFamily: "var(--nv-font-mono)" }}>{t.live.ht} {m.ht}</span>
+              {m.final_ft && <span className="font-bold" style={{ color: "var(--nv-text-primary)", fontFamily: "var(--nv-font-mono)" }}>{t.live.ft} {m.final_ft}</span>}
+              {m.resolved > 0 && (
+                <span className="font-semibold px-2 py-0.5" style={{ borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-bg-elevated)", color: "var(--nv-text-secondary)" }}>
+                  {p.hitsOf.replace("{hits}", String(m.hits)).replace("{n}", String(m.resolved))}
+                </span>
+              )}
+            </div>
+            {m.picks.length === 0 ? (
+              <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{p.noPicks}</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {m.picks.map((pick) => (
+                  <div
+                    key={`${pick.period}:${pick.market}:${pick.archive}`}
+                    className="flex items-center gap-2 px-2 py-1"
+                    style={{ borderRadius: "var(--nv-radius-md)", backgroundColor: "var(--nv-bg-surface)", border: "1px solid var(--nv-border-subtle)", fontSize: "var(--nv-text-xs)" }}
+                  >
+                    <span style={{ color: "var(--nv-text-tertiary)" }}>{liveMarketLabel(pick.period, pick.market, t)}</span>
+                    <span className="font-bold" style={{ color: "var(--nv-text-primary)" }}>{liveSelectionLabel(pick.selection, t)}</span>
+                    <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)" }}>%{pick.pct.toFixed(0)}</span>
+                    <span style={{ color: "var(--nv-text-tertiary)" }}>{pick.archive === "genel" ? p.archive_genel : pick.label} ({pick.n})</span>
+                    {pick.risky && <span style={{ color: "var(--nv-accent-amber)" }} title={p.risk_risky}><span aria-hidden="true">⚠</span> {t.live.archive.risky}</span>}
+                    <OutcomeBadge outcome={pick.outcome} p={p} />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })}

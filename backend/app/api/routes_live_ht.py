@@ -1,7 +1,8 @@
-"""Canlı İY → MS: devre arası ve 2. yarıdaki ana lig maçları + canlı model tahmini.
+"""Canlı İY: devre arası ve 2. yarıdaki ana lig maçları + arşiv görünümü (live-arch-v1).
 
 İY skoru: devre arasında anlık skor; 2. yarıda değişmez İY gözleminden (DB), yoksa panodan.
-Tahmin: dondurulmuşsa defterden (`frozen`), değilse anlık hesaplanır (sadece görüntü).
+Görünüm: A1/A2/A3 + Genel pazar oranları; öne çıkanlar (%85+) maç kaydedildiyse defterden gelir
+(ekranda görülen = değerlendirilen). Eski COND modeli ekranda yok, sadece kaydedilip ölçülür.
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.analysis.league_filter import canonical_league_name, is_main_league
-from app.analysis.live_model import LIVE_RULE_VERSION, archive_ht_filtered, get_cond_table, predict_live
+from app.analysis import live_archive
+from app.analysis.live_model import LIVE_RULE_VERSION
 from app.api.live_ledger import match_phase, observed_ht
 from app.api.live_snapshot import get_live_snapshot
 from app.config import ISTANBUL_TZ
@@ -40,7 +42,9 @@ class LiveHTMatch(BaseModel):
     phase: str | None = None
     league_name: str | None = None
     kickoff_time: str | None = None
-    prediction: dict | None = None
+    frozen: bool = False
+    frozen_at: str | None = None
+    archive_view: dict | None = None
 
 
 def _is_second_half_or_later(minute: str | None, phase: str | None = None) -> bool:
@@ -66,23 +70,48 @@ async def _latest_ht_observations(session, ids: list[str]) -> dict[str, tuple[in
     return {r[0]: (r[1], r[2]) for r in rows}
 
 
-async def _frozen_predictions(session, ids: list[str]) -> dict[str, dict]:
-    """Defterdeki dondurulmuş canlı tahminler (MS satırının details'i tam tahmini taşır)."""
+async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
+    """Kaydedilmiş maçlar: kayıt anı + defterdeki %85+ arşiv işaretleri (görünen = değerlendirilen)."""
     if not ids:
         return {}
     rows = (await session.execute(
-        select(PredictionLedger.match_id, PredictionLedger.details, PredictionLedger.recorded_at)
+        select(PredictionLedger.match_id, PredictionLedger.rule_version, PredictionLedger.recorded_at,
+               PredictionLedger.period, PredictionLedger.market, PredictionLedger.selection,
+               PredictionLedger.archive, PredictionLedger.prob_shown_bp, PredictionLedger.sample_n,
+               PredictionLedger.details)
         .where(
             PredictionLedger.source == "live_ht",
-            PredictionLedger.rule_version == LIVE_RULE_VERSION,
-            PredictionLedger.market == "result",
+            PredictionLedger.rule_version.in_([LIVE_RULE_VERSION, live_archive.LIVE_ARCHIVE_RULE_VERSION]),
             PredictionLedger.match_id.in_(ids),
         )
+        .order_by(PredictionLedger.id)
     )).all()
-    return {
-        r[0]: {**r[1], "frozen": True, "frozen_at": r[2].isoformat()}
-        for r in rows if isinstance(r[1], dict)
-    }
+    out: dict[str, dict] = {}
+    for r in rows:
+        entry = out.setdefault(r.match_id, {"frozen_at": r.recorded_at.isoformat(), "highlights": [], "archived": False})
+        if r.rule_version == LIVE_RULE_VERSION and r.market == "result":
+            entry["archived"] = (r.details or {}).get("archive_rule_version") == live_archive.LIVE_ARCHIVE_RULE_VERSION
+        if r.rule_version != live_archive.LIVE_ARCHIVE_RULE_VERSION:
+            continue
+        details = r.details or {}
+        entry["archived"] = True
+        entry["highlights"].append({
+            "period": r.period, "market": r.market, "selection": r.selection,
+            "pct": r.prob_shown_bp / 100, "archive": r.archive or live_archive.GENERAL,
+            "label": details.get("label") or (r.archive or "genel").upper(),
+            "n": r.sample_n or 0, "risky": bool(details.get("risky")),
+        })
+    for entry in out.values():
+        entry["highlights"].sort(key=lambda h: (h["risky"], -h["pct"], -h["n"]))
+    return out
+
+
+async def _view_for(match: Match, ht: tuple[int, int], frozen: dict | None, *, with_matches: bool = False) -> dict:
+    blobs = {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d}
+    view = await live_archive.load_view(match.match_id, blobs, ht, with_matches=with_matches)
+    if frozen and frozen.get("archived"):
+        view = {**view, "highlights": frozen["highlights"]}
+    return view
 
 
 async def _fixture_cache_info(session, missing: list[str]) -> dict[str, tuple]:
@@ -124,9 +153,8 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
         missing = [mid for mid in ids if mid not in info]
         if missing:
             info.update(await _fixture_cache_info(session, missing))
-        frozen = await _frozen_predictions(session, list(by_id))
+        frozen = await _frozen_info(session, list(by_id))
 
-    table = await get_cond_table()
     result: list[LiveHTMatch] = []
     for mid, fs in live.items():
         row = info.get(mid)
@@ -139,16 +167,15 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
         ht = observations.get(mid) or observed_ht(fs)
         if ht is None:
             continue
-        prediction = frozen.get(mid)
-        if prediction is None:
-            blobs = [match.pattern_ft_b, match.pattern_ft_c, match.pattern_ft_d] if match else []
-            prediction = {**predict_live(table, league, ht, blobs), "frozen": False, "frozen_at": None}
+        record = frozen.get(mid)
+        view = await _view_for(match, ht, record) if match is not None else None
         result.append(LiveHTMatch(
             match_id=mid, home_team=home, away_team=away,
             ht_home=ht[0], ht_away=ht[1], live_home=fs.home, live_away=fs.away,
             live_minute=fs.minute, phase=match_phase(fs), league_name=league,
             kickoff_time=kickoff.isoformat() if kickoff else None,
-            prediction=prediction,
+            frozen=record is not None, frozen_at=record["frozen_at"] if record else None,
+            archive_view=view,
         ))
     return result
 
@@ -158,40 +185,27 @@ async def get_live_prediction(
     match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
     detail: bool = Query(False),
 ) -> dict:
-    """Tek maçın canlı tahmini; detail=1 ile A1/A2/A3 İY-süzülmüş ikincil kartlar."""
+    """Tek maçın canlı arşiv görünümü; detail=1 ile her kaynağın eşleşen maç listesi."""
     async with get_session() as session:
         match = (await session.execute(select(Match).where(
             Match.match_id == match_id, Match.deleted_at.is_(None),
         ))).scalar_one_or_none()
         if match is None:
             raise HTTPException(404, "Maç bulunamadı")
-        frozen = (await _frozen_predictions(session, [match_id])).get(match_id)
-        observation = (await _latest_ht_observations(session, [match_id])).get(match_id)
-
-    if frozen is not None:
-        prediction = frozen
-        ht = (prediction["ht"]["home"], prediction["ht"]["away"])
-    else:
-        ht = observation
-        if ht is None:
-            snap = await get_live_snapshot()
-            fs = snap.scores.get(match_id) if snap else None
-            ht = observed_ht(fs) if fs else None
-        if ht is None and match.actual_ht_home is not None:
-            ht = (match.actual_ht_home, match.actual_ht_away)
-        if ht is None:
-            raise HTTPException(409, "İY skoru henüz bilinmiyor")
-        table = await get_cond_table()
-        prediction = {
-            **predict_live(table, match.league_name or "", ht,
-                           [match.pattern_ft_b, match.pattern_ft_c, match.pattern_ft_d]),
-            "frozen": False, "frozen_at": None,
-        }
-    if detail:
-        prediction = {**prediction, "archives": await archive_ht_filtered(
-            {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d}, ht,
-        )}
-    return prediction
+        record = (await _frozen_info(session, [match_id])).get(match_id)
+        ht = (await _latest_ht_observations(session, [match_id])).get(match_id)
+    if ht is None:
+        snap = await get_live_snapshot()
+        fs = snap.scores.get(match_id) if snap else None
+        ht = observed_ht(fs) if fs else None
+    if ht is None and match.actual_ht_home is not None:
+        ht = (match.actual_ht_home, match.actual_ht_away)
+    if ht is None:
+        raise HTTPException(409, "İY skoru henüz bilinmiyor")
+    return {
+        "frozen": record is not None, "frozen_at": record["frozen_at"] if record else None,
+        "archive_view": await _view_for(match, ht, record, with_matches=detail),
+    }
 
 
 # ─── WebSocket bağlantı yöneticisi (Sprint 82) ─────────────────────────────

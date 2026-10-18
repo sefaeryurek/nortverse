@@ -169,7 +169,17 @@
       "chartY": "Gerçekleşen isabet",
       "chartDiagonal": "Mükemmel kalibrasyon",
       "chartPoint": "%{low}–{high} kovası: gösterilen ort. %{avg}, gerçekleşen %{hit} (n={n})",
-      "chartAria": "Kalibrasyon grafiği: gösterilen olasılık ile gerçekleşen isabet; köşegen mükemmel kalibrasyonu gösterir."
+      "chartAria": "Kalibrasyon grafiği: gösterilen olasılık ile gerçekleşen isabet; köşegen mükemmel kalibrasyonu gösterir.",
+      "archive_genel": "Genel",
+      "byRisk": "Örneklem riskine göre",
+      "risk_risky": "Riskli (5 maçtan az)",
+      "risk_normal": "Normal (5+ maç)",
+      "liveDayTitle": "Canlıya giren maçlar",
+      "noPicks": "Bu maçta %85+ işaret yoktu",
+      "emptyLiveDay": "Bu gün canlıya giren kayıtlı maç yok.",
+      "recordedAt": "Kayıt {time}",
+      "liveSummaryNote": "Devre arasında kaydedilen %85+ arşiv işaretleri; maç bitince tuttu/tutmadı olarak işaretlenir.",
+      "strategy_live_archive": "Canlı arşiv (%85+)"
     }
   },
   "live": {
@@ -179,9 +189,9 @@
     "current": "Güncel",
     "ft": "MS",
     "htArchiveAnalysis": "Arşiv detayı",
-    "htDescription": "Devre arası ve 2. yarıdaki maçlar için MS tahmini: aynı lig ve aynı İY skoruyla biten geçmiş maçlar, maç öncesi A1+A2+A3 görüşüyle düzeltilir.",
+    "htDescription": "Devre arası ve 2. yarıdaki maçlar: maç öncesi A1/A2/A3 eşleşmelerinden İY skoru aynı bitenlerin sonuçları. %85 üzeri oranlar üstte; 5 maçtan az örneklem riskli işaretlenir.",
     "noLiveMatches": "Şu anda devre arasında veya 2. yarıda ana lig maçı yok.",
-    "noLiveNote": "Maçlar devre arasına girdiğinde MS tahmini burada görünür ve tahmin o anda kaydedilir.",
+    "noLiveNote": "Maçlar devre arasına girdiğinde arşiv oranları burada görünür ve %85 üzeri işaretler o anda kaydedilir.",
     "viewBulletin": "Bültendeki maçlara bak",
     "liveDataError": "Canlı veri alınamadı.",
     "wsTooltip": "WebSocket ile anlık güncelleme",
@@ -215,6 +225,39 @@
       "showMatches": "Maçları göster ({n})",
       "hideMatches": "Gizle",
       "similarity": "Benzerlik (A3)"
+    },
+    "archive": {
+      "highlightsTitle": "Öne çıkanlar (%{pct}+)",
+      "noHighlights": "%{pct} üzeri oran yok",
+      "risky": "Riskli",
+      "riskyTooltip": "Bu arşivde {n} maç var ({min}'ten az) — örneklem küçük, şansla yüksek çıkmış olabilir.",
+      "tableTitle": "Arşive göre oranlar (İY {home}-{away} ile bitenler)",
+      "market": "Pazar",
+      "noMatches": "eşleşme yok",
+      "generalNote": "Genel = A1+A2+A3 eşleşmelerinin birleşimi (aynı maç bir kez sayılır). İY skorunun zaten belirlediği pazarlar gösterilmez.",
+      "matchesTitle": "Eşleşen maçlar (İY {home}-{away})",
+      "frozen": "Kaydedildi",
+      "notFrozen": "Kayıt bekliyor",
+      "frozenTooltip": "Devre arasındaki %85+ işaretler değişmez olarak kaydedildi; sonucu Değerlendirme → Canlı İY'de izlenir.",
+      "markets": {
+        "ft_result": "MS",
+        "ft_dc": "MS ÇŞ",
+        "ft_ou_15": "MS 1.5",
+        "ft_ou_25": "MS 2.5",
+        "ft_ou_35": "MS 3.5",
+        "ft_kg": "MS KG",
+        "h2_result": "2Y",
+        "h2_ou_05": "2Y 0.5",
+        "h2_ou_15": "2Y 1.5",
+        "h2_kg": "2Y KG"
+      },
+      "selections": {
+        "under": "Alt",
+        "over": "Üst",
+        "yes": "Var",
+        "no": "Yok"
+      },
+      "noAnalysis": "Bu maç analiz edilmemiş — arşiv eşleşmesi olmadığı için oran ve kayıt yok."
     }
   },
   "error": {
