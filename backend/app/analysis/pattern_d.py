@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
+from app.analysis.freshness import ResultsWatch, results_marker
 from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 from app.analysis.pattern_stats import PatternResult, compute_stats
 from app.analysis.scores import ALL_SCORES, score_key
@@ -61,6 +62,13 @@ class _Pool:
 
 _pool: _Pool | None = None
 _pool_lock = asyncio.Lock()
+# API süreci pipeline/skor güncellemesini (ayrı CLI süreci) bu işaretle fark eder.
+_pool_watch = ResultsWatch()
+
+
+async def _pool_fresh() -> bool:
+    return (_pool is not None and time.monotonic() - _pool.loaded_at < _CACHE_TTL
+            and not await _pool_watch.stale())
 
 
 def _to_vector(ratios: dict[str, float]) -> list[float]:
@@ -147,11 +155,12 @@ async def _load_pool() -> _Pool:
     Kurulum (vektör normalizasyonu) olay döngüsünü bloklamamak için thread'de yapılır.
     """
     global _pool
-    if _pool is not None and time.monotonic() - _pool.loaded_at < _CACHE_TTL:
+    if await _pool_fresh():
         return _pool
     async with _pool_lock:
-        if _pool is not None and time.monotonic() - _pool.loaded_at < _CACHE_TTL:
+        if await _pool_fresh():
             return _pool
+        marker = await results_marker()
         known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
         stmt = select(
             Match.match_id,
@@ -172,6 +181,7 @@ async def _load_pool() -> _Pool:
         async with get_session() as session:
             rows = list((await session.execute(stmt)).all())
         _pool = await asyncio.to_thread(_build_pool, rows)
+        _pool_watch.mark(marker)
         log.info("Pattern D aday havuzu yüklendi: %d maç", len(_pool.candidates))
         return _pool
 
@@ -260,3 +270,4 @@ async def find_pattern_d_all_periods(
 def invalidate_cache() -> None:
     global _pool
     _pool = None
+    _pool_watch.marker = None

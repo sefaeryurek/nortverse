@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
+from app.analysis.freshness import ResultsWatch, results_marker
 from app.analysis.league_priors import PRIOR_SEASON_DAYS, prior_from_counts
 from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 from app.db.connection import get_session
@@ -237,19 +238,28 @@ async def build_cond_table(as_of: datetime) -> CondTable:
     return table
 
 
-def _table_fresh() -> bool:
-    return _table is not None and time.monotonic() - _table_built_at < TABLE_TTL_SECONDS
+_table_watch = ResultsWatch()
+
+
+async def _table_fresh() -> bool:
+    return (_table is not None and time.monotonic() - _table_built_at < TABLE_TTL_SECONDS
+            and not await _table_watch.stale())
 
 
 async def get_cond_table() -> CondTable:
-    """6 saatte bir kurulur (sızıntısız: kesim = kuruluş anı − 3 saat; yeni sonuçlar gün içinde girer)."""
+    """6 saatte bir ya da yeni sonuç gelince (en fazla 5 dk'da bir kontrol) kurulur.
+
+    Sızıntısız: kesim = kuruluş anı − 3 saat.
+    """
     global _table, _table_built_at
-    if _table_fresh():
+    if await _table_fresh():
         return _table
     async with _lock:
-        if not _table_fresh():
+        if not await _table_fresh():
+            marker = await results_marker()
             _table = await build_cond_table(datetime.now(timezone.utc))
             _table_built_at = time.monotonic()
+            _table_watch.mark(marker)
     return _table
 
 
@@ -257,6 +267,7 @@ def invalidate_cond_table() -> None:
     global _table, _table_built_at
     _table = None
     _table_built_at = 0.0
+    _table_watch.marker = None
 
 
 async def archive_ht_filtered(blobs: dict[str, dict | None], ht: tuple[int, int]) -> list[dict]:
