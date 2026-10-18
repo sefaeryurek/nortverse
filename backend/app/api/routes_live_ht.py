@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Path, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import exists, select
 
 from app.analysis.league_filter import canonical_league_name, is_main_league
 from app.analysis import live_archive
@@ -23,7 +23,10 @@ from app.api.live_ledger import match_phase, observed_ht
 from app.api.live_snapshot import get_live_snapshot
 from app.config import ISTANBUL_TZ
 from app.db.connection import get_session
-from app.db.models import FixtureCache, Match, MatchHtObservation, PredictionLedger, SkippedAnalysis
+from app.analysis.ledger import INVALIDATED_VERSION
+from app.db.models import (
+    FixtureCache, Match, MatchHtObservation, PredictionLedger, PredictionResolution, SkippedAnalysis,
+)
 from app.scraper.fixture_scores import phase_from_minute
 
 log = logging.getLogger(__name__)
@@ -85,6 +88,11 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
             PredictionLedger.source == "live_ht",
             PredictionLedger.rule_version.in_([LIVE_RULE_VERSION, live_archive.LIVE_ARCHIVE_RULE_VERSION]),
             PredictionLedger.match_id.in_(ids),
+            # Hatalı veriyle üretilip geçersiz sayılan kayıtlar ekranda "kayıt" gibi gösterilmez.
+            ~exists().where(
+                PredictionResolution.ledger_id == PredictionLedger.id,
+                PredictionResolution.resolver_version == INVALIDATED_VERSION,
+            ),
         )
         .order_by(PredictionLedger.id)
     )).all()
