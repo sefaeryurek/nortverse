@@ -69,6 +69,14 @@ python -m app.cli.main normalize-leagues             # Lig adlarını normalize 
 python -m app.cli.main normalize-leagues --apply     # Lig adlarını kanonik forma çevir
 python -m app.cli.main recompute-patterns --stale-only            # Sadece ayarı eskimiş pattern'leri yenile (devam edebilir)
 python -m app.cli.main recompute-patterns --stale-only --family d # Sadece A3 (Pattern D)
+python -m app.cli.main recompute-patterns --stale-only --include-finished  # Bitmiş maçları da yenile (varsayılan: korunur, audit_log'a düşer)
+
+# Tahmin defteri (Sprint 88)
+python -m app.cli.main update-scores --pending-days 3   # skorlar + son 3 günün eksik sonuçları + defteri çöz
+python -m app.cli.main resolve-predictions              # sadece bekleyen tahminleri tuttu/tutmadı olarak çöz
+python -m app.cli.main backtest-ledger --strategy live_ht --from 2023-07-01 --to 2026-10-18         # canlı İY→MS
+python -m app.cli.main backtest-ledger --strategy top_pick --from 2023-07-01 --to 2026-10-18        # Top Picks v4
+python -m app.cli.main backtest-ledger --strategy market_summary --from 2023-07-01 --to 2026-10-18  # Ana Pazar Özeti
 
 # Backtest (Sprint 76)
 python -m app.cli.main backtest --from 2025-01-01 --to 2025-12-31  # tarih aralığında strateji testi
@@ -1488,6 +1496,26 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Ayar parmak izi:** migration `u5h8c3d9f907` — `pattern_b/c/d_hash` kolonları; `persist.pattern_hashes()`. Ayar değişince sadece ilgili aile bayat sayılır; yaklaşan maçlar okunurken otomatik yenilenir, bitmiş maçlar saklı değeri korur. `recompute-patterns --stale-only [--family d]` sadece bayatları işler, kesilirse kaldığı yerden devam eder. Algoritma değişince `persist.PATTERN_ALGO_VERSION` artırılır.
 - Pattern JSONB kolonları `none_as_null=True` (eşleşme yok = SQL NULL, JSON 'null' değil).
 
+### Sprint 88 — TAMAMLANDI ✅ (Canlı İY→MS Modeli + Tahmin Defteri + Performans Paneli + Strateji v4 + Bug Temizliği)
+- **Bağlam:** Sistem tahmin veriyordu ama hiçbirinin tuttu/tutmadı kaydı yoktu; canlı sayfa İY skoruyla süzülmüş arşiv listesini gösteriyordu (minimum örneklem yok, tahmin kaydı yok). 5 araştırma ajanı ölçtü, plan uygulandı.
+- **Tahmin defteri (88.1, migration `v6i9d4e0a118`):** `prediction_ledger` değişmez (UPDATE/DELETE trigger'la reddedilir, ilk kayıt kazanır — `UNIQUE NULLS NOT DISTINCT`), kronoloji CHECK (maç öncesi kayıt kickoff'tan önce, canlı kayıt İY gözlemiyle). `prediction_resolutions` (skor düzeltilirse yeni satır), view `prediction_ledger_resolved`, `match_ht_observations` (değişmez İY gözlemi). Backtest ayrı tablolarda: `backtest_runs` + `prediction_backtest` (gerçek kayıtla şema seviyesinde karışmaz). `market_catalog.py` + `market_resolver.py` (tek çözücü, RESOLVER_VERSION `stats-v1`), `ledger.py` (`record_predictions`, `resolve_pending`, `uniform_rows` + `PREDICTION_DEFAULTS`). Silinen maçın kayıtları `void`.
+- **Canlı model `live-ms-v1` (88.2, `live_model.py`):** COND = aynı lig + aynı İY skoruyla biten önceki maçların MS dağılımı (n<30 → aynı gol farkı → tüm ligler), Laplace 0.5, × (maç öncesi A1+A2+A3 havuzu / lig prior)^α, **α=0.5**. Kademe: ≥0.70 yüksek, ≥0.55 orta, altı düşük, n<30 yetersiz. Ü2.5 sadece İY toplamı <3, KG sadece bir taraf atmamışsa; 2Y gösterilmez (beceri yok).
+- **Devre arası dondurma (`api/live_ledger.py`):** lifespan'de başlayan izleyici (sayfa açık olmasa da) 60 sn'de bir panoyu okur, İY'de maç başına tek `live_ht` kaydı yazar. 2. yarıda ilk görülüp skor değiştiyse kaydetmez (`late_score_changed`). `phase` alanı pano/livescore'dan (`fixture_scores`, `source_board`).
+- **Canlı sayfa (88.2b):** ana MS tahmini + olasılık + kademe + "İY tabanı %X → model %Y" + kayıt rozeti; A1/A2/A3 ikincil. `GET /api/live-ht/{id}/prediction?detail=`. `use-live-ws.ts` yeniden yazıldı (fallback'te periyodik WS denemesi).
+- **Backtest (88.3, 88.5b, `backtest.py`):** sızıntısız tekrar oynatma — her maç sadece `as_of − 3 saat`e kadar bilinen sonuçları ve kayan 3 sezonluk lig prior'unu görür. Sonuçlar (2023-07 → 2026-10):
+  - Canlı İY→MS: **%59.3 isabet, Brier 0.505** (İY tabanı 0.513, lig ortalaması 0.651); ≥0.70 kademesi ~%78.
+  - Top Picks v4: **%50.6** (2362 seçim), aynı maçlarda lig ortalaması seçimi %46.3 → **+4.3**; yüksek kademe %56.5. Gösterilen ort. %51.5 → kalibre.
+  - Ü/A 2.5 ve KG maç öncesi: lig ortalamasının altında (−1.3 / −2.2) → sadece bilgi amaçlı.
+  - Ana Pazar Özeti ham kazananları: MS 1X2 %42.7 (tek arşivin en yüksek yüzdesi lig ortalamasını geçmiyor).
+- **Maç öncesi strateji v4 (88.4, `prematch_v4.py`, `ft-display-v4`):** A1+A2+A3 (her biri ≥10 maç) havuzlanır, Dirichlet(k=20) ile son 3 sezon lig prior'una çekilir. Yayın: havuz ≥30, seçim lig ortalamasını ≥5 puan aşıyor, X değil. Kademe avantaja göre (≥15 yüksek, ≥10 orta). Ü/A-KG Top Picks'ten çıktı, deftere `informational`. Top Picks + Ana Pazar kazananları kickoff öncesi deftere yazılır (`market-summary-v1`). Frontend: kalibre olasılık + lig ortalaması + avantaj; Ana Pazar'da Ü/A-KG soluk "bilgi amaçlı".
+- **Performans paneli (88.5a/b, `/api/performance/*`, `performance.py`, `stats_utils.py`):** Değerlendirme sekmeleri **Canlı İY / Maç Öncesi / Backtest / Pattern geçmişi**. Kazanma %, Wilson %95 aralığı, gösterilen/gerçekleşen (kalibrasyon), Brier, tabana göre fark, örneklem kademesi (çok erken/ön bulgu/yeterli), kademe/pazar/lig kırılımı, günlük tuttu/tutmadı listesi. Backtest sekmesi koşu seçicili (varsayılan bugünkü ayarlarla üretilmiş son koşu).
+- **Pattern düzeltmeleri (88.4d):** A2 adaptif tolerans minimuma ulaşamazsa sonuç yok; A3 `pattern_d_min_matches=10` (hash'e girer); A3 havuzu `asyncio.Lock` + `to_thread`, IDF ağırlıkları sabit kesimden (`IDF_CUTOFF=2023-07-01`) önceki maçlardan (sızıntısız). `recompute-patterns` varsayılan olarak bitmiş maçları korur (`--include-finished` ile açıkça). Tam recompute (A2/A3, 32.116 maç, 0 hata) yapıldı.
+- **Bug temizliği:** analiz doğrulayıcı 10–19 maçlık önerilerde sayfayı düşürüyordu (88.0.1); Detaylı Analiz'de 4 handikap etiketi tersti (88.0.2); canlı sayfa WS yarışı (88.0.3); defter yazımında NOT NULL hatası analiz sayfasını 500'e düşürüyordu → hata izolasyonu (88.4b); `POST /api/analyze` kickoff sonrası 409, `GET /api/match` rate limit + kilit, `X-Forwarded-For` sadece `TRUSTED_PROXIES`'ten (88.6a); eşleşen liste ilk 50 + "daha fazla", skor sıklığı yüzde, İngilizce etiketler (`label-i18n.ts`), ESLint 0 hata, sekme erişilebilirliği (88.6b); Pattern geçmişi skor listesi paydası (88.5c).
+- **İki kural (artık zorunlu):**
+  1. **Gösterilen ≠ yeniden hesaplanan:** `matches.pattern_*` recompute sonrası "bugünkü algoritma o gün ne derdi" (backtest) değeridir; kullanıcının o gün gördüğü değildir. Gerçek performans yalnızca `prediction_ledger`'dan ölçülür.
+  2. **Kural değişti → sürüm artar:** `LIVE_RULE_VERSION`, `V4_RULE_VERSION`, `MARKET_SUMMARY_RULE_VERSION`. `prematch_v4.RULE_PARAMS` parmak izi testte sabit (`test_rule_version_fingerprint_is_pinned`) — parametre değişip sürüm artmazsa test kırılır. Pattern algoritması değişince `persist.PATTERN_ALGO_VERSION`.
+- **Sonuç:** 1123 backend + 302 frontend + 28 E2E = **1453 toplam test**
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1749,7 +1777,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-17 — Sprint 84 TAMAMLANDI, Local Development)
+## Kaldığımız Yer (2026-10-18 — Sprint 88 TAMAMLANDI, Local Development)
 
 ### ✅ Mevcut Durum — Local Development
 
@@ -1765,25 +1793,29 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 **Eski cloud deployment (Render + Vercel + Neon):** Konfigürasyon korunuyor ama aktif değil.
 
-### Test Durumu (Sprint 84 sonrası)
+### Test Durumu (Sprint 88 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 936 | ✅ Yeşil |
-| **Frontend birim** | vitest | 288 | ✅ Yeşil |
+| **Backend** | pytest | 1123 | ✅ Yeşil |
+| **Frontend birim** | vitest | 302 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 1252 | — |
+| **Toplam** | — | 1453 | — |
 
 ### Son Tamamlanan Sprint'ler
 
 - ✅ **Sprint 82:** Canlı maç WebSocket — 45sn polling → 15sn WebSocket broadcast, REST fallback, `useLiveWs` hook
 - ✅ **Sprint 83:** Isotonic regression confidence kalibrasyonu — shrunk yüzdeler gerçek olasılığa dönüştürülüyor
 - ✅ **Sprint 84:** i18n çoklu dil desteği — Türkçe + İngilizce cookie-bazlı dil seçimi, 27 component/sayfa güncellendi, 0 yeni npm bağımlılığı
+- ✅ **Sprint 87:** Arşiv havuzu + sadece aynı lig + tek kaynak eşleşme listesi + ayar parmak izi
+- ✅ **Sprint 88:** Canlı İY→MS modeli + değişmez tahmin defteri + performans paneli (Canlı / Maç Öncesi / Backtest) + maç öncesi strateji v4
 
 ### Bekleyen Konular
 
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
+- **Oran/ROI:** Defterdeki tahminlerin bahis oranlarıyla karşılaştırılması (kullanıcı kararı: sonraki sprint)
+- **Canlı kalibrasyon `live-ms-v2`:** COND hafif aşırı güvenli (0.72 → 0.67); backtest'ten isotonic düzeltme (opsiyonel)
 
 ### Bilinen Açık Konular
 
@@ -1792,3 +1824,6 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
 - **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
 - **Pattern eksik:** Recompute sırasında eklenen yeni arşiv maçları — `recompute-patterns --only-missing` pası ile tamamlanabilir
+- **Canlı dondurma maç günü doğrulanmalı:** İzleyici kodu ve DB kısıtları test edildi, ama gerçek bir devre arasında (backend açıkken) `live_ht` kaydının düştüğü henüz görülmedi. Backend kapalıyken devre arası olan maçlar kaydedilmez.
+- **Sonuçsuz maçlar:** 9–10 Ekim'den 6 maçın skoru yok (muhtemelen ertelendi)
+- **Tuhaf kayıt:** 3026975'in kickoff'u 2027 görünüyor (veri kaynağı tuhaflığı, kod hatası değil)

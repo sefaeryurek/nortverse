@@ -1,6 +1,7 @@
 @echo off
 REM Nortverse - Skor guncelleme (biten maclarin skorlarini ceker)
 REM Task Scheduler ile 22:00 ve 00:30'da calistirilir
+REM --pending-days 3: son 3 gunde sonucu eksik kalan gunleri de yakalar; sonunda tahmin defteri cozulur
 
 set PYTHONIOENCODING=utf-8
 set LOGFILE=C:\Users\Sefa\Desktop\NORTVERSE - CODEX\scripts\logs\scores.log
@@ -24,7 +25,7 @@ if errorlevel 1 (
 )
 
 echo [%date% %time%] Skor guncelleme basliyor... >> "%LOGFILE%"
-python -m app.cli.main update-scores >> "%LOGFILE%" 2>&1
+python -m app.cli.main update-scores --pending-days 3 >> "%LOGFILE%" 2>&1
 set EXITCODE=%errorlevel%
 
 if %EXITCODE% equ 0 (
