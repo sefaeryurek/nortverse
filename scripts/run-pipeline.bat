@@ -21,7 +21,7 @@ set EXITCODE=%errorlevel%
 if %EXITCODE% equ 0 (
     echo [%date% %time%] Pipeline basarili tamamlandi >> "%LOGFILE%"
 ) else (
-    echo [%date% %time%] HATA: Pipeline basarisiz (exit code: %EXITCODE%) >> "%LOGFILE%"
-    echo [%date% %time%] HATA: Pipeline basarisiz (exit code: %EXITCODE%) >> "%ERRORLOG%"
+    echo [%date% %time%] HATA: Pipeline basarisiz - exit code %EXITCODE% >> "%LOGFILE%"
+    echo [%date% %time%] HATA: Pipeline basarisiz - exit code %EXITCODE% >> "%ERRORLOG%"
 )
 exit /b %EXITCODE%

@@ -22,7 +22,7 @@ set EXITCODE=%errorlevel%
 if %EXITCODE% equ 0 (
     echo [%date% %time%] Skor guncelleme basarili >> "%LOGFILE%"
 ) else (
-    echo [%date% %time%] HATA: Skor guncelleme basarisiz (exit code: %EXITCODE%) >> "%LOGFILE%"
-    echo [%date% %time%] HATA: Skor guncelleme basarisiz (exit code: %EXITCODE%) >> "%ERRORLOG%"
+    echo [%date% %time%] HATA: Skor guncelleme basarisiz - exit code %EXITCODE% >> "%LOGFILE%"
+    echo [%date% %time%] HATA: Skor guncelleme basarisiz - exit code %EXITCODE% >> "%ERRORLOG%"
 )
 exit /b %EXITCODE%
