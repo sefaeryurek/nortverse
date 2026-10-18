@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Optional
 
+from app.analysis.outcomes import (
+    both_scored, goal_range, handicap_result, margin_bucket, period_scores, result_code,
+)
 from pydantic import BaseModel, PrivateAttr
 
 
@@ -180,31 +183,9 @@ class PatternResult(BaseModel):
     h2_result_2_pct: float = 0.0
 
 
-def _hnd_result(h: int, a: int, home_start: int, away_start: int) -> str:
-    """Apply the starting score displayed by the UI, e.g. (0:1)."""
-    eff_h = h + home_start
-    eff_a = a + away_start
-    if eff_h > eff_a:
-        return "1"
-    elif eff_h == eff_a:
-        return "x"
-    return "2"
-
-
-def _period_scores(row, period: str) -> tuple[Optional[int], Optional[int]]:
-    pair = (getattr(row, f"actual_{period}_home"), getattr(row, f"actual_{period}_away"))
-    if not all(type(v) is int and 0 <= v <= 30 for v in pair):
-        return None, None
-    if period != "ft":
-        ft = (row.actual_ft_home, row.actual_ft_away)
-        if any(total is not None and score > total for score, total in zip(pair, ft)):
-            return None, None
-        if period == "h2":
-            ht = (row.actual_ht_home, row.actual_ht_away)
-            if any(first is not None and total is not None and first + second != total
-                   for first, second, total in zip(ht, pair, ft)):
-                return None, None
-    return pair
+# Geriye uyumluluk: eski adlar outcomes modülüne yönlenir.
+_hnd_result = handicap_result
+_period_scores = period_scores
 
 
 def compute_stats(rows: list, period: str, *, weights: list[float] | None = None) -> Optional[PatternResult]:
@@ -213,7 +194,7 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
     valid: list[tuple] = []
     valid_weights: list[float] = []
     for idx, row in enumerate(rows):
-        h, a = _period_scores(row, period)
+        h, a = period_scores(row, period)
         if h is not None and a is not None:
             valid.append((row, h, a))
             valid_weights.append(weights[idx] if weights else 1.0)
@@ -248,15 +229,13 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
         w = valid_weights[i]
         total_goals = h + a
 
-        if h > a:
+        res = result_code(h, a)
+        if res == "1":
             r1 += w
-            res = "1"
-        elif h == a:
+        elif res == "x":
             rx += w
-            res = "x"
         else:
             r2 += w
-            res = "2"
 
         alt15 += w if total_goals < 2 else 0
         ust15 += w if total_goals >= 2 else 0
@@ -265,19 +244,19 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
         alt35 += w if total_goals < 4 else 0
         ust35 += w if total_goals >= 4 else 0
 
-        if h > 0 and a > 0:
+        is_kg = both_scored(h, a)
+        if is_kg:
             kg_var += w
         else:
             kg_yok += w
 
-        hnd_h20[_hnd_result(h, a, 2, 0)] += w
-        hnd_h10[_hnd_result(h, a, 1, 0)] += w
-        hnd_a10[_hnd_result(h, a, 0, 1)] += w
-        hnd_a20[_hnd_result(h, a, 0, 2)] += w
+        hnd_h20[handicap_result(h, a, 2, 0)] += w
+        hnd_h10[handicap_result(h, a, 1, 0)] += w
+        hnd_a10[handicap_result(h, a, 0, 1)] += w
+        hnd_a20[handicap_result(h, a, 0, 2)] += w
 
         is_ust15 = total_goals >= 2
         is_ust25 = total_goals >= 3
-        is_kg = h > 0 and a > 0
         k15 = f"{res}_{'ust' if is_ust15 else 'alt'}"
         k25 = f"{res}_{'ust' if is_ust25 else 'alt'}"
         kkg = f"{res}_{'var' if is_kg else 'yok'}"
@@ -288,24 +267,8 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
         sk = f"{h}-{a}"
         score_ctr[sk] = score_ctr.get(sk, 0.0) + w
 
-        diff = h - a
-        if diff > 0:
-            if diff == 1:
-                fark_ctr["ev1"] = fark_ctr.get("ev1", 0.0) + w
-            elif diff == 2:
-                fark_ctr["ev2"] = fark_ctr.get("ev2", 0.0) + w
-            else:
-                fark_ctr["ev3p"] = fark_ctr.get("ev3p", 0.0) + w
-        elif diff == 0:
-            fark_ctr["ber"] = fark_ctr.get("ber", 0.0) + w
-        else:
-            adiff = -diff
-            if adiff == 1:
-                fark_ctr["dep1"] = fark_ctr.get("dep1", 0.0) + w
-            elif adiff == 2:
-                fark_ctr["dep2"] = fark_ctr.get("dep2", 0.0) + w
-            else:
-                fark_ctr["dep3p"] = fark_ctr.get("dep3p", 0.0) + w
+        bucket = margin_bucket(h, a)
+        fark_ctr[bucket] = fark_ctr.get(bucket, 0.0) + w
 
         ev_ust_05 += w if h >= 1 else 0
         ev_ust_15 += w if h >= 2 else 0
@@ -314,18 +277,19 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
         dep_ust_15 += w if a >= 2 else 0
         dep_ust_25 += w if a >= 3 else 0
 
-        if total_goals <= 1:
+        goals = goal_range(total_goals)
+        if goals == "01":
             gol_01 += w
-        elif total_goals <= 3:
+        elif goals == "23":
             gol_23 += w
-        elif total_goals <= 5:
+        elif goals == "45":
             gol_45 += w
         else:
             gol_6p += w
 
         if period == "ft":
-            ht_h, ht_a = _period_scores(row, "ht")
-            h2_h, h2_a = _period_scores(row, "h2")
+            ht_h, ht_a = period_scores(row, "ht")
+            h2_h, h2_a = period_scores(row, "h2")
             if ht_h is not None and ht_a is not None:
                 ht_pairs.append((ht_h, ht_a, w))
             if h2_h is not None and h2_a is not None:
