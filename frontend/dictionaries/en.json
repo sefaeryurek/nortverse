@@ -257,7 +257,11 @@
         "yes": "Yes",
         "no": "No"
       },
-      "noAnalysis": "This match was not analysed — no archive matches, so no rates or recorded signals."
+      "noAnalysis": "This match was not analysed — no archive matches, so no rates or recorded signals.",
+      "historical": "past {pct}%",
+      "historicalTooltip": "In the historical test, 85%+ signals in this market with {bucket}-match samples actually hit this often ({n} signals).",
+      "historicalPooled": "Not enough data for this market, so the average of all markets with the same sample size is used.",
+      "historicalNote": "\"past X%\": the real hit rate of the same kind of signal in past matches — the shown rate looks inflated when the sample is small."
     }
   },
   "error": {

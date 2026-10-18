@@ -81,12 +81,27 @@ export function HighlightList({ view }: { view: LiveArchiveView }) {
                   <span className="font-semibold">{h.archive === "genel" ? t.evaluation.perf.archive_genel : h.label}</span>
                   <span style={{ color: "var(--nv-text-tertiary)" }}>({h.n})</span>
                   {h.pct !== g.pct && <span style={{ fontFamily: "var(--nv-font-mono)" }}>{fmtPct(h.pct)}</span>}
+                  {h.historical && (
+                    <span
+                      className="px-1.5"
+                      style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-surface)", color: "var(--nv-text-primary)", fontFamily: "var(--nv-font-mono)" }}
+                      title={t.live.archive.historicalTooltip
+                        .replace("{bucket}", h.historical.bucket)
+                        .replace("{n}", String(h.historical.n))
+                        + (h.historical.pooled ? ` ${t.live.archive.historicalPooled}` : "")}
+                    >
+                      {t.live.archive.historical.replace("{pct}", h.historical.pct.toFixed(0))}
+                    </span>
+                  )}
                   {h.risky && <RiskyBadge n={h.n} min={view.risky_below_n} />}
                 </span>
               ))}
             </li>
           ))}
         </ul>
+      )}
+      {groups.some((g) => g.items.some((h) => h.historical)) && (
+        <p style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>{a.historicalNote}</p>
       )}
     </section>
   );

@@ -38,7 +38,8 @@ const view: LiveArchiveView = {
   highlights: [
     { period: "ft", market: "dc", selection: "1X", pct: 92.3, archive: "genel", label: "Genel", n: 13, risky: false },
     { period: "ft", market: "dc", selection: "1X", pct: 91.7, archive: "a1", label: "A1", n: 12, risky: false },
-    { period: "h2", market: "ou_05", selection: "over", pct: 100, archive: "a3", label: "A3", n: 2, risky: true },
+    { period: "h2", market: "ou_05", selection: "over", pct: 100, archive: "a3", label: "A3", n: 2, risky: true,
+      historical: { pct: 79.5, n: 2635, bucket: "2-4", pooled: false } },
   ],
 };
 
@@ -65,6 +66,7 @@ describe("Canlı sayfa", () => {
     expect(screen.getAllByText("Riskli").length).toBe(1);          // sadece A3 (2 maç)
     expect(screen.getByText(/Kaydedildi/)).toBeTruthy();
     expect(screen.queryByText(/MS Tahmini|İY tabanı/)).toBeNull();
+    expect(screen.getByText("geçmiş %80")).toBeTruthy();       // 2 maçlık %100 işaret geçmişte %79.5 tutmuş
     expect(getLiveHTMatches).not.toHaveBeenCalled();
   });
 

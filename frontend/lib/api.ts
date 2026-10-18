@@ -291,6 +291,15 @@ export interface LiveArchiveSource {
   matches?: LiveArchiveMatch[];
 }
 
+export interface LiveHistorical {
+  /** Backtest'te aynı pazar + örneklem kovasındaki %85+ işaretlerin gerçek isabeti. */
+  pct: number;
+  n: number;
+  bucket: string;
+  /** Pazarda az veri vardı → kovanın tüm pazar ortalaması. */
+  pooled: boolean;
+}
+
 export interface LiveHighlight {
   period: "ft" | "h2";
   market: string;
@@ -300,6 +309,7 @@ export interface LiveHighlight {
   label: string;
   n: number;
   risky: boolean;
+  historical?: LiveHistorical | null;
 }
 
 export interface LiveArchiveView {

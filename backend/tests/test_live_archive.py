@@ -61,3 +61,15 @@ def test_ledger_rows_one_per_highlight():
     general = [r for r in rows if r["archive"] is None]
     assert general and all(r["details"]["label"] == "Genel" for r in general)
     assert {r["confidence_tier"] for r in rows} == {"high"}   # 6 maç → riskli değil
+
+
+def test_historical_hit_lookup_by_market_and_sample_bucket():
+    from app.analysis.live_archive import annotate, hit_lookup, n_bucket
+    assert [n_bucket(n) for n in (0, 1, 3, 7, 12, 40)] == ["1", "1", "2-4", "5-9", "10-19", "20+"]
+    table = {("ft", "dc", "5-9"): (80, 100), ("*", "*", "1"): (58, 100), ("ft", "kg", "1"): (5, 10)}
+    assert hit_lookup(table, "ft", "dc", 6) == {"pct": 80.0, "n": 100, "bucket": "5-9", "pooled": False}
+    # Pazar kovasında 30'dan az işaret → kovanın tüm pazar ortalaması
+    assert hit_lookup(table, "ft", "kg", 1)["pooled"] is True and hit_lookup(table, "ft", "kg", 1)["pct"] == 58.0
+    assert hit_lookup(table, "h2", "kg", 25) is None
+    out = annotate([{"period": "ft", "market": "dc", "n": 6, "pct": 100.0}], table)
+    assert out[0]["historical"]["pct"] == 80.0

@@ -152,7 +152,7 @@ def ledger_rows(view: dict, common: dict) -> list[dict]:
             "prob_shown_bp": round(h["pct"] * 100), "sample_n": h["n"] or None,
             "confidence_tier": "insufficient" if h["risky"] else "high",
             "details": {"risky": h["risky"], "label": h["label"], "options": h["options"],
-                        "params": rule_params_fingerprint()},
+                        "params": rule_params_fingerprint(), "historical": h.get("historical")},
         })
     return rows
 
@@ -190,6 +190,10 @@ async def load_view(match_id: str, blobs: dict[str, dict | None], ht: tuple[int,
             info = {r[0]: tuple(r[1:]) for r in result.all()}
     rows_by_source = ht_filtered_rows(blobs, {k: v[:4] for k, v in info.items()}, ht)
     view = build_view(rows_by_source, ht)
+    try:
+        view["highlights"] = annotate(view["highlights"], await load_hit_table())
+    except Exception:  # geçmiş isabet sadece bilgi — hesaplanamazsa görünüm yine döner
+        pass
     if with_matches:
         sims = {
             short: dict(zip([str(i) for i in (blobs.get(family) or {}).get("matched_ids") or []],
@@ -216,3 +220,60 @@ async def load_view(match_id: str, blobs: dict[str, dict | None], ht: tuple[int,
         _view_cache.clear()
     _view_cache[key] = (time.monotonic(), view)
     return view
+
+
+# ─── Geçmiş isabet (backtest'ten): "bu tür %85+ işaretler geçmişte ne kadar tuttu?" ──
+
+N_BUCKETS = ((1, 1, "1"), (2, 4, "2-4"), (5, 9, "5-9"), (10, 19, "10-19"), (20, 10**9, "20+"))
+MIN_HIST_N = 30
+_HIT_TTL = 3600.0
+_hit_cache: tuple[float, dict] | None = None
+
+
+def n_bucket(n: int) -> str:
+    return next(label for lo, hi, label in N_BUCKETS if lo <= max(1, n) <= hi)
+
+
+def hit_lookup(table: dict, period: str, market: str, n: int) -> dict | None:
+    """Pazar × örneklem kovası; az veri varsa (<30 işaret) kovanın tüm pazar ortalaması."""
+    bucket = n_bucket(n)
+    for key in ((period, market, bucket), ("*", "*", bucket)):
+        hits, total = table.get(key, (0, 0))
+        if total >= MIN_HIST_N:
+            return {"pct": round(100 * hits / total, 1), "n": total, "bucket": bucket, "pooled": key[0] == "*"}
+    return None
+
+
+def annotate(highlights: list[dict], table: dict) -> list[dict]:
+    return [{**h, "historical": hit_lookup(table, h["period"], h["market"], h["n"])} for h in highlights]
+
+
+async def load_hit_table() -> dict:
+    """Bugünkü ayarlarla üretilmiş en son live-arch backtest koşusundan isabet tablosu (1 saat önbellek)."""
+    import time
+
+    from sqlalchemy import text
+
+    from app.db.connection import get_session
+
+    global _hit_cache
+    if _hit_cache is not None and time.monotonic() - _hit_cache[0] < _HIT_TTL:
+        return _hit_cache[1]
+    async with get_session() as session:
+        run_id = (await session.execute(text("""
+            SELECT max(id) FROM backtest_runs
+            WHERE rule_version = :rv AND params->>'params_fingerprint' = :fp
+        """), {"rv": LIVE_ARCHIVE_RULE_VERSION, "fp": rule_params_fingerprint()})).scalar()
+        rows = [] if run_id is None else (await session.execute(text("""
+            SELECT period, market, sample_n, count(*) FILTER (WHERE outcome = 'hit'), count(*)
+            FROM prediction_backtest WHERE run_id = :run AND outcome IN ('hit', 'miss')
+            GROUP BY period, market, sample_n
+        """), {"run": run_id})).all()
+    table: dict = {}
+    for period, market, n, hits, total in rows:
+        bucket = n_bucket(n or 1)
+        for key in ((period, market, bucket), ("*", "*", bucket)):
+            h, t = table.get(key, (0, 0))
+            table[key] = (h + hits, t + total)
+    _hit_cache = (time.monotonic(), table)
+    return table

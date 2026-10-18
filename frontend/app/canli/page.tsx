@@ -95,6 +95,7 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
           </div>
         </div>
 
+        {(match.frozen || match.archive_view) && (
         <div className="flex justify-end">
           <span
             className="px-2 py-0.5 font-semibold"
@@ -110,6 +111,7 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
             {match.frozen && match.frozen_at ? ` ${formatTime(match.frozen_at)}` : ""}
           </span>
         </div>
+        )}
         {match.archive_view ? (
           <>
             <HighlightList view={match.archive_view} />

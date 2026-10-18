@@ -110,7 +110,11 @@ async def _view_for(match: Match, ht: tuple[int, int], frozen: dict | None, *, w
     blobs = {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d}
     view = await live_archive.load_view(match.match_id, blobs, ht, with_matches=with_matches)
     if frozen and frozen.get("archived"):
-        view = {**view, "highlights": frozen["highlights"]}
+        try:
+            table = await live_archive.load_hit_table()
+        except Exception:
+            table = {}
+        view = {**view, "highlights": live_archive.annotate(frozen["highlights"], table)}
     return view
 
 
