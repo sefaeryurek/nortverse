@@ -1554,6 +1554,12 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Başlama saati senkronu:** haftalar önce analiz edilen maçlar resmi saat açıklanmadan yer tutucu saatle kaydediliyordu (Kasımpaşa 13:30'da başladı, kayıtta 15:00) → izleyici kaçırırdı. `runner.sync_kickoffs` bülten verisinden düzeltir (izleyici her tur + fixture cache kaydı).
 - **Operasyon notu:** sabah pipeline'ı (Task Scheduler) 27 Eylül'den beri başarıyla çalışmamış (13 Ekim yarıda kesildi, 15 Ekim Docker kapalı). Skor güncellemesi çalışıyor.
 
+### Sprint 90.2 — ACİL ✅ (Lig Filtresi Kaçağı + Kural Dışı Mesajı)
+- **Hata:** pipeline ve Playwright analizi `compute_all_patterns`'a `raw.league_name` veriyordu; sayfa başlığı okunamayınca boş → lig filtresi uygulanmadan **tüm liglerde** arama. 18 Ekim pipeline'ında 73 maç etkilendi (ör. Başakşehir A1 126 karışık lig maçı).
+- **Düzeltme:** çağıranlar `raw.league_code or raw.league_name` (DB'ye yazılan lig ile aynı); `compute_all_patterns` lig bilinmiyorsa hiç eşleşme üretmez (eskiden filtresiz). 73 maç doğru ligle yeniden hesaplandı (62'si arşivi olmayan küçük lig → eşleşmesiz); lig dışı eşleşmesi kalan maç: 0.
+- **Defter:** hatalı arşivle yazılmış 3.707 kayıt silinmeden `invalidated` çözümüyle kalıcı void (`ledger.invalidate_predictions`, audit_log'da sebep); öncesinde doğru arşivle yazılmış 129 kayıt geçerli kaldı. `resolve_pending` invalidated satırları tekrar çözmez.
+- **Canlı sayfa:** analiz yoksa sebep gösterilir — kural dışı (`skipped_analysis.reason`, ör. H2H yetersiz) ya da başlamadan analiz edilmemiş.
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**

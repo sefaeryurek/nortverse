@@ -257,11 +257,12 @@
         "yes": "Var",
         "no": "Yok"
       },
-      "noAnalysis": "Bu maç analiz edilmemiş — arşiv eşleşmesi olmadığı için oran ve kayıt yok.",
+      "noAnalysis": "Bu maç başlamadan analiz edilmemiş (sabah pipeline'ı çalışmadıysa olur) — arşiv oranı ve kayıt yok.",
       "historical": "geçmiş %{pct}",
       "historicalTooltip": "Geçmiş testte bu pazarda {bucket} maçlık örneklemle verilen %85+ işaretlerin gerçekte tutma oranı ({n} işaret).",
       "historicalPooled": "Bu pazarda yeterli veri olmadığı için aynı örneklem büyüklüğündeki tüm pazarların ortalaması.",
-      "historicalNote": "\"geçmiş %X\": aynı türdeki işaretlerin geçmiş maçlarda gerçek isabeti — ekrandaki oran örneklem küçükken olduğundan yüksek görünür."
+      "historicalNote": "\"geçmiş %X\": aynı türdeki işaretlerin geçmiş maçlarda gerçek isabeti — ekrandaki oran örneklem küçükken olduğundan yüksek görünür.",
+      "skipped": "Kural dışı — bu maç için tahmin üretilmiyor: {reason}"
     }
   },
   "error": {

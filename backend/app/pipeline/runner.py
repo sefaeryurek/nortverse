@@ -428,7 +428,7 @@ async def run_pipeline(
                     ft_scores=(result.ft.scores_1, result.ft.scores_x, result.ft.scores_2),
                     ft_ratios=result.ft.all_ratios,
                     as_of=pattern_as_of(result.analyzed_at, raw.kickoff_time),
-                    league_name=raw.league_name,
+                    league_name=raw.league_code or raw.league_name,
                 )
                 await _upsert(result, raw, patterns)
                 stats["analyzed"] += 1

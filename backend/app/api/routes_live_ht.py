@@ -23,7 +23,7 @@ from app.api.live_ledger import match_phase, observed_ht
 from app.api.live_snapshot import get_live_snapshot
 from app.config import ISTANBUL_TZ
 from app.db.connection import get_session
-from app.db.models import FixtureCache, Match, MatchHtObservation, PredictionLedger
+from app.db.models import FixtureCache, Match, MatchHtObservation, PredictionLedger, SkippedAnalysis
 from app.scraper.fixture_scores import phase_from_minute
 
 log = logging.getLogger(__name__)
@@ -45,6 +45,8 @@ class LiveHTMatch(BaseModel):
     frozen: bool = False
     frozen_at: str | None = None
     archive_view: dict | None = None
+    # Analiz yoksa sebebi: kural dışı (h2h_insufficient …) ya da None (hiç analiz edilmemiş)
+    skip_reason: str | None = None
 
 
 def _is_second_half_or_later(minute: str | None, phase: str | None = None) -> bool:
@@ -158,6 +160,10 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
         if missing:
             info.update(await _fixture_cache_info(session, missing))
         frozen = await _frozen_info(session, list(by_id))
+        skipped = dict((await session.execute(
+            select(SkippedAnalysis.match_id, SkippedAnalysis.reason)
+            .where(SkippedAnalysis.match_id.in_([mid for mid in ids if mid not in by_id]))
+        )).all()) if len(by_id) < len(ids) else {}
 
     result: list[LiveHTMatch] = []
     for mid, fs in live.items():
@@ -180,6 +186,7 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
             kickoff_time=kickoff.isoformat() if kickoff else None,
             frozen=record is not None, frozen_at=record["frozen_at"] if record else None,
             archive_view=view,
+            skip_reason=skipped.get(mid) if match is None else None,
         ))
     return result
 

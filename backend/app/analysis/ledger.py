@@ -53,6 +53,7 @@ _PENDING_SQL = text("""
         WHERE pr.ledger_id = l.id ORDER BY pr.id DESC LIMIT 1
     ) r ON true
     WHERE l.id > :after
+      AND r.resolver_version IS DISTINCT FROM 'invalidated'
       AND (m.actual_ft_home IS NOT NULL OR m.deleted_at IS NOT NULL)
       AND (
         r.outcome IS NULL
@@ -111,3 +112,32 @@ async def resolve_pending(batch_size: int = 2000) -> dict[str, int]:
                         constraint="uq_prediction_resolutions_state",
                     )
                 )
+
+
+INVALIDATED_VERSION = "invalidated"
+
+
+async def invalidate_predictions(ledger_ids: list[int], reason: str, actor: str = "system") -> int:
+    """Hatalı veriyle üretilmiş kayıtları kalıcı 'void' yapar (defter değişmez, silinmez).
+
+    Son çözüm `invalidated` olduğu için `resolve_pending` bu satırlara tekrar dokunmaz;
+    performans özetleri void'i saymaz. Sebep audit_log'a yazılır.
+    """
+    from app.db.models import AuditLog
+
+    if not ledger_ids:
+        return 0
+    async with get_session() as session:
+        for i in range(0, len(ledger_ids), 1000):
+            chunk = ledger_ids[i:i + 1000]
+            await session.execute(insert(PredictionResolution).values([
+                {"ledger_id": lid, "outcome": "void", "resolver_version": INVALIDATED_VERSION,
+                 "ft_home": None, "ft_away": None, "ht_home": None, "ht_away": None}
+                for lid in chunk
+            ]).on_conflict_do_nothing(constraint="uq_prediction_resolutions_state"))
+        session.add(AuditLog(operation="invalidate_predictions", actor=actor,
+                             details={"reason": reason, "count": len(ledger_ids),
+                                      "ledger_ids": ledger_ids[:5000]}))
+    log.warning("%d defter kaydı geçersiz sayıldı: %s", len(ledger_ids), reason)
+    return len(ledger_ids)
+

@@ -128,6 +128,11 @@ async def compute_all_patterns(
         raise ValueError("as_of must be timezone-aware")
     families = tuple(f for f in FAMILIES if f in set(families))
     league = canonical_league_name(league_name) if league_name else None
+    if not league or league == "?":
+        # Katı lig kuralı: lig bilinmiyorsa tüm liglerde aramak yerine hiç eşleşme üretilmez
+        # (eskiden None → filtresiz arama → başka liglerden eşleşmeler; Sprint 90.2).
+        log.warning("Pattern hesaplanmadı [%s]: lig bilinmiyor", match_id)
+        return {key: None for family in families for key in pattern_keys(family)}
 
     async def _b(period: str, s1, sx, s2) -> Optional[dict]:
         res = await find_pattern_b_matches(

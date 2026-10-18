@@ -83,3 +83,9 @@ def test_mixed_ledger_rows_compile_without_null_required_columns():
     params = insert(PredictionLedger).values(rows).compile(dialect=postgresql.dialect()).params
     assert params["informational_m0"] is False and params["informational_m1"] is True
     assert params["details_m1"] == {}
+
+
+def test_invalidated_rows_are_never_re_resolved():
+    from app.analysis.ledger import _PENDING_SQL, INVALIDATED_VERSION
+    assert INVALIDATED_VERSION == "invalidated"
+    assert "r.resolver_version IS DISTINCT FROM 'invalidated'" in str(_PENDING_SQL)

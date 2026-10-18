@@ -15,7 +15,8 @@ from app.api import services as svc
 async def compute():
     return await persist.compute_all_patterns("123", ([], [], []), ([], [], []),
                                               ([], [], []), {"1-0": 3.5},
-                                              as_of=datetime(2026, 9, 22, tzinfo=timezone.utc))
+                                              as_of=datetime(2026, 9, 22, tzinfo=timezone.utc),
+                                              league_name="ENG PR")
 
 
 @pytest.mark.asyncio
@@ -105,3 +106,18 @@ async def test_background_analysis_waits_for_foreground_refresh(monkeypatch):
         assert not task.done()
     assert await task is True
     worker.assert_awaited_once_with("123")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("league", [None, "", "?"])
+async def test_unknown_league_produces_no_patterns_instead_of_searching_all_leagues(monkeypatch, league):
+    """Sprint 90.2: lig boşken eskiden filtresiz arama yapılıyordu (eşleşmeler başka liglerden)."""
+    async def must_not_search(*_args, **_kwargs):
+        raise AssertionError("lig bilinmiyorken arşiv aranmamalı")
+
+    monkeypatch.setattr(persist, "find_pattern_b_matches", must_not_search)
+    monkeypatch.setattr(persist, "find_pattern_c_adaptive", must_not_search)
+    monkeypatch.setattr(persist, "find_pattern_d_all_periods", must_not_search)
+    out = await persist.compute_all_patterns("123", ([], [], []), ([], [], []), ([], [], []), {"1-0": 3.5},
+                                             as_of=datetime(2026, 9, 22, tzinfo=timezone.utc), league_name=league)
+    assert out and all(v is None for v in out.values())

@@ -86,9 +86,16 @@ describe("Canlı sayfa", () => {
   it("explains unanalysed matches instead of offering a detail request that would fail", () => {
     wsState = { matches: [match("4", "60", { archive_view: null, frozen: false })], status: "connected", lastUpdate: new Date() };
     render(ui());
-    expect(screen.getByText(/Bu maç analiz edilmemiş/)).toBeTruthy();
+    expect(screen.getByText(/başlamadan analiz edilmemiş/)).toBeTruthy();
     expect(screen.queryByText("Arşiv detayı")).toBeNull();
     expect(screen.queryByText("Canlı veri alınamadı.")).toBeNull();
+  });
+
+  it("shows the rule that excluded a match instead of 'not analysed'", () => {
+    wsState = { matches: [match("5", "HT", { archive_view: null, frozen: false, skip_reason: "h2h_insufficient" })], status: "connected", lastUpdate: new Date() };
+    render(ui());
+    expect(screen.getByText(/Kural dışı/)).toBeTruthy();
+    expect(screen.queryByText(/başlamadan analiz edilmemiş/)).toBeNull();
   });
 
   it("loads matched game lists only when expanded", async () => {
