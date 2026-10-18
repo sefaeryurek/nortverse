@@ -140,6 +140,8 @@ export interface PerformanceSummary {
   source: PredictionSource;
   rule_versions: string[];
   overall: PerformanceStats;
+  /** Arşiv bazında sonuçlanan kayıt sayısı; overall tekil karar sayar (aynı seçim tek kez). */
+  raw_resolved?: number;
   groups: Record<string, (PerformanceStats & { key: string })[]>;
   calibration: { lower: number; upper: number; n: number; avg_prob_pct: number; hit_pct: number }[];
 }
@@ -214,6 +216,8 @@ export interface LiveMatchPick {
   selection: string;
   archive: LiveArchiveKey;
   label: string;
+  /** Aynı seçimi işaret eden tüm arşivler (tekil sayım: tek işaret, birden çok kaynak). */
+  labels: string[];
   pct: number;
   n: number;
   risky: boolean;

@@ -12,7 +12,13 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import text
 
 from app.analysis.market_resolver import resolve
-from app.analysis.performance import GROUP_FIELDS, calibration_buckets, group_summaries, summarize
+from app.analysis.performance import (
+    GROUP_FIELDS,
+    calibration_buckets,
+    dedupe_decisions,
+    group_summaries,
+    summarize,
+)
 from app.config import ISTANBUL_TZ
 from app.db.connection import get_session
 
@@ -87,9 +93,18 @@ async def performance_summary(
     return {
         "source": source,
         "rule_versions": sorted({r["rule_version"] for r in rows}),
-        "overall": summarize(rows),
-        "groups": {g: group_summaries(rows, g) for g in groups},
-        "calibration": calibration_buckets(rows),
+        **_unique_summary(rows, groups),
+    }
+
+
+def _unique_summary(rows: list[dict], groups) -> dict:
+    """Tekil karar sayımı; sadece "arşiv" kırılımı her arşivi kendi satırıyla sayar."""
+    unique = dedupe_decisions(rows)
+    return {
+        "overall": summarize(unique),
+        "raw_resolved": sum(r.get("outcome") in ("hit", "miss") for r in rows),
+        "groups": {g: group_summaries(rows if g == "archive" else unique, g) for g in groups},
+        "calibration": calibration_buckets(unique),
     }
 
 
@@ -177,12 +192,15 @@ async def backtest_summary(run_id: int) -> dict:
         raise HTTPException(404, "Backtest koşusu bulunamadı")
     rows = await load_backtest_rows(run_id)
     main = [r for r in rows if not r["informational"]]
+    unique = dedupe_decisions(rows)
     result = {
         "run_id": run.id, "source": run.strategy, "rule_versions": [run.rule_version],
-        "overall": summarize(main),
-        "informational": summarize([r for r in rows if r["informational"]]),
-        "groups": {g: group_summaries(rows, g) for g in _backtest_groups(run.strategy, run.rule_version)},
-        "calibration": calibration_buckets(main),
+        "overall": summarize(dedupe_decisions(main)),
+        "raw_resolved": sum(r.get("outcome") in ("hit", "miss") for r in main),
+        "informational": summarize(dedupe_decisions([r for r in rows if r["informational"]])),
+        "groups": {g: group_summaries(rows if g == "archive" else unique, g)
+                   for g in _backtest_groups(run.strategy, run.rule_version)},
+        "calibration": calibration_buckets(dedupe_decisions(main)),
     }
     if len(_backtest_cache) >= 8:
         _backtest_cache.pop(next(iter(_backtest_cache)))
@@ -202,6 +220,18 @@ _LIVE_MATCHES_SQL = """
     WHERE l.source = 'live_ht' AND l.kickoff_time >= :start AND l.kickoff_time < :end
     ORDER BY l.kickoff_time, l.match_id, l.id
 """
+
+
+def _merge_pick(picks: list[dict], pick: dict) -> None:
+    """Aynı periyot/pazar/seçim farklı arşivlerden geldiyse tek işaret: kaynaklar `labels`'a eklenir,
+    gösterilen yüzde/örneklem en büyük örneklemli kaynaktan (tekil sayım)."""
+    for existing in picks:
+        if (existing["period"], existing["market"], existing["selection"]) == (pick["period"], pick["market"], pick["selection"]):
+            existing["labels"].append(pick["label"])
+            if (pick["n"], pick["pct"]) > (existing["n"], existing["pct"]):
+                existing.update({k: pick[k] for k in ("archive", "label", "pct", "n", "risky")})
+            return
+    picks.append({**pick, "labels": [pick["label"]]})
 
 
 @router.get("/api/performance/live-matches")
@@ -231,7 +261,7 @@ async def live_matches(day: date = Query(..., description="İstanbul günü (ma�
         if r.rule_version != LIVE_ARCHIVE_RULE_VERSION:
             continue  # eski COND modeli ekranda yok; sadece arka planda ölçülür
         details = r.details or {}
-        entry["picks"].append({
+        _merge_pick(entry["picks"], {
             "period": r.period, "market": r.market, "selection": r.selection,
             "archive": r.archive or "genel", "label": details.get("label") or (r.archive or "genel").upper(),
             "pct": round(r.prob_shown_bp / 100, 1), "n": r.sample_n or 0,

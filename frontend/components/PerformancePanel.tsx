@@ -219,6 +219,9 @@ function SummaryBody({ summary, t, headline, groups }: {
         <span className="font-semibold" style={{ color: "var(--nv-text-secondary)" }}>{headline}</span>
         <span>· {summary.rule_versions.join(", ")}</span>
         {o.pending > 0 && <span>· {p.pendingCount.replace("{n}", String(o.pending))}</span>}
+        {summary.raw_resolved != null && summary.raw_resolved > o.resolved && (
+          <span title={p.uniqueHint}>· {p.uniqueNote.replace("{n}", String(summary.raw_resolved))}</span>
+        )}
         <span className="px-2 py-0.5" style={{ borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-bg-elevated)" }}>
           {(p as Record<string, string>)[`stage_${o.stage}`]}
         </span>
@@ -476,14 +479,16 @@ export async function LiveDayList({ day, t }: { day: string; t: Dictionary }) {
               <div className="flex flex-wrap gap-2">
                 {m.picks.map((pick) => (
                   <div
-                    key={`${pick.period}:${pick.market}:${pick.archive}`}
+                    key={`${pick.period}:${pick.market}:${pick.selection}`}
                     className="flex items-center gap-2 px-2 py-1"
                     style={{ borderRadius: "var(--nv-radius-md)", backgroundColor: "var(--nv-bg-surface)", border: "1px solid var(--nv-border-subtle)", fontSize: "var(--nv-text-xs)" }}
                   >
                     <span style={{ color: "var(--nv-text-tertiary)" }}>{liveMarketLabel(pick.period, pick.market, t)}</span>
                     <span className="font-bold" style={{ color: "var(--nv-text-primary)" }}>{liveSelectionLabel(pick.selection, t)}</span>
                     <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)" }}>%{pick.pct.toFixed(0)}</span>
-                    <span style={{ color: "var(--nv-text-tertiary)" }}>{pick.archive === "genel" ? p.archive_genel : pick.label} ({pick.n})</span>
+                    <span style={{ color: "var(--nv-text-tertiary)" }}>
+                      {(pick.labels ?? [pick.label]).map((l) => (l.toLowerCase() === "genel" ? p.archive_genel : l)).join(" + ")} ({pick.n})
+                    </span>
                     {pick.risky && <span style={{ color: "var(--nv-accent-amber)" }} title={p.risk_risky}><span aria-hidden="true">⚠</span> {t.live.archive.risky}</span>}
                     <OutcomeBadge outcome={pick.outcome} p={p} />
                   </div>

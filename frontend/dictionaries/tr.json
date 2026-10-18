@@ -95,6 +95,8 @@
     "perf": {
       "allTime": "Tüm kayıtlı tahminler",
       "winRate": "Kazanma yüzdesi",
+      "uniqueNote": "tekil karar · arşiv bazında {n} kayıt",
+      "uniqueHint": "Aynı maçta aynı seçimi birden çok arşiv işaret ettiyse tek karar sayılır; arşiv kırılımı her arşivi ayrı gösterir.",
       "hitsOf": "{hits}/{n} tahmin",
       "ci": "%95 aralık %{low}–%{high}",
       "lift": "Tabana göre fark",

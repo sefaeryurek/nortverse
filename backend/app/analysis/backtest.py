@@ -273,7 +273,7 @@ async def load_backtest_rows(run_id: int) -> list[dict]:
     out = []
     for r in rows:
         data = {c: getattr(r, c) for c in (
-            "market", "selection", "period", "prob_shown_bp", "confidence_tier", "league_name",
+            "match_id", "market", "selection", "period", "prob_shown_bp", "confidence_tier", "league_name",
             "kickoff_time", "archive", "informational", "outcome", "baseline_selection",
             "ft_home", "ft_away", "ht_home", "ht_away", "details",
         )}

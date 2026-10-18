@@ -32,6 +32,32 @@ def _iso_week(kickoff: datetime) -> str:
     return f"{year}-W{week:02d}"
 
 
+def decision_key(row: dict) -> tuple:
+    """Bir kararın kimliği: aynı maçta aynı periyot/pazar/seçim → aynı karar (hangi arşivden gelirse gelsin)."""
+    return (row.get("match_id"), row.get("rule_version"), row["period"], row["market"], row["selection"])
+
+
+def dedupe_decisions(rows: list[dict]) -> list[dict]:
+    """Tekil sayım: A1/A2/A3/Genel aynı seçimi işaret ettiyse tek karar sayılır.
+
+    Temsilci satır en büyük örneklemli kaynaktır (eşitse yüksek olasılık) — "riskli" etiketi de
+    ondan gelir, yani kaynaklardan biri bile normal örneklemliyse karar normaldir.
+    `sources` alanı kararı destekleyen arşivleri listeler. match_id yoksa satırlar olduğu gibi döner.
+    """
+    if not rows or rows[0].get("match_id") is None:
+        return rows
+    best: dict[tuple, dict] = {}
+    sources: dict[tuple, list[str]] = defaultdict(list)
+    for row in rows:
+        key = decision_key(row)
+        sources[key].append(row.get("archive") or "genel")
+        current = best.get(key)
+        rank = ((row.get("sample_n") or 0), row["prob_shown_bp"])
+        if current is None or rank > ((current.get("sample_n") or 0), current["prob_shown_bp"]):
+            best[key] = row
+    return [{**row, "sources": sources[key]} for key, row in best.items()]
+
+
 def summarize(rows: list[dict]) -> dict:
     """Tek grup için isabet, güven aralığı, kalibrasyon, Brier ve tabana göre fark."""
     resolved = [r for r in rows if r.get("outcome") in ("hit", "miss")]

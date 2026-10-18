@@ -95,6 +95,8 @@
     "perf": {
       "allTime": "All recorded predictions",
       "winRate": "Win rate",
+      "uniqueNote": "unique decisions · {n} per-archive records",
+      "uniqueHint": "When several archives point to the same selection in a match it counts as one decision; the archive breakdown shows each archive separately.",
       "hitsOf": "{hits}/{n} predictions",
       "ci": "95% interval {low}%–{high}%",
       "lift": "Lift over baseline",
