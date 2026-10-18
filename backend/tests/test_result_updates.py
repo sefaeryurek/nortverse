@@ -157,7 +157,7 @@ async def test_final_score_observations_are_append_only_and_revision_idempotent(
         write_session = AsyncMock()
         latest = MagicMock()
         latest.scalars.return_value.all.return_value = rows
-        write_session.execute.side_effect = [latest, MagicMock(), MagicMock()]
+        write_session.execute.side_effect = [latest, MagicMock(), MagicMock(), MagicMock()]
         sessions.extend((read_session, write_session))
         read_sessions.append(read_session)
         write_sessions.append(write_session)
@@ -192,6 +192,7 @@ async def test_final_score_observations_are_append_only_and_revision_idempotent(
     assert "matches.kickoff_time" in match_sql
 
     observation_statements = []
+    ht_statements = []
     for index, session in enumerate(write_sessions):
         statements = [
             call.args[0] for call in session.execute.await_args_list
@@ -201,13 +202,22 @@ async def test_final_score_observations_are_append_only_and_revision_idempotent(
         assert "DISTINCT ON" in latest_sql
         assert "ORDER BY" in latest_sql
         assert match_update.table.name == "matches"
+        ht_insert = statements[2]
+        assert ht_insert.table.name == "match_ht_observations"
+        ht_statements.append(ht_insert)
         if index == 1:
-            assert session.execute.await_count == 2
-        else:
             assert session.execute.await_count == 3
-            observation_insert = statements[2]
+        else:
+            assert session.execute.await_count == 4
+            observation_insert = statements[3]
             assert observation_insert.table.name == "match_final_result_observations"
             observation_statements.append(observation_insert)
+
+    ht_params = [s.compile(dialect=postgresql.dialect()).params for s in ht_statements]
+    assert [p["source_revision_m0"] for p in ht_params] == ["1-0", "0-0", "1-0", "1-0"]
+    assert all(p["source_m0"] == "fixture_final" and p["phase_m0"] == "final" for p in ht_params)
+    assert all("ON CONFLICT ON CONSTRAINT uq_match_ht_observations_source_revision DO NOTHING"
+               in str(s.compile(dialect=postgresql.dialect())) for s in ht_statements)
 
     compiled = [
         statement.compile(dialect=postgresql.dialect())

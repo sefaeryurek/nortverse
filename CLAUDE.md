@@ -1525,6 +1525,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Performans paneli (88.5a/b, `/api/performance/*`, `performance.py`, `stats_utils.py`):** Değerlendirme sekmeleri **Canlı İY / Maç Öncesi / Backtest / Pattern geçmişi**. Kazanma %, Wilson %95 aralığı, gösterilen/gerçekleşen (kalibrasyon), Brier, tabana göre fark, örneklem kademesi (çok erken/ön bulgu/yeterli), kademe/pazar/lig kırılımı, günlük tuttu/tutmadı listesi. Backtest sekmesi koşu seçicili (varsayılan bugünkü ayarlarla üretilmiş son koşu).
 - **Pattern düzeltmeleri (88.4d):** A2 adaptif tolerans minimuma ulaşamazsa sonuç yok; A3 `pattern_d_min_matches=10` (hash'e girer); A3 havuzu `asyncio.Lock` + `to_thread`, IDF ağırlıkları sabit kesimden (`IDF_CUTOFF=2023-07-01`) önceki maçlardan (sızıntısız). `recompute-patterns` varsayılan olarak bitmiş maçları korur (`--include-finished` ile açıkça). Tam recompute (A2/A3, 32.116 maç, 0 hata) yapıldı.
 - **Bug temizliği:** analiz doğrulayıcı 10–19 maçlık önerilerde sayfayı düşürüyordu (88.0.1); Detaylı Analiz'de 4 handikap etiketi tersti (88.0.2); canlı sayfa WS yarışı (88.0.3); defter yazımında NOT NULL hatası analiz sayfasını 500'e düşürüyordu → hata izolasyonu (88.4b); `POST /api/analyze` kickoff sonrası 409, `GET /api/match` rate limit + kilit, `X-Forwarded-For` sadece `TRUSTED_PROXIES`'ten (88.6a); eşleşen liste ilk 50 + "daha fazla", skor sıklığı yüzde, İngilizce etiketler (`label-i18n.ts`), ESLint 0 hata, sekme erişilebilirliği (88.6b); Pattern geçmişi skor listesi paydası (88.5c).
+- **Canlı kalibrasyon kararı (Sprint 89):** α=0.5 ile model zaten kalibre (test dönemi gösterilen %61.4 / gerçek %61.5). Isotonic düzeltme test Brier'ını üç pazarda da kötüleştirdi → `live-ms-v2` çıkarılmadı (ölçüm `live_model.py` başında).
 - **İki kural (artık zorunlu):**
   1. **Gösterilen ≠ yeniden hesaplanan:** `matches.pattern_*` recompute sonrası "bugünkü algoritma o gün ne derdi" (backtest) değeridir; kullanıcının o gün gördüğü değildir. Gerçek performans yalnızca `prediction_ledger`'dan ölçülür.
   2. **Kural değişti → sürüm artar:** `LIVE_RULE_VERSION`, `V4_RULE_VERSION`, `MARKET_SUMMARY_RULE_VERSION`. `prematch_v4.RULE_PARAMS` parmak izi testte sabit (`test_rule_version_fingerprint_is_pinned`) — parametre değişip sürüm artmazsa test kırılır. Pattern algoritması değişince `persist.PATTERN_ALGO_VERSION`.
@@ -1831,7 +1832,6 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 - **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
 - **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
 - **Oran/ROI:** Defterdeki tahminlerin bahis oranlarıyla karşılaştırılması (kullanıcı kararı: sonraki sprint)
-- **Canlı kalibrasyon `live-ms-v2`:** COND hafif aşırı güvenli (0.72 → 0.67); backtest'ten isotonic düzeltme (opsiyonel)
 
 ### Bilinen Açık Konular
 

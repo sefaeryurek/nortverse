@@ -27,6 +27,7 @@ from app.db.models import (
     FixtureCache,
     Match,
     MatchFinalResultObservation,
+    MatchHtObservation,
     SkippedAnalysis,
 )
 from app.models import FixtureMatch, MatchAnalysisResult, MatchRawData
@@ -554,6 +555,7 @@ async def update_results(target_date: Optional[date] = None) -> dict:
     async def _save():
         async with get_session() as session:
             new_observations: list[dict] = []
+            ht_observations: list[dict] = []
             latest_observations: dict[str, MatchFinalResultObservation] = {}
             if match_by_id:
                 rows = (await session.execute(
@@ -591,6 +593,18 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                         result_fetched_at=checked_at,
                     )
                 )
+                if (
+                    scores["actual_ht_home"] is not None
+                    and existing.kickoff_time is not None
+                    and checked_at > existing.kickoff_time
+                ):
+                    # Değişmez İY gözlemi: İY/2Y pazarlarının çözümü için kanıt (aynı skor tekrar yazılmaz).
+                    ht_observations.append({
+                        "match_id": match_id, "kickoff_time": existing.kickoff_time,
+                        "ht_home": scores["actual_ht_home"], "ht_away": scores["actual_ht_away"],
+                        "phase": "final", "observed_at": checked_at, "source": "fixture_final",
+                        "source_revision": f'{scores["actual_ht_home"]}-{scores["actual_ht_away"]}',
+                    })
                 latest = latest_observations.get(match_id)
                 final_changed = latest is None or (
                     latest.ft_home,
@@ -616,6 +630,11 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                             ),
                         }
                     )
+            if ht_observations:
+                await session.execute(
+                    insert(MatchHtObservation).values(ht_observations)
+                    .on_conflict_do_nothing(constraint="uq_match_ht_observations_source_revision")
+                )
             if new_observations:
                 await session.execute(
                     insert(MatchFinalResultObservation).values(new_observations)

@@ -6,6 +6,10 @@ Maç öncesi A1+A2+A3 havuzu lig ortalamasına oranlanır (LR) ve COND bununla �
 
 Ölçüm (1400 maç, 2023-26, sızıntısız): COND %58.0 / Brier .513, COND×LR %59.5 / Brier .504;
 olasılık ≥0.70 olan tahminler ~%78 tutuyor.
+
+Kalibrasyon (Sprint 89, backtest #3, α=0.5): eğitim <2025-07 / test ≥2025-07. Test döneminde gösterilen
+ortalama %61.4, gerçekleşen %61.5 → zaten kalibre. Eğitimde kurulan isotonic düzeltme test Brier'ını üç
+pazarda da kötüleştirdi (MS .2012→.2034, Ü2.5 .1873→.1874, KG .2332→.2334) → live-ms-v2 çıkarılmadı.
 """
 
 from __future__ import annotations
