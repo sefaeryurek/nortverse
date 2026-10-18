@@ -15,6 +15,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.analysis import live_archive
+from app.analysis.league_filter import is_main_league
 from app.analysis.ledger import record_predictions
 from app.analysis.live_model import LIVE_RULE_VERSION, get_cond_table, predict_live
 from app.analysis.persist import hash_string
@@ -186,6 +187,8 @@ async def run_tick(*, dry_run: bool = False, snapshot=None) -> list[dict]:
                 Match.kickoff_time <= now - WINDOW_END,
             ).order_by(Match.kickoff_time)
         )).scalars().all()
+        # Canlı sayfa ile aynı kural: sadece 7 ana lig (küçük liglerin arşivi yok, kayıt gürültü olur).
+        candidates = [m for m in candidates if is_main_league(m.league_name, m.league_code)]
         if not candidates:
             return []
         frozen = set((await session.execute(

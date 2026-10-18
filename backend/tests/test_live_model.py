@@ -121,7 +121,7 @@ def test_observed_ht_by_phase():
 # ─── Dondurma ─────────────────────────────────────────────────────────────
 
 def _match(**kw):
-    base = dict(match_id="900", league_name=LEAGUE, kickoff_time=NOW,
+    base = dict(match_id="900", league_name=LEAGUE, league_code=LEAGUE, kickoff_time=NOW,
                 pattern_ft_b=None, pattern_ft_c=None, pattern_ft_d=None,
                 pattern_b_hash="b1", pattern_c_hash=None, pattern_d_hash="d1")
     base.update(kw)
@@ -172,7 +172,8 @@ async def test_run_tick_dry_run_reports_every_candidate_without_writing(monkeypa
     first_half = _match(match_id="2", kickoff_time=kickoff)
     missing = _match(match_id="3", kickoff_time=kickoff)
     done = _match(match_id="4", kickoff_time=kickoff)
-    results = iter([[ht_match, first_half, missing, done], ["4"]])
+    minor = _match(match_id="5", kickoff_time=kickoff, league_name="Chile Primera B", league_code="Chile Primera B")
+    results = iter([[ht_match, first_half, missing, done, minor], ["4"]])
 
     class _Result:
         def __init__(self, items):
@@ -201,5 +202,5 @@ async def test_run_tick_dry_run_reports_every_candidate_without_writing(monkeypa
     })
     report = await live_ledger.run_tick(dry_run=True, snapshot=snapshot)
     status = {e["match"].match_id: e["status"] for e in report}
-    assert status == {"4": "already_frozen", "1": "dry_run", "2": "no_ht", "3": "not_live"}
+    assert status == {"4": "already_frozen", "1": "dry_run", "2": "no_ht", "3": "not_live"}  # küçük lig (5) hiç aday değil
     assert next(e for e in report if e["match"].match_id == "1")["prediction"]["ms"]["pick"] == "1"

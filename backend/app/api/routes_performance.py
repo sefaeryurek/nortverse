@@ -213,8 +213,12 @@ async def live_matches(day: date = Query(..., description="İstanbul günü (ma�
     async with get_session() as session:
         rows = (await session.execute(text(_LIVE_MATCHES_SQL),
                                       {"start": start, "end": start + timedelta(days=1)})).all()
+    from app.analysis.league_filter import is_main_league
+
     matches: dict[str, dict] = {}
     for r in rows:
+        if not is_main_league(r.league_name):
+            continue  # canlı sayfada olmayan küçük lig kayıtları değerlendirmede de gösterilmez
         entry = matches.setdefault(r.match_id, {
             "match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
             "league_name": r.league_name, "kickoff_time": r.kickoff_time.isoformat(),
