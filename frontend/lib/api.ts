@@ -230,11 +230,24 @@ export interface LiveGoalMarket {
   tier?: LiveTier;
 }
 
+export interface LiveArchiveMatch {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  kickoff_time: string | null;
+  ht: string;
+  ft: string;
+  result: LiveOutcome;
+  similarity: number | null;
+}
+
 export interface LiveArchiveSummary {
   archive: "A1" | "A2" | "A3";
   n: number;
   sufficient: boolean;
   probs: Record<LiveOutcome, number> | null;
+  /** İY skoru aynı olan tüm eşleşen maçlar, en yeni önce. */
+  matches?: LiveArchiveMatch[];
 }
 
 export interface LivePrediction {

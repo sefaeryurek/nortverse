@@ -203,3 +203,37 @@ async def test_run_tick_dry_run_reports_every_candidate_without_writing(monkeypa
     status = {e["match"].match_id: e["status"] for e in report}
     assert status == {"4": "already_frozen", "1": "dry_run", "2": "no_ht", "3": "not_live"}
     assert next(e for e in report if e["match"].match_id == "1")["prediction"]["ms"]["pick"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_archive_ht_filtered_lists_matches_with_full_time_scores(monkeypatch):
+    from contextlib import asynccontextmanager
+    from app.analysis import live_model
+
+    rows = [
+        ("1", 0, 1, 1, 2, "A", "B", datetime(2025, 3, 1, tzinfo=timezone.utc)),
+        ("2", 0, 1, 1, 1, "C", "D", datetime(2025, 5, 1, tzinfo=timezone.utc)),
+        ("3", 1, 1, 2, 1, "E", "F", datetime(2025, 6, 1, tzinfo=timezone.utc)),  # İY farklı → listede yok
+    ]
+
+    class _Result:
+        def all(self):
+            return rows
+
+    class _Session:
+        async def execute(self, _stmt):
+            return _Result()
+
+    @asynccontextmanager
+    async def fake_session():
+        yield _Session()
+
+    monkeypatch.setattr(live_model, "get_session", fake_session)
+    out = await live_model.archive_ht_filtered(
+        {"b": None, "c": None, "d": {"matched_ids": ["1", "2", "3"], "matched_sims": [0.99, 0.98, 0.97]}}, (0, 1))
+    a3 = next(a for a in out if a["archive"] == "A3")
+    assert a3["n"] == 2
+    assert [m["match_id"] for m in a3["matches"]] == ["2", "1"]          # en yeni önce
+    assert a3["matches"][0]["ft"] == "1-1" and a3["matches"][0]["result"] == "X"
+    assert a3["matches"][1]["similarity"] == 0.99
+    assert next(a for a in out if a["archive"] == "A1")["matches"] == []

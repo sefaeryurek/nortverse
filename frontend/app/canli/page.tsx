@@ -127,16 +127,55 @@ function PredictionPanel({ prediction }: { prediction: LivePrediction }) {
   );
 }
 
+function ArchiveMatchList({ matches }: { matches: NonNullable<LiveArchiveSummary["matches"]> }) {
+  const { t, locale } = useLocale();
+  const p = t.live.prediction;
+  return (
+    <ul className="space-y-1 pl-2 sm:pl-8 pb-1">
+      {matches.map((m) => (
+        <li key={m.match_id}>
+          <Link
+            href={`/analyze/${m.match_id}?home=${encodeURIComponent(m.home_team)}&away=${encodeURIComponent(m.away_team)}`}
+            className="grid items-center gap-2 py-0.5 hover:underline"
+            style={{ gridTemplateColumns: "64px minmax(0,1fr) auto", fontSize: "var(--nv-text-2xs)", fontVariantNumeric: "tabular-nums" }}
+          >
+            <span style={{ color: "var(--nv-text-tertiary)" }}>
+              {m.kickoff_time ? new Date(m.kickoff_time).toLocaleDateString(locale === "en" ? "en-GB" : "tr-TR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}
+            </span>
+            <span className="truncate" style={{ color: "var(--nv-text-secondary)" }}>
+              {m.home_team} - {m.away_team}
+            </span>
+            <span className="flex items-center gap-2" style={{ fontFamily: "var(--nv-font-mono)" }}>
+              <span style={{ color: "var(--nv-text-tertiary)" }}>{t.live.ht} {m.ht}</span>
+              <span className="font-bold" style={{ color: "var(--nv-text-primary)" }}>{t.live.ft} {m.ft}</span>
+              <span className="inline-flex items-center gap-1" style={{ color: "var(--nv-text-primary)" }}>
+                <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: OUTCOME_COLORS[m.result] }} />
+                {m.result}
+              </span>
+              {m.similarity != null && (
+                <span style={{ color: "var(--nv-text-tertiary)" }} title={p.similarity}>%{(m.similarity * 100).toFixed(1)}</span>
+              )}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ArchiveRow({ summary }: { summary: LiveArchiveSummary }) {
   const { t } = useLocale();
   const p = t.live.prediction;
+  const [open, setOpen] = useState(false);
+  const matches = summary.matches ?? [];
   return (
+    <div>
     <div className="flex flex-wrap items-center gap-2 py-1" style={{ fontSize: "var(--nv-text-xs)" }}>
       <span className="font-bold" style={{ width: 28, color: "var(--nv-text-secondary)" }}>{summary.archive}</span>
       <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-tertiary)" }}>
         {p.sample.replace("{n}", String(summary.n))}
       </span>
-      {summary.probs && summary.sufficient ? (
+      {summary.probs ? (
         <span className="flex gap-2" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>
           {OUTCOMES.map((o) => (
             <span key={o}>{o} {pct(summary.probs?.[o])}</span>
@@ -144,9 +183,22 @@ function ArchiveRow({ summary }: { summary: LiveArchiveSummary }) {
         </span>
       ) : (
         <span style={{ color: "var(--nv-text-tertiary)", fontStyle: "italic" }}>
-          {summary.n === 0 ? p.noArchive : p.insufficient}
+          {p.noArchive}
         </span>
       )}
+      {matches.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="ml-auto px-2 py-0.5"
+          style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", border: "1px solid var(--nv-border-subtle)", color: "var(--nv-text-secondary)" }}
+        >
+          {open ? p.hideMatches : p.showMatches.replace("{n}", String(matches.length))}
+        </button>
+      )}
+    </div>
+    {open && <ArchiveMatchList matches={matches} />}
     </div>
   );
 }

@@ -70,14 +70,26 @@ describe("Canlı sayfa", () => {
       ...prediction,
       archives: [
         { archive: "A1", n: 12, sufficient: true, probs: { "1": 0.5, X: 0.25, "2": 0.25 } },
-        { archive: "A3", n: 2, sufficient: false, probs: { "1": 1, X: 0, "2": 0 } },
+        {
+          archive: "A3", n: 2, sufficient: false, probs: { "1": 1, X: 0, "2": 0 },
+          matches: [
+            { match_id: "91", home_team: "Ev FK", away_team: "Dep SK", kickoff_time: "2025-03-01T15:00:00Z",
+              ht: "0-1", ft: "2-1", result: "1", similarity: 0.981 },
+          ],
+        },
       ],
     });
     render(ui());
     expect(getLivePrediction).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Arşiv detayı"));
     expect(getLivePrediction).toHaveBeenCalledWith("3", true);
-    expect(await screen.findByText("yetersiz örneklem")).toBeTruthy();
+    // Az maçlı arşiv de yüzdesiyle gösterilir ("yetersiz örneklem" yok).
+    expect(await screen.findByText("Maçları göster (1)")).toBeTruthy();
+    expect(screen.queryByText("yetersiz örneklem")).toBeNull();
+    fireEvent.click(screen.getByText("Maçları göster (1)"));
+    expect(screen.getByText("Ev FK - Dep SK")).toBeTruthy();
+    expect(screen.getByText("MS 2-1")).toBeTruthy();
+    expect(screen.getByText("%98.1")).toBeTruthy();
   });
 });
 

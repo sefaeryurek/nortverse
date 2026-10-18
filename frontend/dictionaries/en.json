@@ -211,7 +211,10 @@
       "archivesNote": "Secondary information — less reliable than the main prediction because samples are small.",
       "insufficient": "insufficient sample",
       "noArchive": "no matches",
-      "lateNote": "recorded in second half"
+      "lateNote": "recorded in second half",
+      "showMatches": "Show matches ({n})",
+      "hideMatches": "Hide",
+      "similarity": "Similarity (A3)"
     }
   },
   "error": {

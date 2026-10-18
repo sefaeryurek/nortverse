@@ -211,7 +211,10 @@
       "archivesNote": "İkincil bilgi — örneklemi küçük olduğu için ana tahmine göre daha az güvenilir.",
       "insufficient": "yetersiz örneklem",
       "noArchive": "eşleşme yok",
-      "lateNote": "2. yarıda kaydedildi"
+      "lateNote": "2. yarıda kaydedildi",
+      "showMatches": "Maçları göster ({n})",
+      "hideMatches": "Gizle",
+      "similarity": "Benzerlik (A3)"
     }
   },
   "error": {
