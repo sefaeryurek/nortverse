@@ -21,6 +21,12 @@ from app.pipeline import runner
 NOW = datetime(2026, 9, 24, 10, tzinfo=timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def _not_started(monkeypatch):
+    """Bu dosyadaki sahte oturumlar "maç başlamış mı" sorgularını bilmez; koruma ayrı test edilir."""
+    monkeypatch.setattr(prematch_v4, "match_already_started", AsyncMock(return_value=None))
+
+
 def _empty_cond_table(monkeypatch):
     """v4 yakalama lig ortalaması için COND tablosu ister; boş tablo ≈ eşit dağılım."""
     table = CondTable(cutoff=NOW, prior_from=NOW)
@@ -228,3 +234,37 @@ async def test_upsert_after_kickoff_does_not_make_a_snapshot(monkeypatch):
     await runner._upsert(result, raw, {"pattern_ft_b": _pattern()})
 
     assert session.execute.await_count == 1
+
+
+def test_started_evidence_ignores_placeholder_db_kickoff():
+    """DB saati yer tutucu (yarın) olsa bile bültenin güncel kaydı maçın geçtiğini gösteriyorsa kayıt yok."""
+    captured = datetime(2026, 10, 18, 10, 53, tzinfo=timezone.utc)
+    played = datetime(2026, 10, 17, 13, 0, tzinfo=timezone.utc).isoformat()
+    future = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc).isoformat()
+    ev = prematch_v4.started_evidence
+    common = dict(match_id="3026756", captured_at=captured)
+    assert ev(actual_ft_home=None, ht_observed=False, cache_rows=[], **common) is None
+    assert ev(actual_ft_home=1, ht_observed=False, cache_rows=[], **common) == "result_known"
+    assert ev(actual_ft_home=None, ht_observed=True, cache_rows=[], **common) == "ht_observed"
+    rows = [(captured - timedelta(days=2), [{"match_id": "3026756", "kickoff_time": future}]),
+            (captured - timedelta(days=1), [{"match_id": "3026756", "kickoff_time": played}])]
+    assert ev(actual_ft_home=None, ht_observed=False, cache_rows=rows, **common) == "source_kickoff_passed"
+    # Listeden düşmüş (carried) eski kayıt kanıt sayılmaz; en son gerçek kayıt gelecekteyse kayıt yapılır
+    rows = [(captured - timedelta(days=1), [{"match_id": "3026756", "kickoff_time": played, "carried": True}]),
+            (captured - timedelta(days=2), [{"match_id": "3026756", "kickoff_time": future}])]
+    assert ev(actual_ft_home=None, ht_observed=False, cache_rows=rows, **common) is None
+    live = [(captured, [{"match_id": "3026756", "kickoff_time": future, "score_status": "live"}])]
+    assert ev(actual_ft_home=None, ht_observed=False, cache_rows=live, **common) == "source_started"
+
+
+@pytest.mark.asyncio
+async def test_capture_skips_when_match_already_started(monkeypatch):
+    monkeypatch.setattr(prematch_v4, "match_already_started", AsyncMock(return_value="source_kickoff_passed"))
+    _empty_cond_table(monkeypatch)
+    session = AsyncMock()
+    picks, created = await prematch_v4.capture_v4_recommendations(
+        session, match_id="1", analyzed_at=ANALYZED_AT, captured_at=NOW, kickoff_time=NOW + timedelta(hours=5),
+        league_name="English Premier League", league_code="ENG PR", patterns={"pattern_ft_b": _pattern()},
+    )
+    assert (picks, created) == (None, False)
+    session.execute.assert_not_awaited()

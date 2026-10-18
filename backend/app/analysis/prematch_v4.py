@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -24,6 +25,8 @@ from app.analysis.market_catalog import SUMMARY_MARKET_KEYS, get_market
 from app.analysis.persist import hash_string, pattern_hashes
 from app.config import ISTANBUL_TZ
 from app.db.models import AnalysisSnapshot, Match
+
+log = logging.getLogger(__name__)
 
 V4_RULE_VERSION = "ft-display-v4"
 MARKET_SUMMARY_RULE_VERSION = "market-summary-v1"
@@ -197,6 +200,53 @@ def _eligible(analyzed_at: datetime, captured_at: datetime, kickoff_time: dateti
     )
 
 
+def started_evidence(*, actual_ft_home: int | None, ht_observed: bool, cache_rows: list[tuple[datetime, list]],
+                     match_id: str, captured_at: datetime) -> str | None:
+    """Maç zaten başlamış mı? DB'deki başlama saatinden BAĞIMSIZ kanıtlar (o saat yer tutucu olabilir).
+
+    Döner: neden kodu (kayıt yapılmaz) veya None. `cache_rows` = (cached_at, matches_json) — bültenin
+    en son çekilen ve listeden düşmemiş (carried olmayan) kaydı esas alınır.
+    """
+    if actual_ft_home is not None:
+        return "result_known"
+    if ht_observed:
+        return "ht_observed"
+    latest = None
+    for cached_at, items in sorted(cache_rows, key=lambda r: r[0]):
+        for item in items or []:
+            if isinstance(item, dict) and str(item.get("match_id")) == match_id and not item.get("carried"):
+                latest = item
+    if latest is None:
+        return None
+    if latest.get("score_status") in ("live", "finished"):
+        return "source_started"
+    try:
+        kickoff = datetime.fromisoformat(latest["kickoff_time"]) if latest.get("kickoff_time") else None
+    except (TypeError, ValueError):
+        kickoff = None
+    if kickoff is not None and kickoff.tzinfo is not None and kickoff <= captured_at:
+        return "source_kickoff_passed"
+    return None
+
+
+async def match_already_started(session: AsyncSession, match_id: str, captured_at: datetime) -> str | None:
+    from sqlalchemy import exists, text
+
+    from app.db.models import MatchHtObservation
+
+    actual = (await session.execute(select(Match.actual_ft_home).where(Match.match_id == match_id))).scalar()
+    ht_observed = bool((await session.execute(
+        select(exists().where(MatchHtObservation.match_id == match_id))
+    )).scalar())
+    cache_rows = (await session.execute(
+        text("SELECT cached_at, matches_json FROM fixture_cache WHERE matches_json @> CAST(:probe AS jsonb)"),
+        {"probe": json.dumps([{"match_id": match_id}])},
+    )).all()
+    return started_evidence(actual_ft_home=actual, ht_observed=ht_observed,
+                            cache_rows=[(r[0], r[1]) for r in cache_rows],
+                            match_id=match_id, captured_at=captured_at)
+
+
 async def capture_v4_recommendations(
     session: AsyncSession, *, match_id: str, analyzed_at: datetime, captured_at: datetime,
     kickoff_time: datetime | None, league_name: str | None, league_code: str | None,
@@ -204,6 +254,11 @@ async def capture_v4_recommendations(
 ) -> tuple[list[dict] | None, bool]:
     """Maç öncesi kararı bir kez dondurur: ekran listesi + tahmin defteri (aynı transaction)."""
     if not _eligible(analyzed_at, captured_at, kickoff_time, league_name, league_code, patterns):
+        return None, False
+    reason = await match_already_started(session, match_id, captured_at)
+    if reason is not None:
+        # DB saati yer tutucu kalmışken oynanmış maça "maç öncesi" tahmin yazılmasın (3026756 vakası).
+        log.warning("Maç öncesi kayıt atlandı [%s]: maç başlamış görünüyor (%s)", match_id, reason)
         return None, False
     league = canonical_league_name(league_name or league_code or "")
     table = await get_cond_table()
