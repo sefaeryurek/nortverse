@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
-import pytest
 
 from app.config import ISTANBUL_TZ
-from app.api.score_state import MatchState, resolve_match_state, _utc, LIVE_FRESH_SECONDS
+from app.api.score_state import resolve_match_state, _utc, LIVE_FRESH_SECONDS
 from app.scraper.fixture_scores import FixtureScore
 
 

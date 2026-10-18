@@ -1,7 +1,5 @@
 """routes_admin.py yardımcı fonksiyon birim testleri."""
 
-import math
-import pytest
 
 from app.analysis.stats_utils import wilson_ci, paired_coverage_interval
 

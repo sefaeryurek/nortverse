@@ -1,7 +1,6 @@
 """Temporal decay weight hesaplama testleri."""
 
-import math
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app.analysis.pattern_b import _temporal_weights

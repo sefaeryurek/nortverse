@@ -1,6 +1,5 @@
 """Ensemble meta-model testleri (Sprint 81)."""
 
-import math
 import tempfile
 from pathlib import Path
 
@@ -74,7 +73,7 @@ def _training_data(n=200):
     random.seed(42)
     data = []
     for _ in range(n):
-        r = random.choice(["1", "X", "2"])
+        random.choice(["1", "X", "2"])  # tohumlu dizi korunur
         ft_h = random.randint(0, 4)
         ft_a = random.randint(0, 4)
         data.append({

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from app.analysis.evaluation import evaluate_pattern as _evaluate_pattern, pct as _pct
 from app.analysis.league_priors import PriorBook, book_from_counts

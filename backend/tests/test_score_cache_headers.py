@@ -1,6 +1,6 @@
 """Recent score pages need shorter shared cache lifetimes."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 from app.config import ISTANBUL_TZ

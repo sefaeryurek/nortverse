@@ -4,8 +4,13 @@
 DB-side JSONB equality yapar — ayrı integration test gerektirir.
 """
 
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
-from app.analysis.pattern_c import _ratios_match
+import pytest
+
+from app.analysis.pattern_c import _ratios_match, find_pattern_c_adaptive
+from app.analysis.pattern_stats import PatternResult
 
 
 class TestRatiosMatch:
@@ -45,12 +50,7 @@ class TestRatiosMatch:
 # unit test mümkün değil. self-test CLI canlı doğrulama yapar.
 
 
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch, MagicMock
 
-from app.analysis.pattern_c import find_pattern_c_adaptive
-from app.analysis.pattern_stats import PatternResult
 
 
 def _make_pattern_result(match_count: int) -> PatternResult:
