@@ -1,4 +1,9 @@
-"""Günlük değerlendirme endpoint'i — tahmin vs sonuç karşılaştırması."""
+"""Günlük değerlendirme endpoint'i — saklı pattern'lerin sonuçla karşılaştırması.
+
+Saklı pattern'ler kickoff anındaki arşivle hesaplanır (`persist.pattern_as_of`), yani sızıntısızdır;
+ama recompute sonrası "bugünkü algoritma o gün ne derdi" değeridir — o gün gösterilen değil.
+Gerçek performans tahmin defterinden (`/api/performance/*`) ölçülür.
+"""
 
 from __future__ import annotations
 
@@ -86,6 +91,7 @@ async def daily_evaluation(
 
     matches: list[MatchEvaluation] = []
     summary_score_hit = 0
+    score_list_evaluated = 0
 
     acc_b, acc_c, acc_d = EvalAccumulator(), EvalAccumulator(), EvalAccumulator()
 
@@ -122,6 +128,8 @@ async def daily_evaluation(
         acc_c.accumulate(pat_c)
         acc_d.accumulate(pat_d)
 
+        if all_scores:
+            score_list_evaluated += 1
         if score_hit:
             summary_score_hit += 1
 
@@ -160,7 +168,8 @@ async def daily_evaluation(
         btts_hit=acc_b.btts_hit,
         btts_hit_pct=pct(acc_b.btts_hit, acc_b.evaluated),
         score_list_hit=summary_score_hit,
-        score_list_hit_pct=pct(summary_score_hit, total),
+        score_list_hit_pct=pct(summary_score_hit, score_list_evaluated),
+        score_list_evaluated=score_list_evaluated,
         evaluated_c=acc_c.evaluated,
         c_result_hit=acc_c.result_hit,
         c_result_hit_pct=pct(acc_c.result_hit, acc_c.evaluated),

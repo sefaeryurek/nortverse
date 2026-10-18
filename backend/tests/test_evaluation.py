@@ -622,3 +622,43 @@ class TestExtremeValues:
         assert result is not None
         assert result.result_pick == "X"
         assert result.result_hit is True
+
+
+def test_score_list_rate_ignores_matches_without_list(monkeypatch):
+    """Katman A skor listesi olmayan maç paydaya girmez (eskiden tüm maçlara bölünüyordu)."""
+    import asyncio
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from app.api import routes_evaluation
+
+    def row(mid, scores):
+        return SimpleNamespace(
+            match_id=mid, home_team="A", away_team="B", league_code="ENG PR",
+            league_name="English Premier League", kickoff_time=datetime(2026, 10, 1, 15, tzinfo=timezone.utc),
+            actual_ft_home=1, actual_ft_away=0, actual_ht_home=0, actual_ht_away=0,
+            pattern_ft_b=None, pattern_ft_c=None, pattern_ft_d=None,
+            ft_scores_1=scores, ft_scores_x=[], ft_scores_2=[],
+        )
+
+    rows = [row("1", ["1-0"]), row("2", ["2-0"]), row("3", []), row("4", [])]
+
+    class _Result:
+        def all(self):
+            return rows
+
+    class _Session:
+        async def execute(self, _stmt):
+            return _Result()
+
+    @asynccontextmanager
+    async def fake_session():
+        yield _Session()
+
+    monkeypatch.setattr(routes_evaluation, "get_session", fake_session)
+    out = asyncio.run(routes_evaluation.daily_evaluation(target_date="2026-10-01"))
+    assert out.summary.total_matches == 4
+    assert out.summary.score_list_evaluated == 2
+    assert out.summary.score_list_hit == 1
+    assert out.summary.score_list_hit_pct == 50.0

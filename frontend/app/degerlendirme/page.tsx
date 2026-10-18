@@ -408,7 +408,7 @@ async function EvalList({ date, t }: { date: string; t: Dictionary }) {
         <SummaryCard label={t.evaluation.confidentResult} hit={s.confident_result_hit} total={s.confident_evaluated} pct={s.confident_result_hit_pct} />
         <SummaryCard label={t.evaluation.overUnder} hit={s.over_25_hit} total={s.evaluated} pct={s.over_25_hit_pct} />
         <SummaryCard label={t.evaluation.bttsAccuracy} hit={s.btts_hit} total={s.evaluated} pct={s.btts_hit_pct} />
-        <SummaryCard label={t.evaluation.scoreList} hit={s.score_list_hit} total={s.total_matches} pct={s.score_list_hit_pct} />
+        <SummaryCard label={t.evaluation.scoreList} hit={s.score_list_hit} total={s.score_list_evaluated ?? s.total_matches} pct={s.score_list_hit_pct} />
       </div>
 
       {/* Özet kartları — Arşiv 2 (Pattern C) */}

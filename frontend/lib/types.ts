@@ -274,6 +274,8 @@ export interface EvaluationSummary {
   btts_hit_pct: number;
   score_list_hit: number;
   score_list_hit_pct: number;
+  /** Skor listesi olan maç sayısı (yüzdenin paydası). */
+  score_list_evaluated?: number;
   evaluated_c: number;
   c_result_hit: number;
   c_result_hit_pct: number;

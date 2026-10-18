@@ -244,6 +244,7 @@ class EvaluationSummary(BaseModel):
     btts_hit_pct: float = 0.0
     score_list_hit: int = 0
     score_list_hit_pct: float = 0.0
+    score_list_evaluated: int = 0  # Katman A skor listesi olan maçlar (yüzdenin paydası)
     evaluated_c: int = 0
     c_result_hit: int = 0
     c_result_hit_pct: float = 0.0
