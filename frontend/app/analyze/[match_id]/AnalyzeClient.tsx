@@ -20,9 +20,10 @@ const PERIOD_KEYS: Period[] = ["ht", "h2", "ft"];
 
 function patternFor(data: AnalyzeResponse, period: Period) {
   return {
-    b: period === "ht" ? data.ht_b : period === "h2" ? data.h2_b : data.ft_b,
-    c: period === "ht" ? data.ht_c : period === "h2" ? data.h2_c : data.ft_c,
-    d: period === "ht" ? data.ht_d : period === "h2" ? data.h2_d : data.ft_d,
+    // Eski yanıtlarda alan hiç olmayabilir (undefined) — bileşenler null bekler.
+    b: (period === "ht" ? data.ht_b : period === "h2" ? data.h2_b : data.ft_b) ?? null,
+    c: (period === "ht" ? data.ht_c : period === "h2" ? data.h2_c : data.ft_c) ?? null,
+    d: (period === "ht" ? data.ht_d : period === "h2" ? data.h2_d : data.ft_d) ?? null,
   };
 }
 

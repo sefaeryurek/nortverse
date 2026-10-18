@@ -136,3 +136,15 @@ describe("PowerScoreGauge", () => {
     expect(screen.getByText("Çift arşiv onayı")).toBeTruthy();
   });
 });
+
+describe("computePowerScore — A3 şişmesi", () => {
+  it("a small A3 sample (<10) neither adds volume nor counts as an active archive", () => {
+    const data = makeAnalyzeResponse();
+    const b = makePatternResult({ match_count: 20 });
+    const c = makePatternResult({ match_count: 12 });
+    const smallD = makePatternResult({ match_count: 3 });
+    const bigD = makePatternResult({ match_count: 15 });
+    expect(computePowerScore(data, b, c, smallD)).toBe(computePowerScore(data, b, c, null));
+    expect(computePowerScore(data, b, c, bigD)).toBeGreaterThan(computePowerScore(data, b, c, null));
+  });
+});

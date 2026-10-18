@@ -3,6 +3,9 @@
 import type { AnalyzeResponse, PatternResult } from "@/lib/types";
 import { useLocale } from "@/lib/locale-context";
 
+/** Backend prematch_v4.RULE_PARAMS.min_archive_matches ile aynı. */
+export const MIN_ARCHIVE_MATCHES = 10;
+
 export function computePowerScore(
   data: AnalyzeResponse,
   patternB: PatternResult | null,
@@ -22,7 +25,7 @@ export function computePowerScore(
     factors++;
   }
 
-  if (patternD && patternD.match_count > 0) {
+  if (patternD && patternD.match_count >= MIN_ARCHIVE_MATCHES) {
     score += Math.min(15, patternD.match_count);
     factors++;
   }
@@ -47,8 +50,10 @@ export function computePowerScore(
     factors++;
   }
 
+  // Arşiv sayılması için maç öncesi strateji v4 ile aynı eşik: ≥10 eşleşme (A3 neredeyse her maçta
+  // birkaç eşleşme bulduğu için ≥1 eşiği puanı şişiriyordu).
   const activeArchives = [patternB, patternC, patternD].filter(
-    (p) => p && p.match_count >= 1,
+    (p) => p && p.match_count >= MIN_ARCHIVE_MATCHES,
   ).length;
   if (activeArchives >= 3) {
     score += 8;
