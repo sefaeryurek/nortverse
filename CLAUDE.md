@@ -1531,6 +1531,19 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
   2. **Kural değişti → sürüm artar:** `LIVE_RULE_VERSION`, `V4_RULE_VERSION`, `MARKET_SUMMARY_RULE_VERSION`. `prematch_v4.RULE_PARAMS` parmak izi testte sabit (`test_rule_version_fingerprint_is_pinned`) — parametre değişip sürüm artmazsa test kırılır. Pattern algoritması değişince `persist.PATTERN_ALGO_VERSION`.
 - **Sonuç:** 1123 backend + 302 frontend + 28 E2E = **1453 toplam test**
 
+### Sprint 89 — TAMAMLANDI ✅ (Sprint 88 Kalanları: Canlı Deneme Komutu, v3 Temizliği, Tek Kaynak Lig Ortalaması, Kırılımlar)
+- **`live-freeze` (89.1):** canlı dondurma maç beklemeden denenir — argümansız izleyicinin o anki kararını gösterir (yazmaz), `--apply` bir turu gerçekten çalıştırır, `--match ID --ht 1-0` tek maç tahmini (asla yazmaz). `live_ledger.run_tick` izleyiciyle aynı kod. CLI bölündü: `ledger_cmds.py`, `model_cmds.py` (audit_cmds 1090 → 650 satır).
+- **Ölü v3 temizliği (89.2):** `snapshots.py`, `calibration.py`, `calibrate_pattern`, `train-calibrator`, `/api/analysis-validation` kaldırıldı; `capture_prepared_recommendations` → `prematch_v4.py`. DB tabloları ve geçmiş kayıtlar duruyor.
+- **Lig ortalamaları tek kaynak (89.3):** `league_priors.py` — canlı model, v4, Pattern geçmişi, backtest, ensemble aynı formül (gerçek DB'de CondTable ile birebir aynı doğrulandı). Sabit `LEAGUE_BASE_RATES` ve `OVER_25/BTTS_BASE_RATE` kaldırıldı.
+- **Önbellek tazeliği (89.4):** `freshness.ResultsWatch` — A3 havuzu ve COND tablosu yeni sonuç gelince (en fazla 5 dk'da bir kontrol) yenilenir; pipeline ayrı süreçte çalıştığı için sunucu eskiden fark etmiyordu.
+- **Güç skoru A3 şişmesi (89.5)** ve **bülten rozet eşiği (89.7):** arşiv ≥10 maçla sayılır (v4 ile aynı); rozet mantığı `routes_fixture.pattern_status`, test gerçek kodu sınar.
+- **İY gözlemi (89.6):** `update_results` biten maçın İY skorunu `match_ht_observations`'a yazar (`fixture_final`). **live-ms-v2 çıkarılmadı:** isotonic düzeltme test döneminde Brier'ı üç pazarda da kötüleştirdi.
+- **Değerlendirme (89.8):** Canlı İY kırılımları kademe/pazar/lig/hafta; Maç Öncesi kademe/arşiv uyumu/pazar/lig/hafta + Ana Pazar Özeti kazananları bölümü; SVG kalibrasyon grafiği (<30 maçlık kovalar soluk).
+- **Öneri ayar parmak izi (89.9):** v4 seçimi `pattern_hash` ile dondurulur; `AnalyzeResponse.pattern_hash` / `recommendation_pattern_hash` farklıysa Top Picks not düşer. `persist.hash_string` ortak biçim.
+- **`outcomes.py` (89.10):** skor→sonuç ilkeleri tek kaynak (davranış değişmedi, 1200 rastgele karşılaştırma). **Test lint (89.11):** CI ruff `tests/`'i de tarıyordu → temizlendi.
+- **CI notu:** `test_api_regressions.py` `httpx` ister ama `requirements-dev.txt`'te yok → CI pytest adımı bu yüzden kırmızı (Linux konteynerde httpx ile 1067 geçti, 1 atlandı). Ekleme kullanıcı onayı bekliyor.
+- **Sonuç:** 1068 backend + 304 frontend + 28 E2E
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1794,7 +1807,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-18 — Sprint 88 TAMAMLANDI, Local Development)
+## Kaldığımız Yer (2026-10-18 — Sprint 89 TAMAMLANDI, Local Development)
 
 ### ✅ Mevcut Durum — Local Development
 
@@ -1810,14 +1823,14 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 **Eski cloud deployment (Render + Vercel + Neon):** Konfigürasyon korunuyor ama aktif değil.
 
-### Test Durumu (Sprint 88 sonrası)
+### Test Durumu (Sprint 89 sonrası)
 
 | Katman | Araç | Test Sayısı | Durum |
 |---|---|---|---|
-| **Backend** | pytest | 1123 | ✅ Yeşil |
-| **Frontend birim** | vitest | 302 | ✅ Yeşil |
+| **Backend** | pytest | 1068 | ✅ Yeşil (v3/kalibratör testleri kodla birlikte silindi) |
+| **Frontend birim** | vitest | 304 | ✅ Yeşil |
 | **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 1453 | — |
+| **Toplam** | — | 1400 | — |
 
 ### Son Tamamlanan Sprint'ler
 
