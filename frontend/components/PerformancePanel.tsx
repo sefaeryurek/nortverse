@@ -79,15 +79,77 @@ function StatsTable({ title, rows, labelOf, p }: {
   );
 }
 
+const CHART = { w: 320, h: 240, left: 40, right: 12, top: 12, bottom: 36 };
+/** Bu kadar maçtan az kova soluk/boş nokta, çizgiye bağlanmaz (tek maçlık %0/%100 çizgiyi yanıltmasın). */
+const MIN_BUCKET_N = 30;
+
+function CalibrationChart({ buckets, p }: { buckets: PerformanceSummary["calibration"]; p: Perf }) {
+  const plotW = CHART.w - CHART.left - CHART.right;
+  const plotH = CHART.h - CHART.top - CHART.bottom;
+  const x = (pct: number) => CHART.left + (pct / 100) * plotW;
+  const y = (pct: number) => CHART.top + (1 - pct / 100) * plotH;
+  const ticks = [0, 25, 50, 75, 100];
+  const points = buckets.map((b) => ({ ...b, cx: x(b.avg_prob_pct), cy: y(b.hit_pct), solid: b.n >= MIN_BUCKET_N }));
+  const solid = points.filter((pt) => pt.solid);
+  const angle = (-Math.atan2(plotH, plotW) * 180) / Math.PI;
+  return (
+    <svg
+      viewBox={`0 0 ${CHART.w} ${CHART.h}`}
+      role="img"
+      aria-label={p.chartAria}
+      style={{ width: "100%", maxWidth: 420, height: "auto", display: "block", fontVariantNumeric: "tabular-nums" }}
+    >
+      {ticks.map((tk) => (
+        <g key={tk}>
+          <line x1={x(0)} x2={x(100)} y1={y(tk)} y2={y(tk)} stroke="var(--nv-border-subtle)" strokeWidth={1} />
+          <text x={CHART.left - 6} y={y(tk)} dy="0.32em" textAnchor="end" fontSize={10} fill="var(--nv-text-tertiary)">{tk}</text>
+          <text x={x(tk)} y={CHART.h - CHART.bottom + 14} textAnchor="middle" fontSize={10} fill="var(--nv-text-tertiary)">{tk}</text>
+        </g>
+      ))}
+      <line x1={x(0)} y1={y(0)} x2={x(100)} y2={y(100)} stroke="var(--nv-text-tertiary)" strokeWidth={1}>
+        <title>{p.chartDiagonal}</title>
+      </line>
+      {/* Kovalar %30'dan başladığı için köşegenin alt ucu boş — etiket orada, çizgiye paralel */}
+      <text transform={`translate(${x(4)} ${y(4)}) rotate(${angle})`} dy={-5} fontSize={10} fill="var(--nv-text-tertiary)">
+        {p.chartDiagonal}
+      </text>
+      {solid.length > 1 && (
+        <polyline
+          points={solid.map((pt) => `${pt.cx},${pt.cy}`).join(" ")}
+          fill="none" stroke="var(--nv-accent-blue)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+        />
+      )}
+      {points.map((pt) => (
+        <g key={pt.lower}>
+          <title>
+            {p.chartPoint.replace("{low}", String(pt.lower)).replace("{high}", String(pt.upper))
+              .replace("{avg}", pt.avg_prob_pct.toFixed(1)).replace("{hit}", pt.hit_pct.toFixed(1)).replace("{n}", String(pt.n))}
+          </title>
+          <circle cx={pt.cx} cy={pt.cy} r={12} fill="transparent" />
+          {pt.solid ? (
+            <circle cx={pt.cx} cy={pt.cy} r={4.5} fill="var(--nv-accent-blue)" stroke="var(--nv-bg-surface)" strokeWidth={2} />
+          ) : (
+            <circle cx={pt.cx} cy={pt.cy} r={4} fill="var(--nv-bg-surface)" stroke="var(--nv-accent-blue)" strokeWidth={1.5} opacity={0.6} />
+          )}
+        </g>
+      ))}
+      <text x={x(50)} y={CHART.h - 4} textAnchor="middle" fontSize={10} fill="var(--nv-text-secondary)">{p.chartX}</text>
+      <text transform={`translate(10 ${y(50)}) rotate(-90)`} textAnchor="middle" fontSize={10} fill="var(--nv-text-secondary)">{p.chartY}</text>
+    </svg>
+  );
+}
+
 function CalibrationList({ buckets, p }: { buckets: PerformanceSummary["calibration"]; p: Perf }) {
   if (buckets.length === 0) return null;
   return (
     <div className="nv-card p-4 min-w-0">
       <h3 className="font-semibold mb-1" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>{p.calibrationTitle}</h3>
       <p className="mb-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>{p.calibrationHint}</p>
-      <div className="space-y-1.5">
+      <div className="grid gap-4 lg:grid-cols-2 items-center">
+        <CalibrationChart buckets={buckets} p={p} />
+        <div className="space-y-1.5 min-w-0">
         {buckets.map((b) => (
-          <div key={b.lower} className="grid items-center gap-2" style={{ gridTemplateColumns: "64px 1fr 92px", fontSize: "var(--nv-text-xs)", fontVariantNumeric: "tabular-nums" }}>
+          <div key={b.lower} className="grid items-center gap-2" style={{ gridTemplateColumns: "64px 1fr 92px", fontSize: "var(--nv-text-xs)", fontVariantNumeric: "tabular-nums", opacity: b.n >= MIN_BUCKET_N ? 1 : 0.55 }}>
             <span style={{ color: "var(--nv-text-tertiary)" }}>{p.bucket.replace("{low}", String(b.lower)).replace("{high}", String(b.upper))}</span>
             <div style={{ position: "relative", height: 8, borderRadius: 4, backgroundColor: "var(--nv-bg-elevated)" }}>
               <div style={{ width: `${b.hit_pct}%`, height: "100%", borderRadius: 4, backgroundColor: "var(--nv-accent-blue)" }} />
@@ -98,6 +160,7 @@ function CalibrationList({ buckets, p }: { buckets: PerformanceSummary["calibrat
             </span>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );
@@ -105,13 +168,19 @@ function CalibrationList({ buckets, p }: { buckets: PerformanceSummary["calibrat
 
 type GroupSpec = { key: string; title: string; labelOf: (key: string) => string };
 
-function groupSpecs(keys: string[], p: Perf): GroupSpec[] {
+function groupSpecs(keys: readonly string[], p: Perf): GroupSpec[] {
   const lookup = (prefix: string, k: string) => (p as Record<string, string>)[`${prefix}_${k}`] ?? k;
   const specs: Record<string, GroupSpec> = {
     tier: { key: "tier", title: p.byTier, labelOf: (k) => lookup("tier", k) },
     market: { key: "market", title: p.byMarket, labelOf: (k) => marketLabel(k, p) },
     league: { key: "league", title: p.byLeague, labelOf: (k) => k },
     archive: { key: "archive", title: p.byArchive, labelOf: (k) => lookup("archive", k) },
+    agreement: {
+      key: "agreement",
+      title: p.byAgreement,
+      labelOf: (k) => (k === "-" ? p.agreement_none : p.agreement_label.replace("{n}", k)),
+    },
+    week: { key: "week", title: p.byWeek, labelOf: (k) => k },
     period_market: {
       key: "period_market",
       title: p.byPeriodMarket,
@@ -177,11 +246,17 @@ function SummaryBody({ summary, t, headline, groups }: {
   );
 }
 
-export async function PerformanceOverview({ source, t }: { source: PredictionSource; t: Dictionary }) {
+export async function PerformanceOverview({ source, t, groups = ["tier", "market"], title, hint }: {
+  source: PredictionSource;
+  t: Dictionary;
+  groups?: readonly string[];
+  title?: string;
+  hint?: string;
+}) {
   const p = t.evaluation.perf;
   let summary: PerformanceSummary;
   try {
-    summary = await getPerformanceSummary(source);
+    summary = await getPerformanceSummary(source, groups.join(","));
   } catch {
     return <LoadError t={t} />;
   }
@@ -193,7 +268,15 @@ export async function PerformanceOverview({ source, t }: { source: PredictionSou
       </div>
     );
   }
-  return <SummaryBody summary={summary} t={t} headline={p.allTime} groups={groupSpecs(["tier", "market"], p)} />;
+  const body = <SummaryBody summary={summary} t={t} headline={p.allTime} groups={groupSpecs(groups, p)} />;
+  if (!title) return body;
+  return (
+    <section className="space-y-2">
+      <h2 className="font-semibold" style={{ fontSize: "var(--nv-text-base)", color: "var(--nv-text-primary)" }}>{title}</h2>
+      {hint && <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{hint}</p>}
+      {body}
+    </section>
+  );
 }
 
 const STRATEGY_ORDER: PredictionSource[] = ["live_ht", "top_pick", "market_summary"];

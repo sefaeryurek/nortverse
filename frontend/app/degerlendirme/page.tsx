@@ -511,6 +511,10 @@ interface Props {
 const TABS = ["canli", "mac-oncesi", "backtest", "pattern"] as const;
 type Tab = (typeof TABS)[number];
 const TAB_SOURCE = { canli: "live_ht", "mac-oncesi": "top_pick" } as const;
+const TAB_GROUPS = {
+  canli: ["tier", "market", "league", "week"],
+  "mac-oncesi": ["tier", "agreement", "market", "league", "week"],
+} as const satisfies Record<keyof typeof TAB_SOURCE, readonly string[]>;
 
 function resolveTab(raw: string | string[] | undefined): Tab {
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -626,11 +630,22 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
         ) : (
           <div className="grid gap-4 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
             <Suspense fallback={<EvalSkeleton />}>
-              <PerformanceOverview source={TAB_SOURCE[tab]} t={t} />
+              <PerformanceOverview source={TAB_SOURCE[tab]} t={t} groups={TAB_GROUPS[tab]} />
             </Suspense>
             <Suspense fallback={<EvalSkeleton />}>
               <PredictionDayList source={TAB_SOURCE[tab]} day={date} t={t} />
             </Suspense>
+            {tab === "mac-oncesi" && (
+              <Suspense fallback={<EvalSkeleton />}>
+                <PerformanceOverview
+                  source="market_summary"
+                  t={t}
+                  groups={["archive", "period_market"]}
+                  title={t.evaluation.perf.marketSummaryTitle}
+                  hint={t.evaluation.perf.marketSummaryHint}
+                />
+              </Suspense>
+            )}
           </div>
         )}
       </div>

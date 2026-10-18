@@ -19,6 +19,7 @@ GROUP_FIELDS = {
     "period": lambda r: r["period"],
     "period_market": lambda r: f'{r["period"]}:{r["market"]}',
     "archive": lambda r: r.get("archive") or "-",
+    "agreement": lambda r: "-" if r.get("agreement") is None else str(r["agreement"]),
     "informational": lambda r: "info" if r.get("informational") else "main",
     "week": lambda r: _iso_week(r["kickoff_time"]),
     "day": lambda r: r["kickoff_time"].astimezone(ISTANBUL_TZ).date().isoformat(),

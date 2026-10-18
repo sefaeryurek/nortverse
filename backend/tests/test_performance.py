@@ -71,3 +71,12 @@ def test_period_market_group_key():
     rows = [{"period": "ht", "market": "kg", "outcome": "hit", "prob_shown_bp": 7000,
              "kickoff_time": datetime(2026, 1, 1, tzinfo=timezone.utc)}]
     assert group_summaries(rows, "period_market")[0]["key"] == "ht:kg"
+
+
+def test_agreement_group_key():
+    from datetime import datetime, timezone
+    from app.analysis.performance import group_summaries
+    base = {"period": "ft", "market": "result", "outcome": "hit", "prob_shown_bp": 5000,
+            "kickoff_time": datetime(2026, 1, 1, tzinfo=timezone.utc)}
+    keys = {g["key"] for g in group_summaries([{**base, "agreement": 3}, {**base, "agreement": None}], "agreement")}
+    assert keys == {"3", "-"}

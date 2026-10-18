@@ -24,7 +24,7 @@ Informational = Literal["all", "main", "info"]
 _LEDGER_SQL = """
     SELECT l.id, l.source, l.rule_version, l.match_id, l.league_name, l.kickoff_time, l.recorded_at,
            l.period, l.market, l.selection, l.archive, l.prob_shown_bp, l.confidence_tier,
-           l.informational, l.sample_n, l.baseline_selection, l.ht_home, l.ht_away, l.details,
+           l.informational, l.sample_n, l.agreement, l.baseline_selection, l.ht_home, l.ht_away, l.details,
            l.outcome, l.res_ft_home, l.res_ft_away, l.res_ht_home, l.res_ht_away,
            m.home_team, m.away_team
     FROM prediction_ledger_resolved l

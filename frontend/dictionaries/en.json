@@ -158,7 +158,18 @@
       "market_hnd_a10": "Hnd (0:1)",
       "market_hnd_h10": "Hnd (1:0)",
       "market_ms_25_combo": "FT + 2.5",
-      "market_fark": "Margin"
+      "market_fark": "Margin",
+      "byAgreement": "By archive agreement",
+      "byWeek": "By week",
+      "agreement_label": "{n}/3 archives agree",
+      "agreement_none": "No agreement info",
+      "marketSummaryTitle": "Market Summary winners",
+      "marketSummaryHint": "Each archive's top selection per market (no threshold) — measured only, not a recommendation.",
+      "chartX": "Shown probability",
+      "chartY": "Observed hit rate",
+      "chartDiagonal": "Perfect calibration",
+      "chartPoint": "{low}–{high}% bucket: shown avg {avg}%, observed {hit}% (n={n})",
+      "chartAria": "Calibration chart: shown probability vs observed hit rate; the diagonal is perfect calibration."
     }
   },
   "live": {

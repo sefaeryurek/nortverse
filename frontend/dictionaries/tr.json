@@ -158,7 +158,18 @@
       "market_hnd_a10": "Hnd (0:1)",
       "market_hnd_h10": "Hnd (1:0)",
       "market_ms_25_combo": "MS + 2.5",
-      "market_fark": "Fark"
+      "market_fark": "Fark",
+      "byAgreement": "Arşiv uyumuna göre",
+      "byWeek": "Haftaya göre",
+      "agreement_label": "{n}/3 arşiv aynı yönde",
+      "agreement_none": "Uyum bilgisi yok",
+      "marketSummaryTitle": "Ana Pazar Özeti kazananları",
+      "marketSummaryHint": "Her arşivin her pazardaki en yüksek seçimi (eşik yok) — sadece ölçülür, tavsiye değildir.",
+      "chartX": "Gösterilen olasılık",
+      "chartY": "Gerçekleşen isabet",
+      "chartDiagonal": "Mükemmel kalibrasyon",
+      "chartPoint": "%{low}–{high} kovası: gösterilen ort. %{avg}, gerçekleşen %{hit} (n={n})",
+      "chartAria": "Kalibrasyon grafiği: gösterilen olasılık ile gerçekleşen isabet; köşegen mükemmel kalibrasyonu gösterir."
     }
   },
   "live": {
