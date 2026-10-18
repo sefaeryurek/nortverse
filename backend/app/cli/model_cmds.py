@@ -1,4 +1,4 @@
-"""Model/değerlendirme komutları: eski pattern backtest'i, ensemble ve kalibratör eğitimi."""
+"""Model/değerlendirme komutları: pattern backtest'i ve ensemble eğitimi."""
 
 import asyncio
 
@@ -297,95 +297,5 @@ def train_ensemble_cmd(
         model_path = Path(output)
         save_models(models, model_path)
         console.print(f"[green]Model kaydedildi: {model_path} ({models.training_size} maç ile eğitildi)[/green]")
-
-    asyncio.run(_run())
-
-
-def train_calibrator_cmd(
-    from_date: str = typer.Option(..., "--from", help="Eğitim başlangıç tarihi (YYYY-MM-DD)"),
-    to_date: str = typer.Option(..., "--to", help="Eğitim bitiş tarihi (YYYY-MM-DD)"),
-    min_matches: int = typer.Option(5, "--min-matches", help="Pattern en az N eşleşme"),
-    output: str = typer.Option("models/calibrator.joblib", "--output", "-o", help="Model dosya yolu"),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
-) -> None:
-    """Isotonic regression ile confidence kalibratörü eğit."""
-    _setup_logging("DEBUG" if verbose else "INFO")
-
-    from datetime import date, datetime, timedelta
-    from pathlib import Path
-    from sqlalchemy import select
-    from app.analysis.calibration import train_calibrator, save_calibrator
-    from app.config import ISTANBUL_TZ
-    from app.db.connection import get_session
-    from app.db.models import Match
-
-    try:
-        d_from = date.fromisoformat(from_date)
-        d_to = date.fromisoformat(to_date)
-    except ValueError:
-        console.print("[red]Geçersiz tarih formatı. Kullanım: YYYY-MM-DD[/red]")
-        raise typer.Exit(1)
-
-    if d_from > d_to:
-        console.print("[red]--from tarihi --to'dan sonra olamaz.[/red]")
-        raise typer.Exit(1)
-
-    async def _run() -> None:
-        start = datetime(d_from.year, d_from.month, d_from.day, tzinfo=ISTANBUL_TZ)
-        end = datetime(d_to.year, d_to.month, d_to.day, tzinfo=ISTANBUL_TZ) + timedelta(days=1)
-
-        async with get_session() as session:
-            stmt = (
-                select(
-                    Match.match_id, Match.league_name,
-                    Match.actual_ft_home, Match.actual_ft_away,
-                    Match.pattern_ft_b, Match.pattern_ft_c, Match.pattern_ft_d,
-                )
-                .where(
-                    Match.deleted_at.is_(None),
-                    Match.kickoff_time >= start,
-                    Match.kickoff_time < end,
-                    Match.actual_ft_home.isnot(None),
-                    Match.actual_ft_away.isnot(None),
-                )
-                .order_by(Match.kickoff_time)
-            )
-            rows = (await session.execute(stmt)).all()
-
-        if not rows:
-            console.print(f"[yellow]{d_from} — {d_to} aralığında bitmiş maç yok.[/yellow]")
-            return
-
-        training_data = []
-        for row in rows:
-            ft_h, ft_a = row.actual_ft_home, row.actual_ft_away
-            if ft_h > ft_a:
-                actual_result = "1"
-            elif ft_h == ft_a:
-                actual_result = "X"
-            else:
-                actual_result = "2"
-
-            training_data.append({
-                "pattern_ft_b": row.pattern_ft_b,
-                "pattern_ft_c": row.pattern_ft_c,
-                "pattern_ft_d": row.pattern_ft_d,
-                "actual_result": actual_result,
-                "actual_over_25": (ft_h + ft_a) > 2,
-                "actual_btts": ft_h > 0 and ft_a > 0,
-                "league_name": row.league_name,
-            })
-
-        console.print(f"[cyan]Eğitim verisi: {len(training_data)} maç ({d_from} → {d_to})[/cyan]")
-
-        try:
-            models = train_calibrator(training_data, min_matches_per_pattern=min_matches)
-        except ValueError as e:
-            console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1)
-
-        model_path = Path(output)
-        save_calibrator(models, model_path)
-        console.print(f"[green]Kalibratör kaydedildi: {model_path} ({models.training_size} veri noktasıyla eğitildi)[/green]")
 
     asyncio.run(_run())

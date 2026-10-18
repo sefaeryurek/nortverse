@@ -246,7 +246,14 @@ nortverse/
 │   │   │   ├── repair.py          # detect_issues + needs_normalization — tarihsel veri onarımı (Sprint 20)
 │   │   │   ├── score_snapshots.py # Skor snapshot yönetimi
 │   │   │   ├── skip_cache.py      # Atlanan maç cache'i
-│   │   │   ├── snapshots.py       # Analiz snapshot'ları
+│   │   │   ├── prematch_v4.py     # Maç öncesi strateji v4 + karar dondurma (Sprint 88)
+│   │   │   ├── live_model.py      # Canlı İY→MS modeli COND×LR (Sprint 88)
+│   │   │   ├── ledger.py          # Tahmin defteri yazımı + tuttu/tutmadı çözümü (Sprint 88)
+│   │   │   ├── market_catalog.py  # Pazar kataloğu (confidence.ts MARKETS karşılığı) (Sprint 88)
+│   │   │   ├── market_resolver.py # Tek sonuç çözücü (Sprint 88)
+│   │   │   ├── backtest.py        # Sızıntısız backtest: canlı + maç öncesi (Sprint 88)
+│   │   │   ├── performance.py     # Kazanma %, güven aralığı, kalibrasyon özetleri (Sprint 88)
+│   │   │   ├── stats_utils.py     # wilson_ci, örneklem kademesi (Sprint 88)
 │   │   │   └── trends.py          # compute_trends — form & H2H trend verileri (Sprint 8.8)
 │   │   ├── api/
 │   │   │   ├── main.py            # FastAPI hub — router include, lifespan, CORS, middleware (Sprint 22)
@@ -259,7 +266,9 @@ nortverse/
 │   │   │   ├── routes_evaluation.py # /api/evaluation — günlük tahmin vs sonuç karşılaştırması (Sprint 37)
 │   │   │   ├── routes_live_ht.py  # /api/live-ht + /ws/live-ht — canlı İY eşleşme + WebSocket (Sprint 47+82)
 │   │   │   ├── score_state.py     # Skor durumu yönetimi
-│   │   │   └── live_snapshot.py   # Canlı snapshot endpoint
+│   │   │   ├── live_snapshot.py   # Canlı snapshot endpoint
+│   │   │   ├── live_ledger.py     # Devre arasında canlı tahmin dondurma izleyicisi (Sprint 88)
+│   │   │   └── routes_performance.py # /api/performance/* — defter + backtest özetleri (Sprint 88)
 │   │   ├── pipeline/
 │   │   │   └── runner.py          # run_pipeline + update_results: fetch → analiz → upsert
 │   │   └── cli/
@@ -268,7 +277,7 @@ nortverse/
 │   │       ├── pipeline_cmds.py   # analyze, fetch-fixture, run-pipeline, serve (Sprint 21)
 │   │       ├── archive_cmds.py    # build-archive, repair-archive, normalize-leagues (Sprint 21)
 │   │       ├── audit_cmds.py      # audit-db, self-test, prune-non-league, recompute-patterns (Sprint 21)
-│       ├── model_cmds.py      # backtest (pattern), train-ensemble, train-calibrator (Sprint 76+81+83)
+│       ├── model_cmds.py      # backtest (pattern), train-ensemble (Sprint 76+81)
 │       └── ledger_cmds.py     # live-freeze, backtest-ledger — tahmin defteri (Sprint 88)
 │   ├── alembic/                   # DB migration (15 migration)
 │   ├── tests/                     # 936 test
@@ -1458,7 +1467,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Testler:** 7 yeni `_ConnectionManager` testi (connect, disconnect, broadcast, dead cleanup)
 - **Type fix'ler:** Sprint 80'den kalan FTRecommendation test fixture eksiklikleri düzeltildi
 
-### Sprint 83 — TAMAMLANDI ✅ (Isotonic Regression Confidence Kalibrasyonu)
+### Sprint 83 — TAMAMLANDI ✅ (Isotonic Regression Confidence Kalibrasyonu — Sprint 89'da kaldırıldı, v4 yapısı gereği kalibre)
 - **Bağlam:** Confidence skoru olasılık olarak yorumlanmamalıydı — Platt scaling / isotonic regression ile gerçek olasılığa kalibre edildi
 - **Backend `evaluation.py`:** Shrunk yüzdeler gerçek olasılığa dönüştürülüyor
 

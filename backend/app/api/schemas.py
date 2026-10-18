@@ -31,53 +31,6 @@ class AnalysisEvidence(BaseModel):
     minimum_for_rate: int = 100
 
 
-class MarketValidationV3(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-
-    market: str
-
-    opportunities: int
-    issued: int
-    abstained: int
-    resolved_issued: int
-
-    coverage: float | None = None
-    coverage_ci_low: float | None = None
-    coverage_ci_high: float | None = None
-
-    paired: int
-    both_hit: int
-    model_only: int
-    baseline_only: int
-    neither: int
-
-    model_hit_rate: float | None = None
-    model_hit_rate_ci_low: float | None = None
-    model_hit_rate_ci_high: float | None = None
-    baseline_hit_rate: float | None = None
-    baseline_hit_rate_ci_low: float | None = None
-    baseline_hit_rate_ci_high: float | None = None
-    paired_difference: float | None = None
-
-    avg_published_frequency: float | None = None
-    observed_hit_rate: float | None = None
-    calibration_gap: float | None = None
-
-    selected_event_brier: float | None = None
-
-    display_tier: str
-
-
-class AnalysisValidationV3(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-
-    rule_version: str
-    baseline_version: str
-    total_snapshots: int
-    markets: list[MarketValidationV3]
-    brier_note: str
-
-
 class ScoreValidation(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 

@@ -405,7 +405,7 @@ def capture_recommendations_cmd(
     target_date: str = typer.Option(..., "--date", help="YYYY-MM-DD (İstanbul günü)"),
 ) -> None:
     """Hazır analizlerin ölçülecek FT seçimlerini maç başlamadan sabitle."""
-    from app.analysis.snapshots import capture_prepared_recommendations
+    from app.analysis.prematch_v4 import capture_prepared_recommendations
 
     day = datetime.strptime(target_date, "%Y-%m-%d").date()
     count = asyncio.run(capture_prepared_recommendations(day))

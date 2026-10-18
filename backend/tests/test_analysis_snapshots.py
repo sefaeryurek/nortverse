@@ -1,6 +1,8 @@
+"""Maç öncesi (v4) kararın bir kez dondurulması: hazır maçlar, DB-first analiz, önbellek ve upsert yolları."""
+
 from collections import OrderedDict
-from datetime import date, datetime, timedelta, timezone
 from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -9,27 +11,12 @@ from sqlalchemy.dialects import postgresql
 
 from app.analysis import analyze_match
 from app.analysis import persist
-from app.analysis import snapshots
-from app.analysis.snapshots import (
-    BASELINE_VERSION,
-    MIN_BASELINE_MATCHES,
-    RULE_VERSION,
-    V3_ACTIVATION_CUTOFF,
-    V3_RULE_VERSION,
-    build_ft_recommendations,
-    build_market_evaluation_rows,
-    capture_v3_recommendations,
-    load_market_baselines,
-    prekickoff_picks,
-)
 from app.analysis import prematch_v4
 from app.analysis.live_model import CondTable
-from app.api import routes_admin
 from app.api import services
 from app.db.models import Match
 from app.models import MatchRawData
 from app.pipeline import runner
-
 
 NOW = datetime(2026, 9, 24, 10, tzinfo=timezone.utc)
 
@@ -53,268 +40,14 @@ def _pattern(count=30, result_1=70, over=68, btts=66):
         "kg_var_pct": btts, "kg_yok_pct": 100 - btts,
     }
 
-
-def test_fixed_rule_captures_only_qualifying_market_choices():
-    picks = prekickoff_picks(
-        analyzed_at=NOW, captured_at=NOW + timedelta(minutes=1), kickoff_time=NOW + timedelta(hours=2),
-        league_name="Dutch Eredivisie",
-        patterns={"pattern_ft_b": _pattern(), "pattern_ft_c": _pattern(count=1)},
-    )
-
-    assert RULE_VERSION == "ft-display-v3"
-    assert [(p["archive"], p["market"], p["selection"]) for p in picks] == [
-        ("archive_1", "result", "1"),
-    ]
-    assert all(p["match_count"] == 30 for p in picks)
-
-
-def test_ou_btts_single_archive_filtered():
-    """Tekli arşivde O/U ve BTTS sinyal verilmez."""
-    picks = build_ft_recommendations({
-        "pattern_ft_b": _pattern(count=30, over=80, btts=80),
-    })
-    markets = [p["market"] for p in picks]
-    assert "result" in markets
-    assert "over_25" not in markets
-    assert "btts" not in markets
-
-
-def test_ou_btts_dual_archive_allowed():
-    """Her iki arşiv uyumluysa O/U ve BTTS sinyal verilir."""
-    picks = build_ft_recommendations({
-        "pattern_ft_b": _pattern(count=30, over=80, btts=80),
-        "pattern_ft_c": _pattern(count=25, over=75, btts=70),
-    })
-    markets = [p["market"] for p in picks]
-    assert "result" in markets
-    assert "over_25" in markets
-    assert "btts" in markets
-    assert all("+" in p["archive"] for p in picks if p["market"] in ("over_25", "btts"))
-
-
-def test_ineligible_analysis_never_creates_a_snapshot():
-    args = dict(analyzed_at=NOW, captured_at=NOW + timedelta(minutes=1), kickoff_time=NOW + timedelta(hours=2),
-                league_name="Dutch Eredivisie", patterns={"pattern_ft_b": _pattern()})
-    assert prekickoff_picks(**{**args, "kickoff_time": NOW}) is None
-    assert prekickoff_picks(**{**args, "kickoff_time": None}) is None
-    assert prekickoff_picks(**{**args, "league_name": "Netherlands KNVB Beker"}) is None
-    assert prekickoff_picks(**{**args, "league_name": "Netherlands KNVB Beker", "league_code": "HOL D1"}) is None
-    assert prekickoff_picks(**{**args, "patterns": None}) is None
-
-
-def test_eligible_analysis_without_a_pick_is_still_recorded():
-    assert prekickoff_picks(
-        analyzed_at=NOW, captured_at=NOW + timedelta(minutes=1), kickoff_time=NOW + timedelta(hours=2),
-        league_name="Dutch Eredivisie",
-        patterns={"pattern_ft_b": _pattern(result_1=40, over=52, btts=50)},
-    ) == []
-
-
-@pytest.mark.asyncio
-async def test_global_modal_baselines_are_deterministic_on_ties():
-    session = AsyncMock()
-    # total; result 1/X/2; under/over; btts yes/no
-    session.execute.return_value = MagicMock(
-        one=lambda: (100, 40, 40, 20, 50, 50, 50, 50),
-    )
-
-    baselines = await load_market_baselines(session, NOW)
-
-    assert V3_RULE_VERSION == "ft-display-v3"
-    assert BASELINE_VERSION == "global-modal-v1"
-    assert MIN_BASELINE_MATCHES == 100
-    assert baselines == {
-        "result": {
-            "selection": "1", "score_bp": 4000, "sample_size": 100,
-            "scope": "global_supported_leagues",
-        },
-        "over_25": {
-            "selection": "under", "score_bp": 5000, "sample_size": 100,
-            "scope": "global_supported_leagues",
-        },
-        "btts": {
-            "selection": "yes", "score_bp": 5000, "sample_size": 100,
-            "scope": "global_supported_leagues",
-        },
-    }
-    assert session.execute.await_count == 1
-    query = str(session.execute.await_args.args[0].compile(
-        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
-    ))
-    assert "match_final_result_observations" in query
-    assert "row_number() OVER (PARTITION BY" in query
-    assert "ingested_at <= '2026-09-24 10:00:00+00:00'" in query
-    # DB ingestion time is the authoritative knowledge cutoff; source clocks may skew.
-    assert "actual_ft_home" not in query
-    assert "actual_ft_away" not in query
-    assert "matches.deleted_at IS NULL" in query
-    assert "matches.kickoff_time" in query
-    assert query.count("!= '?'") == 2
-
-
-@pytest.mark.asyncio
-async def test_global_modal_baselines_are_withheld_for_short_archive():
-    session = AsyncMock()
-    session.execute.return_value = MagicMock(
-        one=lambda: (99, 40, 30, 29, 48, 51, 50, 49),
-    )
-
-    assert await load_market_baselines(session, NOW) == {
-        "result": None, "over_25": None, "btts": None,
-    }
-
-
-@pytest.mark.asyncio
-async def test_global_modal_baselines_require_timezone_aware_cutoff():
-    session = AsyncMock()
-
-    with pytest.raises(ValueError, match="timezone-aware"):
-        await load_market_baselines(session, NOW.replace(tzinfo=None))
-
-    session.execute.assert_not_awaited()
-
-
-def test_market_evaluation_rows_record_abstention_for_every_market():
-    rows = build_market_evaluation_rows(
-        {"pattern_ft_b": _pattern(count=5)}, baselines=None,
-    )
-
-    assert [row["market"] for row in rows] == ["result", "over_25", "btts"]
-    assert all(row["model_selection"] is None for row in rows)
-    assert all(row["abstain_reason"] == "archive_sample_below_minimum" for row in rows)
-    assert all(row["baseline_selection"] is None for row in rows)
-
-
-@pytest.mark.parametrize(
-    ("patterns", "reason"),
-    [
-        (None, "patterns_unavailable"),
-        (
-            {"pattern_ft_b": _pattern(result_1=40, over=52, btts=50)},
-            "frequency_below_threshold",
-        ),
-    ],
-)
-def test_market_evaluation_rows_explain_other_abstentions(patterns, reason):
-    rows = build_market_evaluation_rows(patterns, baselines=None)
-
-    assert len(rows) == 3
-    assert {row["abstain_reason"] for row in rows} == {reason}
-
-
-def test_market_baseline_does_not_change_model_selection():
-    baselines = {
-        "result": {
-            "selection": "2", "score_bp": 4200, "sample_size": 500,
-            "scope": "global_supported_leagues",
-        },
-    }
-
-    rows = build_market_evaluation_rows(
-        {"pattern_ft_b": _pattern()}, baselines,
-    )
-
-    result = rows[0]
-    assert result == {
-        "market": "result",
-        "model_selection": "1",
-        "model_score_bp": 7000,
-        "model_sample_size": 30,
-        "model_source": "archive_1",
-        "baseline_selection": "2",
-        "baseline_score_bp": 4200,
-        "baseline_sample_size": 500,
-        "baseline_scope": "global_supported_leagues",
-        "abstain_reason": None,
-    }
-
-
-def test_market_evaluation_rows_explain_archive_disagreement():
-    first = _pattern()
-    second = {
-        **_pattern(), "result_1_pct": 10, "result_x_pct": 20, "result_2_pct": 70,
-    }
-
-    rows = build_market_evaluation_rows(
-        {"pattern_ft_b": first, "pattern_ft_c": second}, baselines=None,
-    )
-
-    assert rows[0]["model_selection"] is None
-    assert rows[0]["abstain_reason"] == "archive_disagreement"
-
-
-def test_v3_capture_rejects_analysis_before_activation_cutoff():
-    assert prekickoff_picks(
-        analyzed_at=V3_ACTIVATION_CUTOFF - timedelta(microseconds=1),
-        captured_at=V3_ACTIVATION_CUTOFF + timedelta(minutes=1),
-        kickoff_time=V3_ACTIVATION_CUTOFF + timedelta(hours=1),
-        league_name="English Premier League",
-        patterns={"pattern_ft_b": _pattern()},
-    ) is None
-
-
-@pytest.mark.asyncio
-async def test_v3_capture_winner_writes_header_and_all_markets_once(monkeypatch):
-    session = AsyncMock()
-    session.execute.side_effect = [MagicMock(rowcount=1), MagicMock(rowcount=3)]
-    baselines = {"result": None, "over_25": None, "btts": None}
-    load_baselines = AsyncMock(return_value=baselines)
-    monkeypatch.setattr("app.analysis.snapshots.load_market_baselines", load_baselines)
-
-    picks, created = await capture_v3_recommendations(
-        session,
-        match_id="123",
-        analyzed_at=NOW,
-        captured_at=NOW + timedelta(minutes=1),
-        kickoff_time=NOW + timedelta(hours=2),
-        league_name="English Premier League",
-        league_code="ENG PR",
-        patterns={"pattern_ft_b": _pattern(count=5)},
-    )
-
-    assert created is True
-    assert picks == []
-    assert load_baselines.await_count == 1
-    header = session.execute.await_args_list[0].args[0]
-    header_params = header.compile(dialect=postgresql.dialect()).params
-    assert header_params["rule_version"] == V3_RULE_VERSION
-    assert header_params["baseline_version"] == BASELINE_VERSION
-    market_params = session.execute.await_args_list[1].args[1]
-    assert [row["market"] for row in market_params] == ["result", "over_25", "btts"]
-    assert all(row["model_selection"] is None for row in market_params)
-
-
-@pytest.mark.asyncio
-async def test_v3_capture_conflict_returns_frozen_picks_without_loading_baseline(monkeypatch):
-    frozen = build_ft_recommendations({"pattern_ft_b": _pattern()})
-    session = AsyncMock()
-    session.execute.return_value = MagicMock(rowcount=0)
-    session.get.return_value = MagicMock(picks=frozen)
-    load_baselines = AsyncMock()
-    monkeypatch.setattr("app.analysis.snapshots.load_market_baselines", load_baselines)
-
-    picks, created = await capture_v3_recommendations(
-        session,
-        match_id="123",
-        analyzed_at=NOW,
-        captured_at=NOW + timedelta(minutes=1),
-        kickoff_time=NOW + timedelta(hours=2),
-        league_name="English Premier League",
-        league_code="ENG PR",
-        patterns={"pattern_ft_b": _pattern()},
-    )
-
-    assert created is False
-    assert picks == frozen
-    assert session.execute.await_count == 1
-    load_baselines.assert_not_awaited()
+ANALYZED_AT = datetime(2026, 9, 24, 9, tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio
 async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatch):
     prepared = SimpleNamespace(
         match_id="prepared-1",
-        analyzed_at=V3_ACTIVATION_CUTOFF,
+        analyzed_at=ANALYZED_AT,
         kickoff_time=datetime(2099, 1, 1, 18, tzinfo=timezone.utc),
         league_name="English Premier League",
         league_code="ENG PR",
@@ -344,10 +77,10 @@ async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatc
     monkeypatch.setattr(persist, "update_match_patterns", write)
     _empty_cond_table(monkeypatch)
 
-    count = await snapshots.capture_prepared_recommendations(date(2099, 1, 1))
+    count = await prematch_v4.capture_prepared_recommendations(date(2099, 1, 1))
 
     assert count == 1
-    assert compute.await_args.kwargs["as_of"] == V3_ACTIVATION_CUTOFF
+    assert compute.await_args.kwargs["as_of"] == ANALYZED_AT
     write.assert_awaited_once()  # ekran ile dondurulan seçim aynı pattern'den
     calls = capture_session.execute.await_args_list
     assert "INSERT INTO analysis_snapshots" in _sql(calls[1])
@@ -366,7 +99,7 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
     monkeypatch.setattr(services, "get_session", fake_session)
     row = Match(
         match_id="123", home_team="Home", away_team="Away", league_code="ENG PR",
-        league_name="English Premier League", analyzed_at=V3_ACTIVATION_CUTOFF,
+        league_name="English Premier League", analyzed_at=ANALYZED_AT,
         kickoff_time=datetime(2099, 1, 1, tzinfo=timezone.utc),
     )
     session.execute.side_effect = [
@@ -380,12 +113,13 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
     assert [pick["market"] for pick in picks] == ["result"]
     statement = session.execute.await_args_list[1].args[0]
     assert "INSERT INTO analysis_snapshots" in str(statement.compile(dialect=postgresql.dialect()))
-    assert statement.compile(dialect=postgresql.dialect()).params["analyzed_at"] == V3_ACTIVATION_CUTOFF
+    assert statement.compile(dialect=postgresql.dialect()).params["analyzed_at"] == ANALYZED_AT
 
 
 @pytest.mark.asyncio
 async def test_cached_analysis_refreshes_snapshot_written_by_another_process(monkeypatch):
-    picks = build_ft_recommendations({"pattern_ft_b": _pattern()})
+    picks = prematch_v4.build_v4_recommendations(
+        {"pattern_ft_b": _pattern()}, {"1": 1 / 3, "X": 1 / 3, "2": 1 / 3})
     session = AsyncMock()
     session.get.return_value = MagicMock(picks=picks)
 
@@ -494,351 +228,3 @@ async def test_upsert_after_kickoff_does_not_make_a_snapshot(monkeypatch):
     await runner._upsert(result, raw, {"pattern_ft_b": _pattern()})
 
     assert session.execute.await_count == 1
-
-
-@pytest.mark.asyncio
-async def test_validation_uses_normalized_tables(monkeypatch):
-    session = AsyncMock()
-    session.execute.side_effect = [
-        MagicMock(scalar=lambda: 20),
-        MagicMock(all=lambda: [
-            ("result", 10, 8, 2, 6, 5, 2, 1, 1, 1, 3, 72.5, 0.18),
-        ]),
-    ]
-
-    @asynccontextmanager
-    async def fake_session():
-        yield session
-
-    monkeypatch.setattr(routes_admin, "get_session", fake_session)
-    response = await routes_admin.analysis_validation()
-
-    assert response.total_snapshots == 20
-    assert response.rule_version == RULE_VERSION
-    assert response.baseline_version == BASELINE_VERSION
-    assert len(response.markets) == 1
-
-    m = response.markets[0]
-    assert m.market == "result"
-    assert m.opportunities == 10
-    assert m.issued == 8
-    assert m.abstained == 2
-    assert m.resolved_issued == 6
-    assert m.paired == 5
-    assert m.both_hit == 2
-    assert m.model_only == 1
-    assert m.baseline_only == 1
-    assert m.neither == 1
-    assert m.display_tier == "cok_erken"
-    assert m.coverage == round(6 / 8, 4)
-
-    assert session.execute.await_args_list[0].args[1] == {"rule_version": RULE_VERSION}
-
-    query = str(session.execute.await_args_list[1].args[0])
-    assert "analysis_snapshot_markets" in query
-    assert "match_final_result_observations" in query
-    assert "jsonb_array_elements" not in query
-    assert "actual_ft" not in query
-
-
-# ---------- build_ft_recommendations birim testleri ----------
-
-class TestBuildFtRecommendations:
-    """build_ft_recommendations fonksiyonunun kapsamlı birim testleri."""
-
-    def test_none_patterns_returns_empty(self):
-        assert build_ft_recommendations(None) == []
-
-    def test_empty_dict_returns_empty(self):
-        assert build_ft_recommendations({}) == []
-
-    def test_single_archive_result_only(self):
-        """Tek arşivde sadece result pazarı sinyal verir (O/U ve BTTS filtrelenir)."""
-        picks = build_ft_recommendations({"pattern_ft_b": _pattern(count=30, result_1=75)})
-        markets = [p["market"] for p in picks]
-        assert "result" in markets
-        assert "over_25" not in markets
-        assert "btts" not in markets
-
-    def test_match_count_below_minimum_skipped(self):
-        """MIN_ARCHIVE_MATCHES (10) altı arşiv atlanır."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=9, result_1=90),
-        })
-        assert picks == []
-
-    def test_match_count_at_minimum_included(self):
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=10, result_1=75),
-        })
-        assert len(picks) >= 1
-        assert picks[0]["match_count"] == 10
-
-    def test_frequency_below_threshold_skipped(self):
-        """MIN_FREQUENCY_PCT (65.0) altı pazar atlanır."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=30, result_1=64, over=64, btts=64),
-        })
-        assert picks == []
-
-    def test_frequency_at_threshold_included(self):
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=30, result_1=65),
-        })
-        assert len(picks) >= 1
-        assert picks[0]["frequency_pct"] == 65.0
-
-    def test_two_archives_agreeing_accepted(self):
-        """İki arşiv aynı yönde → kabul."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=30, result_1=70),
-            "pattern_ft_c": _pattern(count=20, result_1=68),
-        })
-        result_pick = [p for p in picks if p["market"] == "result"][0]
-        assert result_pick["selection"] == "1"
-        assert "archive_1" in result_pick["archive"]
-        assert "archive_2" in result_pick["archive"]
-
-    def test_two_archives_disagreeing_rejected(self):
-        """İki arşiv farklı yönde → reddedilir."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=30, result_1=70),
-            "pattern_ft_c": {
-                "match_count": 25,
-                "result_1_pct": 10, "result_x_pct": 20, "result_2_pct": 70,
-                "alt_25_pct": 30, "ust_25_pct": 70,
-                "kg_var_pct": 70, "kg_yok_pct": 30,
-            },
-        })
-        result_picks = [p for p in picks if p["market"] == "result"]
-        assert result_picks == []
-
-    def test_three_archives_two_agree_accepted(self):
-        """3 arşivden 2 aynı yönde → kabul."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=30, result_1=70),
-            "pattern_ft_c": _pattern(count=25, result_1=68),
-            "pattern_ft_d": {
-                "match_count": 20,
-                "result_1_pct": 10, "result_x_pct": 20, "result_2_pct": 70,
-                "alt_25_pct": 30, "ust_25_pct": 70,
-                "kg_var_pct": 70, "kg_yok_pct": 30,
-            },
-        })
-        result_pick = [p for p in picks if p["market"] == "result"][0]
-        assert result_pick["selection"] == "1"
-        assert "archive_1" in result_pick["archive"]
-        assert "archive_2" in result_pick["archive"]
-        assert "archive_3" not in result_pick["archive"]
-
-    def test_three_archives_all_agree(self):
-        """3 arşiv aynı yönde → hepsi etiketlenir."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=30, result_1=70),
-            "pattern_ft_c": _pattern(count=25, result_1=68),
-            "pattern_ft_d": _pattern(count=20, result_1=72),
-        })
-        result_pick = [p for p in picks if p["market"] == "result"][0]
-        assert result_pick["archive"] == "archive_1+archive_2+archive_3"
-
-    def test_three_archives_all_disagree_rejected(self):
-        """3 arşiv 3 farklı yönde → reddedilir."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=30, result_1=70),
-            "pattern_ft_c": {
-                "match_count": 25,
-                "result_1_pct": 10, "result_x_pct": 70, "result_2_pct": 20,
-                "alt_25_pct": 30, "ust_25_pct": 70,
-                "kg_var_pct": 70, "kg_yok_pct": 30,
-            },
-            "pattern_ft_d": {
-                "match_count": 20,
-                "result_1_pct": 10, "result_x_pct": 20, "result_2_pct": 70,
-                "alt_25_pct": 30, "ust_25_pct": 70,
-                "kg_var_pct": 70, "kg_yok_pct": 30,
-            },
-        })
-        result_picks = [p for p in picks if p["market"] == "result"]
-        assert result_picks == []
-
-    def test_ou_btts_need_two_archive_agreement(self):
-        """O/U ve BTTS pazarlarında tek arşiv yetmez, 2+ gerekli."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=30, over=80, btts=80),
-            "pattern_ft_c": _pattern(count=25, over=75, btts=72),
-        })
-        ou_picks = [p for p in picks if p["market"] == "over_25"]
-        btts_picks = [p for p in picks if p["market"] == "btts"]
-        assert len(ou_picks) == 1
-        assert len(btts_picks) == 1
-
-    def test_frequency_is_min_of_agreeing(self):
-        """Uyuşan arşivlerin minimum frekansı kullanılır."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=50, result_1=80),
-            "pattern_ft_c": _pattern(count=30, result_1=68),
-        })
-        result_pick = [p for p in picks if p["market"] == "result"][0]
-        assert result_pick["frequency_pct"] == 68.0
-
-    def test_match_count_is_min_of_agreeing(self):
-        """Uyuşan arşivlerin minimum match_count'u kullanılır."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=50, result_1=80),
-            "pattern_ft_c": _pattern(count=30, result_1=68),
-        })
-        result_pick = [p for p in picks if p["market"] == "result"][0]
-        assert result_pick["match_count"] == 30
-
-    def test_archive_individual_frequencies_present(self):
-        """Her arşivin ayrı frekans ve match_count bilgisi döner."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=50, result_1=80),
-            "pattern_ft_c": _pattern(count=30, result_1=68),
-        })
-        result_pick = [p for p in picks if p["market"] == "result"][0]
-        assert result_pick["archive_1_frequency_pct"] == 80.0
-        assert result_pick["archive_1_match_count"] == 50
-        assert result_pick["archive_2_frequency_pct"] == 68.0
-        assert result_pick["archive_2_match_count"] == 30
-        assert result_pick["archive_3_frequency_pct"] is None
-        assert result_pick["archive_3_match_count"] is None
-
-    def test_recommendation_id_format(self):
-        picks = build_ft_recommendations({"pattern_ft_b": _pattern(count=30, result_1=75)})
-        assert picks[0]["recommendation_id"] == f"{RULE_VERSION}:result:1"
-
-    def test_nan_value_skips_market(self):
-        """NaN veya infinity oran değeri olan pazar atlanır."""
-        pattern = _pattern(count=30)
-        pattern["result_1_pct"] = float("nan")
-        picks = build_ft_recommendations({"pattern_ft_b": pattern})
-        result_picks = [p for p in picks if p["market"] == "result"]
-        assert result_picks == []
-
-    def test_negative_value_skips_market(self):
-        pattern = _pattern(count=30)
-        pattern["result_1_pct"] = -5.0
-        picks = build_ft_recommendations({"pattern_ft_b": pattern})
-        result_picks = [p for p in picks if p["market"] == "result"]
-        assert result_picks == []
-
-    def test_value_over_100_skips_market(self):
-        pattern = _pattern(count=30)
-        pattern["result_1_pct"] = 101.0
-        picks = build_ft_recommendations({"pattern_ft_b": pattern})
-        result_picks = [p for p in picks if p["market"] == "result"]
-        assert result_picks == []
-
-    def test_non_dict_pattern_skipped(self):
-        """pattern_ft_b string ise atlanır."""
-        picks = build_ft_recommendations({"pattern_ft_b": "invalid"})
-        assert picks == []
-
-    def test_missing_match_count_skipped(self):
-        pattern = _pattern(count=30)
-        del pattern["match_count"]
-        picks = build_ft_recommendations({"pattern_ft_b": pattern})
-        assert picks == []
-
-    def test_only_archive_d(self):
-        """Sadece archive_3 (Pattern D) varsa, result sinyali verir."""
-        picks = build_ft_recommendations({
-            "pattern_ft_d": _pattern(count=20, result_1=75),
-        })
-        assert len(picks) == 1
-        assert picks[0]["archive"] == "archive_3"
-        assert picks[0]["market"] == "result"
-
-    def test_x_draw_winner(self):
-        """Beraberlik en yüksek olduğunda X seçilir."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": {
-                "match_count": 30,
-                "result_1_pct": 20, "result_x_pct": 70, "result_2_pct": 10,
-                "alt_25_pct": 70, "ust_25_pct": 30,
-                "kg_var_pct": 30, "kg_yok_pct": 70,
-            },
-        })
-        result_pick = [p for p in picks if p["market"] == "result"][0]
-        assert result_pick["selection"] == "X"
-
-    def test_multiple_markets_can_coexist(self):
-        """3 arşiv uyumlu ise result + over_25 + btts hep birlikte döner."""
-        picks = build_ft_recommendations({
-            "pattern_ft_b": _pattern(count=30, result_1=75, over=80, btts=70),
-            "pattern_ft_c": _pattern(count=25, result_1=70, over=75, btts=68),
-            "pattern_ft_d": _pattern(count=20, result_1=72, over=78, btts=72),
-        })
-        markets = {p["market"] for p in picks}
-        assert markets == {"result", "over_25", "btts"}
-
-
-def test_wilson_ci_basic():
-    ci = routes_admin.wilson_ci(50, 100)
-    assert ci is not None
-    assert 0.39 < ci[0] < 0.42
-    assert 0.58 < ci[1] < 0.61
-
-
-def test_wilson_ci_zero_trials():
-    assert routes_admin.wilson_ci(0, 0) is None
-
-
-def test_wilson_ci_perfect():
-    ci = routes_admin.wilson_ci(100, 100)
-    assert ci is not None
-    assert ci[0] > 0.95
-    assert ci[1] > 0.99
-
-
-def test_wilson_ci_zero_successes():
-    ci = routes_admin.wilson_ci(0, 100)
-    assert ci is not None
-    assert ci[0] == 0.0
-    assert ci[1] < 0.05
-
-
-@pytest.mark.asyncio
-async def test_display_tier_thresholds(monkeypatch):
-    for n, expected_tier in [(29, "cok_erken"), (30, "on_bulgu"), (99, "on_bulgu"), (100, "tam")]:
-        session = AsyncMock()
-        session.execute.side_effect = [
-            MagicMock(scalar=lambda: 1),
-            MagicMock(all=lambda n=n: [
-                ("result", 200, n, 200 - n,
-                 n, n, n // 2,
-                 0, 0, n - n // 2,
-                 n // 2, 70.0, 0.20),
-            ]),
-        ]
-
-        @asynccontextmanager
-        async def _fs(s=session):
-            yield s
-
-        monkeypatch.setattr(routes_admin, "get_session", _fs)
-        resp = await routes_admin.analysis_validation()
-        assert resp.markets[0].display_tier == expected_tier, f"n={n}"
-
-
-@pytest.mark.asyncio
-async def test_calibration_gap_sign(monkeypatch):
-    session = AsyncMock()
-    session.execute.side_effect = [
-        MagicMock(scalar=lambda: 1),
-        MagicMock(all=lambda: [
-            ("btts", 100, 100, 0, 100, 100, 65, 0, 0, 35, 65, 70.0, 0.21),
-        ]),
-    ]
-
-    @asynccontextmanager
-    async def fake_session():
-        yield session
-
-    monkeypatch.setattr(routes_admin, "get_session", fake_session)
-    resp = await routes_admin.analysis_validation()
-    m = resp.markets[0]
-    assert m.avg_published_frequency == 70.0
-    assert m.observed_hit_rate == 65.0
-    assert m.calibration_gap == 5.0

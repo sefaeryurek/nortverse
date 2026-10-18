@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +22,8 @@ from app.analysis.league_filter import canonical_league_name, is_supported_leagu
 from app.analysis.live_model import OUTCOMES, get_cond_table, prematch_posterior
 from app.analysis.market_catalog import SUMMARY_MARKET_KEYS, get_market
 from app.analysis.persist import pattern_hashes
-from app.db.models import AnalysisSnapshot
+from app.config import ISTANBUL_TZ
+from app.db.models import AnalysisSnapshot, Match
 
 V4_RULE_VERSION = "ft-display-v4"
 MARKET_SUMMARY_RULE_VERSION = "market-summary-v1"
@@ -226,3 +228,74 @@ async def capture_v4_recommendations(
     }
     await record_predictions(session, ledger_rows_v4(patterns, prior, table.league_goal_prior(league), common))
     return picks, True
+
+
+async def capture_prepared_recommendations(target_date: date) -> int:
+    """Hazır maçların pattern'lerini güncel ayarla hesaplayıp yazar, sonra v4 kararını dondurur.
+
+    Pattern'ler DB'ye de yazılır → ekrandaki Ana Pazar ile dondurulan seçim aynı veriden gelir.
+    """
+    from app.analysis.persist import compute_all_patterns, update_match_patterns
+    from app.db.connection import get_session
+
+    day_start = datetime.combine(target_date, datetime.min.time(), ISTANBUL_TZ)
+    day_end = day_start + timedelta(days=1)
+    started_at = datetime.now(timezone.utc)
+    async with get_session() as session:
+        prepared = (await session.execute(
+            select(
+                Match.match_id, Match.analyzed_at, Match.kickoff_time,
+                Match.league_name, Match.league_code,
+                Match.ht_scores_1, Match.ht_scores_x, Match.ht_scores_2,
+                Match.h2_scores_1, Match.h2_scores_x, Match.h2_scores_2,
+                Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
+                Match.ft_all_ratios,
+            ).where(
+                Match.deleted_at.is_(None), Match.kickoff_time >= day_start,
+                Match.kickoff_time < day_end, Match.kickoff_time > started_at,
+                Match.analyzed_at.is_not(None), Match.analyzed_at <= started_at,
+                Match.analyzed_at < Match.kickoff_time, Match.ft_scores_1.is_not(None),
+            )
+        )).all()
+
+    count = 0
+    for match in prepared:
+        patterns = await compute_all_patterns(
+            match_id=match.match_id,
+            ht_scores=(match.ht_scores_1 or [], match.ht_scores_x or [], match.ht_scores_2 or []),
+            h2_scores=(match.h2_scores_1 or [], match.h2_scores_x or [], match.h2_scores_2 or []),
+            ft_scores=(match.ft_scores_1 or [], match.ft_scores_x or [], match.ft_scores_2 or []),
+            ft_ratios=match.ft_all_ratios or {}, as_of=match.analyzed_at,
+            league_name=match.league_name,
+        )
+        try:
+            await update_match_patterns(match.match_id, patterns, expected_analyzed_at=match.analyzed_at,
+                                        computed_as_of=match.analyzed_at)
+        except Exception:
+            continue
+        captured_at = datetime.now(timezone.utc)
+        async with get_session() as session:
+            current = (await session.execute(
+                select(Match).where(
+                    Match.match_id == match.match_id,
+                    Match.deleted_at.is_(None),
+                    Match.analyzed_at == match.analyzed_at,
+                    Match.kickoff_time == match.kickoff_time,
+                    Match.kickoff_time > captured_at,
+                ).with_for_update()
+            )).scalar_one_or_none()
+            if current is None:
+                continue
+            picks, created = await capture_v4_recommendations(
+                session,
+                match_id=match.match_id,
+                analyzed_at=match.analyzed_at,
+                captured_at=captured_at,
+                kickoff_time=current.kickoff_time,
+                league_name=current.league_name,
+                league_code=current.league_code,
+                patterns=patterns,
+            )
+            if created and picks is not None:
+                count += 1
+    return count
