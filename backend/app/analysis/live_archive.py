@@ -141,7 +141,7 @@ def ht_filtered_rows(blobs: dict[str, dict | None], results: dict[str, tuple], h
     return out
 
 
-def ledger_rows(view: dict, common: dict) -> list[dict]:
+def ledger_rows(view: dict, common: dict, *, late: bool = False) -> list[dict]:
     """Öne çıkan her seçim için defter satırı (Genel → archive NULL)."""
     rows = []
     for h in view["highlights"]:
@@ -152,7 +152,7 @@ def ledger_rows(view: dict, common: dict) -> list[dict]:
             "prob_shown_bp": round(h["pct"] * 100), "sample_n": h["n"] or None,
             "confidence_tier": "insufficient" if h["risky"] else "high",
             "details": {"risky": h["risky"], "label": h["label"], "options": h["options"],
-                        "params": rule_params_fingerprint(), "historical": h.get("historical")},
+                        "params": rule_params_fingerprint(), "historical": h.get("historical"), "late": late},
         })
     return rows
 
@@ -161,6 +161,15 @@ def ledger_rows(view: dict, common: dict) -> list[dict]:
 
 _VIEW_TTL = 600.0
 _view_cache: dict[tuple, tuple[float, dict]] = {}
+
+
+def _blobs_digest(blobs: dict[str, dict | None]) -> str:
+    """Önbellek anahtarı için eşleşme listelerinin özeti: arşiv yeniden hesaplanınca eski görünüm dönmez."""
+    import hashlib
+    import json
+
+    payload = {k: (b or {}).get("matched_ids") for k, b in sorted(blobs.items())}
+    return hashlib.blake2b(json.dumps(payload, default=str).encode(), digest_size=8).hexdigest()
 
 
 async def load_view(match_id: str, blobs: dict[str, dict | None], ht: tuple[int, int],
@@ -173,7 +182,7 @@ async def load_view(match_id: str, blobs: dict[str, dict | None], ht: tuple[int,
     from app.db.connection import get_session
     from app.db.models import Match
 
-    key = (match_id, tuple(ht), with_matches)
+    key = (match_id, tuple(ht), with_matches, _blobs_digest(blobs))
     cached = _view_cache.get(key)
     if cached is not None and time.monotonic() - cached[0] < _VIEW_TTL:
         return cached[1]

@@ -73,3 +73,32 @@ def test_historical_hit_lookup_by_market_and_sample_bucket():
     assert hit_lookup(table, "h2", "kg", 25) is None
     out = annotate([{"period": "ft", "market": "dc", "n": 6, "pct": 100.0}], table)
     assert out[0]["historical"]["pct"] == 80.0
+
+
+def test_archive_freeze_window():
+    """Arşiv işaretleri devre arası veya 2. yarının ilk 5 dakikası; sonrası ayıklanmış sonuç verir."""
+    from app.api.live_ledger import archive_freeze_allowed
+    from app.scraper.fixture_scores import FixtureScore
+
+    def fs(phase, minute):
+        return FixtureScore("1", "live", 0, 0, 0, 0, minute=minute, phase=phase)
+
+    assert archive_freeze_allowed(fs("ht", None))
+    assert archive_freeze_allowed(fs(None, "HT"))
+    assert archive_freeze_allowed(fs("2h", "48"))
+    assert not archive_freeze_allowed(fs("2h", "51"))
+    assert not archive_freeze_allowed(fs("2h", "90+3"))
+    assert not archive_freeze_allowed(fs("2h", None))
+
+
+def test_late_flag_on_archive_rows():
+    view = build_view({"a1": [_m(str(i), (1, 0), (2, 0)) for i in range(6)], "a2": [], "a3": []}, (1, 0))
+    assert all(r["details"]["late"] is True for r in ledger_rows(view, {"match_id": "9"}, late=True))
+    assert all(r["details"]["late"] is False for r in ledger_rows(view, {"match_id": "9"}))
+
+
+def test_view_cache_key_changes_with_matched_ids():
+    from app.analysis.live_archive import _blobs_digest
+    a = _blobs_digest({"b": {"matched_ids": ["1", "2"]}, "c": None})
+    assert a == _blobs_digest({"c": None, "b": {"matched_ids": ["1", "2"]}})
+    assert a != _blobs_digest({"b": {"matched_ids": ["1", "3"]}, "c": None})

@@ -48,6 +48,22 @@ def observed_ht(fs: FixtureScore) -> tuple[int, int] | None:
     return None
 
 
+ARCHIVE_FREEZE_MAX_MINUTE = 50
+
+
+def archive_freeze_allowed(fs: FixtureScore) -> bool:
+    """Arşiv işaretleri sadece devre arasında ya da 2. yarının ilk dakikalarında yazılır.
+
+    Geç dondurmada "skor hâlâ İY skoru" koşulu sonucu ayıklar (ör. 80'de 0-0 → Üst işaretleri
+    düşük çıkar); bu yüzden 2. yarıda dakika bilinmiyorsa veya 50'yi geçtiyse yazılmaz.
+    """
+    phase = match_phase(fs)
+    if phase == "ht":
+        return True
+    head = (fs.minute or "").strip().split("+")[0]
+    return phase == "2h" and head.isdigit() and int(head) <= ARCHIVE_FREEZE_MAX_MINUTE
+
+
 def pattern_hash(match: Match) -> str | None:
     return hash_string({f: getattr(match, f"pattern_{f}_hash") for f in "bcd"})
 
@@ -150,17 +166,21 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
     async with get_session() as session:
         obs_id = await _ht_observation_id(session, match, ht, phase, now)
         rows = ledger_rows(match, prediction, now, obs_id, late=phase == "2h")
-        # Canlı arşiv %85+ işaretleri (live-arch-v1): ana kayıt ile aynı İY gözlemine bağlı.
-        rows += live_archive.ledger_rows(view, {
-            "match_id": match.match_id, "league_name": match.league_name or "",
-            "kickoff_time": match.kickoff_time, "as_of": now, "pattern_hash": pattern_hash(match),
-            "ht_home": ht[0], "ht_away": ht[1], "ht_observation_id": obs_id,
-        })
+        # Canlı arşiv %85+ işaretleri: ana kayıt ile aynı İY gözlemine bağlı; geç kalındıysa yazılmaz.
+        archive_ok = archive_freeze_allowed(fs)
+        if archive_ok:
+            rows += live_archive.ledger_rows(view, {
+                "match_id": match.match_id, "league_name": match.league_name or "",
+                "kickoff_time": match.kickoff_time, "as_of": now, "pattern_hash": pattern_hash(match),
+                "ht_home": ht[0], "ht_away": ht[1], "ht_observation_id": obs_id,
+            }, late=phase == "2h")
+        else:
+            log.info("Arşiv işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)
         written = await record_predictions(session, rows)
     if written:
         log.info("Canlı tahmin donduruldu [%s] İY %s-%s → %s %%%.1f · %d arşiv işareti (%%85+)",
                  match.match_id, ht[0], ht[1], prediction["ms"]["pick"], prediction["ms"]["prob"] * 100,
-                 len(view["highlights"]))
+                 len(view["highlights"]) if archive_ok else 0)
         return "frozen"
     return "already_frozen"
 
