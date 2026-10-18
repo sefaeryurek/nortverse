@@ -11,6 +11,7 @@ import AddToCartButton from "./AddToCartButton";
 interface Props {
   recommendations: FTRecommendation[];
   period: Period;
+  settingsChanged?: boolean;
 }
 
 function marketLabel(t: Dictionary, market: FTRecommendation["market"]): string {
@@ -200,7 +201,7 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
   );
 });
 
-export default memo(function TopPicks({ recommendations, period }: Props) {
+export default memo(function TopPicks({ recommendations, period, settingsChanged = false }: Props) {
   const { t } = useLocale();
   if (period !== "ft") return null;
   if (recommendations.length === 0) {
@@ -251,6 +252,11 @@ export default memo(function TopPicks({ recommendations, period }: Props) {
           <RecommendationRow key={recommendation.recommendation_id} recommendation={recommendation} />
         ))}
       </div>
+      {settingsChanged && (
+        <p className="text-[10px] leading-relaxed mt-3" style={{ color: "var(--nv-text-secondary)" }}>
+          {t.topPicks.settingsChanged}
+        </p>
+      )}
       <p
         className="text-[10px] leading-relaxed mt-3"
         style={{ color: "var(--nv-text-tertiary)" }}

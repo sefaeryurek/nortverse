@@ -29,7 +29,9 @@ from app.analysis.persist import (
     FAMILIES,
     StalePatternWrite,
     compute_all_patterns,
+    hash_string,
     pattern_as_of,
+    pattern_hashes,
     pattern_keys,
     stale_families,
     update_match_patterns,
@@ -304,6 +306,10 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
     h2_b, h2_c, h2_d = (_pat(patterns[f"pattern_h2_{f}"]) for f in FAMILIES)
     ft_b, ft_c, ft_d = (_pat(patterns[f"pattern_ft_{f}"]) for f in FAMILIES)
 
+    current = pattern_hashes()
+    shown_hash = hash_string({
+        f: current[f] if f in to_compute else getattr(row, f"pattern_{f}_hash") for f in FAMILIES
+    })
     try:
         recommendations = await _frozen_recommendations(row, patterns)
     except Exception:
@@ -326,7 +332,13 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         trends=_trends_parse(row.trends),
         recommendation_rule_version=RULE_VERSION,
         ft_recommendations=recommendations,
+        pattern_hash=shown_hash,
+        recommendation_pattern_hash=_recommendation_hash(recommendations),
     )
+
+
+def _recommendation_hash(picks: list[dict]) -> str | None:
+    return next((p.get("pattern_hash") for p in picks if isinstance(p, dict) and p.get("pattern_hash")), None)
 
 
 # ─── Analiz orchestration ───────────────────────────────────────────────────
@@ -501,6 +513,8 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
         trends=trends_data,
         recommendation_rule_version=RULE_VERSION,
         ft_recommendations=frozen_recommendations,
+        pattern_hash=hash_string(pattern_hashes()),
+        recommendation_pattern_hash=_recommendation_hash(frozen_recommendations),
     )
 
 

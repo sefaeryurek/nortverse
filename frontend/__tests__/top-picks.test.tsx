@@ -56,4 +56,15 @@ describe("TopPicks", () => {
     screen.getByRole("button", { name: "Sepete ekle" }).click();
     expect(window.localStorage.getItem("nortverse_bet_cart")).toContain('"marketKey":"result"');
   });
+
+  it("warns only when the pick was frozen with different archive settings", () => {
+    const { rerender } = renderWithContext(<TopPicks recommendations={[recommendation]} period="ft" settingsChanged />);
+    expect(screen.getByText(/farklı bir arşiv ayarıyla donduruldu/)).toBeDefined();
+    rerender(
+      <MatchProvider value={{ matchId: "123", homeTeam: "Home", awayTeam: "Away" }}>
+        <TopPicks recommendations={[recommendation]} period="ft" />
+      </MatchProvider>,
+    );
+    expect(screen.queryByText(/farklı bir arşiv ayarıyla donduruldu/)).toBeNull();
+  });
 });

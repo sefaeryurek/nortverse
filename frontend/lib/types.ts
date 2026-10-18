@@ -174,6 +174,7 @@ export interface FTRecommendation {
   confidence_tier?: "high" | "medium" | "low" | null;
   prior_pct?: number | null;
   agreement?: number | null;
+  pattern_hash?: string | null;
   archive_1_frequency_pct: number | null;
   archive_1_match_count: number | null;
   archive_2_frequency_pct: number | null;
@@ -203,6 +204,9 @@ export interface AnalyzeResponse {
   trends: TrendsData | null;
   recommendation_rule_version: `ft-display-v${number}`;
   ft_recommendations: FTRecommendation[];
+  /** Sayfadaki arşiv yüzdelerinin ayarı / dondurulmuş önerinin ayarı (farklıysa uyarı). */
+  pattern_hash?: string | null;
+  recommendation_pattern_hash?: string | null;
   skipped: boolean;
   skip_reason: string | null;
 }

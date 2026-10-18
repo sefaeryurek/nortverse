@@ -52,6 +52,11 @@ def pattern_keys(family: str) -> list[str]:
     return [f"pattern_{p}_{family}" for p in PERIODS]
 
 
+def hash_string(hashes: dict[str, str | None]) -> str | None:
+    """Aile parmak izlerini tek metne çevirir: 'b=…;c=…;d=…' (defter ve API aynı biçimi kullanır)."""
+    return ";".join(f"{f}={hashes[f]}" for f in FAMILIES if hashes.get(f)) or None
+
+
 def pattern_hashes() -> dict[str, str]:
     """Her ailenin sonucunu etkileyen ayarların kısa parmak izi."""
     a = ANALYSIS

@@ -101,6 +101,7 @@ class RecommendationOut(BaseModel):
     confidence_tier: Optional[str] = None  # v4: avantaj büyüklüğü (high/medium/low)
     prior_pct: Optional[float] = None      # v4: seçimin lig ortalaması olasılığı
     agreement: Optional[int] = None        # v4: seçimde uyuşan arşiv sayısı
+    pattern_hash: Optional[str] = None     # öneri dondurulurken kullanılan arşiv ayarı
     archive_1_frequency_pct: Optional[float] = None
     archive_1_match_count: Optional[int] = None
     archive_2_frequency_pct: Optional[float] = None
@@ -128,8 +129,11 @@ class AnalyzeResponse(BaseModel):
     h2_d: Optional[PatternResult] = None
     ft_d: Optional[PatternResult] = None
     trends: Optional[TrendsData] = None
-    recommendation_rule_version: str = "ft-display-v3"
+    recommendation_rule_version: str = "ft-display-v4"
     ft_recommendations: list[RecommendationOut] = Field(default_factory=list)
+    # Sayfadaki arşiv yüzdelerinin ayarı ve dondurulmuş önerinin ayarı (farklıysa uyarı gösterilir).
+    pattern_hash: Optional[str] = None
+    recommendation_pattern_hash: Optional[str] = None
     skipped: bool = False
     skip_reason: Optional[str] = None
 

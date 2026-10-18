@@ -78,3 +78,13 @@ def test_market_summary_tie_keeps_first_option_like_frontend():
 
 def test_module_constant_names():
     assert prematch_v4.MARKET_SUMMARY_RULE_VERSION == "market-summary-v1"
+
+
+def test_hash_string_format_and_recommendation_hash():
+    from app.analysis.persist import hash_string
+    from app.api.services import _recommendation_hash
+    assert hash_string({"b": "x1", "c": None, "d": "y2"}) == "b=x1;d=y2"
+    assert hash_string({"b": None, "c": None, "d": None}) is None
+    assert _recommendation_hash([{"market": "result", "pattern_hash": "b=x1"}]) == "b=x1"
+    assert _recommendation_hash([{"market": "result"}]) is None
+    assert _recommendation_hash([]) is None

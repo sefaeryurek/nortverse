@@ -261,7 +261,8 @@
     "signalHigh": "Güçlü sinyal",
     "signalMedium": "Orta sinyal",
     "signalLow": "Hafif sinyal",
-    "priorLine": "Lig ortalaması %{prior} · avantaj +{edge} puan"
+    "priorLine": "Lig ortalaması %{prior} · avantaj +{edge} puan",
+    "settingsChanged": "Bu seçim maç öncesi farklı bir arşiv ayarıyla donduruldu; aşağıdaki arşiv yüzdeleri güncel ayardan hesaplanıyor, bu yüzden birebir örtüşmeyebilir."
   },
   "analyze": {
     "powerScore": "Güç Skoru",

@@ -261,7 +261,8 @@
     "signalHigh": "Strong signal",
     "signalMedium": "Medium signal",
     "signalLow": "Mild signal",
-    "priorLine": "League average {prior}% · edge +{edge} pts"
+    "priorLine": "League average {prior}% · edge +{edge} pts",
+    "settingsChanged": "This pick was frozen before kickoff with different archive settings; the archive percentages below use the current settings, so they may not match exactly."
   },
   "analyze": {
     "powerScore": "Power Score",

@@ -13,14 +13,16 @@ interface Props {
   patternD: PatternResult | null;
   period: Period;
   recommendations: FTRecommendation[];
+  /** Öneri, sayfadaki yüzdelerden farklı arşiv ayarıyla dondurulduysa. */
+  settingsChanged?: boolean;
 }
 
-export default function IddaaCoupon({ patternB, patternC, patternD, period, recommendations }: Props) {
+export default function IddaaCoupon({ patternB, patternC, patternD, period, recommendations, settingsChanged = false }: Props) {
   const { t } = useLocale();
   const hasB = patternB != null && patternB.match_count >= 5;
   const hasC = patternC != null && patternC.match_count >= 1;
   const hasD = patternD != null && patternD.match_count >= 1;
-  const recommendationPanel = <TopPicks recommendations={recommendations} period={period} />;
+  const recommendationPanel = <TopPicks recommendations={recommendations} period={period} settingsChanged={settingsChanged} />;
 
   if (!hasB && !hasC && !hasD) {
     return (

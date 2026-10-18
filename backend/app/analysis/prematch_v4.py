@@ -21,7 +21,7 @@ from app.analysis.ledger import record_predictions
 from app.analysis.league_filter import canonical_league_name, is_supported_league
 from app.analysis.live_model import OUTCOMES, get_cond_table, prematch_posterior
 from app.analysis.market_catalog import SUMMARY_MARKET_KEYS, get_market
-from app.analysis.persist import pattern_hashes
+from app.analysis.persist import hash_string, pattern_hashes
 from app.config import ISTANBUL_TZ
 from app.db.models import AnalysisSnapshot, Match
 
@@ -208,7 +208,9 @@ async def capture_v4_recommendations(
     league = canonical_league_name(league_name or league_code or "")
     table = await get_cond_table()
     prior = table.league_prior(league)
-    picks = build_v4_recommendations(patterns, prior)
+    phash = hash_string(pattern_hashes())
+    # Hangi arşiv ayarıyla donduruldu → sayfadaki güncel yüzdelerle farklıysa kullanıcıya söylenir.
+    picks = [{**pick, "pattern_hash": phash} for pick in build_v4_recommendations(patterns, prior)]
 
     written = await session.execute(
         insert(AnalysisSnapshot).values(
@@ -221,10 +223,9 @@ async def capture_v4_recommendations(
         snapshot = await session.get(AnalysisSnapshot, (match_id, V4_RULE_VERSION))
         return (snapshot.picks if snapshot and isinstance(snapshot.picks, list) else []), False
 
-    hashes = pattern_hashes()
     common = {
         "match_id": match_id, "league_name": league, "kickoff_time": kickoff_time,
-        "as_of": captured_at, "pattern_hash": ";".join(f"{f}={hashes[f]}" for f in "bcd"),
+        "as_of": captured_at, "pattern_hash": phash,
     }
     await record_predictions(session, ledger_rows_v4(patterns, prior, table.league_goal_prior(league), common))
     return picks, True

@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.analysis.ledger import record_predictions
 from app.analysis.live_model import LIVE_RULE_VERSION, get_cond_table, predict_live
+from app.analysis.persist import hash_string
 from app.api.live_snapshot import get_live_snapshot
 from app.db.connection import get_session
 from app.db.models import Match, MatchHtObservation, PredictionLedger
@@ -46,8 +47,7 @@ def observed_ht(fs: FixtureScore) -> tuple[int, int] | None:
 
 
 def pattern_hash(match: Match) -> str | None:
-    parts = [f"{f}={getattr(match, f'pattern_{f}_hash')}" for f in "bcd" if getattr(match, f"pattern_{f}_hash")]
-    return ";".join(parts) or None
+    return hash_string({f: getattr(match, f"pattern_{f}_hash") for f in "bcd"})
 
 
 def ledger_rows(match: Match, prediction: dict, as_of: datetime, ht_observation_id: int,

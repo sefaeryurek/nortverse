@@ -390,6 +390,10 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
                     patternD={patternD}
                     period={activePeriod}
                     recommendations={data.ft_recommendations}
+                    settingsChanged={Boolean(
+                      data.pattern_hash && data.recommendation_pattern_hash
+                      && data.pattern_hash !== data.recommendation_pattern_hash,
+                    )}
                   />
                 </MatchProvider>
 
