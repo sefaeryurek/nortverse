@@ -1544,6 +1544,16 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **CI yeşile döndü (89.12):** `httpx==0.27.2` `requirements-dev.txt`'ye eklendi (kullanıcı onaylı; sadece test ortamı) — `test_api_regressions.py` için gerekiyordu.
 - **Sonuç:** 1068 backend + 304 frontend + 28 E2E
 
+### Sprint 90 — TAMAMLANDI ✅ (Canlı İY Arşiv Odaklı Görünüm + Canlı Değerlendirme)
+- **Kullanıcı isteği:** canlıda ana model yüzdesi yerine A1/A2/A3 ayrı ayrı + Genel oranlar; %85 üstü öne çıksın; az örneklem riskli işaretle yine gösterilsin; canlıya giren her maç değerlendirilsin.
+- **`live_archive.py` (live-arch-v1):** maç öncesi `matched_ids`'ten İY skoru aynı bitenler (sızıntısız). Pazarlar: MS 1X2, ÇŞ, MS Ü/A 1.5-2.5-3.5, MS KG, 2Y 1X2, 2Y Ü/A 0.5-1.5, 2Y KG. İY'nin kesinleştirdiği pazarlar gizli. %85+ → öne çıkan; n<5 → riskli. Genel = A1∪A2∪A3 (tekrarsız). `RULE_PARAMS` parmak izi testte sabit.
+- **Kayıt:** devre arasında tüm %85+ işaretler `prediction_ledger`'a (`rule_version=live-arch-v1`, `archive` a1/a2/a3, Genel=NULL, riskli=`confidence_tier insufficient`). Eski COND modeli (`live-ms-v1`) ekranda yok, kaydedilmeye devam ediyor.
+- **Canlı sayfa:** öne çıkanlar (aynı seçim tek satırda, kaynaklar + maç sayısı + ⚠ Riskli), arşiv × pazar tablosu, açınca eşleşen maç listeleri. Analizsiz maçta açıklayıcı not (detay 404 "Canlı veri alınamadı" hatası veriyordu).
+- **Değerlendirme → Canlı İY:** sadece live-arch-v1; risk/arşiv/periyot·pazar/lig/hafta kırılımı; `/api/performance/live-matches?day=` ile canlıya giren her maç ve işaretlerinin tuttu/tutmadı durumu.
+- **Backtest #8 (`backtest-ledger --strategy live_archive`):** %85+ işaretler ekranda ~%98 görünüyor, gerçek isabet örneklem büyüklüğüne bağlı: 1 maç %58, 2–4 %71, 5–9 %80, 10–19 %83, 20+ %85. Zayıf pazarlar: 2Y sonucu %35–50, 2Y 1.5 %48–55, KG %55–69. Güçlüler (10+ maç): MS 3.5 %90–92, ÇŞ %85–86.
+- **Başlama saati senkronu:** haftalar önce analiz edilen maçlar resmi saat açıklanmadan yer tutucu saatle kaydediliyordu (Kasımpaşa 13:30'da başladı, kayıtta 15:00) → izleyici kaçırırdı. `runner.sync_kickoffs` bülten verisinden düzeltir (izleyici her tur + fixture cache kaydı).
+- **Operasyon notu:** sabah pipeline'ı (Task Scheduler) 27 Eylül'den beri başarıyla çalışmamış (13 Ekim yarıda kesildi, 15 Ekim Docker kapalı). Skor güncellemesi çalışıyor.
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1807,7 +1817,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-18 — Sprint 89 TAMAMLANDI, Local Development)
+## Kaldığımız Yer (2026-10-18 — Sprint 90 TAMAMLANDI, Local Development)
 
 ### ✅ Mevcut Durum — Local Development
 
@@ -1848,6 +1858,7 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 ### Bilinen Açık Konular
 
+- **Sabah pipeline'ı çalışmıyor (27 Eylül'den beri):** Task Scheduler görevi ve bilgisayarın 08:00'de açık olması kontrol edilmeli.
 - **Docker Desktop otostart:** Docker Desktop Windows ile otomatik başlatılmalı — aksi takdirde pipeline/skor cron'ları çalışmaz (28-30 Eylül 3 günlük veri kaybı yaşandı)
 - **Task Scheduler "missed run":** Kaçırılan görevlerin yeniden çalıştırılması ayarı etkinleştirilmeli
 - **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
