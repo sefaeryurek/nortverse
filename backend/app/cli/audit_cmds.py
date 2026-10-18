@@ -565,7 +565,7 @@ def recompute_patterns_cmd(
 
 
 def backtest_ledger_cmd(
-    strategy: str = typer.Option("live_ht", "--strategy", help="Şimdilik: live_ht"),
+    strategy: str = typer.Option("live_ht", "--strategy", help="live_ht | top_pick | market_summary"),
     from_date: str = typer.Option(..., "--from", help="Başlangıç (YYYY-MM-DD)"),
     to_date: str = typer.Option(..., "--to", help="Bitiş, hariç (YYYY-MM-DD)"),
     alpha: float = typer.Option(0.5, "--alpha", help="Maç öncesi LR üssü (live_model.ALPHA)"),
@@ -576,12 +576,14 @@ def backtest_ledger_cmd(
     """Sızıntısız backtest — sonuçlar prediction_backtest'e yazılır (gerçek defterle karışmaz)."""
     _setup_logging("DEBUG" if verbose else "INFO")
     from datetime import datetime
-    from app.analysis.backtest import load_backtest_rows, ms_brier_report, run_live_backtest
+    from app.analysis.backtest import (
+        load_backtest_rows, ms_brier_report, run_live_backtest, run_prematch_backtest,
+    )
     from app.analysis.performance import group_summaries, summarize
     from app.config import ISTANBUL_TZ
 
-    if strategy != "live_ht":
-        console.print("[red]Şimdilik sadece --strategy live_ht destekleniyor.[/red]")
+    if strategy not in ("live_ht", "top_pick", "market_summary"):
+        console.print("[red]--strategy: live_ht | top_pick | market_summary[/red]")
         raise typer.Exit(1)
     start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
     end = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
@@ -595,17 +597,22 @@ def backtest_ledger_cmd(
         )
 
     async def _run() -> None:
-        run_id = await run_live_backtest(start, end, notes=notes, alpha=alpha, replace_run=replace_run)
+        if strategy == "live_ht":
+            run_id = await run_live_backtest(start, end, notes=notes, alpha=alpha, replace_run=replace_run)
+            title = f"Canlı İY→MS backtest #{run_id} ({from_date} → {to_date}, α={alpha})"
+        else:
+            run_id = await run_prematch_backtest(strategy, start, end, notes=notes, replace_run=replace_run)
+            title = f"Maç öncesi backtest #{run_id} · {strategy} ({from_date} → {to_date})"
         rows = await load_backtest_rows(run_id)
         brier = ms_brier_report(rows)
-        console.print(f"\n[bold cyan]Canlı İY→MS backtest #{run_id}[/bold cyan] ({from_date} → {to_date}, α={alpha})")
-        for market in ("result", "ou_25", "kg"):
-            market_rows = [r for r in rows if r["market"] == market]
-            if not market_rows:
-                continue
-            _line(market, summarize(market_rows))
-            for group in group_summaries(market_rows, "tier"):
-                _line(f"  · {group['key']}", group)
+        console.print(f"\n[bold cyan]{title}[/bold cyan]")
+        breakdown = "archive" if strategy == "market_summary" else "tier"
+        for period in ("ht", "h2", "ft"):
+            for market in sorted({r["market"] for r in rows if r["period"] == period}):
+                market_rows = [r for r in rows if r["market"] == market and r["period"] == period]
+                _line(f"{period}·{market}", summarize(market_rows))
+                for group in group_summaries(market_rows, breakdown):
+                    _line(f"  · {group['key']}", group)
         if brier["brier"] is not None:
             console.print(
                 f"\n  MS çok sınıflı Brier: model {brier['brier']:.4f} · İY tabanı {brier['baseline_brier']:.4f} "

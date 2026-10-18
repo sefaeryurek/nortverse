@@ -88,7 +88,8 @@
     "tabs": {
       "live": "Canlı İY",
       "prematch": "Maç Öncesi",
-      "pattern": "Pattern geçmişi"
+      "pattern": "Pattern geçmişi",
+      "backtest": "Backtest"
     },
     "patternNote": "Bu sekme bugünkü algoritmanın geçmiş maçlarda ne diyeceğini gösterir (backtest niteliğinde); kullanıcıya o gün gösterilen tahminler değildir.",
     "perf": {
@@ -133,7 +134,31 @@
       "tier_none": "—",
       "market_result": "MS 1X2",
       "market_ou_25": "MS 2.5 Alt/Üst",
-      "market_kg": "Karşılıklı Gol"
+      "market_kg": "Karşılıklı Gol",
+      "backtestNote": "Backtest: bugünkü kuralların geçmiş maçlarda ne diyeceği — her maçta sadece o ana kadar bilinen verilerle (sızıntısız). Gerçek kayıtlı tahminlerle karışmaz; gerçek performans Canlı İY ve Maç Öncesi sekmelerindedir.",
+      "runPicker": "Koşu",
+      "experiment": "deneme",
+      "noRuns": "Henüz backtest koşusu yok (backtest-ledger komutuyla üretilir).",
+      "strategy_live_ht": "Canlı İY→MS",
+      "strategy_top_pick": "Top Picks",
+      "strategy_market_summary": "Ana Pazar Özeti",
+      "byLeague": "Lige göre",
+      "byArchive": "Arşive göre",
+      "byPeriodMarket": "Periyot · pazar",
+      "informationalTitle": "Bilgi amaçlı (Ü/A 2.5 · KG)",
+      "informationalHint": "Top Picks'e girmez — lig ortalamasını geçemediği için sadece ölçülür.",
+      "archive_a1": "Arşiv 1",
+      "archive_a2": "Arşiv 2",
+      "archive_a3": "Arşiv 3",
+      "period_ht": "İY",
+      "period_h2": "2Y",
+      "period_ft": "MS",
+      "market_dc": "Çifte Şans",
+      "market_iy_ms": "İY/MS",
+      "market_hnd_a10": "Hnd (0:1)",
+      "market_hnd_h10": "Hnd (1:0)",
+      "market_ms_25_combo": "MS + 2.5",
+      "market_fark": "Fark"
     }
   },
   "live": {

@@ -1,5 +1,8 @@
-import { getPerformancePredictions, getPerformanceSummary } from "@/lib/api";
-import type { LedgerPrediction, PerformanceStats, PerformanceSummary, PredictionSource } from "@/lib/api";
+import Link from "next/link";
+import { getBacktestRuns, getBacktestSummary, getPerformancePredictions, getPerformanceSummary } from "@/lib/api";
+import type {
+  BacktestRun, BacktestSummary, LedgerPrediction, PerformanceStats, PerformanceSummary, PredictionSource,
+} from "@/lib/api";
 import type { Dictionary } from "@/lib/i18n";
 import { leagueDisplay } from "@/lib/leagues";
 import { formatTime } from "@/lib/dates";
@@ -100,35 +103,50 @@ function CalibrationList({ buckets, p }: { buckets: PerformanceSummary["calibrat
   );
 }
 
-export async function PerformanceOverview({ source, t }: { source: PredictionSource; t: Dictionary }) {
+type GroupSpec = { key: string; title: string; labelOf: (key: string) => string };
+
+function groupSpecs(keys: string[], p: Perf): GroupSpec[] {
+  const lookup = (prefix: string, k: string) => (p as Record<string, string>)[`${prefix}_${k}`] ?? k;
+  const specs: Record<string, GroupSpec> = {
+    tier: { key: "tier", title: p.byTier, labelOf: (k) => lookup("tier", k) },
+    market: { key: "market", title: p.byMarket, labelOf: (k) => marketLabel(k, p) },
+    league: { key: "league", title: p.byLeague, labelOf: (k) => k },
+    archive: { key: "archive", title: p.byArchive, labelOf: (k) => lookup("archive", k) },
+    period_market: {
+      key: "period_market",
+      title: p.byPeriodMarket,
+      labelOf: (k) => {
+        const [period, market] = k.split(":");
+        return `${lookup("period", period)} · ${marketLabel(market, p)}`;
+      },
+    },
+  };
+  return keys.map((k) => specs[k]).filter(Boolean);
+}
+
+function LoadError({ t }: { t: Dictionary }) {
+  return (
+    <div className="nv-card p-6 text-center space-y-3">
+      <p style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{t.common.loadError}</p>
+      <RetryButton />
+    </div>
+  );
+}
+
+function SummaryBody({ summary, t, headline, groups }: {
+  summary: PerformanceSummary;
+  t: Dictionary;
+  headline: string;
+  groups: GroupSpec[];
+}) {
   const p = t.evaluation.perf;
-  let summary: PerformanceSummary;
-  try {
-    summary = await getPerformanceSummary(source);
-  } catch {
-    return (
-      <div className="nv-card p-6 text-center space-y-3">
-        <p style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{t.common.loadError}</p>
-        <RetryButton />
-      </div>
-    );
-  }
   const o = summary.overall;
-  if (o.total === 0) {
-    return (
-      <div className="nv-card p-6 text-center">
-        <p style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}>{p.empty}</p>
-        {source === "live_ht" && <p className="mt-1" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{p.emptyLive}</p>}
-      </div>
-    );
-  }
-  const tierLabel = (key: string) => (p as Record<string, string>)[`tier_${key}`] ?? key;
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-        <span className="font-semibold" style={{ color: "var(--nv-text-secondary)" }}>{p.allTime}</span>
+        <span className="font-semibold" style={{ color: "var(--nv-text-secondary)" }}>{headline}</span>
         <span>· {summary.rule_versions.join(", ")}</span>
-        <span>· {p.pendingCount.replace("{n}", String(o.pending))}</span>
+        {o.pending > 0 && <span>· {p.pendingCount.replace("{n}", String(o.pending))}</span>}
         <span className="px-2 py-0.5" style={{ borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-bg-elevated)" }}>
           {(p as Record<string, string>)[`stage_${o.stage}`]}
         </span>
@@ -150,10 +168,120 @@ export async function PerformanceOverview({ source, t }: { source: PredictionSou
         <Card label={p.brier} value={o.brier == null ? "—" : o.brier.toFixed(3)} sub={p.brierHint} />
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        <StatsTable title={p.byTier} rows={summary.groups.tier ?? []} labelOf={tierLabel} p={p} />
-        <StatsTable title={p.byMarket} rows={summary.groups.market ?? []} labelOf={(k) => marketLabel(k, p)} p={p} />
+        {groups.map((g) => (
+          <StatsTable key={g.key} title={g.title} rows={summary.groups[g.key] ?? []} labelOf={g.labelOf} p={p} />
+        ))}
       </div>
       <CalibrationList buckets={summary.calibration} p={p} />
+    </div>
+  );
+}
+
+export async function PerformanceOverview({ source, t }: { source: PredictionSource; t: Dictionary }) {
+  const p = t.evaluation.perf;
+  let summary: PerformanceSummary;
+  try {
+    summary = await getPerformanceSummary(source);
+  } catch {
+    return <LoadError t={t} />;
+  }
+  if (summary.overall.total === 0) {
+    return (
+      <div className="nv-card p-6 text-center">
+        <p style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}>{p.empty}</p>
+        {source === "live_ht" && <p className="mt-1" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{p.emptyLive}</p>}
+      </div>
+    );
+  }
+  return <SummaryBody summary={summary} t={t} headline={p.allTime} groups={groupSpecs(["tier", "market"], p)} />;
+}
+
+const STRATEGY_ORDER: PredictionSource[] = ["live_ht", "top_pick", "market_summary"];
+const BACKTEST_GROUPS: Record<PredictionSource, string[]> = {
+  live_ht: ["tier", "market", "league"],
+  top_pick: ["tier", "market", "league"],
+  market_summary: ["archive", "period_market"],
+};
+
+/** Seçili koşu: URL'deki geçerliyse o, değilse her stratejinin bugünkü ayarlarla üretilmiş en son koşusu. */
+export function pickBacktestRun(runs: BacktestRun[], requested: number | null): BacktestRun | null {
+  const asked = runs.find((r) => r.id === requested);
+  if (asked) return asked;
+  for (const strategy of STRATEGY_ORDER) {
+    const candidates = runs.filter((r) => r.strategy === strategy).sort((a, b) => b.id - a.id);
+    const best = candidates.find((r) => r.current) ?? candidates[0];
+    if (best) return best;
+  }
+  return null;
+}
+
+function runLabel(run: BacktestRun, p: Perf): string {
+  const strategy = (p as Record<string, string>)[`strategy_${run.strategy}`] ?? run.strategy;
+  return `#${run.id} · ${strategy}`;
+}
+
+export async function BacktestOverview({ runId, t }: { runId: number | null; t: Dictionary }) {
+  const p = t.evaluation.perf;
+  let runs: BacktestRun[];
+  try {
+    runs = await getBacktestRuns();
+  } catch {
+    return <LoadError t={t} />;
+  }
+  const run = pickBacktestRun(runs, runId);
+  if (!run) {
+    return <p className="nv-card p-6 text-center" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}>{p.noRuns}</p>;
+  }
+  let summary: BacktestSummary;
+  try {
+    summary = await getBacktestSummary(run.id);
+  } catch {
+    return <LoadError t={t} />;
+  }
+  const ordered = [...runs].sort(
+    (a, b) => STRATEGY_ORDER.indexOf(a.strategy) - STRATEGY_ORDER.indexOf(b.strategy) || b.id - a.id,
+  );
+  const range = `${run.date_from.slice(0, 10)} → ${run.date_to.slice(0, 10)}`;
+  const info = summary.informational;
+  return (
+    <div className="space-y-3">
+      <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{p.backtestNote}</p>
+      <nav aria-label={p.runPicker} className="flex flex-wrap gap-2">
+        {ordered.map((r) => (
+          <Link
+            key={r.id}
+            href={`/degerlendirme?tab=backtest&run=${r.id}`}
+            aria-current={r.id === run.id ? "page" : undefined}
+            className="px-2.5 py-1 font-semibold whitespace-nowrap"
+            style={{
+              fontSize: "var(--nv-text-xs)",
+              borderRadius: "var(--nv-radius-full)",
+              border: "1px solid var(--nv-border-subtle)",
+              backgroundColor: r.id === run.id ? "var(--nv-accent-blue-dim)" : "transparent",
+              color: r.id === run.id ? "var(--nv-accent-blue)" : "var(--nv-text-secondary)",
+              opacity: r.current ? 1 : 0.6,
+            }}
+          >
+            {runLabel(r, p)}{r.current ? "" : ` (${p.experiment})`}
+          </Link>
+        ))}
+      </nav>
+      <SummaryBody
+        summary={summary}
+        t={t}
+        headline={`${runLabel(run, p)} · ${range}`}
+        groups={groupSpecs(BACKTEST_GROUPS[run.strategy] ?? ["market"], p)}
+      />
+      {info.total > 0 && (
+        <div className="nv-card p-4 min-w-0" style={{ opacity: 0.85 }}>
+          <h3 className="font-semibold" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>{p.informationalTitle}</h3>
+          <p className="mb-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>{p.informationalHint}</p>
+          <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+            {p.winRate}: <strong>{fmt(info.hit_pct, "%")}</strong> · {p.baseline}: {fmt(info.baseline_hit_pct, "%")} ·{" "}
+            {p.lift}: {info.lift_pct == null ? "—" : `${info.lift_pct > 0 ? "+" : ""}${info.lift_pct.toFixed(1)}`} · n={info.resolved}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -88,7 +88,8 @@
     "tabs": {
       "live": "Live HT",
       "prematch": "Pre-match",
-      "pattern": "Pattern history"
+      "pattern": "Pattern history",
+      "backtest": "Backtest"
     },
     "patternNote": "This tab shows what today's algorithm would say for past matches (backtest-like); these are not the predictions shown on the day.",
     "perf": {
@@ -133,7 +134,31 @@
       "tier_none": "—",
       "market_result": "FT 1X2",
       "market_ou_25": "FT Over/Under 2.5",
-      "market_kg": "Both teams to score"
+      "market_kg": "Both teams to score",
+      "backtestNote": "Backtest: what today's rules would have said on past matches — each match only sees data known at that moment (no leakage). Never mixed with recorded predictions; real performance is on the Live HT and Pre-match tabs.",
+      "runPicker": "Run",
+      "experiment": "experiment",
+      "noRuns": "No backtest runs yet (created with the backtest-ledger command).",
+      "strategy_live_ht": "Live HT→FT",
+      "strategy_top_pick": "Top Picks",
+      "strategy_market_summary": "Market Summary",
+      "byLeague": "By league",
+      "byArchive": "By archive",
+      "byPeriodMarket": "Period · market",
+      "informationalTitle": "Informational (O/U 2.5 · BTTS)",
+      "informationalHint": "Not in Top Picks — measured only, as it does not beat the league average.",
+      "archive_a1": "Archive 1",
+      "archive_a2": "Archive 2",
+      "archive_a3": "Archive 3",
+      "period_ht": "HT",
+      "period_h2": "2H",
+      "period_ft": "FT",
+      "market_dc": "Double Chance",
+      "market_iy_ms": "HT/FT",
+      "market_hnd_a10": "Hnd (0:1)",
+      "market_hnd_h10": "Hnd (1:0)",
+      "market_ms_25_combo": "FT + 2.5",
+      "market_fark": "Margin"
     }
   },
   "live": {

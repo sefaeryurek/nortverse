@@ -17,6 +17,7 @@ GROUP_FIELDS = {
     "tier": lambda r: r.get("confidence_tier") or "none",
     "league": lambda r: r.get("league_name") or "-",
     "period": lambda r: r["period"],
+    "period_market": lambda r: f'{r["period"]}:{r["market"]}',
     "archive": lambda r: r.get("archive") or "-",
     "informational": lambda r: "info" if r.get("informational") else "main",
     "week": lambda r: _iso_week(r["kickoff_time"]),

@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
-import { PerformanceOverview, PredictionDayList } from "@/components/PerformancePanel";
+import { BacktestOverview, PerformanceOverview, PredictionDayList } from "@/components/PerformancePanel";
 import RetryButton from "@/components/RetryButton";
 import { getEvaluation } from "@/lib/api";
 import { resolvePageDate } from "@/lib/dates";
@@ -505,10 +505,10 @@ async function EvalList({ date, t }: { date: string; t: Dictionary }) {
 /* ------------------------------------------------------------------ */
 
 interface Props {
-  searchParams: Promise<{ date?: string | string[]; tab?: string | string[] }>;
+  searchParams: Promise<{ date?: string | string[]; tab?: string | string[]; run?: string | string[] }>;
 }
 
-const TABS = ["canli", "mac-oncesi", "pattern"] as const;
+const TABS = ["canli", "mac-oncesi", "backtest", "pattern"] as const;
 type Tab = (typeof TABS)[number];
 const TAB_SOURCE = { canli: "live_ht", "mac-oncesi": "top_pick" } as const;
 
@@ -521,6 +521,7 @@ function TabBar({ active, date, t }: { active: Tab; date: string; t: Dictionary 
   const labels: Record<Tab, string> = {
     canli: t.evaluation.tabs.live,
     "mac-oncesi": t.evaluation.tabs.prematch,
+    backtest: t.evaluation.tabs.backtest,
     pattern: t.evaluation.tabs.pattern,
   };
   return (
@@ -554,6 +555,8 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
   const date = resolvePageDate(params.date, today);
   if (date === null) redirect("/degerlendirme");
   const tab = resolveTab(params.tab);
+  const rawRun = Array.isArray(params.run) ? params.run[0] : params.run;
+  const runId = rawRun && /^\d{1,9}$/.test(rawRun) ? Number(rawRun) : null;
 
   const cookieStore = await cookies();
   const raw = cookieStore.get(COOKIE_NAME)?.value;
@@ -592,18 +595,26 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
 
       <TabBar active={tab} date={date} t={t} />
 
-      {/* Gun sekmeleri */}
-      <DayTabs
-        referenceDate={today}
-        activeDate={date}
-        basePath="/degerlendirme"
-        range="past"
-        locale={locale}
-        extraQuery={`tab=${tab}`}
-      />
+      {/* Gün sekmeleri — backtest bir tarih aralığını özetler, güne bağlı değil */}
+      {tab !== "backtest" && (
+        <DayTabs
+          referenceDate={today}
+          activeDate={date}
+          basePath="/degerlendirme"
+          range="past"
+          locale={locale}
+          extraQuery={`tab=${tab}`}
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto">
-        {tab === "pattern" ? (
+        {tab === "backtest" ? (
+          <div className="grid gap-4 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
+            <Suspense fallback={<EvalSkeleton />}>
+              <BacktestOverview runId={runId} t={t} />
+            </Suspense>
+          </div>
+        ) : tab === "pattern" ? (
           <>
             <p className="px-[var(--nv-page-gutter)] pt-3" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", maxWidth: "var(--nv-max-content)" }}>
               {t.evaluation.patternNote}

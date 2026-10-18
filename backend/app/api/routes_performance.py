@@ -115,3 +115,66 @@ async def performance_predictions(
         "outcome": r["outcome"] or "pending",
         "late": bool((r["details"] or {}).get("late")),
     } for r in rows]
+
+
+# ── Backtest ("bugünkü algoritma o gün ne derdi") — gerçek defterden ayrı ──
+
+_BACKTEST_GROUPS = {
+    "live_ht": ("tier", "market", "league"),
+    "top_pick": ("tier", "market", "league"),
+    "market_summary": ("archive", "period_market"),
+}
+_backtest_cache: dict[int, dict] = {}
+
+
+@router.get("/api/performance/backtest/runs")
+async def backtest_runs() -> list[dict]:
+    async with get_session() as session:
+        rows = (await session.execute(text("""
+            SELECT r.id, r.strategy, r.rule_version, r.params, r.date_from, r.date_to, r.notes, r.created_at,
+                   (SELECT count(*) FROM prediction_backtest b WHERE b.run_id = r.id) AS n
+            FROM backtest_runs r ORDER BY r.id DESC
+        """))).all()
+    return [{
+        "id": r.id, "strategy": r.strategy, "rule_version": r.rule_version, "params": r.params,
+        "date_from": r.date_from.isoformat(), "date_to": r.date_to.isoformat(), "notes": r.notes,
+        "created_at": r.created_at.isoformat(), "n": r.n, "current": _is_current(r.strategy, r.params or {}),
+    } for r in rows]
+
+
+def _is_current(strategy: str, params: dict) -> bool:
+    """Koşu bugünkü ayarlarla mı üretildi? (deneme koşuları seçicide ikincil gösterilir)"""
+    if strategy == "live_ht":
+        from app.analysis.live_model import ALPHA
+        return params.get("alpha") == ALPHA
+    from app.analysis.prematch_v4 import rule_params_fingerprint
+    return params.get("params_fingerprint") == rule_params_fingerprint()
+
+
+@router.get("/api/performance/backtest/{run_id}/summary")
+async def backtest_summary(run_id: int) -> dict:
+    """Koşu değişmez (yeniden üretim yeni id açar) → özet süreç içinde önbelleklenir."""
+    cached = _backtest_cache.get(run_id)
+    if cached is not None:
+        return cached
+    from app.analysis.backtest import load_backtest_rows
+
+    async with get_session() as session:
+        run = (await session.execute(
+            text("SELECT id, strategy, rule_version FROM backtest_runs WHERE id = :id"), {"id": run_id},
+        )).first()
+    if run is None:
+        raise HTTPException(404, "Backtest koşusu bulunamadı")
+    rows = await load_backtest_rows(run_id)
+    main = [r for r in rows if not r["informational"]]
+    result = {
+        "run_id": run.id, "source": run.strategy, "rule_versions": [run.rule_version],
+        "overall": summarize(main),
+        "informational": summarize([r for r in rows if r["informational"]]),
+        "groups": {g: group_summaries(rows, g) for g in _BACKTEST_GROUPS.get(run.strategy, ("market",))},
+        "calibration": calibration_buckets(main),
+    }
+    if len(_backtest_cache) >= 8:
+        _backtest_cache.pop(next(iter(_backtest_cache)))
+    _backtest_cache[run_id] = result
+    return result

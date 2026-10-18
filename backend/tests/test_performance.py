@@ -63,3 +63,11 @@ def test_calibration_buckets():
     rows = [_row("hit", 7200), _row("miss", 7800), _row("hit", 9500), _row(None, 5000)]
     buckets = calibration_buckets(rows)
     assert [(b["lower"], b["n"], b["hit_pct"]) for b in buckets] == [(70, 2, 50.0), (90, 1, 100.0)]
+
+
+def test_period_market_group_key():
+    from datetime import datetime, timezone
+    from app.analysis.performance import group_summaries
+    rows = [{"period": "ht", "market": "kg", "outcome": "hit", "prob_shown_bp": 7000,
+             "kickoff_time": datetime(2026, 1, 1, tzinfo=timezone.utc)}]
+    assert group_summaries(rows, "period_market")[0]["key"] == "ht:kg"

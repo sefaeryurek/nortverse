@@ -177,6 +177,33 @@ export async function getPerformanceSummary(source: PredictionSource, groupBy = 
   );
 }
 
+export interface BacktestRun {
+  id: number;
+  strategy: PredictionSource;
+  rule_version: string;
+  params: Record<string, unknown>;
+  date_from: string;
+  date_to: string;
+  notes: string | null;
+  created_at: string;
+  n: number;
+  /** Bugünkü ayarlarla üretilmiş mi (değilse deneme koşusu). */
+  current: boolean;
+}
+
+export interface BacktestSummary extends PerformanceSummary {
+  run_id: number;
+  informational: PerformanceStats;
+}
+
+export async function getBacktestRuns(): Promise<BacktestRun[]> {
+  return request<BacktestRun[]>("/api/performance/backtest/runs", { next: { revalidate: 300 } });
+}
+
+export async function getBacktestSummary(runId: number): Promise<BacktestSummary> {
+  return request<BacktestSummary>(`/api/performance/backtest/${runId}/summary`, { next: { revalidate: 3600 } });
+}
+
 export async function getPerformancePredictions(source: PredictionSource, day: string): Promise<LedgerPrediction[]> {
   return request<LedgerPrediction[]>(
     `/api/performance/predictions?${new URLSearchParams({ source, day })}`,
