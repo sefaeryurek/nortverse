@@ -190,11 +190,17 @@ def ledger_rows_v4(patterns: dict, prior: dict[str, float], goal_prior: dict[str
     return rows
 
 
+# Karar en erken başlamadan 48 saat önce dondurulur. İlk kayıt kazandığı için daha erken bir sayfa
+# ziyareti (ör. Mayıs maçına Ekim'de) maç günü güncel takım gücüyle karar verilmesini engelliyordu.
+CAPTURE_HORIZON = timedelta(hours=48)
+
+
 def _eligible(analyzed_at: datetime, captured_at: datetime, kickoff_time: datetime | None,
               league_name: str | None, league_code: str | None, patterns: dict | None) -> bool:
     return not (
         kickoff_time is None or analyzed_at.tzinfo is None or captured_at.tzinfo is None
         or kickoff_time.tzinfo is None or analyzed_at > captured_at or captured_at >= kickoff_time
+        or kickoff_time - captured_at > CAPTURE_HORIZON
         or not is_supported_league(league_name, league_code) or not isinstance(patterns, dict)
         or not any(isinstance(patterns.get(f"pattern_ft_{f}"), dict) for f in "bcd")
     )

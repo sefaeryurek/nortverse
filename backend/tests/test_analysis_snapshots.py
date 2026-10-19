@@ -63,6 +63,8 @@ def _pattern(count=30, result_1=70, over=68, btts=66):
     }
 
 ANALYZED_AT = datetime(2026, 9, 24, 9, tzinfo=timezone.utc)
+# Karar en erken başlamadan 48 saat önce dondurulur → servis yolları gerçek saatle çalıştığı için yakın gelecek.
+SOON = datetime.now(timezone.utc) + timedelta(hours=6)
 
 
 @pytest.mark.asyncio
@@ -70,7 +72,7 @@ async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatc
     prepared = SimpleNamespace(
         match_id="prepared-1",
         analyzed_at=ANALYZED_AT,
-        kickoff_time=datetime(2099, 1, 1, 18, tzinfo=timezone.utc),
+        kickoff_time=SOON,
         league_name="English Premier League",
         league_code="ENG PR",
         ht_scores_1=[], ht_scores_x=[], ht_scores_2=[],
@@ -104,7 +106,7 @@ async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatc
     _empty_cond_table(monkeypatch)
     _v5_model(monkeypatch)
 
-    count = await prematch_v4.capture_prepared_recommendations(date(2099, 1, 1))
+    count = await prematch_v4.capture_prepared_recommendations(SOON.date())
 
     assert count == 1
     assert compute.await_args.kwargs["as_of"] == ANALYZED_AT
@@ -130,7 +132,7 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
     row = Match(
         match_id="123", home_team="Home", away_team="Away", league_code="ENG PR",
         league_name="English Premier League", analyzed_at=ANALYZED_AT,
-        kickoff_time=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        kickoff_time=SOON,
     )
     session.execute.side_effect = [
         MagicMock(scalar_one_or_none=lambda: row),
@@ -317,3 +319,20 @@ async def test_started_match_without_v5_snapshot_shows_frozen_v4(monkeypatch):
     row = Match(match_id="9", home_team="H", away_team="A", league_code="ENG PR",
                 league_name="English Premier League", analyzed_at=ANALYZED_AT, kickoff_time=NOW)
     assert await services._frozen_recommendations(row, {}) == v4_picks
+
+
+@pytest.mark.asyncio
+async def test_capture_waits_until_48_hours_before_kickoff(monkeypatch):
+    """Mayıs maçına Ekim'de sayfa ziyareti karar dondurmaz (ilk kayıt kazanır → maç günü kararı engellenirdi)."""
+    _empty_cond_table(monkeypatch)
+    session = AsyncMock()
+    far = await prematch_v4.capture_v4_recommendations(
+        session, match_id="1", analyzed_at=ANALYZED_AT, captured_at=NOW, kickoff_time=NOW + timedelta(days=204),
+        league_name="English Premier League", league_code="ENG PR", patterns={"pattern_ft_b": _pattern()},
+    )
+    assert far == (None, False)
+    session.execute.assert_not_awaited()
+    assert prematch_v4._eligible(ANALYZED_AT, NOW, NOW + timedelta(hours=47), "English Premier League",
+                                 "ENG PR", {"pattern_ft_b": _pattern()})
+    assert not prematch_v4._eligible(ANALYZED_AT, NOW, NOW + timedelta(hours=49), "English Premier League",
+                                     "ENG PR", {"pattern_ft_b": _pattern()})
