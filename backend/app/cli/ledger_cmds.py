@@ -86,6 +86,22 @@ def live_freeze_cmd(
                           + " · ".join(f"{o} %{p * 100:.1f}" for o, p in ms["prematch"]["probs"].items()))
         else:
             console.print("  Maç öncesi arşiv görüşü yok — sadece İY koşullu dağılım kullanıldı.")
+        from app.analysis import live_archive, live_poisson
+
+        ht_pair = (ht_home, ht_away)
+        table = await get_cond_table()
+        view = await live_archive.load_view(
+            match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
+            ht_pair, league=match.league_name or "", table=table)
+        console.print(f"  Kararlar ({live_archive.LIVE_ARCHIVE_RULE_VERSION}): " + (", ".join(
+            f"{h['period']}·{h['market']} {h['selection']} %{h['pct']} (lig {h['cond_n']} maç, arşiv "
+            f"{'+'.join(h['sources'])} %{h['archive_pct']})" for h in view["highlights"]) or "yok"))
+        poisson = live_poisson.predict(await live_poisson.get_poisson_model(), match.league_name or "",
+                                       match.home_team, match.away_team, ht_pair)
+        picks = live_poisson.decisions(poisson, live_poisson.cond_lookup(table, match.league_name or "", ht_pair))
+        console.print(f"  Gölge {live_poisson.LIVE_POISSON_RULE_VERSION}: " + (", ".join(
+            f"{p['period']}·{p['market']} {p['selection']} %{p['pct']}{' ★' if p['best'] else ''}"
+            f"{' (değerli)' if p['valuable'] else ''}" for p in picks) or "yok"))
         console.print("[dim]Deneme: deftere hiçbir şey yazılmadı.[/dim]")
 
     async def _tick() -> None:
@@ -122,7 +138,7 @@ def live_freeze_cmd(
 
 
 def backtest_ledger_cmd(
-    strategy: str = typer.Option("live_ht", "--strategy", help="live_ht | live_archive | top_pick | market_summary"),
+    strategy: str = typer.Option("live_ht", "--strategy", help="live_ht | live_archive | live_poisson | top_pick | market_summary"),
     from_date: str = typer.Option(..., "--from", help="Başlangıç (YYYY-MM-DD)"),
     to_date: str = typer.Option(..., "--to", help="Bitiş, hariç (YYYY-MM-DD)"),
     alpha: float = typer.Option(0.5, "--alpha", help="Maç öncesi LR üssü (live_model.ALPHA)"),
@@ -134,13 +150,14 @@ def backtest_ledger_cmd(
     _setup_logging("DEBUG" if verbose else "INFO")
     from datetime import datetime
     from app.analysis.backtest import (
-        load_backtest_rows, ms_brier_report, run_live_archive_backtest, run_live_backtest, run_prematch_backtest,
+        load_backtest_rows, ms_brier_report, run_live_archive_backtest, run_live_backtest,
+        run_live_poisson_backtest, run_prematch_backtest,
     )
     from app.analysis.performance import group_summaries, summarize
     from app.config import ISTANBUL_TZ
 
-    if strategy not in ("live_ht", "live_archive", "top_pick", "market_summary"):
-        console.print("[red]--strategy: live_ht | live_archive | top_pick | market_summary[/red]")
+    if strategy not in ("live_ht", "live_archive", "live_poisson", "top_pick", "market_summary"):
+        console.print("[red]--strategy: live_ht | live_archive | live_poisson | top_pick | market_summary[/red]")
         raise typer.Exit(1)
     start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
     end = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
@@ -157,6 +174,9 @@ def backtest_ledger_cmd(
         if strategy == "live_archive":
             run_id = await run_live_archive_backtest(start, end, notes=notes, replace_run=replace_run)
             title = f"Canlı arşiv (%85+) backtest #{run_id} ({from_date} → {to_date})"
+        elif strategy == "live_poisson":
+            run_id = await run_live_poisson_backtest(start, end, notes=notes, replace_run=replace_run)
+            title = f"Canlı Poisson (gölge, %85+) backtest #{run_id} ({from_date} → {to_date})"
         elif strategy == "live_ht":
             run_id = await run_live_backtest(start, end, notes=notes, alpha=alpha, replace_run=replace_run)
             title = f"Canlı İY→MS backtest #{run_id} ({from_date} → {to_date}, α={alpha})"

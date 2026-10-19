@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.analysis import live_archive
+from app.analysis import live_archive, live_poisson
 from app.analysis.league_filter import is_main_league
 from app.analysis.ledger import record_predictions
 from app.analysis.live_model import LIVE_RULE_VERSION, get_cond_table, predict_live
@@ -142,6 +142,20 @@ async def plan_live_freeze(match: Match, fs: FixtureScore) -> tuple[str, dict | 
     return "ready", prediction
 
 
+async def _poisson_shadow(match: Match, fs: FixtureScore) -> tuple[dict | None, list[dict]]:
+    """Gölge Poisson kararları; hata ana kaydı asla engellemez."""
+    try:
+        ht = observed_ht(fs)
+        league = match.league_name or ""
+        model = await live_poisson.get_poisson_model()
+        prediction = live_poisson.predict(model, league, match.home_team, match.away_team, ht)
+        picks = live_poisson.decisions(prediction, live_poisson.cond_lookup(await get_cond_table(), league, ht))
+        return prediction, picks
+    except Exception:
+        log.warning("Gölge Poisson tahmini hesaplanamadı [%s]", match.match_id, exc_info=True)
+        return None, []
+
+
 async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: bool = False,
                                  report: dict | None = None) -> str:
     """İY gözlemini ve tahmini bir kez kaydeder. Durum kodunu döner (tahmin `report`'a yazılır)."""
@@ -151,9 +165,11 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
         view = await live_archive.load_view(
             match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
             observed_ht(fs), league=match.league_name or "", table=await get_cond_table())
+    shadow_pred, shadow_picks = await _poisson_shadow(match, fs) if status == "ready" else (None, [])
     if report is not None:
         report["prediction"] = prediction
         report["view"] = view
+        report["poisson"] = shadow_picks
     if status == "late_score_changed":
         log.info("Canlı tahmin dondurulmadı (2. yarıda skor değişmiş) [%s]", match.match_id)
     if status != "ready":
@@ -174,6 +190,13 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
                 "kickoff_time": match.kickoff_time, "as_of": now, "pattern_hash": pattern_hash(match),
                 "ht_home": ht[0], "ht_away": ht[1], "ht_observation_id": obs_id,
             }, late=phase == "2h")
+            if shadow_picks:
+                # Gölge model (live-poisson-v1): ekranda yok, bir hafta ölçülüp v2 ile karşılaştırılacak
+                rows += live_poisson.ledger_rows(shadow_pred, shadow_picks, {
+                    "match_id": match.match_id, "league_name": match.league_name or "",
+                    "kickoff_time": match.kickoff_time, "as_of": now, "pattern_hash": pattern_hash(match),
+                    "ht_home": ht[0], "ht_away": ht[1], "ht_observation_id": obs_id,
+                }, late=phase == "2h")
         else:
             log.info("Arşiv işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)
         written = await record_predictions(session, rows)

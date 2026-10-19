@@ -268,6 +268,47 @@ async def run_live_archive_backtest(date_from: datetime, date_to: datetime, *, n
     return run_id
 
 
+async def run_live_poisson_backtest(date_from: datetime, date_to: datetime, *, notes: str | None = None,
+                                    replace_run: int | None = None) -> int:
+    """Poisson canlı modeli (live-poisson-v1, gölge): her maçın %85+ işaretleri, gerçek İY/MS ile çözülür.
+
+    Model haftada bir (`refit_days`) yeniden kurulur; her kurulum sadece `as_of − 3 saat` öncesini görür.
+    """
+    from app.analysis import live_poisson as lp
+
+    run_id, _history, target_ids = await _start_run(
+        "live_ht", lp.LIVE_POISSON_RULE_VERSION,
+        {"rule_params": lp.RULE_PARAMS, "params_fingerprint": lp.rule_params_fingerprint(),
+         "ht_capture_offset_min": 47},
+        date_from, date_to, notes, replace_run,
+    )
+    training = await lp.load_training()
+    kickoffs = [t.kickoff for t in training]
+    log.info("Poisson backtest #%d: %d hedef maç, %d eğitim maçı", run_id, len(target_ids), len(training))
+    state: dict = {"model": None}
+    refit = timedelta(days=lp.RULE_PARAMS["refit_days"])
+
+    def rows_of(table, match, as_of):
+        model = state["model"]
+        if model is None or as_of - model.as_of >= refit:
+            model = state["model"] = lp.fit_model(lp.train_window(training, kickoffs, as_of), as_of)
+        ht = (match.actual_ht_home, match.actual_ht_away)
+        ft = (match.actual_ft_home, match.actual_ft_away)
+        league = match.league_name or ""
+        prediction = lp.predict(model, league, match.home_team, match.away_team, ht)
+        picks = lp.decisions(prediction, lp.cond_lookup(table, league, ht))
+        if not picks:
+            return []
+        common = {"match_id": match.match_id, "league_name": league,
+                  "kickoff_time": match.kickoff_time, "as_of": as_of}
+        return [{**row, "run_id": run_id, "ht_home": ht[0], "ht_away": ht[1], "ft_home": ft[0], "ft_away": ft[1],
+                 "outcome": resolve(row["period"], row["market"], row["selection"], ht, ft)}
+                for row in lp.ledger_rows(prediction, picks, common)]
+
+    await _replay(run_id, _history, target_ids, date_from, lambda ko: ko + HT_CAPTURE_OFFSET, rows_of)
+    return run_id
+
+
 async def load_backtest_rows(run_id: int) -> list[dict]:
     async with get_session() as session:
         rows = (await session.execute(

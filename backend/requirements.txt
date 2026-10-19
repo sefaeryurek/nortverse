@@ -15,6 +15,8 @@ pydantic==2.9.2
 # Machine Learning — ensemble meta-model (Sprint 81)
 scikit-learn==1.5.2
 joblib==1.4.2
+# Sprint 91: canlı Poisson modeli (live_poisson.py) — scikit-learn zaten getiriyordu, sürüm sabitlendi (kullanıcı onaylı)
+scipy==1.17.1
 
 # Veritabanı
 sqlalchemy==2.0.36
