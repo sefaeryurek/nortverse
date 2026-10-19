@@ -106,8 +106,10 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
             "pct": r.prob_shown_bp / 100, "archive": r.archive or live_archive.GENERAL,
             "label": details.get("label") or (r.archive or "genel").upper(),
             "n": r.sample_n or 0, "risky": bool(details.get("risky")),
-            "sources": details.get("sources") or [details.get("label") or (r.archive or "genel").upper()],
+            # v1 kayıtlarında `sources` yok → ekran eski (arşiv başına) düzenini kullanır
+            "sources": details.get("sources"),
             "archive_pct": details.get("archive_pct"), "cond_n": details.get("cond_n"),
+            "cond_level": details.get("cond_level"),
             "conflict": bool(details.get("conflict")), "rule_version": r.rule_version,
         })
     for entry in out.values():
@@ -124,7 +126,12 @@ async def _view_for(match: Match, ht: tuple[int, int], frozen: dict | None, *, w
             table = await live_archive.load_hit_table()
         except Exception:
             table = {}
-        view = {**view, "highlights": live_archive.annotate(frozen["highlights"], table)}
+        versions = {h.get("rule_version") for h in frozen["highlights"]}
+        rule_version = (live_archive.LIVE_ARCHIVE_RULE_VERSION
+                        if live_archive.LIVE_ARCHIVE_RULE_VERSION in versions or not versions
+                        else max(versions))
+        view = {**view, "rule_version": rule_version,
+                "highlights": live_archive.annotate(frozen["highlights"], table)}
     return view
 
 

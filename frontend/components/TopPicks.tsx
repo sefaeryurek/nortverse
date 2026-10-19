@@ -67,6 +67,9 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
   const match = useMatchInfo();
   const { t } = useLocale();
   const calPct = recommendation.calibrated_pct != null ? Math.round(recommendation.calibrated_pct) : null;
+  // v5 (takım gücü modeli): "ham %" ana yüzdeyle aynı, `match_count` ligin eğitim maçı sayısı
+  // (eşleşen arşiv maçı değil) → ikisi de yanıltıcı olduğundan gösterilmez.
+  const isModel = recommendation.archive === "model";
   const pct = calPct ?? Math.round(recommendation.frequency_pct);
   const tier = recommendation.confidence_tier ?? null;
   const color = tier ? TIER_COLOR[tier] ?? pctColor(pct) : pctColor(pct);
@@ -173,7 +176,7 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
           >
             %{pct}
           </div>
-          {calPct != null && (
+          {calPct != null && !isModel && (
             <div
               className="mt-0.5 text-[9px]"
               style={{
@@ -185,6 +188,7 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
               {t.topPicks.rawPct.replace("{pct}", String(Math.round(recommendation.frequency_pct)))}
             </div>
           )}
+          {!isModel && (
           <div
             className={`${calPct != null ? "" : "mt-0.5 "}text-[9px]`}
             style={{
@@ -194,6 +198,7 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
           >
             {recommendation.match_count} {t.common.match}
           </div>
+          )}
         </div>
         {match && <AddToCartButton item={{
           matchId: match.matchId, homeTeam: match.homeTeam, awayTeam: match.awayTeam,

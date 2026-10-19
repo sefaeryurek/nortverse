@@ -28,7 +28,8 @@
     "back": "Back",
     "hide": "Hide",
     "open": "Open",
-    "search": "Search"
+    "search": "Search",
+    "timeLocale": "en-GB"
   },
   "days": [
     "Mon",
@@ -160,7 +161,7 @@
       "experiment": "experiment",
       "noRuns": "No backtest runs yet (created with the backtest-ledger command).",
       "strategy_live_ht": "Live HT→FT",
-      "strategy_top_pick": "Top Picks",
+      "strategy_top_pick": "Archive pool (v4)",
       "strategy_market_summary": "Market Summary",
       "byLeague": "By league",
       "byArchive": "By archive",
@@ -199,7 +200,14 @@
       "emptyLiveDay": "No recorded live matches on this day.",
       "recordedAt": "Recorded {time}",
       "liveSummaryNote": "Decisions recorded at half-time: an archive with 5+ matches at 85%+ and the same-league, same half-time history at 85%+; one decision per market. Marked hit/miss when the match ends.",
-      "strategy_live_archive": "Live archive (85%+)"
+      "strategy_live_archive": "Live archive (85%+)",
+      "market_ou_05": "2H Over/Under 0.5",
+      "market_ou_15": "FT Over/Under 1.5",
+      "market_ou_35": "FT Over/Under 3.5",
+      "strategy_live_poisson": "Live Poisson (shadow)",
+      "strategy_prematch_v5": "Pre-match (team strength)",
+      "pctFormat": "{v}%",
+      "decimalSep": "."
     }
   },
   "live": {
@@ -291,7 +299,9 @@
       "historicalTooltip": "In the historical test, 85%+ signals in this market with {bucket}-match samples actually hit this often ({n} signals).",
       "historicalPooled": "Not enough data for this market, so the average of all markets with the same sample size is used.",
       "historicalNote": "\"past X%\": the real hit rate of the same kind of signal in past matches — the shown rate looks inflated when the sample is small."
-    }
+    },
+    "staleData": "stale",
+    "staleTooltip": "Live data has not updated for {s}s; the source may be delayed."
   },
   "error": {
     "title": "Something went wrong",
@@ -509,7 +519,7 @@
     "archiveDual": "Archive 1+2 aligned",
     "archive1Match": "Archive 1 match found",
     "archive2Match": "Archive 2 match found",
-    "archive3Match": "Archive 3 match found (cosine similarity)"
+    "archive3Match": "Archive 3 match found (team-strength similarity)"
   },
   "liveMatchBadge": {
     "liveScore": "Live score",

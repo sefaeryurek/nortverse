@@ -47,8 +47,9 @@ function MatchRow({ match, showSimilarity, htLabel, h2Label, ftLabel }: { match:
     >
       <div className="flex-1 min-w-0">
         <span
-          className="text-xs truncate"
+          className="block text-xs truncate"
           style={{ color: "var(--nv-text-primary)", fontWeight: 600 }}
+          title={`${match.home_team} - ${match.away_team}`}
         >
           {match.home_team} - {match.away_team}
         </span>

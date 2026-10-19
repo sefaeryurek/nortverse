@@ -14,32 +14,60 @@ export class ApiError extends Error {
 async function request<T>(path: string, options: RequestInit & { next?: { revalidate: number } } = {}): Promise<T> {
   const timeout = AbortSignal.timeout(30_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  const msg = errorMessages();
   let response: Response;
   try {
     response = await fetch(`${getApiBase()}${path}`, { ...options, signal });
   } catch (error) {
     if (options.signal?.aborted) throw error;
-    throw new ApiError(timeout.aborted
-      ? "İşlem beklenenden uzun sürdü. Lütfen yeniden deneyin."
-      : "Sunucuya ulaşılamadı. Lütfen bağlantınızı kontrol edip yeniden deneyin.", 0);
+    throw new ApiError(timeout.aborted ? msg.timeout : msg.network, 0);
   }
   if (!response.ok) {
-    const messages: Record<number, string> = {
+    throw new ApiError(msg.status[response.status] ?? msg.generic, response.status);
+  }
+  try { return await response.json() as T; }
+  catch (error) {
+    if (options.signal?.aborted) throw error;
+    if (timeout.aborted) throw new ApiError(msg.timeout, 0);
+    throw new ApiError(msg.invalid, response.status);
+  }
+}
+
+const ERROR_MESSAGES = {
+  tr: {
+    timeout: "İşlem beklenenden uzun sürdü. Lütfen yeniden deneyin.",
+    network: "Sunucuya ulaşılamadı. Lütfen bağlantınızı kontrol edip yeniden deneyin.",
+    generic: "Veriler yüklenemedi. Lütfen yeniden deneyin.",
+    invalid: "Sunucudan geçersiz bir yanıt alındı. Lütfen yeniden deneyin.",
+    status: {
       400: "İstek geçersiz. Lütfen seçtiğiniz tarih veya maç bilgisini kontrol edin.",
       404: "Maç bulunamadı veya artık erişilebilir değil.",
       422: "Tarih veya maç bilgisi geçerli değil.",
       429: "Çok fazla istek gönderildi. Lütfen biraz sonra yeniden deneyin.",
       503: "Veri hizmeti geçici olarak kullanılamıyor. Lütfen biraz sonra yeniden deneyin.",
       504: "Veri kaynağı zamanında yanıt vermedi. Lütfen yeniden deneyin.",
-    };
-    throw new ApiError(messages[response.status] ?? "Veriler yüklenemedi. Lütfen yeniden deneyin.", response.status);
-  }
-  try { return await response.json() as T; }
-  catch (error) {
-    if (options.signal?.aborted) throw error;
-    if (timeout.aborted) throw new ApiError("İşlem beklenenden uzun sürdü. Lütfen yeniden deneyin.", 0);
-    throw new ApiError("Sunucudan geçersiz bir yanıt alındı. Lütfen yeniden deneyin.", response.status);
-  }
+    } as Record<number, string>,
+  },
+  en: {
+    timeout: "The request took longer than expected. Please try again.",
+    network: "Could not reach the server. Please check your connection and try again.",
+    generic: "Data could not be loaded. Please try again.",
+    invalid: "The server returned an invalid response. Please try again.",
+    status: {
+      400: "Invalid request. Please check the selected date or match.",
+      404: "Match not found or no longer available.",
+      422: "The date or match information is not valid.",
+      429: "Too many requests. Please try again in a moment.",
+      503: "The data service is temporarily unavailable. Please try again shortly.",
+      504: "The data source did not respond in time. Please try again.",
+    } as Record<number, string>,
+  },
+};
+
+/** Tarayıcıda dil çerezine göre (sunucu bileşenleri kendi sözlük metnini gösterir → Türkçe varsayılan). */
+function errorMessages() {
+  const english = typeof document !== "undefined" && /(?:^|;\s*)nv_lang=en(?:;|$)/.test(document.cookie);
+  return ERROR_MESSAGES[english ? "en" : "tr"];
 }
 
 function checkedList<T>(value: T, results = false): T {
@@ -255,9 +283,13 @@ export async function getLiveMatchEvaluations(day: string): Promise<LiveMatchEva
   );
 }
 
-export async function getPerformancePredictions(source: PredictionSource, day: string): Promise<LedgerPrediction[]> {
+export async function getPerformancePredictions(
+  source: PredictionSource, day: string, ruleVersion?: string,
+): Promise<LedgerPrediction[]> {
+  const params = new URLSearchParams({ source, day });
+  if (ruleVersion) params.set("rule_version", ruleVersion);
   return request<LedgerPrediction[]>(
-    `/api/performance/predictions?${new URLSearchParams({ source, day })}`,
+    `/api/performance/predictions?${params}`,
     { next: { revalidate: 60 } },
   );
 }

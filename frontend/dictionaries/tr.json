@@ -28,7 +28,8 @@
     "back": "Geri",
     "hide": "Gizle",
     "open": "Aç",
-    "search": "Ara"
+    "search": "Ara",
+    "timeLocale": "tr-TR"
   },
   "days": [
     "Pzt",
@@ -160,7 +161,7 @@
       "experiment": "deneme",
       "noRuns": "Henüz backtest koşusu yok (backtest-ledger komutuyla üretilir).",
       "strategy_live_ht": "Canlı İY→MS",
-      "strategy_top_pick": "Top Picks",
+      "strategy_top_pick": "Arşiv havuzu (v4)",
       "strategy_market_summary": "Ana Pazar Özeti",
       "byLeague": "Lige göre",
       "byArchive": "Arşive göre",
@@ -199,7 +200,14 @@
       "emptyLiveDay": "Bu gün canlıya giren kayıtlı maç yok.",
       "recordedAt": "Kayıt {time}",
       "liveSummaryNote": "Devre arasında kaydedilen kararlar: en az 5 maçlık arşiv %85+ ve aynı lig + aynı İY geçmişi %85+; pazar başına tek karar. Maç bitince tuttu/tutmadı olarak işaretlenir.",
-      "strategy_live_archive": "Canlı arşiv (%85+)"
+      "strategy_live_archive": "Canlı arşiv (%85+)",
+      "market_ou_05": "2Y 0.5 Alt/Üst",
+      "market_ou_15": "MS 1.5 Alt/Üst",
+      "market_ou_35": "MS 3.5 Alt/Üst",
+      "strategy_live_poisson": "Canlı Poisson (gölge)",
+      "strategy_prematch_v5": "Maç öncesi (takım gücü)",
+      "pctFormat": "%{v}",
+      "decimalSep": ","
     }
   },
   "live": {
@@ -291,7 +299,9 @@
       "historicalTooltip": "Geçmiş testte bu pazarda {bucket} maçlık örneklemle verilen %85+ işaretlerin gerçekte tutma oranı ({n} işaret).",
       "historicalPooled": "Bu pazarda yeterli veri olmadığı için aynı örneklem büyüklüğündeki tüm pazarların ortalaması.",
       "historicalNote": "\"geçmiş %X\": aynı türdeki işaretlerin geçmiş maçlarda gerçek isabeti — ekrandaki oran örneklem küçükken olduğundan yüksek görünür."
-    }
+    },
+    "staleData": "veri eski",
+    "staleTooltip": "Canlı veri {s} sn'dir güncellenmedi; kaynak gecikiyor olabilir."
   },
   "error": {
     "title": "Bir şeyler ters gitti",
@@ -509,7 +519,7 @@
     "archiveDual": "Arşiv 1+2 uyumlu",
     "archive1Match": "Arşiv 1 eşleşmesi var",
     "archive2Match": "Arşiv 2 eşleşmesi var",
-    "archive3Match": "Arşiv 3 eşleşmesi var (cosine similarity)"
+    "archive3Match": "Arşiv 3 eşleşmesi var (takım gücü benzerliği)"
   },
   "liveMatchBadge": {
     "liveScore": "Canlı skor",

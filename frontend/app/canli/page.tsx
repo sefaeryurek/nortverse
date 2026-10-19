@@ -14,6 +14,8 @@ import { useLocale } from "@/lib/locale-context";
 
 const POLL_INTERVAL = 45_000;
 const WS_GRACE_MS = 3_000;
+const STALE_AFTER_S = 90; // WS 15 sn, REST 45 sn'de bir gelir → 90 sn'den eski veri gecikmiş sayılır
+
 function ArchiveDetails({ match }: { match: LiveHTMatch }) {
   const { t } = useLocale();
   const a = t.live.archive;
@@ -225,22 +227,36 @@ export default function CanliPage() {
     }
   }, [t]);
 
-  // WS bağlı değilken REST ile yükle: bağlantı kurulurken kısa bekleme, fallback'te hemen.
+  // WS bağlı değilken REST ile yükle: ilk bağlantıda kısa bekleme; fallback'te veya bağlantı koptuysa hemen.
+  // Bağımlılıkta tam durum yok → yeniden bağlanma denemeleri (bağlanıyor ↔ koptu) zamanlayıcıyı sıfırlamaz.
+  const immediate = ws.status === "fallback" || ws.lastUpdate !== null;
   useEffect(() => {
     if (usingWs) return;
-    const start = window.setTimeout(fetchMatches, ws.status === "fallback" ? 0 : WS_GRACE_MS);
+    const start = window.setTimeout(fetchMatches, immediate ? 0 : WS_GRACE_MS);
     const timer = window.setInterval(fetchMatches, POLL_INTERVAL);
     return () => {
       window.clearTimeout(start);
       window.clearInterval(timer);
     };
-  }, [usingWs, ws.status, fetchMatches]);
+  }, [usingWs, immediate, fetchMatches]);
 
-  const source: Snapshot | null = usingWs && ws.lastUpdate ? { matches: ws.matches, at: ws.lastUpdate } : rest;
+  // Bağlantı koptuğunda son WS verisi, daha yeni REST verisi gelene kadar ekranda kalır (boş iskelet / eski REST yok).
+  const wsSnap: Snapshot | null = ws.lastUpdate ? { matches: ws.matches, at: ws.lastUpdate } : null;
+  const source: Snapshot | null = usingWs
+    ? wsSnap
+    : wsSnap && (!rest || wsSnap.at > rest.at) ? wsSnap : rest;
   const matches = useMemo(
     () => [...(source?.matches ?? [])].sort((a, b) => minuteOrder(a) - minuteOrder(b)),
     [source?.matches],
   );
+  // Yayın durursa (kaynak hatası) liste sessizce eskimesin: 90 sn'den eski veri işaretlenir.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const staleSeconds = source ? Math.round((now - source.at.getTime()) / 1000) : 0;
+  const stale = staleSeconds > STALE_AFTER_S;
   const loading = source === null && !error;
   const showError = source === null && !!error;
   const timeLocale = locale === "en" ? "en-GB" : "tr-TR";
@@ -263,8 +279,10 @@ export default function CanliPage() {
           <div className="flex items-center gap-2">
             <ConnectionBadge status={ws.status} />
             {source && (
-              <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", fontFamily: "var(--nv-font-mono)" }}>
+              <span style={{ fontSize: "var(--nv-text-xs)", color: stale ? "var(--nv-accent-amber)" : "var(--nv-text-tertiary)", fontFamily: "var(--nv-font-mono)" }}
+                title={stale ? t.live.staleTooltip.replace("{s}", String(staleSeconds)) : undefined}>
                 {source.at.toLocaleTimeString(timeLocale, { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                {stale && <> · <span aria-hidden="true">⚠</span> {t.live.staleData}</>}
               </span>
             )}
           </div>

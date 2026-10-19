@@ -11,8 +11,9 @@ import RetryButton from "./RetryButton";
 
 type Perf = Dictionary["evaluation"]["perf"];
 
-function fmt(value: number | null | undefined, suffix = ""): string {
-  return value == null ? "—" : `${value.toFixed(1)}${suffix}`;
+/** Dile göre yüzde: Türkçe "%92,6", İngilizce "92.6%" (uygulamanın geri kalanıyla aynı). */
+function fmtPct(value: number | null | undefined, p: Perf): string {
+  return value == null ? "—" : p.pctFormat.replace("{v}", value.toFixed(1).replace(".", p.decimalSep));
 }
 
 function rateColor(stats: PerformanceStats): string {
@@ -89,8 +90,8 @@ function StatsTable({ title, rows, labelOf, p }: {
               <tr key={row.key} style={{ borderTop: "1px solid var(--nv-border-subtle)", textAlign: "right", opacity: row.stage === "cok_erken" ? 0.65 : 1 }}>
                 <td style={{ textAlign: "left", padding: "6px", color: "var(--nv-text-primary)" }}>{labelOf(row.key)}</td>
                 <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{row.resolved}</td>
-                <td style={{ padding: "6px", fontWeight: 700, color: rateColor(row) }}>{fmt(row.hit_pct, "%")}</td>
-                <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{fmt(row.avg_prob_pct, "%")}</td>
+                <td style={{ padding: "6px", fontWeight: 700, color: rateColor(row) }}>{fmtPct(row.hit_pct, p)}</td>
+                <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{fmtPct(row.avg_prob_pct, p)}</td>
                 <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{row.lift_pct == null ? "—" : `${row.lift_pct > 0 ? "+" : ""}${row.lift_pct.toFixed(1)}`}</td>
                 <td style={{ padding: "6px" }}><VerdictBadge verdict={row.verdict} resolved={row.resolved} p={p} /></td>
               </tr>
@@ -262,7 +263,7 @@ function SummaryBody({ summary, t, headline, groups }: {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card
           label={p.winRate}
-          value={fmt(o.hit_pct, "%")}
+          value={fmtPct(o.hit_pct, p)}
           sub={`${p.hitsOf.replace("{hits}", String(o.hits)).replace("{n}", String(o.resolved))}${o.ci_low != null ? ` · ${p.ci.replace("{low}", o.ci_low.toFixed(0)).replace("{high}", String(o.ci_high?.toFixed(0)))}` : ""}`}
           color={rateColor(o)}
         />
@@ -272,7 +273,7 @@ function SummaryBody({ summary, t, headline, groups }: {
           sub={o.baseline_hit_pct == null ? undefined : `${p.baseline}: ${o.baseline_hit_pct.toFixed(1)}%`}
           hint={p.liftHint}
         />
-        <Card label={p.calibration} value={`${fmt(o.avg_prob_pct, "%")} / ${fmt(o.hit_pct, "%")}`} hint={p.calibrationHint} />
+        <Card label={p.calibration} value={`${fmtPct(o.avg_prob_pct, p)} / ${fmtPct(o.hit_pct, p)}`} hint={p.calibrationHint} />
         <Card label={p.brier} value={o.brier == null ? "—" : o.brier.toFixed(3)} sub={p.brierHint} />
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
@@ -344,7 +345,10 @@ export function pickBacktestRun(runs: BacktestRun[], requested: number | null): 
 }
 
 function runLabel(run: BacktestRun, p: Perf): string {
-  const key = run.rule_version.startsWith("live-arch") ? "live_archive" : run.strategy;
+  const key = run.rule_version.startsWith("live-arch") ? "live_archive"
+    : run.rule_version.startsWith("live-poisson") ? "live_poisson"
+    : run.rule_version === "ft-display-v5" ? "prematch_v5"
+    : run.strategy;
   const strategy = (p as Record<string, string>)[`strategy_${key}`] ?? run.strategy;
   return `#${run.id} · ${strategy}`;
 }
@@ -406,7 +410,7 @@ export async function BacktestOverview({ runId, t }: { runId: number | null; t: 
           <h3 className="font-semibold" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>{p.informationalTitle}</h3>
           <p className="mb-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>{p.informationalHint}</p>
           <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)", fontVariantNumeric: "tabular-nums" }}>
-            {p.winRate}: <strong>{fmt(info.hit_pct, "%")}</strong> · {p.baseline}: {fmt(info.baseline_hit_pct, "%")} ·{" "}
+            {p.winRate}: <strong>{fmtPct(info.hit_pct, p)}</strong> · {p.baseline}: {fmtPct(info.baseline_hit_pct, p)} ·{" "}
             {p.lift}: {info.lift_pct == null ? "—" : `${info.lift_pct > 0 ? "+" : ""}${info.lift_pct.toFixed(1)}`} · n={info.resolved}
           </p>
         </div>
@@ -429,11 +433,15 @@ function OutcomeBadge({ outcome, p }: { outcome: LedgerPrediction["outcome"]; p:
   );
 }
 
-export async function PredictionDayList({ source, day, t }: { source: PredictionSource; day: string; t: Dictionary }) {
+export async function PredictionDayList({ source, day, t, ruleVersion }: {
+  source: PredictionSource; day: string; t: Dictionary;
+  /** Sadece bu sürüm (ekrandaki); gölge sürümün seçimleri aynı maçta çelişkili görünmesin. */
+  ruleVersion?: string;
+}) {
   const p = t.evaluation.perf;
   let rows: LedgerPrediction[];
   try {
-    rows = await getPerformancePredictions(source, day);
+    rows = await getPerformancePredictions(source, day, ruleVersion);
   } catch {
     return <p className="nv-card p-4" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{t.common.loadError}</p>;
   }
@@ -465,7 +473,7 @@ export async function PredictionDayList({ source, day, t }: { source: Prediction
                 <div key={pred.id} className="flex items-center gap-2 px-2 py-1" style={{ borderRadius: "var(--nv-radius-md)", backgroundColor: "var(--nv-bg-surface)", border: "1px solid var(--nv-border-subtle)", fontSize: "var(--nv-text-xs)", opacity: pred.informational ? 0.7 : 1 }}>
                   <span style={{ color: "var(--nv-text-tertiary)" }}>{marketLabel(pred.market, p)}</span>
                   <span className="font-bold" style={{ color: "var(--nv-text-primary)" }}>{selectionLabel(pred.market, pred.selection, t)}</span>
-                  <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)" }}>%{pred.prob_pct.toFixed(1)}</span>
+                  <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)" }}>{fmtPct(pred.prob_pct, p)}</span>
                   {pred.informational && <span style={{ color: "var(--nv-text-tertiary)" }}>({p.info})</span>}
                   {pred.late && <span style={{ color: "var(--nv-text-tertiary)" }}>({p.late})</span>}
                   <OutcomeBadge outcome={pred.outcome} p={p} />

@@ -134,6 +134,16 @@ function HitBadge({ hit, label }: { hit: boolean; label: string }) {
 /*  Pattern Badge                                                     */
 /* ------------------------------------------------------------------ */
 
+/** Backend Türkçe seçim adı döner ("Üst", "KG Var") → seçili dile çevrilir. */
+function pickLabel(pick: string, t: Dictionary): string {
+  const lp = t.live.prediction;
+  const map: Record<string, string> = {
+    "Üst": lp.over, "Alt": lp.under,
+    "KG Var": `${lp.btts} ${lp.yes}`, "KG Yok": `${lp.btts} ${lp.no}`,
+  };
+  return map[pick] ?? pick;
+}
+
 function PatternBadge({
   pat,
   archiveLabel,
@@ -173,8 +183,8 @@ function PatternBadge({
           {t.evaluation.confident}
         </span>
       )}
-      <HitBadge hit={pat.over_25_hit} label={`${pat.over_25_pick} %${pat.over_25_pct.toFixed(0)}`} />
-      <HitBadge hit={pat.btts_hit} label={`${pat.btts_pick} %${pat.btts_pct.toFixed(0)}`} />
+      <HitBadge hit={pat.over_25_hit} label={`${pickLabel(pat.over_25_pick, t)} %${pat.over_25_pct.toFixed(0)}`} />
+      <HitBadge hit={pat.btts_hit} label={`${pickLabel(pat.btts_pick, t)} %${pat.btts_pct.toFixed(0)}`} />
       <span style={{ color: "var(--nv-text-tertiary)" }}>
         ({pat.match_count} {t.common.match})
       </span>
@@ -193,7 +203,7 @@ function EvalRow({ match, t }: { match: MatchEvaluation; t: Dictionary }) {
   const timeStr = match.kickoff_time
     ? (() => {
         try {
-          return new Date(match.kickoff_time).toLocaleTimeString("tr-TR", {
+          return new Date(match.kickoff_time).toLocaleTimeString(t.common.timeLocale, {
             hour: "2-digit",
             minute: "2-digit",
             timeZone: "Europe/Istanbul",
@@ -582,7 +592,7 @@ function RangeBar({ active, date, tab, t }: { active: Range; date: string; tab: 
   );
 }
 
-function TabBar({ active, date, t }: { active: Tab; date: string; t: Dictionary }) {
+function TabBar({ active, date, range, t }: { active: Tab; date: string; range: Range; t: Dictionary }) {
   const labels: Record<Tab, string> = {
     canli: t.evaluation.tabs.live,
     "mac-oncesi": t.evaluation.tabs.prematch,
@@ -590,13 +600,13 @@ function TabBar({ active, date, t }: { active: Tab; date: string; t: Dictionary 
     pattern: t.evaluation.tabs.pattern,
   };
   return (
-    <div role="tablist" className="flex gap-1 px-[var(--nv-page-gutter)] pt-3 overflow-x-auto">
+    // Sekmeler ayrı sayfalara giden bağlantılar → ARIA sekme değil, gezinme (ok tuşu davranışı gerekmez).
+    <nav aria-label={t.evaluation.title} className="flex gap-1 px-[var(--nv-page-gutter)] pt-3 overflow-x-auto">
       {TABS.map((tab) => (
         <Link
           key={tab}
-          role="tab"
-          aria-selected={tab === active}
-          href={`/degerlendirme?date=${date}&tab=${tab}`}
+          aria-current={tab === active ? "page" : undefined}
+          href={`/degerlendirme?date=${date}&tab=${tab}&aralik=${range}`}
           className="px-3 py-1.5 font-semibold whitespace-nowrap"
           style={{
             fontSize: "var(--nv-text-sm)",
@@ -608,7 +618,7 @@ function TabBar({ active, date, t }: { active: Tab; date: string; t: Dictionary 
           {labels[tab]}
         </Link>
       ))}
-    </div>
+    </nav>
   );
 }
 
@@ -660,7 +670,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
         </div>
       </div>
 
-      <TabBar active={tab} date={date} t={t} />
+      <TabBar active={tab} date={date} range={range} t={t} />
 
       {/* Gün sekmeleri — backtest bir tarih aralığını özetler, güne bağlı değil */}
       {tab !== "backtest" && (
@@ -706,7 +716,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
               />
             </Suspense>
             <Suspense fallback={<EvalSkeleton />}>
-              {tab === "canli" ? <LiveDayList day={date} t={t} /> : <PredictionDayList source={TAB_SOURCE[tab]} day={date} t={t} />}
+              {tab === "canli" ? <LiveDayList day={date} t={t} /> : <PredictionDayList source={TAB_SOURCE[tab]} day={date} t={t} ruleVersion={PREMATCH_RULE_VERSION} />}
             </Suspense>
             {tab === "canli" && (
               <Suspense fallback={<EvalSkeleton />}>

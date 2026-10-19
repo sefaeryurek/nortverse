@@ -273,12 +273,26 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
             {!data.skipped && (
               <>
                 {/* Period tabs */}
-                <div className="flex gap-2" role="tablist">
+                <div
+                  className="flex gap-2"
+                  role="tablist"
+                  onKeyDown={(e) => {
+                    // Erişilebilir sekme: ← → ile periyot değişir, odak yeni sekmeye geçer
+                    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+                    const idx = PERIOD_KEYS.indexOf(activePeriod);
+                    const next = PERIOD_KEYS[(idx + (e.key === "ArrowRight" ? 1 : PERIOD_KEYS.length - 1)) % PERIOD_KEYS.length];
+                    changePeriod(next);
+                    document.getElementById(`period-tab-${next}`)?.focus();
+                  }}
+                >
                   {PERIOD_KEYS.map((key) => (
                     <button
                       key={key}
+                      id={`period-tab-${key}`}
                       role="tab"
                       aria-selected={activePeriod === key}
+                      aria-controls="period-panel"
+                      tabIndex={activePeriod === key ? 0 : -1}
                       onClick={() => changePeriod(key)}
                       className="px-4 py-2 text-sm font-semibold transition-all"
                       style={{
@@ -301,6 +315,9 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
 
                 {/* Period content -- pending iken hafif soluk */}
                 <div
+                  id="period-panel"
+                  role="tabpanel"
+                  aria-labelledby={`period-tab-${activePeriod}`}
                   className="space-y-4 transition-opacity"
                   style={{
                     opacity: isPending ? 0.6 : 1,

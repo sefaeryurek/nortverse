@@ -42,9 +42,9 @@ function Cell({
   const pct = Math.round(value.pct);
   const { color, opacity } = pctTone(pct);
   return (
-    <div className="flex flex-col items-end gap-1" style={{ opacity }}>
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] truncate" style={{ color }}>
+    <div className="flex flex-col items-end gap-1 min-w-0" style={{ opacity }}>
+      <div className="flex items-center gap-2 min-w-0 max-w-full">
+        <span className="text-[11px] truncate min-w-0" style={{ color }}>
           {localizeLabel(value.selectionLabel, locale)}
         </span>
         <span

@@ -83,6 +83,20 @@ describe("Canlı sayfa", () => {
     expect(await screen.findByText("Ev 7")).toBeTruthy();
   });
 
+  it("keeps the last WebSocket list on screen when the connection drops", () => {
+    wsState = { matches: [match("7", "HT")], status: "disconnected", lastUpdate: new Date() };
+    render(ui());
+    // Eskiden bağlantı koptuğunda REST gelene kadar boş iskelet görünüyordu
+    expect(screen.getByText("Ev 7")).toBeTruthy();
+    expect(screen.queryByText("veri eski")).toBeNull();
+  });
+
+  it("marks data older than 90 seconds as stale", () => {
+    wsState = { matches: [match("8", "HT")], status: "connected", lastUpdate: new Date(Date.now() - 120_000) };
+    render(ui());
+    expect(screen.getByText(/veri eski/)).toBeTruthy();
+  });
+
   it("explains unanalysed matches instead of offering a detail request that would fail", () => {
     wsState = { matches: [match("4", "60", { archive_view: null, frozen: false })], status: "connected", lastUpdate: new Date() };
     render(ui());
