@@ -544,7 +544,7 @@ const LIVE_ARCHIVE_RULE_VERSION = "live-arch-v2";
 const LIVE_ARCHIVE_OLD_VERSION = "live-arch-v1";
 /** Maç öncesi: ekranda Dixon-Coles (v5); arşiv havuzu (v4) gölgede ölçülmeye devam eder. */
 const PREMATCH_RULE_VERSION = "ft-display-v5";
-const PREMATCH_SHADOW_VERSION = "ft-display-v4";
+const PREMATCH_SHADOW_VERSION = "ft-display-v4.1";
 const TAB_SOURCE = { canli: "live_ht", "mac-oncesi": "top_pick" } as const;
 const TAB_GROUPS = {
   canli: ["period_market", "archive", "league", "week"],

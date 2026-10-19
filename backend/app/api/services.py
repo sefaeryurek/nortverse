@@ -180,10 +180,13 @@ def _trends_parse(blob: dict | None) -> Optional[TrendsData]:
 
 async def _legacy_v4_picks(session, match_id: str) -> list[dict]:
     """v5'ten önce dondurulmuş ve artık başlamış maçlar: o gün gösterilen v4 seçimi (geçmiş kaybolmasın)."""
-    from app.analysis.prematch_v4 import V4_RULE_VERSION
+    from app.analysis.prematch_v4 import LEGACY_V4_RULE_VERSIONS
 
-    snapshot = await session.get(AnalysisSnapshot, (match_id, V4_RULE_VERSION))
-    return snapshot.picks if snapshot is not None and isinstance(snapshot.picks, list) else []
+    for version in LEGACY_V4_RULE_VERSIONS:
+        snapshot = await session.get(AnalysisSnapshot, (match_id, version))
+        if snapshot is not None and isinstance(snapshot.picks, list):
+            return snapshot.picks
+    return []
 
 
 async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) -> list[dict]:

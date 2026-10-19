@@ -97,6 +97,19 @@ def summarize(rows: list[dict]) -> dict:
     }
 
 
+def expand_by_archive(rows: list[dict]) -> list[dict]:
+    """"Arşiv" kırılımı için: live-arch-v2 tek satırda kararı destekleyen arşivleri `details.sources`'ta
+    tutar (satırın `archive`'ı çoğunlukla boş, en büyük örneklem Genel kazanır) → her kaynak kendi satırıyla."""
+    out = []
+    for row in rows:
+        sources = (row.get("details") or {}).get("sources")
+        if isinstance(sources, list) and sources:
+            out.extend({**row, "archive": str(label).lower()} for label in sources)
+        else:
+            out.append(row)
+    return out
+
+
 def group_summaries(rows: list[dict], by: str) -> list[dict]:
     key_of = GROUP_FIELDS[by]
     buckets: dict[str, list[dict]] = defaultdict(list)

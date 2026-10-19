@@ -28,8 +28,10 @@ from app.db.models import AnalysisSnapshot, Match
 
 log = logging.getLogger(__name__)
 
-V4_RULE_VERSION = "ft-display-v4"
-MARKET_SUMMARY_RULE_VERSION = "market-summary-v1"
+# Arşiv algoritması (A2 c4, A3 d4) Sprint 91.4'te değişti → arşive dayanan iki kural yeni sürüm (Sprint 92.4).
+V4_RULE_VERSION = "ft-display-v4.1"
+MARKET_SUMMARY_RULE_VERSION = "market-summary-v2"
+LEGACY_V4_RULE_VERSIONS = ("ft-display-v4",)  # o gün gösterilen eski seçimler okunabilsin
 RULE_PARAMS = {
     "k": 20.0, "min_archive_matches": 10, "min_pooled": 30, "min_edge": 0.05,
     "exclude": ["X"], "tier_high_edge": 0.15, "tier_medium_edge": 0.10,
@@ -39,7 +41,12 @@ _RESULT_FIELDS = {"1": "result_1_pct", "X": "result_x_pct", "2": "result_2_pct"}
 
 
 def rule_params_fingerprint() -> str:
-    return hashlib.sha1(json.dumps(RULE_PARAMS, sort_keys=True).encode()).hexdigest()[:12]
+    """Kural parametreleri + arşiv algoritması sürümü: ikisinden biri değişince sabitlenmiş test kırılır
+    (arşiv havuzunu kullanan kural, arşiv değişince de yeni sürüm almalı)."""
+    from app.analysis.persist import PATTERN_ALGO_VERSION
+
+    payload = {**RULE_PARAMS, "pattern_algo": PATTERN_ALGO_VERSION}
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
 def _eligible_archives(patterns: dict) -> list[tuple[str, dict]]:

@@ -130,3 +130,37 @@ def test_verdict_protocol():
     assert verdict(140, 150, 0.80) == "above"
     s = summarize([_row("hit", 9000)] * 90 + [_row("miss", 9000)] * 10)
     assert s["verdict"] == "on_track" and s["expected_hits"] == 90.0
+
+
+def test_live_match_picks_do_not_merge_across_rule_versions():
+    picks: list[dict] = []
+    base = {"period": "ft", "market": "dc", "selection": "1X", "outcome": "hit", "pct": 90.0, "n": 40,
+            "risky": False, "archive": "genel", "label": "GENEL"}
+    _merge_pick(picks, {**base, "rule_version": "live-arch-v1"})
+    _merge_pick(picks, {**base, "rule_version": "live-arch-v2"})
+    assert len(picks) == 2
+
+
+def test_archive_breakdown_counts_each_supporting_archive():
+    from app.analysis.performance import expand_by_archive
+    row = {"archive": None, "outcome": "hit", "details": {"sources": ["A3", "Genel"]}}
+    plain = {"archive": "a1", "outcome": "miss", "details": {}}
+    assert [r["archive"] for r in expand_by_archive([row, plain])] == ["a3", "genel", "a1"]
+
+
+def test_backtest_run_current_flag_uses_its_own_rule_version():
+    from app.analysis import live_archive, live_poisson, prematch_v4, prematch_v5
+    from app.api.routes_performance import _is_current
+    assert _is_current(prematch_v5.V5_RULE_VERSION, {"params_fingerprint": prematch_v5.rule_params_fingerprint()})
+    assert _is_current(live_poisson.LIVE_POISSON_RULE_VERSION,
+                       {"params_fingerprint": live_poisson.rule_params_fingerprint()})
+    assert _is_current(live_archive.LIVE_ARCHIVE_RULE_VERSION,
+                       {"params_fingerprint": live_archive.rule_params_fingerprint()})
+    assert not _is_current(prematch_v5.V5_RULE_VERSION, {"params_fingerprint": prematch_v4.rule_params_fingerprint()})
+    assert not _is_current("live-arch-v1", {"params_fingerprint": live_archive.rule_params_fingerprint()})
+
+
+def test_summary_defaults_to_on_screen_rule_version():
+    from app.api.routes_performance import on_screen_rule_version
+    assert on_screen_rule_version("live_ht") == "live-arch-v2"
+    assert on_screen_rule_version("top_pick") == "ft-display-v5"

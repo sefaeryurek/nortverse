@@ -308,7 +308,7 @@ async def test_started_match_without_v5_snapshot_shows_frozen_v4(monkeypatch):
     v4_picks = [{"recommendation_id": "ft-display-v4:result:1", "market": "result"}]
     session = AsyncMock()
     session.get.side_effect = lambda _model, key: (
-        MagicMock(picks=v4_picks) if key[1] == prematch_v4.V4_RULE_VERSION else None)
+        MagicMock(picks=v4_picks) if key[1] == "ft-display-v4" else None)
     session.execute.return_value = MagicMock(scalar_one_or_none=lambda: None)   # maç başlamış
 
     @asynccontextmanager
