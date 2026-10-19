@@ -378,7 +378,7 @@ def run_pipeline_cmd(
 
     from app.pipeline import run_pipeline
 
-    async def _run() -> None:
+    async def _run() -> dict:
         stats = await run_pipeline(target_date=dt, only_hot=hot_only, incremental=incremental)
         console.print(
             f"\n[bold green]Pipeline tamamlandı:[/bold green] "
@@ -386,8 +386,22 @@ def run_pipeline_cmd(
             f"[yellow]{stats['skipped']} atlandı[/yellow] · "
             f"[red]{stats['errors']} hata[/red]"
         )
+        return stats
 
-    asyncio.run(_run())
+    stats = asyncio.run(_run())
+    if pipeline_failed(stats):
+        # Görev zamanlayıcı sıfır olmayan kodu görüp ekranda uyarı verir (eskiden hata olsa da 0 dönüyordu).
+        console.print("[bold red]Pipeline hatalı sayıldı: çok fazla maç işlenemedi[/bold red]")
+        raise typer.Exit(code=2)
+
+
+def pipeline_failed(stats: dict) -> bool:
+    """Tek tük sayfa zaman aşımı (her gün 1-2 olabilir) uyarı vermez; hiçbir maç kaydedilemediyse
+    veya denenenlerin %20'sinden fazlası (en az 5) hata verdiyse hata sayılır."""
+    errors, analyzed = stats.get("errors", 0), stats.get("analyzed", 0)
+    if errors == 0:
+        return False
+    return analyzed == 0 or errors > max(5, 0.2 * (analyzed + errors))
 
 
 def capture_score_snapshots_cmd(

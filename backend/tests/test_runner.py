@@ -399,3 +399,13 @@ async def test_retained_cache_items_are_marked_carried(monkeypatch):
     monkeypatch.setattr(runner, "sync_kickoffs_from_cache", AsyncMock(return_value=0))
     assert await runner.save_fixture_cache(date(2026, 10, 19), []) == 1
     assert session.merge.await_args.args[0].matches_json[0]["carried"] is True
+
+
+def test_pipeline_exit_code_rule():
+    """Tek tük zaman aşımı uyarı vermez; hiç kayıt yoksa ya da hatalar çoksa görev hata döner."""
+    from app.cli.pipeline_cmds import pipeline_failed
+    assert not pipeline_failed({"analyzed": 78, "errors": 2, "skipped": 68})
+    assert not pipeline_failed({"analyzed": 0, "errors": 0, "skipped": 10})
+    assert pipeline_failed({"analyzed": 0, "errors": 3})
+    assert pipeline_failed({"analyzed": 20, "errors": 9})
+    assert not pipeline_failed({"analyzed": 20, "errors": 5})

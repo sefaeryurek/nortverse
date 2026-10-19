@@ -189,7 +189,8 @@ async def _legacy_v4_picks(session, match_id: str) -> list[dict]:
     return []
 
 
-async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) -> list[dict]:
+async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None],
+                                  pattern_hash: str | None = None) -> list[dict]:
     """Read the immutable snapshot, creating it only while the match is upcoming."""
     async with get_session() as session:
         snapshot = await session.get(AnalysisSnapshot, (row.match_id, RULE_VERSION))
@@ -219,6 +220,7 @@ async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) 
             league_name=current.league_name,
             league_code=current.league_code,
             patterns=patterns,
+            pattern_hash=pattern_hash,
         )
         if picks is not None:
             _snapshot_finalized_put(_snapshot_cache_key(row.match_id))
@@ -323,7 +325,7 @@ async def build_from_db(row: Match) -> AnalyzeResponse | None:
         f: current[f] if f in to_compute else getattr(row, f"pattern_{f}_hash") for f in FAMILIES
     })
     try:
-        recommendations = await _frozen_recommendations(row, patterns)
+        recommendations = await _frozen_recommendations(row, patterns, shown_hash)
     except Exception:
         # Tahmin dondurma hatası analiz sayfasını düşürmemeli; bir sonraki ziyarette yeniden denenir.
         log.error("Maç öncesi seçim dondurulamadı [%s]", mid, exc_info=True)

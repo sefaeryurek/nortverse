@@ -145,7 +145,7 @@ def ledger_rows_v5(probabilities: dict | None, prior: dict[str, float], goal_pri
 
 async def capture_recommendations(
     session, *, match_id: str, analyzed_at, captured_at, kickoff_time, league_name: str | None,
-    league_code: str | None, patterns: dict | None,
+    league_code: str | None, patterns: dict | None, pattern_hash: str | None = None,
 ) -> tuple[list[dict] | None, bool]:
     """Maç öncesi kararları bir kez dondurur: v4 (gölge) + v5 (ekranda). Ekranda gösterilecek v5 seçimini döner.
 
@@ -166,6 +166,7 @@ async def capture_recommendations(
     v4_picks, _ = await capture_v4_recommendations(
         session, match_id=match_id, analyzed_at=analyzed_at, captured_at=captured_at,
         kickoff_time=kickoff_time, league_name=league_name, league_code=league_code, patterns=patterns,
+        pattern_hash=pattern_hash,
     )
     if v4_picks is None:
         return None, False
@@ -185,7 +186,7 @@ async def capture_recommendations(
     v4_selection = v4["selection"] if v4 and not v4.get("abstain_reason") else None
     probabilities = match_probabilities(await get_poisson_model(), teams.league_name or league,
                                         teams.home_team, teams.away_team)
-    phash = hash_string(pattern_hashes())
+    phash = pattern_hash or hash_string(pattern_hashes())
     picks = [{**pick, "pattern_hash": phash}
              for pick in build_v5_recommendations(probabilities, prior, v4_selection, patterns)]
     written = await session.execute(

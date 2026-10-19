@@ -1602,7 +1602,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - Değerlendirme sayfası: özetin üstünde karne satırı (beklenen vs gerçek), tablolarda "Durum" sütunu (ikon + metin). İlk hüküm: live-arch-v1 "beklentinin altında" (123 kararda beklenen 121, gerçek 93).
 
 **Faz 6 — operasyon (TAMAMLANDI ✅, görev kurulumu yönetici izni ister):**
-- **`scripts/start-backend.bat` + `Backend` görevi:** oturum açılışında penceresiz başlar (süre sınırı yok, `IgnoreNew`); port 8000 doluysa ikinci kopya açmaz (`logs/backend_starts.log`), Docker'ı `ensure-docker.bat` ile hazırlar, çökerse 30 sn sonra yeniden dener, 5 çöküşte durur. Log `logs/backend.log` (20 MB'ta `backend.old.log`).
+- **`scripts/start-backend.bat` + `Backend` görevi:** oturum açılışında penceresiz başlar (süre sınırı yok, `IgnoreNew`); port 8000 doluysa ikinci kopya açmaz (`scripts/logs/backend_starts.log`), Docker'ı `ensure-docker.bat` ile hazırlar, çökerse 30 sn sonra yeniden dener (her denemede port tekrar kontrol edilir), 5 çöküşte durur; 10 dk'dan uzun çalıştıysa çökme sayacı sıfırlanır (Sprint 92.5). Log `scripts/logs/backend.log` (20 MB'ta `backend.old.log`, her yeniden başlatmada kontrol). `run-pipeline` hiç kayıt yapamazsa veya hataları %20'yi (en az 5) aşarsa kod 2 döner → ekranda uyarı.
 - **`scripts/notify-error.bat`:** görev hatasında ekranda uyarı penceresi (`msg`, 12 saat) + masaüstünde `NORTVERSE-HATA.txt`. Pipeline, skor güncelleme, yedekleme ve backend hata dallarına bağlı. Mesajda parantez kullanılmaz (if/else bloğunu erken kapatır).
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)

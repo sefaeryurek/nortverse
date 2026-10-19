@@ -263,9 +263,12 @@ async def match_already_started(session: AsyncSession, match_id: str, captured_a
 async def capture_v4_recommendations(
     session: AsyncSession, *, match_id: str, analyzed_at: datetime, captured_at: datetime,
     kickoff_time: datetime | None, league_name: str | None, league_code: str | None,
-    patterns: dict | None,
+    patterns: dict | None, pattern_hash: str | None = None,
 ) -> tuple[list[dict] | None, bool]:
-    """Maç öncesi kararı bir kez dondurur: ekran listesi + tahmin defteri (aynı transaction)."""
+    """Maç öncesi kararı bir kez dondurur: ekran listesi + tahmin defteri (aynı transaction).
+
+    `pattern_hash`: kullanılan pattern'lerin parmak izi (verilmezse güncel ayar — taze hesaplanmış varsayılır).
+    """
     if not _eligible(analyzed_at, captured_at, kickoff_time, league_name, league_code, patterns):
         return None, False
     reason = await match_already_started(session, match_id, captured_at)
@@ -276,7 +279,7 @@ async def capture_v4_recommendations(
     league = canonical_league_name(league_name or league_code or "")
     table = await get_cond_table()
     prior = table.league_prior(league)
-    phash = hash_string(pattern_hashes())
+    phash = pattern_hash or hash_string(pattern_hashes())
     # Hangi arşiv ayarıyla donduruldu → sayfadaki güncel yüzdelerle farklıysa kullanıcıya söylenir.
     picks = [{**pick, "pattern_hash": phash} for pick in build_v4_recommendations(patterns, prior)]
 
