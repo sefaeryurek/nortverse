@@ -91,3 +91,46 @@ def test_train_window_excludes_recent_and_old():
     window = lp.train_window(rows, kickoffs, AS_OF)
     assert window and window[-1].kickoff <= AS_OF - timedelta(hours=3)
     assert window[0].kickoff >= AS_OF - timedelta(days=lp.RULE_PARAMS["train_days"])
+
+
+# ─── Maç öncesi λ: tazelik ve sızıntı korumaları (Sprint 92.2) ──────────────
+
+NOW_L = datetime(2026, 10, 19, 12, tzinfo=timezone.utc)
+
+
+def test_stored_lambda_refreshed_when_months_old():
+    """Ekim'de Mayıs maçı için yazılan λ maç günü kullanılmaz (A3 eski takım gücüyle eşleşirdi)."""
+    kickoff = datetime(2027, 5, 9, 18, tzinfo=timezone.utc)
+    match_day = datetime(2027, 5, 9, 8, tzinfo=timezone.utc)
+    assert not lp.stored_lambda_usable(NOW_L, as_of=match_day, kickoff=kickoff, now=match_day)
+    assert lp.stored_lambda_usable(match_day - timedelta(days=3), as_of=match_day, kickoff=kickoff, now=match_day)
+
+
+def test_stored_lambda_rejected_when_model_saw_own_result():
+    kickoff = NOW_L - timedelta(days=2)
+    assert not lp.stored_lambda_usable(NOW_L, as_of=kickoff, kickoff=kickoff, now=NOW_L)
+    assert lp.stored_lambda_usable(lp.week_start(kickoff), as_of=kickoff, kickoff=kickoff, now=NOW_L)
+    assert not lp.stored_lambda_usable(None, as_of=kickoff, kickoff=kickoff, now=NOW_L)
+
+
+@pytest.mark.asyncio
+async def test_new_match_without_row_uses_given_teams(monkeypatch):
+    """İlk analizde satır henüz yok → λ verilen lig/takımlarla hesaplanır (eskiden A3 kalıcı boş kalıyordu)."""
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock, MagicMock
+
+    session = AsyncMock()
+    session.execute.return_value = MagicMock(first=lambda: None)
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr("app.db.connection.get_session", fake_session)
+    model = lp.PoissonModel(as_of=NOW_L, leagues={})
+    monkeypatch.setattr(lp, "get_poisson_model", AsyncMock(return_value=model))
+    monkeypatch.setattr(lp, "expected_pair", lambda m, league, h, a: (1.6, 0.9) if league == "L" else None)
+    pair = await lp.team_lambdas_for_match("new", NOW_L, league="L", home="H", away="A",
+                                           kickoff=NOW_L + timedelta(hours=5))
+    assert pair == (1.6, 0.9)
+    assert session.execute.await_count == 1   # satır yok → yazma denenmez

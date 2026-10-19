@@ -485,6 +485,7 @@ async def do_analyze(match_id: str) -> AnalyzeResponse:
         ft_ratios=result.ft.all_ratios,
         as_of=pattern_as_of(result.analyzed_at, raw.kickoff_time),
         league_name=match_league_name(raw.league_code, raw.league_name),
+        teams=(raw.home_team, raw.away_team), kickoff=raw.kickoff_time,
     )
 
     frozen_recommendations: list[dict] = []

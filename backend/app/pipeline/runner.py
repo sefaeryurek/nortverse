@@ -236,7 +236,17 @@ async def _upsert(
                 )
         return picks or []
 
-    return await _with_retry(_do, label=f"_upsert[{result.match_id}]")
+    picks = await _with_retry(_do, label=f"_upsert[{result.match_id}]")
+    if raw is not None and patterns is not None and "pattern_ft_d" in patterns:
+        # İlk analizde pattern'ler kayıttan önce hesaplanır → λ satır yokken yazılamamıştı; şimdi yazılır
+        # (aksi halde maç bitince A3 aday havuzuna λ'sız girer). Sprint 92.2.
+        try:
+            from app.analysis.live_poisson import team_lambdas_for_match
+
+            await team_lambdas_for_match(result.match_id, pattern_as_of(result.analyzed_at, raw.kickoff_time))
+        except Exception as exc:
+            log.warning("Takım gücü λ yazılamadı [%s]: %s", result.match_id, exc)
+    return picks
 
 
 async def sync_kickoffs(session, items: list[dict]) -> int:
@@ -433,6 +443,7 @@ async def run_pipeline(
                     ft_ratios=result.ft.all_ratios,
                     as_of=pattern_as_of(result.analyzed_at, raw.kickoff_time),
                     league_name=match_league_name(raw.league_code, raw.league_name),
+                    teams=(raw.home_team, raw.away_team), kickoff=raw.kickoff_time,
                 )
                 await _upsert(result, raw, patterns)
                 stats["analyzed"] += 1

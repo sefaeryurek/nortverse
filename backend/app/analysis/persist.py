@@ -122,6 +122,8 @@ async def compute_all_patterns(
     as_of: datetime,
     league_name: str | None = None,
     families: Iterable[str] = FAMILIES,
+    teams: tuple[str, str] | None = None,
+    kickoff: datetime | None = None,
 ) -> dict[str, dict | None]:
     """İstenen pattern ailelerini tek seferde hesapla.
 
@@ -172,7 +174,9 @@ async def compute_all_patterns(
     async def _d_all() -> tuple[Optional[dict], Optional[dict], Optional[dict]]:
         from app.analysis.live_poisson import team_lambdas_for_match
 
-        target = await team_lambdas_for_match(match_id, as_of)
+        home, away = teams or (None, None)
+        target = await team_lambdas_for_match(match_id, as_of, league=league, home=home, away=away,
+                                              kickoff=kickoff)
         if target is None:
             return None, None, None
         results = await find_pattern_d_all_periods(

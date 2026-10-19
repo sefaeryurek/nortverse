@@ -421,8 +421,47 @@ async def backfill_team_lambdas(*, only_missing: bool = True, batch: int = 2000)
     return stats
 
 
-async def team_lambdas_for_match(match_id: str, as_of: datetime) -> tuple[float, float] | None:
-    """Maçın saklı λ'sı; yoksa (yeni maç) güncel modelle hesaplanıp yazılır. Model yoksa None."""
+# Saklı λ en fazla bu kadar eski bir modelle hesaplanmışsa kullanılır; yaklaşan maçlar Ekim'de
+# Mayıs maçı için yazılan λ ile maç günü A3 eşleşmesi yapmasın (Sprint 92.2).
+LAMBDA_MAX_AGE = timedelta(days=7)
+_week_models: dict[datetime, PoissonModel] = {}
+_week_lock = asyncio.Lock()
+
+
+def stored_lambda_usable(stored_as_of: datetime | None, *, as_of: datetime, kickoff: datetime | None,
+                         now: datetime) -> bool:
+    """Saklı λ bu hesap için geçerli mi? Maçın kendi sonucunu görmemiş ve yeterince taze olmalı."""
+    if stored_as_of is None:
+        return False
+    if kickoff is not None and stored_as_of - RESULT_KNOWN_DELAY >= kickoff:
+        return False  # model maçın kendi sonucunu görmüş olabilir (sızıntı)
+    return stored_as_of >= min(as_of, now) - LAMBDA_MAX_AGE
+
+
+async def _model_for(kickoff: datetime, now: datetime) -> PoissonModel:
+    """Maçın kendi sonucunu görmeyen model: güncel model uygunsa o, değilse başlama haftasının modeli."""
+    current = await get_poisson_model()
+    if current.as_of - RESULT_KNOWN_DELAY < kickoff:
+        return current
+    as_of = week_start(min(kickoff, now))
+    async with _week_lock:
+        model = _week_models.get(as_of)
+        if model is None:
+            model = await asyncio.to_thread(fit_model, await load_training(as_of), as_of)
+            _week_models[as_of] = model
+            while len(_week_models) > 8:
+                _week_models.pop(next(iter(_week_models)))
+    return model
+
+
+async def team_lambdas_for_match(match_id: str, as_of: datetime, *, league: str | None = None,
+                                 home: str | None = None, away: str | None = None,
+                                 kickoff: datetime | None = None) -> tuple[float, float] | None:
+    """Maçın maç öncesi λ'sı. Saklı değer geçerliyse o; yoksa sızıntısız modelle hesaplanıp yazılır.
+
+    Satır henüz yoksa (pipeline'da ilk analiz, kayıt pattern'lerden sonra yapılır) `league/home/away`
+    ile hesaplanır, yazılamaz; `_upsert` kayıttan sonra tekrar çağırıp yazar. Model yoksa None.
+    """
     from sqlalchemy import select, update
 
     from app.db.connection import get_session
@@ -430,19 +469,28 @@ async def team_lambdas_for_match(match_id: str, as_of: datetime) -> tuple[float,
 
     async with get_session() as session:
         row = (await session.execute(select(
-            Match.team_lambda_home, Match.team_lambda_away, Match.league_name, Match.home_team, Match.away_team,
+            Match.team_lambda_home, Match.team_lambda_away, Match.team_lambda_as_of,
+            Match.league_name, Match.home_team, Match.away_team, Match.kickoff_time,
         ).where(Match.match_id == match_id))).first()
-    if row is None:
+    now = datetime.now(timezone.utc)
+    if row is not None:
+        league, home, away = row.league_name or league, row.home_team or home, row.away_team or away
+        kickoff = row.kickoff_time or kickoff
+    if not (league and home and away):
         return None
-    if row.team_lambda_home is not None and row.team_lambda_away is not None:
+    kickoff = kickoff or as_of
+    kickoff = kickoff if kickoff.tzinfo else kickoff.replace(tzinfo=timezone.utc)
+    if (row is not None and row.team_lambda_home is not None and row.team_lambda_away is not None
+            and stored_lambda_usable(row.team_lambda_as_of, as_of=as_of, kickoff=kickoff, now=now)):
         return row.team_lambda_home, row.team_lambda_away
-    if datetime.now(timezone.utc) - as_of > timedelta(days=8):
-        return None  # geçmiş maç: doldurma komutu (backfill-team-lambdas) haftalık modelle hesaplar
-    model = await get_poisson_model()
-    pair = expected_pair(model, row.league_name or "", row.home_team, row.away_team)
+    if row is not None and row.team_lambda_home is None and now - kickoff > timedelta(days=8):
+        return None  # hiç λ'sı olmayan eski maç: doldurma komutu (backfill-team-lambdas) haftalık modelle yazar
+    model = await _model_for(kickoff, now)
+    pair = expected_pair(model, league, home, away)
     if pair is None:
         return None
-    async with get_session() as session:
-        await session.execute(update(Match).where(Match.match_id == match_id).values(
-            team_lambda_home=pair[0], team_lambda_away=pair[1], team_lambda_as_of=model.as_of))
+    if row is not None:
+        async with get_session() as session:
+            await session.execute(update(Match).where(Match.match_id == match_id).values(
+                team_lambda_home=pair[0], team_lambda_away=pair[1], team_lambda_as_of=model.as_of))
     return pair
