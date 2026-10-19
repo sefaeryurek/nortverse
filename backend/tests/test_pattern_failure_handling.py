@@ -12,6 +12,14 @@ from app.api import routes_analysis
 from app.api import services as svc
 
 
+@pytest.fixture(autouse=True)
+def _team_lambdas(monkeypatch):
+    """A3 hedefi (takım gücü λ) DB'den okunur; bu testler sadece aile hata davranışını sınar."""
+    from app.analysis import live_poisson
+
+    monkeypatch.setattr(live_poisson, "team_lambdas_for_match", AsyncMock(return_value=(1.5, 1.0)))
+
+
 async def compute():
     return await persist.compute_all_patterns("123", ([], [], []), ([], [], []),
                                               ([], [], []), {"1-0": 3.5},

@@ -7,6 +7,9 @@ import { useLocale } from "@/lib/locale-context";
 import type { Period } from "@/lib/labels";
 
 const LIST_LIMIT = 50;
+/** A3 = takım gücüne en yakın 200 maç; önce en yakın 20 gösterilir (Sprint 91). */
+const LIST_LIMIT_D = 20;
+const limitOf = (id: string) => (id === "d" ? LIST_LIMIT_D : LIST_LIMIT);
 
 interface Props {
   matchId: string;
@@ -99,14 +102,14 @@ export default function MatchedMatchesList({ matchId, period = "ft", hasPatternB
   const loading = open && current === null;
   const error = current?.error ?? false;
   const data = current?.data ?? null;
-  const visible = (list: MatchedMatch[], id: string) => (showAll[`${key}:${id}`] ? list : list.slice(0, LIST_LIMIT));
-  const moreButton = (list: MatchedMatch[], id: string) => list.length > LIST_LIMIT && !showAll[`${key}:${id}`] && (
+  const visible = (list: MatchedMatch[], id: string) => (showAll[`${key}:${id}`] ? list : list.slice(0, limitOf(id)));
+  const moreButton = (list: MatchedMatch[], id: string) => list.length > limitOf(id) && !showAll[`${key}:${id}`] && (
     <button
       onClick={() => setShowAll((prev) => ({ ...prev, [`${key}:${id}`]: true }))}
       className="text-xs font-semibold mt-1"
       style={{ color: "var(--nv-accent-blue)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
     >
-      {t.analyze.showMore.replace("{count}", String(list.length - LIST_LIMIT))}
+      {t.analyze.showMore.replace("{count}", String(list.length - limitOf(id)))}
     </button>
   );
 

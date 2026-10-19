@@ -156,7 +156,7 @@ class TestAnalysisConfigDefaults:
         monkeypatch.delenv("PATTERN_C_TOLERANCE", raising=False)
         from app.config import AnalysisConfig
         cfg = AnalysisConfig()
-        assert cfg.pattern_c_tolerance == 0.5
+        assert cfg.pattern_c_tolerance == 1.0
 
     def test_override_pattern_c_tolerance(self, monkeypatch):
         monkeypatch.setenv("PATTERN_C_TOLERANCE", "1.0")
@@ -230,17 +230,17 @@ class TestAnalysisConfigDefaults:
         cfg = AnalysisConfig()
         assert cfg.pattern_c_match_cap == 100
 
-    def test_default_pattern_d_min_similarity(self, monkeypatch):
-        monkeypatch.delenv("PATTERN_D_MIN_SIMILARITY", raising=False)
+    def test_default_pattern_d_top_k(self, monkeypatch):
+        monkeypatch.delenv("PATTERN_D_TOP_K", raising=False)
         from app.config import AnalysisConfig
         cfg = AnalysisConfig()
-        assert cfg.pattern_d_min_similarity == 0.97
+        assert cfg.pattern_d_top_k == 200
 
-    def test_override_pattern_d_min_similarity(self, monkeypatch):
-        monkeypatch.setenv("PATTERN_D_MIN_SIMILARITY", "0.90")
+    def test_override_pattern_d_top_k(self, monkeypatch):
+        monkeypatch.setenv("PATTERN_D_TOP_K", "50")
         from app.config import AnalysisConfig
         cfg = AnalysisConfig()
-        assert cfg.pattern_d_min_similarity == 0.90
+        assert cfg.pattern_d_top_k == 50
 
     def test_default_pattern_d_min_matches(self, monkeypatch):
         monkeypatch.delenv("PATTERN_D_MIN_MATCHES", raising=False)

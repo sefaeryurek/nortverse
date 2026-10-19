@@ -43,7 +43,7 @@ from app.cli.pipeline_cmds import (
     update_scores_cmd,
 )
 
-from app.cli.model_cmds import backtest_cmd, train_ensemble_cmd
+from app.cli.model_cmds import backfill_team_lambdas_cmd, backtest_cmd, train_ensemble_cmd
 from app.cli.ledger_cmds import backtest_ledger_cmd, live_freeze_cmd
 
 app = typer.Typer(help="Nortverse - futbol tahmin sistemi CLI", no_args_is_help=True)
@@ -79,6 +79,7 @@ app.command("self-test")(self_test_cmd)
 app.command("backtest")(backtest_cmd)
 app.command("backtest-ledger")(backtest_ledger_cmd)
 app.command("train-ensemble")(train_ensemble_cmd)
+app.command("backfill-team-lambdas")(backfill_team_lambdas_cmd)
 
 
 @app.command()

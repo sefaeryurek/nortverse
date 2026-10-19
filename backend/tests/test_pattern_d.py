@@ -1,4 +1,4 @@
-"""Pattern D (Cosine Similarity) birim testleri."""
+"""Arşiv-3 (algoritma d4): takım gücü (λ ev, λ dep) uzayında aynı ligden en yakın K maç."""
 
 import math
 from datetime import datetime, timedelta, timezone
@@ -6,312 +6,72 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.analysis.pattern_d import (
-    _build_pool,
-    _compute_idf_weights,
-    _to_vector,
-    cosine_similarity,
-    find_pattern_d_all_periods,
-)
-from app.analysis.pattern_stats import compute_stats
-from app.analysis.scores import ALL_SCORES, score_key
+from app.analysis.pattern_d import _build_pool, find_pattern_d_all_periods, nearest
+
+AS_OF = datetime(2026, 10, 1, tzinfo=timezone.utc)
+LEAGUE = "English Premier League"
 
 
-# ─── _to_vector ──────────────────────────────────────────────────────────────
+def _row(match_id, lam_h, lam_a, league=LEAGUE, kickoff=None, ft=(2, 1), ht=(1, 0)):
+    kickoff = kickoff or AS_OF - timedelta(days=30)
+    return (match_id, lam_h, lam_a, ft[0], ft[1], ht[0], ht[1], ft[0] - ht[0], ft[1] - ht[1], league, kickoff)
 
 
-class TestToVector:
-    def test_empty_dict_returns_zeros(self):
-        vec = _to_vector({})
-        assert len(vec) == len(ALL_SCORES)
-        assert all(v == 0.0 for v in vec)
-
-    def test_single_key(self):
-        h, a = ALL_SCORES[0]
-        key = score_key(h, a)
-        vec = _to_vector({key: 3.5})
-        assert vec[0] == 3.5
-        assert all(v == 0.0 for v in vec[1:])
-
-    def test_full_ratios(self):
-        ratios = {score_key(h, a): float(i) for i, (h, a) in enumerate(ALL_SCORES)}
-        vec = _to_vector(ratios)
-        assert len(vec) == 35
-        for i, v in enumerate(vec):
-            assert v == float(i)
-
-    def test_extra_keys_ignored(self):
-        ratios = {score_key(h, a): 1.0 for h, a in ALL_SCORES}
-        ratios["unknown_key"] = 99.0
-        vec = _to_vector(ratios)
-        assert len(vec) == 35
-
-
-# ─── cosine_similarity ───────────────────────────────────────────────────────
-
-
-class TestCosineSimilarity:
-    def test_identical_vectors(self):
-        a = [1.0, 2.0, 3.0]
-        assert cosine_similarity(a, a) == pytest.approx(1.0)
-
-    def test_orthogonal_vectors(self):
-        a = [1.0, 0.0]
-        b = [0.0, 1.0]
-        assert cosine_similarity(a, b) == pytest.approx(0.0)
-
-    def test_opposite_vectors(self):
-        a = [1.0, 0.0]
-        b = [-1.0, 0.0]
-        assert cosine_similarity(a, b) == pytest.approx(-1.0)
-
-    def test_zero_vector_a(self):
-        assert cosine_similarity([0.0, 0.0], [1.0, 2.0]) == 0.0
-
-    def test_zero_vector_b(self):
-        assert cosine_similarity([1.0, 2.0], [0.0, 0.0]) == 0.0
-
-    def test_both_zero(self):
-        assert cosine_similarity([0.0, 0.0], [0.0, 0.0]) == 0.0
-
-    def test_known_value(self):
-        a = [1.0, 2.0, 3.0]
-        b = [4.0, 5.0, 6.0]
-        dot = 1*4 + 2*5 + 3*6  # 32
-        norm_a = math.sqrt(1 + 4 + 9)  # sqrt(14)
-        norm_b = math.sqrt(16 + 25 + 36)  # sqrt(77)
-        expected = dot / (norm_a * norm_b)
-        assert cosine_similarity(a, b) == pytest.approx(expected)
-
-    def test_similar_vectors_high_sim(self):
-        a = [3.5, 2.0, 1.5, 4.0, 0.5]
-        b = [3.6, 2.1, 1.4, 4.1, 0.6]
-        sim = cosine_similarity(a, b)
-        assert sim > 0.99
-
-    def test_different_vectors_low_sim(self):
-        a = [10.0, 0.0, 0.0, 0.0, 0.0]
-        b = [0.0, 0.0, 0.0, 0.0, 10.0]
-        sim = cosine_similarity(a, b)
-        assert sim == pytest.approx(0.0)
-
-    def test_35_dimensional_vectors(self):
-        a = [float(i) for i in range(35)]
-        b = [float(i + 0.1) for i in range(35)]
-        sim = cosine_similarity(a, b)
-        assert sim > 0.99
-
-    def test_symmetry(self):
-        a = [1.0, 3.0, 5.0, 7.0]
-        b = [2.0, 4.0, 6.0, 8.0]
-        assert cosine_similarity(a, b) == pytest.approx(cosine_similarity(b, a))
-
-    def test_scale_invariance(self):
-        a = [1.0, 2.0, 3.0]
-        b = [1.0, 2.0, 3.0]
-        b_scaled = [10.0, 20.0, 30.0]
-        assert cosine_similarity(a, b) == pytest.approx(cosine_similarity(a, b_scaled))
-
-
-# ─── score_key helper ────────────────────────────────────────────────────────
-
-class TestScoreKey:
-    def test_format(self):
-        assert score_key(1, 0) == "1-0"
-        assert score_key(0, 0) == "0-0"
-        assert score_key(6, 1) == "6-1"
-
-    def test_all_scores_length(self):
-        assert len(ALL_SCORES) == 35
-
-
-# ─── find_pattern_d_all_periods ─────────────────────────────────────────────
-
-_AS_OF = datetime(2026, 10, 1, tzinfo=timezone.utc)
-_LEAGUE = "English Premier League"
-
-
-def _make_ratios(base: float = 3.0) -> dict[str, float]:
-    return {score_key(h, a): base + i * 0.1 for i, (h, a) in enumerate(ALL_SCORES)}
-
-
-def _make_candidate(match_id: str, ratios: dict[str, float], league: str = _LEAGUE,
-                    kickoff: datetime | None = None):
-    kickoff = kickoff or _AS_OF - timedelta(days=30)
-    return (match_id, ratios, 2, 1, 1, 0, 1, 1, league, kickoff)
-
-
-async def _run_d(target, candidates, **kwargs):
-    pool = _build_pool(candidates)
+async def _run(target, rows, **kwargs):
+    pool = _build_pool(rows)
     with patch("app.analysis.pattern_d._load_pool", new_callable=AsyncMock, return_value=pool):
-        kwargs.setdefault("as_of", _AS_OF)
-        kwargs.setdefault("league_name", _LEAGUE)
+        kwargs.setdefault("as_of", AS_OF)
+        kwargs.setdefault("league_name", LEAGUE)
         return await find_pattern_d_all_periods(target, **kwargs)
 
 
-class TestFindPatternDGuards:
-    @pytest.mark.asyncio
-    async def test_below_min_matches_returns_none(self):
-        candidates = [_make_candidate(str(i), _make_ratios(3.0)) for i in range(3)]
-        assert await _run_d(_make_ratios(3.0), candidates, min_matches=4) == (None, None, None)
-        _, _, ft = await _run_d(_make_ratios(3.0), candidates, min_matches=3)
-        assert ft.match_count == 3
-
-    def test_idf_uses_only_matches_before_cutoff(self):
-        from app.analysis.pattern_d import IDF_CUTOFF
-        common = {score_key(h, a): 1.0 for h, a in ALL_SCORES}
-        rare = {score_key(h, a): (1.0 if i == 0 else 0.0) for i, (h, a) in enumerate(ALL_SCORES)}
-        before = [_make_candidate(f"b{i}", common, kickoff=IDF_CUTOFF - timedelta(days=10)) for i in range(20)]
-        after = [_make_candidate(f"a{i}", rare, kickoff=IDF_CUTOFF + timedelta(days=10)) for i in range(50)]
-        pool = _build_pool(before + after)
-        assert pool.idf == _compute_idf_weights(before)
+def test_pool_skips_missing_lambdas_and_groups_by_league():
+    pool = _build_pool([_row("1", 1.5, 1.0), _row("2", None, 1.0), _row("3", 1.2, 0.9, league="Spanish La Liga")])
+    assert [c.match_id for c in pool.by_league[LEAGUE]] == ["1"]
+    assert [c.match_id for c in pool.by_league["Spanish La Liga"]] == ["3"]
 
 
-class TestFindPatternD:
-    @pytest.mark.asyncio
-    async def test_empty_ratios_returns_none(self):
-        assert await find_pattern_d_all_periods({}) == (None, None, None)
-
-    @pytest.mark.asyncio
-    async def test_zero_vector_returns_none(self):
-        ratios = {score_key(h, a): 0.0 for h, a in ALL_SCORES}
-        result = await _run_d(ratios, [_make_candidate("100", _make_ratios())])
-        assert result == (None, None, None)
-
-    @pytest.mark.asyncio
-    async def test_returns_only_similar_matches(self):
-        different = {score_key(h, a): 0.0 for h, a in ALL_SCORES}
-        different[score_key(0, 0)] = 10.0
-        candidates = [_make_candidate("100", _make_ratios(3.01)), _make_candidate("200", different)]
-        _, _, ft = await _run_d(_make_ratios(3.0), candidates, min_similarity=0.9)
-        assert ft._matched_ids == ["100"]
-
-    @pytest.mark.asyncio
-    async def test_exclude_match_id(self):
-        same = _make_ratios(3.0)
-        candidates = [_make_candidate("100", same), _make_candidate("200", same)]
-        _, _, ft = await _run_d(same, candidates, exclude_match_id="100")
-        assert ft._matched_ids == ["200"]
-
-    @pytest.mark.asyncio
-    async def test_no_count_limit(self):
-        candidates = [_make_candidate(str(i), _make_ratios(3.0 + i * 0.001)) for i in range(40)]
-        _, _, ft = await _run_d(_make_ratios(3.0), candidates, min_similarity=0.5)
-        assert ft.match_count == 40
-
-    @pytest.mark.asyncio
-    async def test_same_league_only_no_fallback(self):
-        candidates = [
-            _make_candidate("100", _make_ratios(3.0), league="Spanish La Liga"),
-            _make_candidate("200", _make_ratios(3.0)),
-        ]
-        _, _, ft = await _run_d(_make_ratios(3.0), candidates)
-        assert ft._matched_ids == ["200"]
-
-    @pytest.mark.asyncio
-    async def test_other_league_only_returns_none(self):
-        candidates = [_make_candidate("100", _make_ratios(3.0), league="Spanish La Liga")]
-        assert await _run_d(_make_ratios(3.0), candidates) == (None, None, None)
-
-    @pytest.mark.asyncio
-    async def test_future_matches_excluded(self):
-        candidates = [
-            _make_candidate("old", _make_ratios(3.0)),
-            _make_candidate("future", _make_ratios(3.0), kickoff=_AS_OF + timedelta(days=1)),
-            _make_candidate("too_recent", _make_ratios(3.0), kickoff=_AS_OF - timedelta(hours=1)),
-        ]
-        _, _, ft = await _run_d(_make_ratios(3.0), candidates)
-        assert ft._matched_ids == ["old"]
-
-    @pytest.mark.asyncio
-    async def test_sorted_by_similarity_with_sims(self):
-        candidates = [
-            _make_candidate("far", _make_ratios(3.5)),
-            _make_candidate("near", _make_ratios(3.0)),
-        ]
-        _, _, ft = await _run_d(_make_ratios(3.0), candidates, min_similarity=0.5)
-        assert ft._matched_ids[0] == "near"
-        assert ft._matched_sims[0] >= ft._matched_sims[1]
-        assert ft._matched_sims[0] == pytest.approx(1.0, abs=1e-3)
+def test_nearest_orders_by_log_distance_and_respects_cutoff_and_self():
+    pool = _build_pool([
+        _row("near", 1.6, 1.0), _row("far", 0.6, 2.2), _row("mid", 1.9, 0.8),
+        _row("self", 1.5, 1.0), _row("future", 1.5, 1.0, kickoff=AS_OF + timedelta(days=1)),
+    ])
+    hits = nearest(pool.by_league[LEAGUE], (1.5, 1.0), cutoff=AS_OF, exclude_match_id="self", top_k=2)
+    assert [c.match_id for _, c in hits] == ["near", "mid"]
+    assert hits[0][0] == pytest.approx(math.log(1.6 / 1.5))
 
 
-# ─── IDF ağırlıkları ────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_top_k_limits_and_similarity_is_exp_minus_distance():
+    rows = [_row(str(i), 1.0 + i * 0.05, 1.0) for i in range(30)]
+    _, _, ft = await _run((1.0, 1.0), rows, top_k=10)
+    assert ft.match_count == 10
+    assert ft._matched_ids[0] == "0" and ft._matched_sims[0] == 1.0
+    assert ft._matched_sims == sorted(ft._matched_sims, reverse=True)
 
 
-class TestIDFWeights:
-    def test_empty_candidates_returns_ones(self):
-        weights = _compute_idf_weights([])
-        assert len(weights) == len(ALL_SCORES)
-        assert all(w == 1.0 for w in weights)
-
-    def test_all_nonzero_dimensions_get_low_weight(self):
-        ratios = {score_key(h, a): 1.0 for h, a in ALL_SCORES}
-        candidates = [(str(i), ratios, 1, 0, 0, 0, 1, 0) for i in range(100)]
-        weights = _compute_idf_weights(candidates)
-        assert all(0.0 <= w <= 1.0 for w in weights)
-
-    def test_rare_dimension_gets_higher_weight(self):
-        common = {score_key(h, a): 1.0 for h, a in ALL_SCORES}
-        rare = {score_key(h, a): (1.0 if i == 0 else 0.0) for i, (h, a) in enumerate(ALL_SCORES)}
-        candidates = [(str(i), common, 1, 0, 0, 0, 1, 0) for i in range(99)]
-        candidates.append(("99", rare, 1, 0, 0, 0, 1, 0))
-        weights = _compute_idf_weights(candidates)
-        assert weights[0] < weights[1]
-
-    def test_normalized_to_max_one(self):
-        ratios = {score_key(h, a): float(i % 5) for i, (h, a) in enumerate(ALL_SCORES)}
-        candidates = [(str(i), ratios, 1, 0, 0, 0, 1, 0) for i in range(50)]
-        weights = _compute_idf_weights(candidates)
-        assert max(weights) == pytest.approx(1.0)
+@pytest.mark.asyncio
+async def test_only_same_league_and_min_matches():
+    rows = [_row(str(i), 1.5, 1.0) for i in range(5)] + [_row(f"x{i}", 1.5, 1.0, league="Spanish La Liga") for i in range(20)]
+    assert await _run((1.5, 1.0), rows, min_matches=6) == (None, None, None)
+    _, _, ft = await _run((1.5, 1.0), rows, min_matches=5)
+    assert ft.match_count == 5 and all(not m.startswith("x") for m in ft._matched_ids)
 
 
-# ─── Weighted cosine similarity ─────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_no_target_or_league_returns_none():
+    assert await find_pattern_d_all_periods(None, league_name=LEAGUE) == (None, None, None)
+    assert await find_pattern_d_all_periods((1.2, 1.0), league_name=None) == (None, None, None)
 
 
-class TestWeightedCosineSimilarity:
-    def test_weights_change_result(self):
-        a = [1.0, 0.0, 3.0]
-        b = [1.0, 5.0, 3.0]
-        sim_unweighted = cosine_similarity(a, b)
-        sim_weighted = cosine_similarity(a, b, weights=[1.0, 0.0, 1.0])
-        assert sim_weighted > sim_unweighted
-
-    def test_none_weights_same_as_unweighted(self):
-        a = [1.0, 2.0, 3.0]
-        b = [4.0, 5.0, 6.0]
-        assert cosine_similarity(a, b, None) == cosine_similarity(a, b)
+@pytest.mark.asyncio
+async def test_result_known_delay_excludes_just_finished_matches():
+    rows = [_row("old", 1.5, 1.0), _row("recent", 1.5, 1.0, kickoff=AS_OF - timedelta(hours=1))]
+    _, _, ft = await _run((1.5, 1.0), rows)
+    assert ft._matched_ids == ["old"]
 
 
-# ─── Similarity-weighted stats ──────────────────────────────────────────────
-
-
-class TestWeightedStats:
-    def _make_row(self, ft_h, ft_a, ht_h=0, ht_a=0):
-        class R:
-            pass
-        r = R()
-        r.actual_ft_home = ft_h
-        r.actual_ft_away = ft_a
-        r.actual_ht_home = ht_h
-        r.actual_ht_away = ht_a
-        r.actual_h2_home = ft_h - ht_h
-        r.actual_h2_away = ft_a - ht_a
-        return r
-
-    def test_equal_weights_same_as_unweighted(self):
-        rows = [self._make_row(2, 1), self._make_row(0, 0), self._make_row(1, 2)]
-        unweighted = compute_stats(rows, "ft")
-        weighted = compute_stats(rows, "ft", weights=[1.0, 1.0, 1.0])
-        assert unweighted.result_1_pct == weighted.result_1_pct
-        assert unweighted.result_x_pct == weighted.result_x_pct
-
-    def test_high_weight_shifts_result(self):
-        rows = [self._make_row(2, 0), self._make_row(0, 1)]
-        even = compute_stats(rows, "ft", weights=[1.0, 1.0])
-        biased = compute_stats(rows, "ft", weights=[10.0, 1.0])
-        assert biased.result_1_pct > even.result_1_pct
-
-    def test_match_count_is_actual_count_not_weight_sum(self):
-        rows = [self._make_row(1, 0), self._make_row(0, 1)]
-        result = compute_stats(rows, "ft", weights=[5.0, 5.0])
-        assert result.match_count == 2
+@pytest.mark.asyncio
+async def test_naive_as_of_rejected():
+    with pytest.raises(ValueError):
+        await _run((1.5, 1.0), [_row("1", 1.5, 1.0)], as_of=datetime(2026, 10, 1))

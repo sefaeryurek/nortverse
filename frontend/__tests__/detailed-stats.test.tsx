@@ -59,7 +59,7 @@ describe("DetailedStats", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText("Arşiv 1 — Skor Seti")).toBeTruthy();
     expect(screen.getByText("Arşiv 2 — Oran Benzerliği")).toBeTruthy();
-    expect(screen.getByText("Arşiv 3 — Cosine Similarity")).toBeTruthy();
+    expect(screen.getByText("Arşiv 3 — Takım gücü benzerliği")).toBeTruthy();
   });
 
   it("hides IY/MS section in ht period", () => {

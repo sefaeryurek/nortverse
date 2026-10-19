@@ -23,7 +23,7 @@ from sqlalchemy import update as sa_update
 from app.analysis.league_filter import canonical_league_name
 from app.analysis.pattern_b import find_pattern_b_matches
 from app.analysis.pattern_c import find_pattern_c_adaptive
-from app.analysis.pattern_d import IDF_CUTOFF, find_pattern_d_all_periods
+from app.analysis.pattern_d import find_pattern_d_all_periods
 from app.analysis.pattern_stats import PatternResult
 from app.config import ANALYSIS
 from app.db.connection import get_session
@@ -36,8 +36,9 @@ PERIODS: tuple[str, ...] = ("ht", "h2", "ft")
 PATTERN_B_MIN_MATCHES = 5
 
 # Algoritma (kod) değişince ilgili ailenin sürümünü artır → o aile bayat sayılır.
-# c3: adaptive minimumun altında sonuç yok. d3: min 10 eşleşme + IDF kesim tarihi (pattern_d.IDF_CUTOFF).
-PATTERN_ALGO_VERSION = {"b": 2, "c": 3, "d": 3}
+# c3: adaptive minimumun altında sonuç yok. c4: sabit ±1.0 (Sprint 91).
+# d4: kosinüs yerine takım gücü (λ) uzayında en yakın K maç (Sprint 91, live_poisson modeli).
+PATTERN_ALGO_VERSION = {"b": 2, "c": 4, "d": 4}
 
 
 class PatternComputationError(RuntimeError):
@@ -57,6 +58,12 @@ def hash_string(hashes: dict[str, str | None]) -> str | None:
     return ";".join(f"{f}={hashes[f]}" for f in FAMILIES if hashes.get(f)) or None
 
 
+def _team_model_fingerprint() -> str:
+    from app.analysis.live_poisson import rule_params_fingerprint
+
+    return rule_params_fingerprint()
+
+
 def pattern_hashes() -> dict[str, str]:
     """Her ailenin sonucunu etkileyen ayarların kısa parmak izi."""
     a = ANALYSIS
@@ -66,8 +73,8 @@ def pattern_hashes() -> dict[str, str]:
         "c": [PATTERN_ALGO_VERSION["c"], a.pattern_c_tolerance, a.pattern_c_max_tolerance,
               a.pattern_c_tolerance_step, a.pattern_c_adaptive_min, a.pattern_c_match_cap,
               a.temporal_decay_half_life_years],
-        "d": [PATTERN_ALGO_VERSION["d"], a.pattern_d_min_similarity, a.pattern_d_min_matches,
-              IDF_CUTOFF.isoformat(), a.temporal_decay_half_life_years],
+        "d": [PATTERN_ALGO_VERSION["d"], a.pattern_d_top_k, a.pattern_d_min_matches,
+              a.temporal_decay_half_life_years, _team_model_fingerprint()],
     }
     return {
         family: hashlib.sha1(json.dumps(values).encode()).hexdigest()[:12]
@@ -163,13 +170,16 @@ async def compute_all_patterns(
         return tuple(_dump(r) for r in results)
 
     async def _d_all() -> tuple[Optional[dict], Optional[dict], Optional[dict]]:
-        if not ft_ratios:
+        from app.analysis.live_poisson import team_lambdas_for_match
+
+        target = await team_lambdas_for_match(match_id, as_of)
+        if target is None:
             return None, None, None
         results = await find_pattern_d_all_periods(
-            ft_ratios,
-            min_similarity=ANALYSIS.pattern_d_min_similarity,
+            target,
             exclude_match_id=match_id, as_of=as_of,
             league_name=league,
+            top_k=ANALYSIS.pattern_d_top_k,
             min_matches=ANALYSIS.pattern_d_min_matches,
         )
         return tuple(_dump(r) for r in results)

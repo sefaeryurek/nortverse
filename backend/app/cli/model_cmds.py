@@ -303,3 +303,18 @@ def train_ensemble_cmd(
         console.print(f"[green]Model kaydedildi: {model_path} ({models.training_size} maç ile eğitildi)[/green]")
 
     asyncio.run(_run())
+
+
+def backfill_team_lambdas_cmd(
+    all_matches: bool = typer.Option(False, "--all", help="Saklı λ'ları da yeniden hesapla (varsayılan: sadece eksikler)"),
+) -> None:
+    """Maç öncesi takım gücü beklentilerini (λ ev/dep) doldurur — A3 bu uzayda en yakın maçları bulur.
+
+    Her maç kendi başlama haftasının başında kurulmuş modelle hesaplanır (sızıntısız).
+    """
+    _setup_logging("INFO")
+    from app.analysis.live_poisson import backfill_team_lambdas
+
+    stats = asyncio.run(backfill_team_lambdas(only_missing=not all_matches))
+    console.print(f"[green]Takım gücü λ:[/green] {stats['written']} maç yazıldı · "
+                  f"{stats['no_model']} maçta lig modeli yok (yetersiz geçmiş) · hedef {stats['targets']}")

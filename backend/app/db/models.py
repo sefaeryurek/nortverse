@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -70,6 +71,10 @@ class Match(Base):
     pattern_b_hash: Mapped[str | None] = mapped_column(String(16))
     pattern_c_hash: Mapped[str | None] = mapped_column(String(16))
     pattern_d_hash: Mapped[str | None] = mapped_column(String(16))
+    # Maç öncesi takım gücü beklentisi (live_poisson modeli, as_of ≤ kickoff) — A3 en yakın maç uzayı
+    team_lambda_home: Mapped[float | None] = mapped_column(Float)
+    team_lambda_away: Mapped[float | None] = mapped_column(Float)
+    team_lambda_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Form & H2H trendleri (Sprint 8.8) — TrendsData JSON
     trends: Mapped[dict | None] = mapped_column(JSONB)
