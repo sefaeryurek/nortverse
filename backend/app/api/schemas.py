@@ -129,7 +129,7 @@ class AnalyzeResponse(BaseModel):
     h2_d: Optional[PatternResult] = None
     ft_d: Optional[PatternResult] = None
     trends: Optional[TrendsData] = None
-    recommendation_rule_version: str = "ft-display-v4"
+    recommendation_rule_version: str = "ft-display-v5"
     ft_recommendations: list[RecommendationOut] = Field(default_factory=list)
     # Sayfadaki arşiv yüzdelerinin ayarı ve dondurulmuş önerinin ayarı (farklıysa uyarı gösterilir).
     pattern_hash: Optional[str] = None

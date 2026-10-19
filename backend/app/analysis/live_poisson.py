@@ -79,6 +79,8 @@ class LeagueModel:
     attack: dict[str, float]
     defense: dict[str, float]
     n: int
+    # Dixon-Coles düşük skor düzeltmesi (maç öncesi v5 kullanır; canlı 2Y tahminini etkilemez)
+    rho: float = 0.0
     # İY gol farkı durumu → (2Y ev payı, 2Y dep payı) — λ_2Y = λ_maç × pay
     share: dict[int, tuple[float, float]] = field(default_factory=dict)
     # pay hesabı için ham toplamlar (tüm ligler ortalamasına çekmek için)
@@ -145,6 +147,7 @@ def fit_league(rows: list[TrainMatch], as_of: datetime) -> LeagueModel | None:
         defense={t: float(theta[2 + n_teams + i]) for t, i in index.items()},
         n=len(rows),
     )
+    model.rho = _fit_rho(model, rows, w.tolist())
     sums = {s: [0.0, 0.0, 0.0, 0.0] for s in STATES}  # 2Y ev gol, ev beklenti, 2Y dep gol, dep beklenti
     for r, weight in zip(rows, w.tolist()):
         lam_h, lam_a = model.expected_goals(r.home, r.away)
@@ -155,6 +158,42 @@ def fit_league(rows: list[TrainMatch], as_of: datetime) -> LeagueModel | None:
         acc[3] += weight * lam_a
     model._share_sums = sums
     return model
+
+
+def dc_tau(x: int, y: int, lam_h: float, lam_a: float, rho: float) -> float:
+    """Dixon-Coles (1997) düzeltmesi: 0-0, 1-0, 0-1, 1-1 skorlarının bağımsız Poisson'dan sapması."""
+    if x == 0 and y == 0:
+        return 1 - lam_h * lam_a * rho
+    if x == 0 and y == 1:
+        return 1 + lam_h * rho
+    if x == 1 and y == 0:
+        return 1 + lam_a * rho
+    if x == 1 and y == 1:
+        return 1 - rho
+    return 1.0
+
+
+def _fit_rho(model: LeagueModel, rows: list[TrainMatch], weights: list[float]) -> float:
+    """Takım güçleri sabitken ağırlıklı log-olabilirliği en büyükleyen rho ([-0.2, 0.2])."""
+    from scipy.optimize import minimize_scalar
+
+    low = []
+    for r, weight in zip(rows, weights):
+        if r.ft_h <= 1 and r.ft_a <= 1:
+            low.append((r.ft_h, r.ft_a, *model.expected_goals(r.home, r.away), weight))
+    if not low:
+        return 0.0
+
+    def neg(rho: float) -> float:
+        total = 0.0
+        for x, y, lam_h, lam_a, weight in low:
+            tau = dc_tau(x, y, lam_h, lam_a, rho)
+            if tau <= 0:
+                return 1e12
+            total -= weight * math.log(tau)
+        return total
+
+    return float(minimize_scalar(neg, bounds=(-0.2, 0.2), method="bounded").x)
 
 
 def _finish_shares(leagues: dict[str, LeagueModel]) -> None:

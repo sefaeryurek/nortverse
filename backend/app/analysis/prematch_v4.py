@@ -342,7 +342,9 @@ async def capture_prepared_recommendations(target_date: date) -> int:
             )).scalar_one_or_none()
             if current is None:
                 continue
-            picks, created = await capture_v4_recommendations(
+            from app.analysis.prematch_v5 import capture_recommendations
+
+            picks, created = await capture_recommendations(
                 session,
                 match_id=match.match_id,
                 analyzed_at=match.analyzed_at,

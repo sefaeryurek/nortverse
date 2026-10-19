@@ -138,7 +138,7 @@ def live_freeze_cmd(
 
 
 def backtest_ledger_cmd(
-    strategy: str = typer.Option("live_ht", "--strategy", help="live_ht | live_archive | live_poisson | top_pick | market_summary"),
+    strategy: str = typer.Option("live_ht", "--strategy", help="live_ht | live_archive | live_poisson | top_pick | top_pick_v5 | market_summary"),
     from_date: str = typer.Option(..., "--from", help="Başlangıç (YYYY-MM-DD)"),
     to_date: str = typer.Option(..., "--to", help="Bitiş, hariç (YYYY-MM-DD)"),
     alpha: float = typer.Option(0.5, "--alpha", help="Maç öncesi LR üssü (live_model.ALPHA)"),
@@ -151,13 +151,13 @@ def backtest_ledger_cmd(
     from datetime import datetime
     from app.analysis.backtest import (
         load_backtest_rows, ms_brier_report, run_live_archive_backtest, run_live_backtest,
-        run_live_poisson_backtest, run_prematch_backtest,
+        run_live_poisson_backtest, run_prematch_backtest, run_prematch_v5_backtest,
     )
     from app.analysis.performance import group_summaries, summarize
     from app.config import ISTANBUL_TZ
 
-    if strategy not in ("live_ht", "live_archive", "live_poisson", "top_pick", "market_summary"):
-        console.print("[red]--strategy: live_ht | live_archive | live_poisson | top_pick | market_summary[/red]")
+    if strategy not in ("live_ht", "live_archive", "live_poisson", "top_pick", "top_pick_v5", "market_summary"):
+        console.print("[red]--strategy: live_ht | live_archive | live_poisson | top_pick | top_pick_v5 | market_summary[/red]")
         raise typer.Exit(1)
     start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
     end = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
@@ -174,6 +174,9 @@ def backtest_ledger_cmd(
         if strategy == "live_archive":
             run_id = await run_live_archive_backtest(start, end, notes=notes, replace_run=replace_run)
             title = f"Canlı arşiv (%85+) backtest #{run_id} ({from_date} → {to_date})"
+        elif strategy == "top_pick_v5":
+            run_id = await run_prematch_v5_backtest(start, end, notes=notes, replace_run=replace_run)
+            title = f"Maç öncesi v5 (Dixon-Coles) backtest #{run_id} ({from_date} → {to_date})"
         elif strategy == "live_poisson":
             run_id = await run_live_poisson_backtest(start, end, notes=notes, replace_run=replace_run)
             title = f"Canlı Poisson (gölge, %85+) backtest #{run_id} ({from_date} → {to_date})"

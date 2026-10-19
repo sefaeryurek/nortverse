@@ -18,7 +18,7 @@ from app.config import ISTANBUL_TZ
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import canonical_league_name, is_supported_league, match_league_name
 from app.analysis.score_snapshots import capture_score_snapshot
-from app.analysis.prematch_v4 import capture_v4_recommendations
+from app.analysis.prematch_v5 import capture_recommendations
 from app.analysis.persist import FAMILIES, compute_all_patterns, hash_columns, pattern_as_of
 from app.analysis.skip_cache import save_skip
 from app.analysis.trends import compute_trends
@@ -210,7 +210,7 @@ async def _upsert(
                 try:
                     # Savepoint: dondurma/defter hatası maç kaydını geri almaz.
                     async with session.begin_nested():
-                        picks, _ = await capture_v4_recommendations(
+                        picks, _ = await capture_recommendations(
                             session,
                             match_id=result.match_id,
                             analyzed_at=result.analyzed_at,

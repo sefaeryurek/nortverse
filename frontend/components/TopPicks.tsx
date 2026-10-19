@@ -30,7 +30,8 @@ const ARCHIVE_NAME: Record<string, string> = {
   archive_1: "A1", archive_2: "A2", archive_3: "A3",
 };
 
-function archiveLabel(archive: string): string {
+function archiveLabel(archive: string, t: Dictionary): string {
+  if (archive === "model") return t.topPicks.modelLabel;
   if (archive.includes("+")) {
     return archive.split("+").map((a) => ARCHIVE_NAME[a] ?? a).join("+");
   }
@@ -56,6 +57,7 @@ function tierLabel(t: Dictionary, tier: string): string {
 
 function archiveBadgeClass(archive: string) {
   if (archive.includes("+")) return "nv-badge nv-badge-purple";
+  if (archive === "model") return "nv-badge nv-badge-green";
   if (archive === "archive_1") return "nv-badge nv-badge-blue";
   if (archive === "archive_2") return "nv-badge nv-badge-green";
   return "nv-badge nv-badge-amber";
@@ -68,7 +70,7 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
   const pct = calPct ?? Math.round(recommendation.frequency_pct);
   const tier = recommendation.confidence_tier ?? null;
   const color = tier ? TIER_COLOR[tier] ?? pctColor(pct) : pctColor(pct);
-  const archive = archiveLabel(recommendation.archive);
+  const archive = archiveLabel(recommendation.archive, t);
   const mktLabel = marketLabel(t, recommendation.market);
   const selLabel = selectionLabel(t, recommendation.selection);
 
@@ -137,6 +139,9 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
         >
           {selLabel}
         </div>
+        {recommendation.archive === "model" && recommendation.agreement === 1 && (
+          <div className="text-[10px]" style={{ color: "var(--nv-accent-green)" }}>{t.topPicks.archiveAgrees}</div>
+        )}
         {recommendation.prior_pct != null && recommendation.margin != null && (
           <div className="text-[10px]" style={{ color: "var(--nv-text-tertiary)" }}>
             {t.topPicks.priorLine
@@ -226,7 +231,7 @@ export default memo(function TopPicks({ recommendations, period, settingsChanged
           className="mt-1 text-xs leading-relaxed"
           style={{ color: "var(--nv-text-tertiary)" }}
         >
-          {t.topPicks.emptyMessage}
+          {t.topPicks.emptyMessageV5}
         </p>
       </div>
     );
@@ -261,7 +266,7 @@ export default memo(function TopPicks({ recommendations, period, settingsChanged
         className="text-[10px] leading-relaxed mt-3"
         style={{ color: "var(--nv-text-tertiary)" }}
       >
-        {t.topPicks.disclaimer}
+        {recommendations[0].recommendation_id.startsWith("ft-display-v4") ? t.topPicks.disclaimer : t.topPicks.disclaimerV5}
       </p>
     </div>
   );

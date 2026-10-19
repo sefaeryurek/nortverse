@@ -230,6 +230,47 @@ async def run_prematch_backtest(strategy: str, date_from: datetime, date_to: dat
     return run_id
 
 
+async def run_prematch_v5_backtest(date_from: datetime, date_to: datetime, *, notes: str | None = None,
+                                  replace_run: int | None = None) -> int:
+    """Maç öncesi v5 (Dixon-Coles takım gücü) backtest'i; takım modeli haftalık, kickoff − 3 saate kadar veriyle."""
+    from app.analysis import live_poisson as lp
+    from app.analysis import prematch_v5 as v5
+    from app.analysis.prematch_v4 import decide_result
+
+    run_id, history, target_ids = await _start_run(
+        "top_pick", v5.V5_RULE_VERSION,
+        {"rule_params": v5.RULE_PARAMS, "params_fingerprint": v5.rule_params_fingerprint()},
+        date_from, date_to, notes, replace_run,
+    )
+    training = await lp.load_training()
+    kickoffs = [t.kickoff for t in training]
+    log.info("Maç öncesi v5 backtest #%d: %d hedef maç, %d eğitim maçı", run_id, len(target_ids), len(training))
+    state: dict = {"model": None}
+    refit = timedelta(days=lp.RULE_PARAMS["refit_days"])
+
+    def rows_of(table, match, as_of):
+        model = state["model"]
+        if model is None or as_of - model.as_of >= refit:
+            model = state["model"] = lp.fit_model(lp.train_window(training, kickoffs, as_of), as_of)
+        league = canonical_league_name(match.league_name)
+        prior = table.league_prior(league)
+        patterns = {f"pattern_ft_{f}": getattr(match, f"pattern_ft_{f}") for f in "bcd"}
+        v4 = decide_result(patterns, prior)
+        v4_selection = v4["selection"] if v4 and not v4.get("abstain_reason") else None
+        probabilities = v5.match_probabilities(model, match.league_name or "", match.home_team, match.away_team)
+        common = {"match_id": match.match_id, "league_name": league, "kickoff_time": match.kickoff_time,
+                  "as_of": as_of}
+        ht = (match.actual_ht_home, match.actual_ht_away)
+        ft = (match.actual_ft_home, match.actual_ft_away)
+        return [{**row, "run_id": run_id, "ht_home": ht[0], "ht_away": ht[1], "ft_home": ft[0], "ft_away": ft[1],
+                 "outcome": resolve(row["period"], row["market"], row["selection"], ht, ft)}
+                for row in v5.ledger_rows_v5(probabilities, prior, table.league_goal_prior(league), v4_selection,
+                                             common)]
+
+    await _replay(run_id, history, target_ids, date_from, lambda ko: ko, rows_of)
+    return run_id
+
+
 async def run_live_archive_backtest(date_from: datetime, date_to: datetime, *, notes: str | None = None,
                                     replace_run: int | None = None) -> int:
     """Canlı arşiv kararları (güncel live-arch kuralı), gerçek İY/MS ile çözülür. COND kapısı artımlı tablodan.

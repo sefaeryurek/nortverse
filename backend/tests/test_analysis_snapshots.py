@@ -34,6 +34,22 @@ def _empty_cond_table(monkeypatch):
     return table
 
 
+def _v5_model(monkeypatch):
+    """v5 için sabit takım modeli: ev sahibi açık favori (lig ortalaması ≈ eşit dağılım)."""
+    from app.analysis import live_model, live_poisson, prematch_v5
+
+    monkeypatch.setattr(live_model, "get_cond_table", prematch_v4.get_cond_table)  # _empty_cond_table ile aynı
+    monkeypatch.setattr(live_poisson, "get_poisson_model", AsyncMock(return_value=object()))
+    monkeypatch.setattr(prematch_v5, "match_probabilities", lambda *_: {
+        "result": {"1": 0.7, "X": 0.2, "2": 0.1}, "over25": 0.6, "btts": 0.4,
+        "lambda": {"home": 2.0, "away": 0.8}, "rho": -0.05, "train_n": 500,
+    })
+
+
+TEAMS = MagicMock(first=lambda: SimpleNamespace(home_team="Home", away_team="Away",
+                                                league_name="English Premier League"))
+
+
 def _sql(call) -> str:
     return str(call.args[0].compile(dialect=postgresql.dialect()))
 
@@ -64,10 +80,14 @@ async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatc
     listing_session = AsyncMock()
     listing_session.execute.return_value = MagicMock(all=lambda: [prepared])
     capture_session = AsyncMock()
+    capture_session.get.return_value = None
     capture_session.execute.side_effect = [
         MagicMock(scalar_one_or_none=lambda: prepared),
-        MagicMock(rowcount=1),
-        MagicMock(rowcount=5),
+        MagicMock(rowcount=1),   # v4 snapshot (gölge)
+        MagicMock(rowcount=5),   # v4 defter
+        TEAMS,                   # v5 için takımlar
+        MagicMock(rowcount=1),   # v5 snapshot (ekranda)
+        MagicMock(rowcount=3),   # v5 defter
     ]
     sessions = iter((listing_session, capture_session))
 
@@ -82,6 +102,7 @@ async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatc
     monkeypatch.setattr(persist, "compute_all_patterns", compute)
     monkeypatch.setattr(persist, "update_match_patterns", write)
     _empty_cond_table(monkeypatch)
+    _v5_model(monkeypatch)
 
     count = await prematch_v4.capture_prepared_recommendations(date(2099, 1, 1))
 
@@ -91,6 +112,9 @@ async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatc
     calls = capture_session.execute.await_args_list
     assert "INSERT INTO analysis_snapshots" in _sql(calls[1])
     assert "INSERT INTO prediction_ledger" in _sql(calls[2])
+    assert "INSERT INTO analysis_snapshots" in _sql(calls[4])
+    assert "ft-display-v5" in str(calls[4].args[0].compile(dialect=postgresql.dialect()).params)
+    assert "INSERT INTO prediction_ledger" in _sql(calls[5])
 
 
 @pytest.mark.asyncio
@@ -112,11 +136,17 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
         MagicMock(scalar_one_or_none=lambda: row),
         MagicMock(rowcount=1),
         MagicMock(rowcount=5),
+        TEAMS,
+        MagicMock(rowcount=1),
+        MagicMock(rowcount=3),
     ]
     _empty_cond_table(monkeypatch)
+    _v5_model(monkeypatch)
     picks = await services._frozen_recommendations(row, {"pattern_ft_b": _pattern()})
 
     assert [pick["market"] for pick in picks] == ["result"]
+    assert picks[0]["recommendation_id"].startswith("ft-display-v5")
+    assert picks[0]["archive"] == "model" and picks[0]["agreement"] == 1   # v4 de ev sahibi diyor
     statement = session.execute.await_args_list[1].args[0]
     assert "INSERT INTO analysis_snapshots" in str(statement.compile(dialect=postgresql.dialect()))
     assert statement.compile(dialect=postgresql.dialect()).params["analyzed_at"] == ANALYZED_AT
@@ -268,3 +298,22 @@ async def test_capture_skips_when_match_already_started(monkeypatch):
     )
     assert (picks, created) == (None, False)
     session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_started_match_without_v5_snapshot_shows_frozen_v4(monkeypatch):
+    """v5'ten önce dondurulup başlamış maç: o gün gösterilen v4 seçimi kaybolmaz."""
+    v4_picks = [{"recommendation_id": "ft-display-v4:result:1", "market": "result"}]
+    session = AsyncMock()
+    session.get.side_effect = lambda _model, key: (
+        MagicMock(picks=v4_picks) if key[1] == prematch_v4.V4_RULE_VERSION else None)
+    session.execute.return_value = MagicMock(scalar_one_or_none=lambda: None)   # maç başlamış
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    monkeypatch.setattr(services, "get_session", fake_session)
+    row = Match(match_id="9", home_team="H", away_team="A", league_code="ENG PR",
+                league_name="English Premier League", analyzed_at=ANALYZED_AT, kickoff_time=NOW)
+    assert await services._frozen_recommendations(row, {}) == v4_picks

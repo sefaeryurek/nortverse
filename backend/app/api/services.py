@@ -22,7 +22,8 @@ from app.api.schemas import AnalyzeResponse, PeriodOut, RecommendationOut
 from app.analysis import analyze_match, check_match_filters
 from app.analysis.league_filter import is_supported_league, match_league_name
 from app.analysis.pattern_stats import PatternResult
-from app.analysis.prematch_v4 import V4_RULE_VERSION as RULE_VERSION, capture_v4_recommendations
+from app.analysis.prematch_v5 import V5_RULE_VERSION as RULE_VERSION
+from app.analysis.prematch_v5 import capture_recommendations
 
 
 from app.analysis.persist import (
@@ -177,6 +178,14 @@ def _trends_parse(blob: dict | None) -> Optional[TrendsData]:
         return None
 
 
+async def _legacy_v4_picks(session, match_id: str) -> list[dict]:
+    """v5'ten önce dondurulmuş ve artık başlamış maçlar: o gün gösterilen v4 seçimi (geçmiş kaybolmasın)."""
+    from app.analysis.prematch_v4 import V4_RULE_VERSION
+
+    snapshot = await session.get(AnalysisSnapshot, (match_id, V4_RULE_VERSION))
+    return snapshot.picks if snapshot is not None and isinstance(snapshot.picks, list) else []
+
+
 async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) -> list[dict]:
     """Read the immutable snapshot, creating it only while the match is upcoming."""
     async with get_session() as session:
@@ -197,8 +206,8 @@ async def _frozen_recommendations(row: Match, patterns: dict[str, dict | None]) 
             ).with_for_update()
         )).scalar_one_or_none()
         if current is None:
-            return []
-        picks, _ = await capture_v4_recommendations(
+            return await _legacy_v4_picks(session, row.match_id)
+        picks, _ = await capture_recommendations(
             session,
             match_id=row.match_id,
             analyzed_at=current.analyzed_at,
