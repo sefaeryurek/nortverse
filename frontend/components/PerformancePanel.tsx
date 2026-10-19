@@ -42,6 +42,26 @@ function Card({ label, value, sub, hint, color }: { label: string; value: string
   );
 }
 
+const VERDICT_STYLE: Record<string, { icon: string; color: string }> = {
+  collecting: { icon: "…", color: "var(--nv-text-tertiary)" },
+  below: { icon: "▼", color: "var(--nv-accent-red)" },
+  above: { icon: "▲", color: "var(--nv-accent-green)" },
+  on_track: { icon: "●", color: "var(--nv-accent-blue)" },
+};
+
+/** Karne hükmü: ikon + metin (renk tek başına anlam taşımaz). */
+function VerdictBadge({ verdict, resolved, p }: { verdict?: string; resolved: number; p: Perf }) {
+  if (!verdict) return null;
+  const style = VERDICT_STYLE[verdict] ?? VERDICT_STYLE.collecting;
+  const label = ((p as Record<string, string>)[`verdict_${verdict}`] ?? verdict).replace("{n}", String(resolved));
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap" style={{ color: style.color }} title={p.verdictHint}>
+      <span aria-hidden="true">{style.icon}</span>
+      {label}
+    </span>
+  );
+}
+
 function StatsTable({ title, rows, labelOf, p }: {
   title: string;
   rows: (PerformanceStats & { key: string })[];
@@ -61,6 +81,7 @@ function StatsTable({ title, rows, labelOf, p }: {
               <th style={{ padding: "4px 6px", fontWeight: 500 }}>{p.colHit}</th>
               <th style={{ padding: "4px 6px", fontWeight: 500 }}>{p.colAvg}</th>
               <th style={{ padding: "4px 6px", fontWeight: 500 }}>{p.colLift}</th>
+              <th style={{ padding: "4px 6px", fontWeight: 500 }}>{p.colVerdict}</th>
             </tr>
           </thead>
           <tbody>
@@ -71,6 +92,7 @@ function StatsTable({ title, rows, labelOf, p }: {
                 <td style={{ padding: "6px", fontWeight: 700, color: rateColor(row) }}>{fmt(row.hit_pct, "%")}</td>
                 <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{fmt(row.avg_prob_pct, "%")}</td>
                 <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{row.lift_pct == null ? "—" : `${row.lift_pct > 0 ? "+" : ""}${row.lift_pct.toFixed(1)}`}</td>
+                <td style={{ padding: "6px" }}><VerdictBadge verdict={row.verdict} resolved={row.resolved} p={p} /></td>
               </tr>
             ))}
           </tbody>
@@ -226,6 +248,17 @@ function SummaryBody({ summary, t, headline, groups }: {
           {(p as Record<string, string>)[`stage_${o.stage}`]}
         </span>
       </div>
+      {o.verdict && (
+        <div className="flex flex-wrap items-center gap-2" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>
+          <span className="font-semibold">{p.verdictTitle}:</span>
+          <VerdictBadge verdict={o.verdict} resolved={o.resolved} p={p} />
+          {o.expected_hits != null && o.resolved > 0 && (
+            <span style={{ color: "var(--nv-text-tertiary)" }}>
+              · {p.expectedVsActual.replace("{expected}", o.expected_hits.toFixed(0)).replace("{actual}", String(o.hits)).replace("{n}", String(o.resolved))}
+            </span>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card
           label={p.winRate}

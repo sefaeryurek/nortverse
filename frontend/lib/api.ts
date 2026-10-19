@@ -134,7 +134,12 @@ export interface PerformanceStats {
   baseline_hit_pct: number | null;
   lift_pct: number | null;
   stage: SampleStage;
+  /** Kural karnesi (Sprint 91): <100 tekil karar → collecting; Wilson aralığı beklenenin altı → below. */
+  verdict?: Verdict;
+  expected_hits?: number | null;
 }
+
+export type Verdict = "collecting" | "below" | "above" | "on_track";
 
 export interface PerformanceSummary {
   source: PredictionSource;

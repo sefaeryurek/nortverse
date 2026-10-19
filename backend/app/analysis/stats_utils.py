@@ -34,3 +34,25 @@ def sample_stage(resolved: int) -> str:
     if resolved < 100:
         return "on_bulgu"
     return "tam"
+
+
+# Değerlendirme protokolü (Sprint 91 Faz 5): bir kural ancak bu kadar tekil karar sonuçlanınca yargılanır.
+MIN_DECISIONS_FOR_VERDICT = 100
+
+
+def verdict(hits: int, resolved: int, avg_prob: float | None) -> str:
+    """Kural karnesi: gerçek isabet, gösterilen olasılığın (beklenen) ortalamasıyla Wilson %95 aralığında kıyaslanır.
+
+    - collecting: <100 tekil karar → hüküm yok, kural değiştirilmez
+    - below: aralığın üst sınırı bile beklenenin altında → pazar askıya alınmalı (yeni sürüm + gölge)
+    - above: alt sınır beklenenin üstünde (model temkinli)
+    - on_track: beklenen aralığın içinde
+    """
+    if resolved < MIN_DECISIONS_FOR_VERDICT or avg_prob is None:
+        return "collecting"
+    low, high = wilson_ci(hits, resolved)
+    if high < avg_prob:
+        return "below"
+    if low > avg_prob:
+        return "above"
+    return "on_track"

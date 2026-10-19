@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 
-from app.analysis.stats_utils import sample_stage, wilson_ci
+from app.analysis.stats_utils import sample_stage, verdict, wilson_ci
 from app.config import ISTANBUL_TZ
 
 GROUP_FIELDS = {
@@ -92,6 +92,8 @@ def summarize(rows: list[dict]) -> dict:
         "baseline_hit_pct": pct(base_rate),
         "lift_pct": None if base_rate is None else round((model_on_base - base_hits) / len(with_base) * 100, 1),
         "stage": sample_stage(n),
+        "verdict": verdict(hits, n, avg_prob),
+        "expected_hits": None if not n else round(sum(probs), 1),
     }
 
 

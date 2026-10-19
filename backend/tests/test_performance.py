@@ -120,3 +120,13 @@ def test_live_match_picks_merge_by_selection():
     assert len(picks) == 2
     assert picks[0]["labels"] == ["A1", "GENEL"]
     assert picks[0]["n"] == 50 and picks[0]["pct"] == 88.0 and picks[0]["risky"] is False
+
+
+def test_verdict_protocol():
+    from app.analysis.stats_utils import verdict
+    assert verdict(60, 80, 0.7) == "collecting"               # 100 tekil karar yok → hüküm yok
+    assert verdict(66, 100, 0.92) == "below"                  # %66 gerçek, %92 gösterilen → askı
+    assert verdict(92, 100, 0.90) == "on_track"
+    assert verdict(140, 150, 0.80) == "above"
+    s = summarize([_row("hit", 9000)] * 90 + [_row("miss", 9000)] * 10)
+    assert s["verdict"] == "on_track" and s["expected_hits"] == 90.0

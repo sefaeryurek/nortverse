@@ -1590,6 +1590,16 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Backtest #12 (2023-07 → 2026-10, haftalık takım modeli, sızıntısız):** 3.019 seçim, isabet **%62,7**, gösterilen ort. %58,6 (temkinli), aynı maçlarda lig favorisi %45,5. v4 aynı seçimde: 1.143 seçim %64,6. Ev %70,1 · deplasman %55,1. Az maçlı takım (<10) içeren seçimler kötü değil (%66,7, 114). Karşılaştırma: v4 #5 %50,6.
 - **Ekran:** Top Picks rozeti "Takım gücü", "arşiv havuzu da aynı seçimde" satırı, v5 açıklaması. Değerlendirme → Maç Öncesi: v5 ana özet, v4 "Arşiv havuzu (gölgede)" bölümü.
 
+**Faz 4 — arşivler sadece bilgi; A3 takım gücü, A2 sabit ±1.0 (TAMAMLANDI ✅):**
+- Arşivler karar vermiyor: canlıda karar COND kapısıyla (v2), maç öncesi Dixon-Coles (v5); A1/A2/A3 ekranda bilgi.
+- **A3 (algoritma d4, `pattern_d.py`):** kosinüs yerine maç öncesi takım gücü beklentisi (λ ev, λ dep) log uzayında aynı ligden en yakın **200** maç (`PATTERN_D_TOP_K`); benzerlik = exp(−uzaklık). λ'lar `matches.team_lambda_home/away/as_of` (migration `w7j0e5f1b229`); `backfill-team-lambdas` her maçı başlama haftasının modeliyle (sızıntısız) doldurur (30.697/32.119; en eski sezonlarda lig modeli yok). Yeni maçta `live_poisson.team_lambdas_for_match` hesaplayıp yazar. Örneklem ölçümü (2.500 maç, 2023-07+): MS çoğunluk isabeti **%54,5** (eski kosinüs A3 %44,7, ayrıca her maçta sonuç). Liste önce en yakın 20, "daha fazla" ile tümü.
+- **A2 (c4):** sabit ±1.0 tolerans (`PATTERN_C_TOLERANCE=1.0`). `PATTERN_ALGO_VERSION` c→4, d→4; tüm maçlar `recompute-patterns --stale-only --include-finished` ile yeniden hesaplandı.
+
+**Faz 5 — değerlendirme protokolü (TAMAMLANDI ✅):**
+- `stats_utils.verdict`: her özet/kırılımda karne — gerçek isabet, gösterilen olasılığın ortalamasıyla (beklenen) Wilson %95 aralığında kıyaslanır. **<100 tekil karar → "veri toplanıyor"** (kural değiştirilmez); üst sınır < beklenen → **"beklentinin altında, askı önerilir"**; alt sınır > beklenen → "üstünde"; aksi "yolunda". `expected_hits` = gösterilen olasılıkların toplamı.
+- Kurallar: her kural değişikliği yeni sürüm + gölge; askı önerisi otomatik değil (kullanıcı kararı); bahis oranı verisi yok → kârlılık iddiası yok.
+- Değerlendirme sayfası: özetin üstünde karne satırı (beklenen vs gerçek), tablolarda "Durum" sütunu (ikon + metin). İlk hüküm: live-arch-v1 "beklentinin altında" (123 kararda beklenen 121, gerçek 93).
+
 **Faz 6 — operasyon (TAMAMLANDI ✅, görev kurulumu yönetici izni ister):**
 - **`scripts/start-backend.bat` + `Backend` görevi:** oturum açılışında penceresiz başlar (süre sınırı yok, `IgnoreNew`); port 8000 doluysa ikinci kopya açmaz (`logs/backend_starts.log`), Docker'ı `ensure-docker.bat` ile hazırlar, çökerse 30 sn sonra yeniden dener, 5 çöküşte durur. Log `logs/backend.log` (20 MB'ta `backend.old.log`).
 - **`scripts/notify-error.bat`:** görev hatasında ekranda uyarı penceresi (`msg`, 12 saat) + masaüstünde `NORTVERSE-HATA.txt`. Pipeline, skor güncelleme, yedekleme ve backend hata dallarına bağlı. Mesajda parantez kullanılmaz (if/else bloğunu erken kapatır).
