@@ -10,6 +10,7 @@ set "ERRORLOG=%ROOT%\scripts\logs\pipeline_errors.log"
 call "%~dp0ensure-docker.bat" "%LOGFILE%"
 if errorlevel 1 (
     echo [%date% %time%] HATA: Docker/PostgreSQL hazir degil, pipeline calismadi >> "%ERRORLOG%"
+    call "%~dp0notify-error.bat" "Sabah pipeline calismadi - Docker/PostgreSQL hazir degil"
     exit /b 1
 )
 
@@ -23,5 +24,6 @@ if %EXITCODE% equ 0 (
 ) else (
     echo [%date% %time%] HATA: Pipeline basarisiz - exit code %EXITCODE% >> "%LOGFILE%"
     echo [%date% %time%] HATA: Pipeline basarisiz - exit code %EXITCODE% >> "%ERRORLOG%"
+    call "%~dp0notify-error.bat" "Sabah pipeline basarisiz - kod %EXITCODE%, scripts\logs\pipeline.log"
 )
 exit /b %EXITCODE%

@@ -1578,6 +1578,10 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Ekran:** canlı sayfada "Kararlar (%85+)" — pazar başına tek satır, lig geçmişi oranı + maç sayısı, arşivler (A1 + Genel …) ve arşiv oranı, çelişki uyarısı, geçmiş isabet çipi (backtest #9). Arşiv tablosu (A1/A2/A3/Genel, 10 pazar) bilgi olarak duruyor. Değerlendirme → Canlı İY: v2 ana özet, v1 "Eski kural" bölümünde.
 - v1 kayıtları defterde kalır (`LIVE_ARCHIVE_RULE_VERSIONS`); yeni kayıtlar sadece v2. Eski kayıtlı maçlar ekranda v1 düzeninde gösterilir.
 
+**Faz 6 — operasyon (TAMAMLANDI ✅, görev kurulumu yönetici izni ister):**
+- **`scripts/start-backend.bat` + `Backend` görevi:** oturum açılışında penceresiz başlar (süre sınırı yok, `IgnoreNew`); port 8000 doluysa ikinci kopya açmaz (`logs/backend_starts.log`), Docker'ı `ensure-docker.bat` ile hazırlar, çökerse 30 sn sonra yeniden dener, 5 çöküşte durur. Log `logs/backend.log` (20 MB'ta `backend.old.log`).
+- **`scripts/notify-error.bat`:** görev hatasında ekranda uyarı penceresi (`msg`, 12 saat) + masaüstünde `NORTVERSE-HATA.txt`. Pipeline, skor güncelleme, yedekleme ve backend hata dallarına bağlı. Mesajda parantez kullanılmaz (if/else bloğunu erken kapatır).
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1882,7 +1886,7 @@ Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapı
 
 ### Bilinen Açık Konular
 
-- **Zamanlanmış görevler (Sprint 90.6):** `scripts/install-tasks.ps1` (yönetici PowerShell ile bir kez) → BackupDB 07:00, RunPipeline 08:00, UpdateScores1 18:00–23:00 saat başı, UpdateScores2 00:30. Görevler `run-hidden.vbs` ile **pencere açmadan** çalışır (eskiden açılan cmd kapatılınca iş yarıda kalıyordu: 13 Ekim `^C`, 17 Ekim 0xC000013A), kaçırılan çalışma PC açılınca yapılır, `ensure-docker.bat` Docker Desktop'ı gerekirse başlatıp DB'yi bekler. PC kapalıyken hiçbir şey çalışmaz (bulut kararı bekliyor).
+- **Zamanlanmış görevler (Sprint 90.6 + 91 Faz 6):** `scripts/install-tasks.ps1` (yönetici PowerShell ile bir kez) → BackupDB 07:00, RunPipeline 08:00, UpdateScores1 18:00–23:00 saat başı, UpdateScores2 00:30, **Backend oturum açılışında**. Hata olursa ekranda uyarı + masaüstünde `NORTVERSE-HATA.txt`. Görevler `run-hidden.vbs` ile **pencere açmadan** çalışır (eskiden açılan cmd kapatılınca iş yarıda kalıyordu: 13 Ekim `^C`, 17 Ekim 0xC000013A), kaçırılan çalışma PC açılınca yapılır, `ensure-docker.bat` Docker Desktop'ı gerekirse başlatıp DB'yi bekler. PC kapalıyken hiçbir şey çalışmaz (bulut kararı bekliyor).
 - **Yedekler 27 Eylül'den beri hiç alınmamıştı:** `wmic` Windows 11'de yok (dosya adı bozuluyordu) + konteyner adı yanlıştı (`nortverse-db-1` ≠ `nortverse-codex-db-1`). `backup-db.bat` düzeltildi (`docker compose exec -T db`, 10 MB altı yedek başarısız sayılır); 18 Ekim yedeği alındı ve `pg_restore --list` ile doğrulandı.
 - **Docker Desktop otostart:** Docker Desktop Windows ile otomatik başlatılmalı — aksi takdirde pipeline/skor cron'ları çalışmaz (28-30 Eylül 3 günlük veri kaybı yaşandı)
 - **Task Scheduler "missed run":** Kaçırılan görevlerin yeniden çalıştırılması ayarı etkinleştirilmeli

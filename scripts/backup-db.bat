@@ -36,4 +36,5 @@ exit /b 0
 
 :failed
 echo [%date% %time%] HATA: Yedekleme basarisiz (kod %DUMPCODE%, %FSIZE% byte) >> "%LOGFILE%"
+call "%~dp0notify-error.bat" "Veritabani yedegi alinamadi - kod %DUMPCODE%"
 exit /b 1

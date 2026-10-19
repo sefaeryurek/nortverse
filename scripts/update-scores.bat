@@ -11,6 +11,7 @@ set "ERRORLOG=%ROOT%\scripts\logs\scores_errors.log"
 call "%~dp0ensure-docker.bat" "%LOGFILE%"
 if errorlevel 1 (
     echo [%date% %time%] HATA: Docker/PostgreSQL hazir degil, skor guncellenmedi >> "%ERRORLOG%"
+    call "%~dp0notify-error.bat" "Skor guncellenmedi - Docker/PostgreSQL hazir degil"
     exit /b 1
 )
 
@@ -24,5 +25,6 @@ if %EXITCODE% equ 0 (
 ) else (
     echo [%date% %time%] HATA: Skor guncelleme basarisiz - exit code %EXITCODE% >> "%LOGFILE%"
     echo [%date% %time%] HATA: Skor guncelleme basarisiz - exit code %EXITCODE% >> "%ERRORLOG%"
+    call "%~dp0notify-error.bat" "Skor guncelleme basarisiz - kod %EXITCODE%, scripts\logs\scores.log"
 )
 exit /b %EXITCODE%
