@@ -158,6 +158,35 @@ async def test_freeze_dry_run_computes_without_writing(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_freeze_writes_main_row_when_archive_view_fails(monkeypatch):
+    """Arşiv görünümü hata verirse ana kayıt ve İY gözlemi yine yazılır (eskiden tüm dondurma düşüyordu)."""
+    from contextlib import asynccontextmanager
+
+    monkeypatch.setattr(live_ledger, "get_cond_table", AsyncMock(return_value=_table(_many(LEAGUE, (1, 0), (1, 0), 40))))
+    monkeypatch.setattr(live_ledger.live_archive, "load_view", AsyncMock(side_effect=RuntimeError("bozuk")))
+    monkeypatch.setattr(live_ledger, "_poisson_shadow", AsyncMock(return_value=(None, [])))
+    monkeypatch.setattr(live_ledger, "_ht_observation_id", AsyncMock(return_value=11))
+    written: list = []
+
+    async def record(_session, rows):
+        written.extend(rows)
+        return len(rows)
+
+    monkeypatch.setattr(live_ledger, "record_predictions", record)
+
+    @asynccontextmanager
+    async def fake_session():
+        yield object()
+
+    monkeypatch.setattr(live_ledger, "get_session", fake_session)
+    fs = FixtureScore("900", "live", 1, 0, minute="HT")
+    match = _match(kickoff_time=datetime.now(timezone.utc) - timedelta(minutes=50))
+    assert await freeze_live_prediction(match, fs) == "frozen"
+    assert written and all(r["rule_version"] == live_ledger.LIVE_RULE_VERSION for r in written)
+    assert written[0]["ht_observation_id"] == 11
+
+
+@pytest.mark.asyncio
 async def test_freeze_requires_ht_phase():
     fs = FixtureScore("900", "live", 0, 0, minute="30")
     assert await freeze_live_prediction(_match(), fs) == "no_ht"

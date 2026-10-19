@@ -51,17 +51,30 @@ def observed_ht(fs: FixtureScore) -> tuple[int, int] | None:
 ARCHIVE_FREEZE_MAX_MINUTE = 50
 
 
-def archive_freeze_allowed(fs: FixtureScore) -> bool:
+# Dakika bilinmiyorsa (kaynak panosu 2. yarıda dakika vermez) başlamadan geçen süre kullanılır:
+# 45 + ~15 dk ara + 5 dk ≈ 2. yarının 50. dakikası.
+ARCHIVE_FREEZE_MAX_ELAPSED = timedelta(minutes=65)
+
+
+def archive_freeze_allowed(fs: FixtureScore, kickoff: datetime | None = None,
+                           now: datetime | None = None) -> bool:
     """Arşiv işaretleri sadece devre arasında ya da 2. yarının ilk dakikalarında yazılır.
 
     Geç dondurmada "skor hâlâ İY skoru" koşulu sonucu ayıklar (ör. 80'de 0-0 → Üst işaretleri
-    düşük çıkar); bu yüzden 2. yarıda dakika bilinmiyorsa veya 50'yi geçtiyse yazılmaz.
+    düşük çıkar); bu yüzden 2. yarıda 50. dakika geçtiyse yazılmaz. Dakika bilinmiyorsa
+    başlama saatinden geçen süreye bakılır (eskiden hiç yazılmıyordu → yeniden başlatma sonrası kayıp).
     """
     phase = match_phase(fs)
     if phase == "ht":
         return True
+    if phase != "2h":
+        return False
     head = (fs.minute or "").strip().split("+")[0]
-    return phase == "2h" and head.isdigit() and int(head) <= ARCHIVE_FREEZE_MAX_MINUTE
+    if head.isdigit():
+        return int(head) <= ARCHIVE_FREEZE_MAX_MINUTE
+    if kickoff is None:
+        return False
+    return (now or datetime.now(timezone.utc)) - kickoff <= ARCHIVE_FREEZE_MAX_ELAPSED
 
 
 def pattern_hash(match: Match) -> str | None:
@@ -162,9 +175,13 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
     status, prediction = await plan_live_freeze(match, fs)
     view = None
     if status == "ready":
-        view = await live_archive.load_view(
-            match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
-            observed_ht(fs), league=match.league_name or "", table=await get_cond_table())
+        try:
+            view = await live_archive.load_view(
+                match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
+                observed_ht(fs), league=match.league_name or "", table=await get_cond_table())
+        except Exception:
+            # Arşiv görünümü hatası ana kaydı ve İY gözlemini engellemez (eskiden tüm dondurma düşüyordu).
+            log.warning("Canlı arşiv görünümü hesaplanamadı [%s]", match.match_id, exc_info=True)
     shadow_pred, shadow_picks = await _poisson_shadow(match, fs) if status == "ready" else (None, [])
     if report is not None:
         report["prediction"] = prediction
@@ -183,7 +200,7 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
         obs_id = await _ht_observation_id(session, match, ht, phase, now)
         rows = ledger_rows(match, prediction, now, obs_id, late=phase == "2h")
         # Canlı arşiv %85+ işaretleri: ana kayıt ile aynı İY gözlemine bağlı; geç kalındıysa yazılmaz.
-        archive_ok = archive_freeze_allowed(fs)
+        archive_ok = view is not None and archive_freeze_allowed(fs, match.kickoff_time, now)
         if archive_ok:
             rows += live_archive.ledger_rows(view, {
                 "match_id": match.match_id, "league_name": match.league_name or "",
@@ -197,6 +214,8 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
                     "kickoff_time": match.kickoff_time, "as_of": now, "pattern_hash": pattern_hash(match),
                     "ht_home": ht[0], "ht_away": ht[1], "ht_observation_id": obs_id,
                 }, late=phase == "2h")
+        elif view is None:
+            log.warning("Arşiv işaretleri yazılmadı (görünüm yok) [%s]", match.match_id)
         else:
             log.info("Arşiv işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)
         written = await record_predictions(session, rows)

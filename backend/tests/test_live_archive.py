@@ -154,6 +154,12 @@ def test_archive_freeze_window():
     assert not archive_freeze_allowed(fs("2h", "51"))
     assert not archive_freeze_allowed(fs("2h", "90+3"))
     assert not archive_freeze_allowed(fs("2h", None))
+    # Kaynak panosu 2. yarıda dakika vermez → başlamadan geçen süre (yeniden başlatma sonrası kayıp olmasın)
+    from datetime import datetime, timedelta, timezone
+    kickoff = datetime(2026, 10, 19, 18, tzinfo=timezone.utc)
+    assert archive_freeze_allowed(fs("2h", None), kickoff, kickoff + timedelta(minutes=62))
+    assert not archive_freeze_allowed(fs("2h", None), kickoff, kickoff + timedelta(minutes=70))
+    assert not archive_freeze_allowed(fs("2h", "55"), kickoff, kickoff + timedelta(minutes=62))
 
 
 def test_late_flag_on_archive_rows():
