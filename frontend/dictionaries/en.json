@@ -207,7 +207,8 @@
       "strategy_live_poisson": "Live Poisson (shadow)",
       "strategy_prematch_v5": "Pre-match (team strength)",
       "pctFormat": "{v}%",
-      "decimalSep": "."
+      "decimalSep": ".",
+      "strategy_live_2h": "Live 2nd half (shadow)"
     }
   },
   "live": {

@@ -207,7 +207,8 @@
       "strategy_live_poisson": "Canlı Poisson (gölge)",
       "strategy_prematch_v5": "Maç öncesi (takım gücü)",
       "pctFormat": "%{v}",
-      "decimalSep": ","
+      "decimalSep": ",",
+      "strategy_live_2h": "Canlı 2. yarı (gölge)"
     }
   },
   "live": {

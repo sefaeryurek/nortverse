@@ -190,9 +190,10 @@ def backtest_ledger_cmd(
             title = f"Maç öncesi v5 (Dixon-Coles) backtest #{run_id} ({from_date} → {to_date})"
         elif strategy == "live_poisson":
             run_id = await run_live_poisson_backtest(start, end, notes=notes, replace_run=replace_run)
+            title = f"Canlı Poisson (gölge, %85+) backtest #{run_id} ({from_date} → {to_date})"
         elif strategy == "live_2h":
             run_id = await run_live_2h_backtest(start, end, notes=notes, replace_run=replace_run)
-            title = f"Canlı Poisson (gölge, %85+) backtest #{run_id} ({from_date} → {to_date})"
+            title = f"Canlı 2. yarı (gölge: güvenli alt ≥%85, gol ≥%70) backtest #{run_id} ({from_date} → {to_date})"
         elif strategy == "live_ht":
             run_id = await run_live_backtest(start, end, notes=notes, alpha=alpha, replace_run=replace_run)
             title = f"Canlı İY→MS backtest #{run_id} ({from_date} → {to_date}, α={alpha})"

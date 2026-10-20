@@ -347,6 +347,7 @@ export function pickBacktestRun(runs: BacktestRun[], requested: number | null): 
 function runLabel(run: BacktestRun, p: Perf): string {
   const key = run.rule_version.startsWith("live-arch") ? "live_archive"
     : run.rule_version.startsWith("live-poisson") ? "live_poisson"
+    : run.rule_version.startsWith("live-2h") ? "live_2h"
     : run.rule_version === "ft-display-v5" ? "prematch_v5"
     : run.strategy;
   const strategy = (p as Record<string, string>)[`strategy_${key}`] ?? run.strategy;
