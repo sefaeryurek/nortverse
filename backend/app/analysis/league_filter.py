@@ -122,6 +122,8 @@ LEAGUE_ALIASES: dict[str, str] = {
     "portugal primeira liga": "Portuguese Primeira Liga",
     "primeira liga": "Portuguese Primeira Liga",
     "por d1": "Portuguese Primeira Liga",
+    "liga portugal 1": "Portuguese Primeira Liga",
+    "liga portugal": "Portuguese Primeira Liga",
     # Belçika
     "belgian pro league": "Belgian Pro League",
     "belgium pro league": "Belgian Pro League",
@@ -145,6 +147,10 @@ LEAGUE_ALIASES: dict[str, str] = {
     "germany 2. bundesliga": "German 2. Bundesliga",
     "2. bundesliga": "German 2. Bundesliga",
     "ger d2": "German 2. Bundesliga",
+    # Bülten tam adları (Sprint 92: kısa kodla aynı kanonik ada gitmezse lig süzgeci boş kalır)
+    "german bundesliga 2": "German 2. Bundesliga",
+    "germany bundesliga 2": "German 2. Bundesliga",
+    "bundesliga 2": "German 2. Bundesliga",
     # İngiltere League One/Two
     "england league one": "England League One",
     "eng l1": "England League One",
@@ -209,6 +215,28 @@ MAIN_LEAGUES: frozenset[str] = frozenset({
     "Dutch Eredivisie",
     "Holland Eredivisie",
 })
+
+
+# Gölgedeki ligler (Sprint 92, kullanıcı onaylı): arşivi kuruldu, tahminleri deftere yazılır ama ekranda
+# (bülten, canlı sayfa, değerlendirme özeti) görünmez; karnesi ayrı tutulur. Ortak havuzlar (COND "tüm
+# ligler", lig ortalaması genel değeri, Poisson 2. yarı payı) sadece ana liglerden kurulur → ana liglerin
+# yüzdeleri değişmez.
+SHADOW_LEAGUES: frozenset[str] = frozenset({
+    "English Championship",
+    "German 2. Bundesliga",
+    "Portuguese Primeira Liga",
+    "Belgian Pro League",
+    "Scottish Premiership",
+})
+
+
+def is_shadow_league(*names: str | None) -> bool:
+    return any(n and (n.strip() in SHADOW_LEAGUES or canonical_league_name(n) in SHADOW_LEAGUES) for n in names)
+
+
+def is_tracked_league(*names: str | None) -> bool:
+    """Tahmin üretilip deftere yazılan ligler: 7 ana lig + gölgedeki ligler."""
+    return is_main_league(*names) or is_shadow_league(*names)
 
 
 def is_main_league(*names: str | None) -> bool:

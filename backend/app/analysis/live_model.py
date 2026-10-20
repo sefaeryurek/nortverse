@@ -19,11 +19,13 @@ import logging
 import time
 from collections import Counter
 from dataclasses import dataclass, field
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
 from app.analysis.freshness import ResultsWatch, results_marker
+from app.analysis.league_filter import is_main_league
 from app.analysis.league_priors import PRIOR_SEASON_DAYS, prior_from_counts
 from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 from app.db.connection import get_session
@@ -78,6 +80,12 @@ def _diff_key(h: int, a: int) -> int:
     return max(-3, min(3, h - a))
 
 
+@lru_cache(maxsize=512)
+def _in_reference_pool(league: str) -> bool:
+    """Ortak "tüm ligler" havuzuna giren lig mi? (sadece 7 ana lig — Sprint 92)"""
+    return is_main_league(league)
+
+
 @dataclass
 class CondTable:
     """İY skoruna koşullu MS sayaçları + lig prior'u. `add` ile artımlı büyür (backtest)."""
@@ -94,8 +102,10 @@ class CondTable:
         key, diff = (ht_h, ht_a), _diff_key(ht_h, ht_a)
         self.by_score.setdefault(league, {}).setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
         self.by_diff.setdefault(league, {}).setdefault(diff, Counts()).add(ft_h, ft_a)
-        self.global_by_score.setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
-        self.global_by_diff.setdefault(diff, Counts()).add(ft_h, ft_a)
+        if _in_reference_pool(league):
+            # "Tüm ligler" yedeği sadece ana liglerden: gölgedeki yeni ligler ana liglerin oranlarını kaydırmasın
+            self.global_by_score.setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
+            self.global_by_diff.setdefault(diff, Counts()).add(ft_h, ft_a)
         if kickoff >= self.prior_from:
             self.prior.setdefault(league, Counts()).add(ft_h, ft_a)
 

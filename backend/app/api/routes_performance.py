@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import text
 
-from app.analysis.league_filter import is_main_league
+from app.analysis.league_filter import is_main_league, is_shadow_league
 from app.analysis.market_resolver import resolve
 from app.analysis.performance import (
     GROUP_FIELDS,
@@ -28,6 +28,12 @@ router = APIRouter()
 
 Source = Literal["live_ht", "top_pick", "market_summary"]
 Informational = Literal["all", "main", "info"]
+# Ekrandaki 7 ana lig ya da gölgedeki yeni ligler (Sprint 92) — karneleri birbirine karışmaz.
+Scope = Literal["main", "shadow"]
+
+
+def _in_scope(league_name: str | None, scope: str) -> bool:
+    return is_shadow_league(league_name) if scope == "shadow" else is_main_league(league_name)
 
 _LEDGER_SQL = """
     SELECT l.id, l.source, l.rule_version, l.match_id, l.league_name, m.kickoff_time, l.recorded_at,
@@ -68,7 +74,7 @@ def on_screen_rule_version(source: str) -> str:
 
 
 async def _load(source: str, rule_version: str | None, date_from: date | None, date_to: date | None,
-                informational: str, limit: int = 50000) -> list[dict]:
+                informational: str, limit: int = 50000, scope: str = "main") -> list[dict]:
     filters, params = [], {"source": source, "limit": limit}
     # Sürüm verilmezse ekrandaki sürüm; "all" açıkça tüm sürümler (gölge dahil).
     rule_version = on_screen_rule_version(source) if rule_version is None else rule_version
@@ -87,8 +93,9 @@ async def _load(source: str, rule_version: str | None, date_from: date | None, d
         filters.append("AND l.informational")
     async with get_session() as session:
         rows = (await session.execute(text(_LEDGER_SQL.format(filters=" ".join(filters))), params)).all()
-    # Ekranda olmayan küçük lig / silinmiş lig kayıtları (eski v3 kopyaları dahil) panelde sayılmaz.
-    return [_with_baseline(r) for r in rows if is_main_league(r.league_name)]
+    # Ekranda olmayan küçük lig / silinmiş lig kayıtları (eski v3 kopyaları dahil) panelde sayılmaz;
+    # gölgedeki ligler sadece scope=shadow ile.
+    return [_with_baseline(r) for r in rows if _in_scope(r.league_name, scope)]
 
 
 @router.get("/api/performance/summary")
@@ -99,12 +106,13 @@ async def performance_summary(
     date_to: date | None = Query(None),
     group_by: str = Query("market,tier", description="Virgülle: " + ",".join(GROUP_FIELDS)),
     informational: Informational = Query("all"),
+    scope: Scope = Query("main"),
 ) -> dict:
     groups = [g.strip() for g in group_by.split(",") if g.strip()]
     unknown = [g for g in groups if g not in GROUP_FIELDS]
     if unknown:
         raise HTTPException(400, f"Bilinmeyen gruplama: {', '.join(unknown)}")
-    rows = await _load(source, rule_version, date_from, date_to, informational)
+    rows = await _load(source, rule_version, date_from, date_to, informational, scope=scope)
     return {
         "source": source,
         "rule_versions": sorted({r["rule_version"] for r in rows}),
@@ -129,8 +137,9 @@ async def performance_predictions(
     day: date | None = Query(None, description="İstanbul günü (maç başlama)"),
     rule_version: str | None = Query(None, max_length=32),
     limit: int = Query(300, ge=1, le=1000),
+    scope: Scope = Query("main"),
 ) -> list[dict]:
-    rows = await _load(source, rule_version, day, day, "all", limit=limit)
+    rows = await _load(source, rule_version, day, day, "all", limit=limit, scope=scope)
     return [{
         "id": r["id"], "match_id": r["match_id"], "home_team": r["home_team"], "away_team": r["away_team"],
         "league_name": r["league_name"], "kickoff_time": r["kickoff_time"].isoformat(),
@@ -262,7 +271,8 @@ def _merge_pick(picks: list[dict], pick: dict, sources: list[str] | None = None)
 
 
 @router.get("/api/performance/live-matches")
-async def live_matches(day: date = Query(..., description="İstanbul günü (maç başlama)")) -> list[dict]:
+async def live_matches(day: date = Query(..., description="İstanbul günü (maç başlama)"),
+                       scope: Scope = Query("main")) -> list[dict]:
     """Canlıya giren (devre arasında kaydedilen) her maç: %85+ arşiv işaretleri ve tuttu/tutmadı."""
     from app.analysis.live_archive import LIVE_ARCHIVE_RULE_VERSIONS
 
@@ -272,7 +282,7 @@ async def live_matches(day: date = Query(..., description="İstanbul günü (ma�
                                       {"start": start, "end": start + timedelta(days=1)})).all()
     matches: dict[str, dict] = {}
     for r in rows:
-        if not is_main_league(r.league_name):
+        if not _in_scope(r.league_name, scope):
             continue  # canlı sayfada olmayan küçük lig kayıtları değerlendirmede de gösterilmez
         entry = matches.setdefault(r.match_id, {
             "match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,

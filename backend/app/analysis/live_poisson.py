@@ -197,9 +197,15 @@ def _fit_rho(model: LeagueModel, rows: list[TrainMatch], weights: list[float]) -
 
 
 def _finish_shares(leagues: dict[str, LeagueModel]) -> None:
-    """Lig payları tüm liglerin payına `share_prior_goals` beklenen gol kadar çekilir."""
+    """Lig payları ana liglerin ortak payına `share_prior_goals` beklenen gol kadar çekilir.
+
+    Ortak pay sadece 7 ana ligden (Sprint 92): gölgedeki yeni ligler ana liglerin payını kaydırmasın.
+    """
+    from app.analysis.league_filter import is_main_league
+
     total = {s: [0.0, 0.0, 0.0, 0.0] for s in STATES}
-    for lm in leagues.values():
+    reference = [lm for name, lm in leagues.items() if is_main_league(name)] or list(leagues.values())
+    for lm in reference:
         for s, acc in lm._share_sums.items():
             for i in range(4):
                 total[s][i] += acc[i]
@@ -311,7 +317,7 @@ async def load_training(as_of: datetime | None = None) -> list[TrainMatch]:
     """Ana liglerin sonucu maçtan sonra kaydedilmiş biten maçları (zaman sıralı)."""
     from sqlalchemy import func, select
 
-    from app.analysis.league_filter import is_main_league
+    from app.analysis.league_filter import is_tracked_league
     from app.db.connection import get_session
     from app.db.models import Match
 
@@ -330,7 +336,7 @@ async def load_training(as_of: datetime | None = None) -> list[TrainMatch]:
         rows = (await session.execute(stmt)).all()
     out = []
     for ko, league, home, away, hh, ha, fh, fa in rows:
-        if hh > fh or ha > fa or not is_main_league(league):
+        if hh > fh or ha > fa or not is_tracked_league(league):
             continue
         out.append(TrainMatch(ko if ko.tzinfo else ko.replace(tzinfo=timezone.utc), league, home, away, hh, ha, fh, fa))
     return out
@@ -382,7 +388,7 @@ async def backfill_team_lambdas(*, only_missing: bool = True, batch: int = 2000)
     modelle hesaplanır (eğitim: o andan 3 saat öncesine kadar) → arşiv maçlarında gelecek bilgisi yok."""
     from sqlalchemy import select, update
 
-    from app.analysis.league_filter import is_main_league
+    from app.analysis.league_filter import is_tracked_league
     from app.db.connection import get_session
     from app.db.models import Match
 
@@ -394,7 +400,7 @@ async def backfill_team_lambdas(*, only_missing: bool = True, batch: int = 2000)
     if only_missing:
         stmt = stmt.where(Match.team_lambda_home.is_(None))
     async with get_session() as session:
-        targets = [r for r in (await session.execute(stmt)).all() if is_main_league(r.league_name)]
+        targets = [r for r in (await session.execute(stmt)).all() if is_tracked_league(r.league_name)]
     now = datetime.now(timezone.utc)
     models: dict[datetime, PoissonModel] = {}
     stats = {"targets": len(targets), "written": 0, "no_model": 0}
