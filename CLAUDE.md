@@ -1605,6 +1605,22 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **`scripts/start-backend.bat` + `Backend` görevi:** oturum açılışında penceresiz başlar (süre sınırı yok, `IgnoreNew`); port 8000 doluysa ikinci kopya açmaz (`scripts/logs/backend_starts.log`), Docker'ı `ensure-docker.bat` ile hazırlar, çökerse 30 sn sonra yeniden dener (her denemede port tekrar kontrol edilir), 5 çöküşte durur; 10 dk'dan uzun çalıştıysa çökme sayacı sıfırlanır (Sprint 92.5). Log `scripts/logs/backend.log` (20 MB'ta `backend.old.log`, her yeniden başlatmada kontrol). `run-pipeline` hiç kayıt yapamazsa veya hataları %20'yi (en az 5) aşarsa kod 2 döner → ekranda uyarı.
 - **`scripts/notify-error.bat`:** görev hatasında ekranda uyarı penceresi (`msg`, 12 saat) + masaüstünde `NORTVERSE-HATA.txt`. Pipeline, skor güncelleme, yedekleme ve backend hata dallarına bağlı. Mesajda parantez kullanılmaz (if/else bloğunu erken kapatır).
 
+### Sprint 92 — DEVAM EDİYOR (19 Ekim gece 7 ajan canlı incelemesi sonrası)
+**Ajan bulguları (kararları yönlendiren):**
+- 18 Ekim örnekleri (Real Madrid, Lazio, Lyon, Utrecht, Malaga, Arsenal, Milan, Başakşehir): sonuç tutanlar İY skorunun verdiği bilgiydi (COND zaten %70–95); skor "tutmaları" sonradan görme — kısa listeler son skoru "o İY'de ligin en sık skorları"ndan **daha az** içeriyor. Utrecht (1-0 → 1-2) ayırt edilemezdi (~1/10); tek ipucu "geride olan takım maç öncesi açık güçlüyse" dönüş %12 → %30 (test edilecek fikir).
+- "İY 1-0, arşivde hep KG var" fikri %53,5 (taban %51,4) → gönderilmedi.
+- Arşiv derinliği: 7 ana lig yeterli (eski sezon +0,7 puan); asıl açık bültenin %98'i ana lig dışı.
+- Oran: nowgoal'da açılış/kapanış/devre arası oranları var (son sezonlar); otomatik çekim kullanım şartlarına aykırı olabilir → sadece kişisel ölçüm denemesi.
+
+**92.1 — Maç öncesi karar en erken 48 saat önce dondurulur** (`prematch_v4.CAPTURE_HORIZON`); Mayıs 2027 maçına Ekim'de yazılan 47 kayıt geçersiz sayıldı.
+**92.2 — Takım gücü λ:** saklı λ 7 günden eskiyse veya modeli maçın kendi sonucunu görmüşse yeniden hesaplanır (`live_poisson.stored_lambda_usable`, gerekirse başlama haftasının modeli); ilk analizde satır yokken lig/takım parametreleriyle hesaplanır, `_upsert` sonrası yazılır.
+**92.3 — Canlı dondurma:** arşiv görünümü hatası ana kaydı düşürmez; 2. yarıda dakika bilinmezse başlamadan geçen süre (≤65 dk) kullanılır.
+**92.4 — Değerlendirme:** sürüm verilmeyen özet ekrandaki sürümü sayar (`on_screen_rule_version`, `rule_version=all` açıkça); backtest "güncel" etiketi koşunun kendi sürümüne göre; "arşiv" kırılımı v2'nin `details.sources`'unu sayar; canlı maç listesinde sürümler birleşmez. A2/A3 değiştiği için **v4 gölge → `ft-display-v4.1`, Ana Pazar → `market-summary-v2`**; v4 parmak izi artık `PATTERN_ALGO_VERSION`'ı da içerir (arşiv algoritması değişince sabitlenmiş test kırılır).
+**92.5 — Operasyon:** `run-pipeline` çok hata verirse kod 2; backend sarmalayıcısı 10 dk'dan uzun çalışmada çökme sayacını sıfırlar, her denemede portu kontrol eder; defterdeki pattern parmak izi kullanılan veriden.
+**92.6 — Frontend:** WS kopunca son veri ekranda kalır + 90 sn'den eski veri işareti; donmuş kararlarda "tüm ligler" etiketi; günlük liste sadece ekrandaki sürüm; v5 seçiminde "N maç/ham %" gizli; eksik pazar/strateji etiketleri; dile göre yüzde ve hata mesajları; sekme erişilebilirliği.
+**92.7 — `live-2h-v1` GÖLGEDE (`live_2h.py`):** devre arasında (a) güvenli alt — ev/dep 1.5 alt (MS ve 2Y), olasılık = min(Poisson son skor ızgarası, COND) ≥%85, COND yoksa karar yok; (b) gol — 2Y ev/dep gol, MS KG/ev/dep 0.5 üst, Poisson ≥%70. İY'nin belirlediği ve aynı olayı anlatan pazarlar tek karar; COND ≥%80 → `trivial`. Backtest #14 (2023-07 → 2026-10): MS dep 1.5 alt %88,7 (1.480, gösterilen %86,6), 2Y dep 1.5 alt %87,9 (428), 2Y ev gol %77,1 (703, gösterilen %75,7), 2Y dep gol %76,6 (218). Ekranda yok; 100 tekil karar sonrası karne, ekrana alınması kullanıcı kararı.
+**92.8 — Gölge ligler (`league_filter.SHADOW_LEAGUES`, kullanıcı onaylı):** ENG Championship (37), GER 2. Bundesliga (9), Portekiz (23), Belçika (5), İskoçya (29) × 5 sezon `build-multi-archive` ile kuruluyor. Tahmin üretilir ve deftere yazılır, ekranda yok (bülten/canlı sadece ana lig); değerlendirmede `scope=shadow` ayrı karne. Ana liglerin oranları değişmesin diye ortak havuzlar (COND "tüm ligler", lig ortalaması genel değeri, Poisson 2Y payı) sadece 7 ana ligden. Kurulumdan sonra: `recompute-patterns --stale-only --include-finished` + `backfill-team-lambdas`.
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1676,7 +1692,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Otomatik skor güncelleme:** `_score_updater` Sprint 7'de kaldırıldı. Skor güncelleme sadece GitHub Actions gece cron'u (`update-scores`) ve CLI ile yapılır.
 
-- **Arşive ekleme yapılmıyor:** Mevcut arşiv sabittir, yeni lig/sezon eklenmeyecek. Var olan maçların yüzdeleri değişmesin diye bu karar alındı.
+- **Arşive ekleme (Sprint 92'de gevşetildi):** 7 ana ligin arşivi sabit (yeni sezon eklenmiyor). Kullanıcı onayıyla 5 yeni lig gölgede eklendi; eşleşme sadece aynı ligde ve ortak havuzlar sadece ana liglerden kurulduğu için ana liglerin yüzdeleri değişmez. Yeni lig eklemek yine kullanıcı onayı ister.
 
 - **Pattern matching self-exclusion:** `find_pattern_b_matches` ve `find_pattern_c_all_periods` fonksiyonları `exclude_match_id` parametresi alır. Bülten maçı analiz edilirken kendi match_id'si geçilmeli — DB'de sonucu varsa kendi kendini analiz etmemesi için. `main.py`'deki `_build_from_db` ve `_do_analyze` bunu otomatik yapar.
 
