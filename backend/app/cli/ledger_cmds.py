@@ -102,6 +102,15 @@ def live_freeze_cmd(
         console.print(f"  Gölge {live_poisson.LIVE_POISSON_RULE_VERSION}: " + (", ".join(
             f"{p['period']}·{p['market']} {p['selection']} %{p['pct']}{' ★' if p['best'] else ''}"
             f"{' (değerli)' if p['valuable'] else ''}" for p in picks) or "yok"))
+        from app.analysis import live_2h
+
+        dist = live_poisson.final_grid(await live_poisson.get_poisson_model(), match.league_name or "",
+                                       match.home_team, match.away_team, ht_pair)
+        h2 = live_2h.decide(dist["grid"] if dist else None, ht_pair,
+                            live_2h.cond_lookup(table, match.league_name or "", ht_pair))
+        console.print(f"  Gölge {live_2h.LIVE_2H_RULE_VERSION}: " + (", ".join(
+            f"{p['period']}·{p['market']} {p['selection']} %{p['pct']} ({p['kind']}"
+            f"{', zaten neredeyse kesin' if p['trivial'] else ''})" for p in h2) or "yok"))
         console.print("[dim]Deneme: deftere hiçbir şey yazılmadı.[/dim]")
 
     async def _tick() -> None:
@@ -138,7 +147,7 @@ def live_freeze_cmd(
 
 
 def backtest_ledger_cmd(
-    strategy: str = typer.Option("live_ht", "--strategy", help="live_ht | live_archive | live_poisson | top_pick | top_pick_v5 | market_summary"),
+    strategy: str = typer.Option("live_ht", "--strategy", help="live_ht | live_archive | live_poisson | live_2h | top_pick | top_pick_v5 | market_summary"),
     from_date: str = typer.Option(..., "--from", help="Başlangıç (YYYY-MM-DD)"),
     to_date: str = typer.Option(..., "--to", help="Bitiş, hariç (YYYY-MM-DD)"),
     alpha: float = typer.Option(0.5, "--alpha", help="Maç öncesi LR üssü (live_model.ALPHA)"),
@@ -151,13 +160,15 @@ def backtest_ledger_cmd(
     from datetime import datetime
     from app.analysis.backtest import (
         load_backtest_rows, ms_brier_report, run_live_archive_backtest, run_live_backtest,
-        run_live_poisson_backtest, run_prematch_backtest, run_prematch_v5_backtest,
+        run_live_2h_backtest, run_live_poisson_backtest, run_prematch_backtest, run_prematch_v5_backtest,
     )
     from app.analysis.performance import group_summaries, summarize
     from app.config import ISTANBUL_TZ
 
-    if strategy not in ("live_ht", "live_archive", "live_poisson", "top_pick", "top_pick_v5", "market_summary"):
-        console.print("[red]--strategy: live_ht | live_archive | live_poisson | top_pick | top_pick_v5 | market_summary[/red]")
+    if strategy not in ("live_ht", "live_archive", "live_poisson", "live_2h", "top_pick", "top_pick_v5",
+                        "market_summary"):
+        console.print("[red]--strategy: live_ht | live_archive | live_poisson | live_2h | top_pick | top_pick_v5 | "
+                      "market_summary[/red]")
         raise typer.Exit(1)
     start = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
     end = datetime.strptime(to_date, "%Y-%m-%d").replace(tzinfo=ISTANBUL_TZ)
@@ -179,6 +190,8 @@ def backtest_ledger_cmd(
             title = f"Maç öncesi v5 (Dixon-Coles) backtest #{run_id} ({from_date} → {to_date})"
         elif strategy == "live_poisson":
             run_id = await run_live_poisson_backtest(start, end, notes=notes, replace_run=replace_run)
+        elif strategy == "live_2h":
+            run_id = await run_live_2h_backtest(start, end, notes=notes, replace_run=replace_run)
             title = f"Canlı Poisson (gölge, %85+) backtest #{run_id} ({from_date} → {to_date})"
         elif strategy == "live_ht":
             run_id = await run_live_backtest(start, end, notes=notes, alpha=alpha, replace_run=replace_run)

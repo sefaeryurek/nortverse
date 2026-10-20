@@ -232,8 +232,8 @@ def _pmf(lam: float) -> list[float]:
     return probs
 
 
-def predict(model: PoissonModel, league: str, home: str, away: str, ht: tuple[int, int]) -> dict | None:
-    """Pazar başına en olası seçim ve olasılığı (yüzde). Lig modeli yoksa None."""
+def final_grid(model: PoissonModel, league: str, home: str, away: str, ht: tuple[int, int]) -> dict | None:
+    """İY skorundan son skor dağılımı: [((iy_ev, iy_dep, ms_ev, ms_dep), olasılık)] + λ'lar. Model yoksa None."""
     lm = model.leagues.get(league)
     if lm is None:
         return None
@@ -242,6 +242,15 @@ def predict(model: PoissonModel, league: str, home: str, away: str, ht: tuple[in
     r_h, r_a = lam_h * share_h, lam_a * share_a
     ph, pa = _pmf(r_h), _pmf(r_a)
     grid = [((ht[0], ht[1], ht[0] + i, ht[1] + j), ph[i] * pa[j]) for i in range(len(ph)) for j in range(len(pa))]
+    return {"grid": grid, "lam_h": lam_h, "lam_a": lam_a, "r_h": r_h, "r_a": r_a}
+
+
+def predict(model: PoissonModel, league: str, home: str, away: str, ht: tuple[int, int]) -> dict | None:
+    """Pazar başına en olası seçim ve olasılığı (yüzde). Lig modeli yoksa None."""
+    dist = final_grid(model, league, home, away, ht)
+    if dist is None:
+        return None
+    grid, lam_h, lam_a, r_h, r_a = dist["grid"], dist["lam_h"], dist["lam_a"], dist["r_h"], dist["r_a"]
     cells = []
     for period, market in DECISION_MARKETS:
         if market_decided(period, market, tuple(ht)):

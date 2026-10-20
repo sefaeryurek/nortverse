@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.analysis import live_archive, live_poisson
+from app.analysis import live_2h, live_archive, live_poisson
 from app.analysis.league_filter import is_main_league
 from app.analysis.ledger import record_predictions
 from app.analysis.live_model import LIVE_RULE_VERSION, get_cond_table, predict_live
@@ -169,6 +169,24 @@ async def _poisson_shadow(match: Match, fs: FixtureScore) -> tuple[dict | None, 
         return None, []
 
 
+async def _live_2h_shadow(match: Match, fs: FixtureScore) -> tuple[list[dict], dict | None]:
+    """Gölge 2. yarı işaretleri (live-2h-v1); hata ana kaydı asla engellemez."""
+    try:
+        ht = observed_ht(fs)
+        league = match.league_name or ""
+        model = await live_poisson.get_poisson_model()
+        dist = live_poisson.final_grid(model, league, match.home_team, match.away_team, ht)
+        if dist is None:
+            return [], None
+        picks = live_2h.decide(dist["grid"], ht, live_2h.cond_lookup(await get_cond_table(), league, ht))
+        lambdas = {"2h": {"home": round(dist["r_h"], 3), "away": round(dist["r_a"], 3)},
+                   "ft": {"home": round(dist["lam_h"], 3), "away": round(dist["lam_a"], 3)}}
+        return picks, lambdas
+    except Exception:
+        log.warning("Gölge 2. yarı işaretleri hesaplanamadı [%s]", match.match_id, exc_info=True)
+        return [], None
+
+
 async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: bool = False,
                                  report: dict | None = None) -> str:
     """İY gözlemini ve tahmini bir kez kaydeder. Durum kodunu döner (tahmin `report`'a yazılır)."""
@@ -183,10 +201,12 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             # Arşiv görünümü hatası ana kaydı ve İY gözlemini engellemez (eskiden tüm dondurma düşüyordu).
             log.warning("Canlı arşiv görünümü hesaplanamadı [%s]", match.match_id, exc_info=True)
     shadow_pred, shadow_picks = await _poisson_shadow(match, fs) if status == "ready" else (None, [])
+    h2_picks, h2_lambdas = await _live_2h_shadow(match, fs) if status == "ready" else ([], None)
     if report is not None:
         report["prediction"] = prediction
         report["view"] = view
         report["poisson"] = shadow_picks
+        report["live_2h"] = h2_picks
     if status == "late_score_changed":
         log.info("Canlı tahmin dondurulmadı (2. yarıda skor değişmiş) [%s]", match.match_id)
     if status != "ready":
@@ -200,24 +220,26 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
         obs_id = await _ht_observation_id(session, match, ht, phase, now)
         rows = ledger_rows(match, prediction, now, obs_id, late=phase == "2h")
         # Canlı arşiv %85+ işaretleri: ana kayıt ile aynı İY gözlemine bağlı; geç kalındıysa yazılmaz.
-        archive_ok = view is not None and archive_freeze_allowed(fs, match.kickoff_time, now)
+        # Arşiv ve gölge işaretleri sadece devre arası / 2. yarının başında; geç kalındıysa yazılmaz.
+        window_ok = archive_freeze_allowed(fs, match.kickoff_time, now)
+        archive_ok = window_ok and view is not None
+        common = {
+            "match_id": match.match_id, "league_name": match.league_name or "",
+            "kickoff_time": match.kickoff_time, "as_of": now, "pattern_hash": pattern_hash(match),
+            "ht_home": ht[0], "ht_away": ht[1], "ht_observation_id": obs_id,
+        }
         if archive_ok:
-            rows += live_archive.ledger_rows(view, {
-                "match_id": match.match_id, "league_name": match.league_name or "",
-                "kickoff_time": match.kickoff_time, "as_of": now, "pattern_hash": pattern_hash(match),
-                "ht_home": ht[0], "ht_away": ht[1], "ht_observation_id": obs_id,
-            }, late=phase == "2h")
-            if shadow_picks:
-                # Gölge model (live-poisson-v1): ekranda yok, bir hafta ölçülüp v2 ile karşılaştırılacak
-                rows += live_poisson.ledger_rows(shadow_pred, shadow_picks, {
-                    "match_id": match.match_id, "league_name": match.league_name or "",
-                    "kickoff_time": match.kickoff_time, "as_of": now, "pattern_hash": pattern_hash(match),
-                    "ht_home": ht[0], "ht_away": ht[1], "ht_observation_id": obs_id,
-                }, late=phase == "2h")
+            rows += live_archive.ledger_rows(view, common, late=phase == "2h")
+        if window_ok and shadow_picks:
+            # Gölge model (live-poisson-v1): ekranda yok, bir hafta ölçülüp v2 ile karşılaştırılacak
+            rows += live_poisson.ledger_rows(shadow_pred, shadow_picks, common, late=phase == "2h")
+        if window_ok and h2_picks:
+            # Gölge 2. yarı işaretleri (live-2h-v1): ekranda yok, 100 tekil karar sonra karne
+            rows += live_2h.ledger_rows(h2_picks, common, lambdas=h2_lambdas, late=phase == "2h")
+        if not window_ok:
+            log.info("Arşiv/gölge işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)
         elif view is None:
             log.warning("Arşiv işaretleri yazılmadı (görünüm yok) [%s]", match.match_id)
-        else:
-            log.info("Arşiv işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)
         written = await record_predictions(session, rows)
     if written:
         log.info("Canlı tahmin donduruldu [%s] İY %s-%s → %s %%%.1f · %d arşiv işareti (%%85+)",
