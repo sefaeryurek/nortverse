@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from bs4 import BeautifulSoup
 
+from app.config import SCRAPER
 from app.scraper.browser import browser_context, goto_with_retry
 from app.scraper.fixture import _MATCH_ROW_RE
 from app.scraper.fixture_scores import FixtureScore, _MINUTE_RE, _score, phase_from_minute
@@ -49,7 +50,8 @@ async def fetch_live_scores() -> dict[str, FixtureScore]:
     async with browser_context() as ctx:
         page = await ctx.new_page()
         try:
-            await goto_with_retry(page, "https://live5.nowgoal26.com/")
+            # Adres ayardan (SCRAPER_BASE_URL): kaynak alan adı değişirse tek yerden güncellenir.
+            await goto_with_retry(page, SCRAPER.base_url + "/")
             await page.wait_for_selector('tr[id^="tr1_"]', timeout=12000)
             # The score feed and minute clock are applied after the initial HTML.
             await page.wait_for_timeout(1500)
