@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, WebSocket, WebSocketD
 from pydantic import BaseModel
 from sqlalchemy import exists, select
 
-from app.analysis.league_filter import canonical_league_name, is_main_league
+from app.analysis.league_filter import canonical_league_name, is_shadow_league, is_tracked_league
 from app.analysis import live_archive
 from app.analysis.live_model import LIVE_RULE_VERSION
 from app.api.live_ledger import match_phase, observed_ht
@@ -46,6 +46,8 @@ class LiveHTMatch(BaseModel):
     frozen: bool = False
     frozen_at: str | None = None
     archive_view: dict | None = None
+    # Gölgedeki lig (Sprint 92): ekran varsayılan olarak gizler, "gölge ligleri göster" açıkken "Deneme" etiketiyle
+    shadow: bool = False
 
 
 def _is_second_half_or_later(minute: str | None, phase: str | None = None) -> bool:
@@ -163,7 +165,7 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
             continue
         home, away, kickoff = match.home_team, match.away_team, match.kickoff_time
         league = canonical_league_name(match.league_name) if match.league_name else None
-        if not is_main_league(league):
+        if not is_tracked_league(league):
             continue
         ht = observations.get(mid) or observed_ht(fs)
         if ht is None:
@@ -176,7 +178,7 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
             live_minute=fs.minute, phase=match_phase(fs), league_name=league,
             kickoff_time=kickoff.isoformat() if kickoff else None,
             frozen=record is not None, frozen_at=record["frozen_at"] if record else None,
-            archive_view=view,
+            archive_view=view, shadow=is_shadow_league(league),
         ))
     return result
 

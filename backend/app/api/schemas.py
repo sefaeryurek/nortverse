@@ -80,6 +80,8 @@ class FixtureMatchOut(BaseModel):
     live_minute: Optional[str] = None
     score_checked_at: Optional[str] = None
     has_prediction: bool = False
+    # Gölgedeki lig (Sprint 92): sadece "gölge ligleri göster" açıkken listelenir, ekranda "Deneme" etiketi
+    shadow: bool = False
 
 
 class PeriodOut(BaseModel):

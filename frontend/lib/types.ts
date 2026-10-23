@@ -11,6 +11,8 @@ export interface FixtureMatch {
   live_minute: string | null;
   score_checked_at: string | null;
   has_prediction: boolean;
+  /** Gölgedeki lig (sadece "gölge ligleri göster" açıkken listelenir). */
+  shadow?: boolean;
 }
 
 export interface PeriodOut {

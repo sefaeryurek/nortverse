@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getBacktestRuns, getBacktestSummary, getLiveMatchEvaluations, getPerformancePredictions, getPerformanceSummary } from "@/lib/api";
 import { liveMarketLabel, liveSelectionLabel } from "@/lib/live-labels";
 import type {
+  PerformanceScope,
   BacktestRun, BacktestSummary, LedgerPrediction, LiveMatchEvaluation, PerformanceStats, PerformanceSummary, PredictionSource,
 } from "@/lib/api";
 import type { Dictionary } from "@/lib/i18n";
@@ -286,8 +287,10 @@ function SummaryBody({ summary, t, headline, groups }: {
   );
 }
 
-export async function PerformanceOverview({ source, t, groups = ["tier", "market"], title, hint, ruleVersion, dateFrom, dateTo, headline }: {
+export async function PerformanceOverview({ source, t, groups = ["tier", "market"], title, hint, ruleVersion, dateFrom, dateTo, headline, scope = "main" }: {
   source: PredictionSource;
+  /** Ana ligler ya da gölgedeki (deneme) ligler. */
+  scope?: PerformanceScope;
   t: Dictionary;
   groups?: readonly string[];
   title?: string;
@@ -302,7 +305,7 @@ export async function PerformanceOverview({ source, t, groups = ["tier", "market
   const p = t.evaluation.perf;
   let summary: PerformanceSummary;
   try {
-    summary = await getPerformanceSummary(source, groups.join(","), ruleVersion, dateFrom, dateTo);
+    summary = await getPerformanceSummary(source, groups.join(","), ruleVersion, dateFrom, dateTo, scope);
   } catch {
     return <LoadError t={t} />;
   }
@@ -434,15 +437,15 @@ function OutcomeBadge({ outcome, p }: { outcome: LedgerPrediction["outcome"]; p:
   );
 }
 
-export async function PredictionDayList({ source, day, t, ruleVersion }: {
-  source: PredictionSource; day: string; t: Dictionary;
+export async function PredictionDayList({ source, day, t, ruleVersion, scope = "main" }: {
+  source: PredictionSource; day: string; t: Dictionary; scope?: PerformanceScope;
   /** Sadece bu sürüm (ekrandaki); gölge sürümün seçimleri aynı maçta çelişkili görünmesin. */
   ruleVersion?: string;
 }) {
   const p = t.evaluation.perf;
   let rows: LedgerPrediction[];
   try {
-    rows = await getPerformancePredictions(source, day, ruleVersion);
+    rows = await getPerformancePredictions(source, day, ruleVersion, scope);
   } catch {
     return <p className="nv-card p-4" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{t.common.loadError}</p>;
   }
@@ -488,11 +491,11 @@ export async function PredictionDayList({ source, day, t, ruleVersion }: {
   );
 }
 
-export async function LiveDayList({ day, t }: { day: string; t: Dictionary }) {
+export async function LiveDayList({ day, t, scope = "main" }: { day: string; t: Dictionary; scope?: PerformanceScope }) {
   const p = t.evaluation.perf;
   let matches: LiveMatchEvaluation[];
   try {
-    matches = await getLiveMatchEvaluations(day);
+    matches = await getLiveMatchEvaluations(day, scope);
   } catch {
     return <p className="nv-card p-4" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{t.common.loadError}</p>;
   }

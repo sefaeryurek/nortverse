@@ -91,6 +91,20 @@ describe("Canlı sayfa", () => {
     expect(screen.queryByText("veri eski")).toBeNull();
   });
 
+  it("hides trial-league matches unless the sidebar switch is on", () => {
+    wsState = { matches: [match("21", "HT"), match("22", "HT", { shadow: true })], status: "connected", lastUpdate: new Date() };
+    document.cookie = "nv_shadow=0;path=/";
+    render(ui());
+    expect(screen.getByText("Ev 21")).toBeTruthy();
+    expect(screen.queryByText("Ev 22")).toBeNull();
+    cleanup();
+    document.cookie = "nv_shadow=1;path=/";
+    render(ui());
+    expect(screen.getByText("Ev 22")).toBeTruthy();
+    expect(screen.getByText("Deneme")).toBeTruthy();
+    document.cookie = "nv_shadow=0;path=/";
+  });
+
   it("marks data older than 90 seconds as stale", () => {
     wsState = { matches: [match("8", "HT")], status: "connected", lastUpdate: new Date(Date.now() - 120_000) };
     render(ui());

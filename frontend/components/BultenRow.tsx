@@ -80,6 +80,15 @@ export default memo(function BultenRow({ match, timeStr, patternStatus, t, dateL
             >
               {leagueName}
             </span>
+            {match.shadow && (
+              <span
+                className="px-1.5 font-semibold flex-shrink-0"
+                style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-accent-amber-dim)", color: "var(--nv-accent-amber)" }}
+                title={t.common.shadowBadgeHint}
+              >
+                {t.common.shadowBadge}
+              </span>
+            )}
           </div>
 
           {/* Takimlar */}

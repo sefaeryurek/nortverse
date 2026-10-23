@@ -11,6 +11,8 @@ import { leagueDisplay } from "@/lib/leagues";
 import type { DailyEvaluation, MatchEvaluation, PatternEvaluation } from "@/lib/types";
 import Link from "next/link";
 import { type Dictionary, type Locale, COOKIE_NAME, defaultLocale, getDictionary, isLocale } from "@/lib/i18n";
+import { SHADOW_COOKIE, shadowFromCookie } from "@/lib/shadow";
+import type { PerformanceScope } from "@/lib/api";
 
 export const metadata: Metadata = {
   title: "Değerlendirme",
@@ -515,7 +517,7 @@ async function EvalList({ date, t }: { date: string; t: Dictionary }) {
 /* ------------------------------------------------------------------ */
 
 interface Props {
-  searchParams: Promise<{ date?: string | string[]; tab?: string | string[]; run?: string | string[]; aralik?: string | string[] }>;
+  searchParams: Promise<{ date?: string | string[]; tab?: string | string[]; run?: string | string[]; aralik?: string | string[]; kapsam?: string | string[] }>;
 }
 
 /** Özet aralığı: seçili gün, o güne kadar 7 gün, ya da tüm kayıtlar. */
@@ -566,7 +568,7 @@ function resolveTab(raw: string | string[] | undefined): Tab {
   return (TABS as readonly string[]).includes(value ?? "") ? (value as Tab) : "canli";
 }
 
-function RangeBar({ active, date, tab, t }: { active: Range; date: string; tab: Tab; t: Dictionary }) {
+function RangeBar({ active, date, tab, t, scopeQuery }: { active: Range; date: string; tab: Tab; t: Dictionary; scopeQuery: string }) {
   const p = t.evaluation.perf;
   const labels: Record<Range, string> = { gun: p.range_day, "7g": p.range_week, tum: p.range_all };
   return (
@@ -575,7 +577,7 @@ function RangeBar({ active, date, tab, t }: { active: Range; date: string; tab: 
       {RANGES.map((r) => (
         <Link
           key={r}
-          href={`/degerlendirme?date=${date}&tab=${tab}&aralik=${r}`}
+          href={`/degerlendirme?date=${date}&tab=${tab}&aralik=${r}${scopeQuery}`}
           aria-current={r === active ? "true" : undefined}
           className="px-2.5 py-1 font-semibold"
           style={{
@@ -592,7 +594,33 @@ function RangeBar({ active, date, tab, t }: { active: Range; date: string; tab: 
   );
 }
 
-function TabBar({ active, date, range, t }: { active: Tab; date: string; range: Range; t: Dictionary }) {
+/** Gölge ligler açıkken: ana ligler ile gölgedeki (deneme) liglerin karnesi ayrı ayrı. */
+function ScopeBar({ active, date, tab, range, t }: { active: PerformanceScope; date: string; tab: Tab; range: Range; t: Dictionary }) {
+  const p = t.evaluation.perf;
+  const items: [PerformanceScope, string, string][] = [["main", p.scopeMain, ""], ["shadow", p.scopeShadow, "&kapsam=golge"]];
+  return (
+    <div role="group" aria-label={t.nav.shadowHint} className="flex flex-wrap items-center gap-1">
+      {items.map(([key, label, query]) => (
+        <Link
+          key={key}
+          href={`/degerlendirme?date=${date}&tab=${tab}&aralik=${range}${query}`}
+          aria-current={key === active ? "true" : undefined}
+          className="px-2.5 py-1 font-semibold"
+          style={{
+            fontSize: "var(--nv-text-xs)",
+            borderRadius: "var(--nv-radius-full)",
+            backgroundColor: key === active ? (key === "shadow" ? "var(--nv-accent-amber-dim)" : "var(--nv-accent-blue-dim)") : "var(--nv-bg-elevated)",
+            color: key === active ? (key === "shadow" ? "var(--nv-accent-amber)" : "var(--nv-accent-blue)") : "var(--nv-text-secondary)",
+          }}
+        >
+          {label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function TabBar({ active, date, range, t, scopeQuery }: { active: Tab; date: string; range: Range; t: Dictionary; scopeQuery: string }) {
   const labels: Record<Tab, string> = {
     canli: t.evaluation.tabs.live,
     "mac-oncesi": t.evaluation.tabs.prematch,
@@ -606,7 +634,7 @@ function TabBar({ active, date, range, t }: { active: Tab; date: string; range: 
         <Link
           key={tab}
           aria-current={tab === active ? "page" : undefined}
-          href={`/degerlendirme?date=${date}&tab=${tab}&aralik=${range}`}
+          href={`/degerlendirme?date=${date}&tab=${tab}&aralik=${range}${scopeQuery}`}
           className="px-3 py-1.5 font-semibold whitespace-nowrap"
           style={{
             fontSize: "var(--nv-text-sm)",
@@ -639,6 +667,11 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
   const raw = cookieStore.get(COOKIE_NAME)?.value;
   const locale: Locale = isLocale(raw) ? raw : defaultLocale;
   const t = getDictionary(locale);
+  // Gölge ligler sadece kenar menüdeki anahtar açıkken seçilebilir
+  const shadowOn = shadowFromCookie(cookieStore.get(SHADOW_COOKIE)?.value);
+  const rawScope = Array.isArray(params.kapsam) ? params.kapsam[0] : params.kapsam;
+  const scope: PerformanceScope = shadowOn && rawScope === "golge" ? "shadow" : "main";
+  const scopeQuery = scope === "shadow" ? "&kapsam=golge" : "";
 
   return (
     <div className="flex flex-col h-full pb-[60px] md:pb-0">
@@ -670,7 +703,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
         </div>
       </div>
 
-      <TabBar active={tab} date={date} range={range} t={t} />
+      <TabBar active={tab} date={date} range={range} t={t} scopeQuery={scopeQuery} />
 
       {/* Gün sekmeleri — backtest bir tarih aralığını özetler, güne bağlı değil */}
       {tab !== "backtest" && (
@@ -680,7 +713,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
           basePath="/degerlendirme"
           range="past"
           locale={locale}
-          extraQuery={`tab=${tab}&aralik=${range}`}
+          extraQuery={`tab=${tab}&aralik=${range}${scopeQuery}`}
         />
       )}
 
@@ -702,9 +735,11 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
           </>
         ) : (
           <div className="grid gap-4 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
-            <RangeBar active={range} date={date} tab={tab} t={t} />
+            {shadowOn && <ScopeBar active={scope} date={date} tab={tab} range={range} t={t} />}
+            <RangeBar active={range} date={date} tab={tab} t={t} scopeQuery={scopeQuery} />
             <Suspense fallback={<EvalSkeleton />}>
               <PerformanceOverview
+                scope={scope}
                 source={TAB_SOURCE[tab]}
                 t={t}
                 groups={TAB_GROUPS[tab]}
@@ -716,11 +751,12 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
               />
             </Suspense>
             <Suspense fallback={<EvalSkeleton />}>
-              {tab === "canli" ? <LiveDayList day={date} t={t} /> : <PredictionDayList source={TAB_SOURCE[tab]} day={date} t={t} ruleVersion={PREMATCH_RULE_VERSION} />}
+              {tab === "canli" ? <LiveDayList day={date} t={t} scope={scope} /> : <PredictionDayList source={TAB_SOURCE[tab]} day={date} t={t} ruleVersion={PREMATCH_RULE_VERSION} scope={scope} />}
             </Suspense>
             {tab === "canli" && (
               <Suspense fallback={<EvalSkeleton />}>
                 <PerformanceOverview
+                  scope={scope}
                   source="live_ht"
                   t={t}
                   groups={["risk", "archive"]}
@@ -736,6 +772,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
             {tab === "mac-oncesi" && (
               <Suspense fallback={<EvalSkeleton />}>
                 <PerformanceOverview
+                  scope={scope}
                   source="top_pick"
                   t={t}
                   groups={["tier", "market"]}
@@ -751,6 +788,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
             {tab === "mac-oncesi" && (
               <Suspense fallback={<EvalSkeleton />}>
                 <PerformanceOverview
+                  scope={scope}
                   source="market_summary"
                   t={t}
                   groups={["archive", "period_market"]}

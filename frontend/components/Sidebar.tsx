@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { useLocale } from "@/lib/locale-context";
+import { setShadowEnabled, shadowEnabledInBrowser } from "@/lib/shadow";
+
+const noopSubscribe = () => () => {};
 
 const NAV_ICONS = [
   {
@@ -60,6 +63,8 @@ function readSidebar(): boolean {
 export default function Sidebar() {
   const pathname = usePathname();
   const { locale, t, setLocale } = useLocale();
+  // Gölge lig tercihi çerezden (sunucuda kapalı sayılır → hidrasyon uyuşur); değişince sayfa yenilenir
+  const shadowOn = useSyncExternalStore(noopSubscribe, shadowEnabledInBrowser, () => false);
   // Kayıtlı tercih depodan okunur (SSR'da kapalı); kullanıcı değiştirince override + kayıt.
   const savedExpanded = useSyncExternalStore(subscribeSidebar, readSidebar, () => false);
   const [override, setOverride] = useState<boolean | null>(null);
@@ -196,6 +201,28 @@ export default function Sidebar() {
             {expanded && (
               <span className="text-sm font-medium truncate">
                 {locale === "tr" ? "English" : "Türkçe"}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setShadowEnabled(!shadowOn)}
+            className="flex items-center gap-3 rounded-lg transition-all"
+            style={{
+              padding: expanded ? "8px 12px" : "8px 0",
+              justifyContent: expanded ? "flex-start" : "center",
+              color: shadowOn ? "var(--nv-accent-amber)" : "var(--nv-text-tertiary)",
+              transitionDuration: "var(--nv-duration-normal)",
+            }}
+            title={t.nav.shadowHint}
+            aria-pressed={shadowOn}
+            aria-label={shadowOn ? t.nav.shadowHide : t.nav.shadowShow}
+          >
+            <span className="flex-shrink-0 flex items-center justify-center text-xs font-bold" style={{ width: 20, height: 20 }} aria-hidden="true">
+              {shadowOn ? "◉" : "○"}
+            </span>
+            {expanded && (
+              <span className="text-sm font-medium truncate">
+                {shadowOn ? t.nav.shadowHide : t.nav.shadowShow}
               </span>
             )}
           </button>

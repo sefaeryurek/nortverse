@@ -12,7 +12,10 @@
     "footer": "Futbol Analiz Sistemi",
     "collapse": "Menüyü daralt",
     "expand": "Menüyü genişlet",
-    "language": "Dil"
+    "language": "Dil",
+    "shadowShow": "Gölge ligleri göster",
+    "shadowHide": "Gölge ligleri gizle",
+    "shadowHint": "Championship, Almanya 2, Portekiz, Belçika, İskoçya — tahminleri deneme aşamasında, karnesi ayrı tutulur"
   },
   "common": {
     "retry": "Tekrar dene",
@@ -29,7 +32,9 @@
     "hide": "Gizle",
     "open": "Aç",
     "search": "Ara",
-    "timeLocale": "tr-TR"
+    "timeLocale": "tr-TR",
+    "shadowBadge": "Deneme",
+    "shadowBadgeHint": "Gölgedeki lig: tahminler deneme aşamasında, henüz yeterli karne yok"
   },
   "days": [
     "Pzt",
@@ -208,7 +213,9 @@
       "strategy_prematch_v5": "Maç öncesi (takım gücü)",
       "pctFormat": "%{v}",
       "decimalSep": ",",
-      "strategy_live_2h": "Canlı 2. yarı (gölge)"
+      "strategy_live_2h": "Canlı 2. yarı (gölge)",
+      "scopeMain": "Ana ligler",
+      "scopeShadow": "Gölge ligler (deneme)"
     }
   },
   "live": {

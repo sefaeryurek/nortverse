@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { getLiveHTMatches, getLivePrediction } from "@/lib/api";
 import type { LiveArchiveSource, LiveHTMatch } from "@/lib/api";
@@ -11,6 +11,9 @@ import { minuteOrder } from "@/lib/live-order";
 import { useLiveWs } from "@/lib/use-live-ws";
 import type { WsStatus } from "@/lib/use-live-ws";
 import { useLocale } from "@/lib/locale-context";
+import { shadowEnabledInBrowser } from "@/lib/shadow";
+
+const noopSubscribe = () => () => {};
 
 const POLL_INTERVAL = 45_000;
 const WS_GRACE_MS = 3_000;
@@ -70,6 +73,12 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
         <span className="flex items-center gap-1 flex-shrink-0" title={match.league_name ?? ""}>
           <span className="text-sm leading-none" aria-hidden="true">{flag}</span>
           <span className="font-semibold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{short}</span>
+          {match.shadow && (
+            <span className="px-1.5 font-semibold" title={t.common.shadowBadgeHint}
+              style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-accent-amber-dim)", color: "var(--nv-accent-amber)" }}>
+              {t.common.shadowBadge}
+            </span>
+          )}
         </span>
         {match.kickoff_time && (
           <span className="flex-shrink-0" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
@@ -245,9 +254,13 @@ export default function CanliPage() {
   const source: Snapshot | null = usingWs
     ? wsSnap
     : wsSnap && (!rest || wsSnap.at > rest.at) ? wsSnap : rest;
+  // Gölgedeki lig maçları sadece kenar menüden "gölge ligleri göster" açıkken
+  const showShadow = useSyncExternalStore(noopSubscribe, shadowEnabledInBrowser, () => false);
   const matches = useMemo(
-    () => [...(source?.matches ?? [])].sort((a, b) => minuteOrder(a) - minuteOrder(b)),
-    [source?.matches],
+    () => [...(source?.matches ?? [])]
+      .filter((m) => showShadow || !m.shadow)
+      .sort((a, b) => minuteOrder(a) - minuteOrder(b)),
+    [source?.matches, showShadow],
   );
   // Yayın durursa (kaynak hatası) liste sessizce eskimesin: 90 sn'den eski veri işaretlenir.
   const [now, setNow] = useState(() => Date.now());

@@ -12,7 +12,10 @@
     "footer": "Football Analysis System",
     "collapse": "Collapse menu",
     "expand": "Expand menu",
-    "language": "Language"
+    "language": "Language",
+    "shadowShow": "Show trial leagues",
+    "shadowHide": "Hide trial leagues",
+    "shadowHint": "Championship, 2. Bundesliga, Portugal, Belgium, Scotland — predictions on trial, scored separately"
   },
   "common": {
     "retry": "Retry",
@@ -29,7 +32,9 @@
     "hide": "Hide",
     "open": "Open",
     "search": "Search",
-    "timeLocale": "en-GB"
+    "timeLocale": "en-GB",
+    "shadowBadge": "Trial",
+    "shadowBadgeHint": "Trial league: predictions are being tested, not enough track record yet"
   },
   "days": [
     "Mon",
@@ -208,7 +213,9 @@
       "strategy_prematch_v5": "Pre-match (team strength)",
       "pctFormat": "{v}%",
       "decimalSep": ".",
-      "strategy_live_2h": "Live 2nd half (shadow)"
+      "strategy_live_2h": "Live 2nd half (shadow)",
+      "scopeMain": "Main leagues",
+      "scopeShadow": "Trial leagues"
     }
   },
   "live": {

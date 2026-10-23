@@ -13,7 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import ISTANBUL_TZ
-from app.analysis.league_filter import is_main_league
+from app.analysis.league_filter import is_main_league, is_shadow_league
 from app.analysis.prematch_v4 import RULE_PARAMS
 from app.api.schemas import FixtureMatchOut
 from app.api.live_snapshot import get_live_snapshot
@@ -82,6 +82,11 @@ async def _enrich_prediction_status(items: list[dict]) -> dict[str, bool]:
     return result
 
 
+def _listed(league_name: str | None, league_code: str | None, shadow: bool) -> bool:
+    """Bültende gösterilecek lig: 7 ana lig; `shadow` açıksa gölgedeki ligler de."""
+    return is_main_league(league_name, league_code) or (shadow and is_shadow_league(league_name, league_code))
+
+
 async def _bulletin_items(items: list[dict], req_date: date) -> list[FixtureMatchOut]:
     now = datetime.now(timezone.utc)
     today = now.astimezone(ISTANBUL_TZ).date()
@@ -112,12 +117,16 @@ async def _bulletin_items(items: list[dict], req_date: date) -> list[FixtureMatc
             "live_minute": state.live_minute,
             "score_checked_at": state.score_checked_at,
             "has_prediction": pred_status.get(match.match_id, False),
+            "shadow": is_shadow_league(match.league_name, match.league_code),
         }))
     return visible
 
 
 @router.get("/api/fixture", response_model=list[FixtureMatchOut])
-async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> list[FixtureMatchOut]:
+async def fixture(
+    target_date: Optional[str] = Query(None, alias="date"),
+    shadow: bool = Query(False, description="Gölgedeki ligleri de listele (deneme)"),
+) -> list[FixtureMatchOut]:
     """Günlük Hot maçları döndürür.
 
     3 katmanlı cache:
@@ -144,11 +153,13 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
             detail=f"Tarih sınırlar dışında. {max_past.isoformat()} ile {max_future.isoformat()} arası kabul edilir."
         )
 
+    mem_key = f"{cache_key}:shadow" if shadow else cache_key
+
     # 1. Memory cache
-    if cache_key in fixture_cache:
-        ts, cached_result = fixture_cache[cache_key]
+    if mem_key in fixture_cache:
+        ts, cached_result = fixture_cache[mem_key]
         if time.time() - ts < FIXTURE_CACHE_TTL:
-            log.info("Fixture memory cache hit: %s", cache_key)
+            log.info("Fixture memory cache hit: %s", mem_key)
             return await _bulletin_items(cached_result, req_date)
 
     # 2. DB cache
@@ -168,13 +179,13 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
             result = []
             for raw in db_row.matches_json:
                 match = FixtureMatchOut(**raw)
-                if not is_main_league(match.league_name, match.league_code):
+                if not _listed(match.league_name, match.league_code, shadow):
                     continue
                 if match.kickoff_time and datetime.fromisoformat(match.kickoff_time).astimezone(ISTANBUL_TZ).date() != req_date:
                     continue
                 result.append(raw)
-            fixture_cache_put(cache_key, result)
-            log.info("Fixture DB cache hit: %s (%d lig maçı)", cache_key, len(result))
+            fixture_cache_put(mem_key, result)
+            log.info("Fixture DB cache hit: %s (%d lig maçı)", mem_key, len(result))
             return await _bulletin_items(result, req_date)
         except (ValueError, TypeError, AttributeError) as exc:
             log.warning("Fixture DB cache geçersiz, yeniden çekilecek [%s]: %s", cache_key, exc)
@@ -199,7 +210,7 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
             detail="Maç verisi şu anda alınamıyor. Lütfen biraz sonra tekrar deneyin.",
         ) from exc
     source_matches = matches
-    matches = [m for m in source_matches if is_main_league(m.league_name, m.league_code)]
+    matches = [m for m in source_matches if _listed(m.league_name, m.league_code, shadow)]
 
     result = [
         FixtureMatchOut(
@@ -220,7 +231,7 @@ async def fixture(target_date: Optional[str] = Query(None, alias="date")) -> lis
     except Exception as exc:
         log.warning("Fixture DB'ye kaydedilemedi: %s", exc)
 
-    fixture_cache_put(cache_key, [m.model_dump() for m in result])
+    fixture_cache_put(mem_key, [m.model_dump() for m in result])
     return await _bulletin_items([m.model_dump() for m in result], req_date)
 
 

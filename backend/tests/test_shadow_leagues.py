@@ -32,3 +32,11 @@ def test_prior_overall_uses_main_leagues_only():
     book = book_from_counts(NOW, rows)
     assert abs(book.overall.result["1"] - book.get("English Premier League").result["1"]) < 1e-9
     assert book.get("Scottish Premiership").result["2"] > 0.9
+
+
+def test_bulletin_lists_shadow_leagues_only_when_asked():
+    from app.api.routes_fixture import _listed
+    assert _listed("English Premier League", "ENG PR", False)
+    assert not _listed("England Championship", "ENG LCH", False)
+    assert _listed("England Championship", "ENG LCH", True)
+    assert not _listed("Liga Portugal 2", None, True)   # gölge listesinde olmayan lig hiç görünmez

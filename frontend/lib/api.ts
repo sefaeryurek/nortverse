@@ -77,9 +77,11 @@ function checkedList<T>(value: T, results = false): T {
   return value;
 }
 
-export async function getFixture(date: string): Promise<FixtureMatch[]> {
+export async function getFixture(date: string, shadow = false): Promise<FixtureMatch[]> {
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
-  return checkedList(await request<FixtureMatch[]>(`/api/fixture?${new URLSearchParams({ date })}`, {
+  const params = new URLSearchParams({ date });
+  if (shadow) params.set("shadow", "1");
+  return checkedList(await request<FixtureMatch[]>(`/api/fixture?${params}`, {
     next: { revalidate: isRecentScoreDate(date, today) ? 15 : 300 },
   }));
 }
@@ -205,11 +207,15 @@ export interface LedgerPrediction {
   late: boolean;
 }
 
+/** Değerlendirme kapsamı: ekrandaki 7 ana lig ya da gölgedeki (deneme) ligler — karneleri ayrı. */
+export type PerformanceScope = "main" | "shadow";
+
 export async function getPerformanceSummary(
   source: PredictionSource, groupBy = "tier,market", ruleVersion?: string,
-  dateFrom?: string, dateTo?: string,
+  dateFrom?: string, dateTo?: string, scope: PerformanceScope = "main",
 ): Promise<PerformanceSummary> {
   const params = new URLSearchParams({ source, group_by: groupBy });
+  if (scope !== "main") params.set("scope", scope);
   if (ruleVersion) params.set("rule_version", ruleVersion);
   if (dateFrom) params.set("date_from", dateFrom);
   if (dateTo) params.set("date_to", dateTo);
@@ -276,17 +282,20 @@ export interface LiveMatchEvaluation {
 }
 
 /** Canlıya giren (devre arasında kaydedilen) her maç ve %85+ işaretlerinin sonucu. */
-export async function getLiveMatchEvaluations(day: string): Promise<LiveMatchEvaluation[]> {
+export async function getLiveMatchEvaluations(day: string, scope: PerformanceScope = "main"): Promise<LiveMatchEvaluation[]> {
+  const params = new URLSearchParams({ day });
+  if (scope !== "main") params.set("scope", scope);
   return request<LiveMatchEvaluation[]>(
-    `/api/performance/live-matches?${new URLSearchParams({ day })}`,
+    `/api/performance/live-matches?${params}`,
     { next: { revalidate: 60 } },
   );
 }
 
 export async function getPerformancePredictions(
-  source: PredictionSource, day: string, ruleVersion?: string,
+  source: PredictionSource, day: string, ruleVersion?: string, scope: PerformanceScope = "main",
 ): Promise<LedgerPrediction[]> {
   const params = new URLSearchParams({ source, day });
+  if (scope !== "main") params.set("scope", scope);
   if (ruleVersion) params.set("rule_version", ruleVersion);
   return request<LedgerPrediction[]>(
     `/api/performance/predictions?${params}`,
@@ -394,6 +403,8 @@ export interface LiveHTMatch {
   frozen?: boolean;
   frozen_at?: string | null;
   archive_view?: LiveArchiveView | null;
+  /** Gölgedeki lig — ekran varsayılan olarak gizler. */
+  shadow?: boolean;
 }
 
 export async function getLiveHTMatches(): Promise<LiveHTMatch[]> {

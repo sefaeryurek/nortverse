@@ -14,6 +14,7 @@ import type { FixtureMatch } from "@/lib/types";
 import { leagueDisplay } from "@/lib/leagues";
 import Link from "next/link";
 import { type Locale, COOKIE_NAME, defaultLocale, getDictionary, isLocale } from "@/lib/i18n";
+import { SHADOW_COOKIE, shadowFromCookie } from "@/lib/shadow";
 
 export const metadata: Metadata = {
   title: "Bülten",
@@ -102,7 +103,7 @@ function sortMatches(
     .map(({ match, timeStr }) => ({ match, timeStr }));
 }
 
-async function MatchList({ date, locale }: { date: string; locale: Locale }) {
+async function MatchList({ date, locale, shadow }: { date: string; locale: Locale; shadow: boolean }) {
   const t = getDictionary(locale);
   let matches: FixtureMatch[] = [];
   let patternStatus: PatternStatusMap = {};
@@ -110,7 +111,7 @@ async function MatchList({ date, locale }: { date: string; locale: Locale }) {
   try {
     const now = new Date();
     const today = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
-    matches = (await getFixture(date))
+    matches = (await getFixture(date, shadow))
       .filter((match) => showBulletinMatch(match, now.getTime(), today, date))
       .filter((match) => match.has_prediction);
     if (matches.length > 0) {
@@ -343,6 +344,7 @@ export default async function BultenPage({ searchParams }: Props) {
 
   const cookieStore = await cookies();
   const raw = cookieStore.get(COOKIE_NAME)?.value;
+  const shadow = shadowFromCookie(cookieStore.get(SHADOW_COOKIE)?.value);
   const locale: Locale = isLocale(raw) ? raw : defaultLocale;
   const t = getDictionary(locale);
 
@@ -379,7 +381,7 @@ export default async function BultenPage({ searchParams }: Props) {
       {/* Mac listesi */}
       <div className="flex-1 overflow-y-auto">
         <Suspense fallback={<BultenSkeleton />}>
-          <MatchList date={date} locale={locale} />
+          <MatchList date={date} locale={locale} shadow={shadow} />
         </Suspense>
       </div>
     </div>
