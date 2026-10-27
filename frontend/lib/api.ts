@@ -450,24 +450,19 @@ export async function getLivePrediction(matchId: string, detail = false): Promis
 }
 
 
-/* ---- İY strateji (ht-display-v1, Deneme) ---- */
-export interface HtPick {
-  period: "ht";
-  market: string;
-  selection: string;
+/* ---- İY oran panosu (Sprint 93) ---- */
+export interface HtOption {
+  market: "result" | "ou";
+  selection: "1" | "X" | "2" | "over" | "under";
+  /** Ü/A çizgisi (Asya: 0.75, 1.0, 1.25 ...) */
+  line: number | null;
+  odds: number;
+  /** Bahis payı çıkarılmış ima olasılık */
   pct: number;
-  tier: "high" | "medium";
-  base_pct: number | null;
-}
-
-export interface HtProbs {
-  lambda: { home: number; away: number };
-  result: Record<"1" | "X" | "2", number>;
-  dc: Record<"1X" | "X2" | "12", number>;
-  ou_05: Record<"over" | "under", number>;
-  ou_15: Record<"over" | "under", number>;
-  ev_05: Record<"over" | "under", number>;
-  top_scores: { score: string; pct: number }[];
+  margin_pct: number;
+  /** Takım gücü modelinin olasılığı (sadece İY 1/X/2) */
+  model_pct: number | null;
+  outcome?: "hit" | "miss" | "push" | "half";
 }
 
 export interface HtMatch {
@@ -478,10 +473,11 @@ export interface HtMatch {
   kickoff_time: string | null;
   shadow: boolean;
   final_ht: string | null;
-  probs: HtProbs | null;
-  picks: HtPick[];
-  frozen: boolean;
-  frozen_at: string | null;
+  /** Olasılığa göre azalan */
+  options: HtOption[];
+  /** Oranın kaynakta güncellendiği an (epoch sn) */
+  odds_at: number | null;
+  expected_goals: { home: number; away: number } | null;
 }
 
 export async function getHtStrategy(date: string, shadow = false): Promise<{ date: string; matches: HtMatch[] }> {

@@ -16,7 +16,7 @@
     "shadowShow": "Show trial leagues",
     "shadowHide": "Hide trial leagues",
     "shadowHint": "Championship, 2. Bundesliga, Portugal, Belgium, Scotland — predictions on trial, scored separately",
-    "firstHalf": "First Half"
+    "firstHalf": "HT odds"
   },
   "common": {
     "retry": "Retry",
@@ -565,24 +565,27 @@
     "unknownCheck": "Check time unknown"
   },
   "ht": {
-    "title": "First Half",
-    "subtitle": "Pre-match first-half predictions — team strength model",
-    "trialBadge": "Trial",
-    "trialNote": "On trial: over 6,126 past matches HT double chance ≥85% hit 88.7%, HT 1/2 ≥50% hit 58.5%. Real track record appears on the evaluation page after 100 decisions.",
-    "picks": "First-half picks",
-    "noPick": "No first-half pick above threshold",
-    "leagueAvg": "league avg {pct}%",
-    "expectedGoals": "Expected HT goals",
-    "topScores": "Most likely HT scores",
-    "goal": "HT goal",
-    "under15": "HT under 1.5",
-    "homeScores": "Home scores in HT",
-    "frozen": "Recorded",
-    "notFrozen": "Recorded 48 h before kickoff",
+    "title": "First-half odds",
+    "subtitle": "First-half markets: Bet365 odds and the probability they imply",
+    "note": "Probability is computed from the odds with the bookmaker margin removed; historically this was the most accurate estimate. Our team strength model did not beat the odds in the first half (in a 1,205-match test, \"value\" picks lost money), so there is no value claim — the model probability is shown only as a note.",
+    "strongest": "Strongest",
+    "result": "HT",
+    "total": "HT Over/Under {line}",
+    "over": "Over",
+    "under": "Under",
+    "quarterHint": "Quarter line: half the stake goes on {lo}, half on {hi} (half win / refund possible).",
+    "integerHint": "Whole line: the stake is refunded if total goals equal {line}.",
+    "model": "model {pct}%",
+    "modelTip": "Team strength model probability (information only)",
+    "margin": "margin {pct}%",
     "finalHt": "HT result",
-    "empty": "No matches with first-half predictions for this day",
-    "tierHigh": "strong",
-    "tierMedium": "medium"
+    "won": "Won",
+    "lost": "Lost",
+    "push": "Refund",
+    "half": "Half loss",
+    "expectedGoals": "Model's expected HT goals",
+    "empty": "No match with first-half odds on this day",
+    "oddsTime": "odds at {time}"
   },
   "auth": {
     "title": "Sign in",

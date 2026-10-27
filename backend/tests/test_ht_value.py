@@ -50,3 +50,15 @@ def test_candidates_ev_and_decide():
     picks = hv.decide(cands, {**hv.RULE_PARAMS, "min_ev": -1.0, "min_prob": 0.0, "max_odds": 10})
     assert len(picks) == 2 and picks[0]["ev"] >= picks[1]["ev"]  # pazar başına tek seçim
     assert hv.settle(p1, (1, 0)) == 2.0 and hv.settle(p1, (0, 0)) == -1.0
+
+
+def test_market_options_remove_margin():
+    from app.scraper.odds import market_options
+
+    opts = market_options({"op": {"1": 2.3, "X": 2.5, "2": 4.33}, "ou": {"line": 1.25, "over": 1.9, "under": 1.9}})
+    result = [o for o in opts if o["market"] == "result"]
+    assert abs(sum(o["pct"] for o in result) - 100) < 0.2
+    assert result[0]["margin_pct"] > 0
+    ou = {o["selection"]: o for o in opts if o["market"] == "ou"}
+    assert ou["over"]["pct"] == ou["under"]["pct"] == 50.0 and ou["over"]["line"] == 1.25
+    assert market_options({}) == []

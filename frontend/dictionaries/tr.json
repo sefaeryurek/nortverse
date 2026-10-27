@@ -16,7 +16,7 @@
     "shadowShow": "Gölge ligleri göster",
     "shadowHide": "Gölge ligleri gizle",
     "shadowHint": "Championship, Almanya 2, Portekiz, Belçika, İskoçya — tahminleri deneme aşamasında, karnesi ayrı tutulur",
-    "firstHalf": "İY Strateji"
+    "firstHalf": "İY Oranları"
   },
   "common": {
     "retry": "Tekrar dene",
@@ -565,24 +565,27 @@
     "unknownCheck": "Kontrol zamanı bilinmiyor"
   },
   "ht": {
-    "title": "İY Strateji",
-    "subtitle": "Maç öncesi ilk yarı tahminleri — takım gücü modeli",
-    "trialBadge": "Deneme",
-    "trialNote": "Deneme aşamasında: geçmiş 6.126 maçta İY çifte şans ≥%85 %88,7, İY 1/2 ≥%50 %58,5 tuttu. Gerçek karnesi 100 tekil karardan sonra değerlendirme sayfasında.",
-    "picks": "İY kararları",
-    "noPick": "Eşiği geçen İY kararı yok",
-    "leagueAvg": "lig ort. %{pct}",
-    "expectedGoals": "Beklenen İY golü",
-    "topScores": "En olası İY skorları",
-    "goal": "İY gol var",
-    "under15": "İY 1.5 alt",
-    "homeScores": "Ev İY gol atar",
-    "frozen": "Kaydedildi",
-    "notFrozen": "Başlamaya 48 saat kala kaydedilir",
+    "title": "İY Oranları",
+    "subtitle": "İlk yarı pazarları: Bet365 oranı ve oranın ima ettiği olasılık",
+    "note": "Olasılık, bahis şirketinin payı çıkarılmış orandan hesaplanır; geçmişte en isabetli tahmin buydu. Takım gücü modelimiz İY'de oranları yenemedi (1.205 maçlık testte \"değerli\" görünen seçimler zarar etti), bu yüzden \"value\" iddiası yok — model olasılığı sadece not olarak duruyor.",
+    "strongest": "En güçlü",
+    "result": "İY",
+    "total": "İY Alt/Üst {line}",
+    "over": "Üst",
+    "under": "Alt",
+    "quarterHint": "Çeyrek çizgi: bahsin yarısı {lo}, yarısı {hi} çizgisine gider (yarım kazanç/iade olabilir).",
+    "integerHint": "Tam çizgi: toplam gol {line} olursa bahis iade edilir.",
+    "model": "model %{pct}",
+    "modelTip": "Takım gücü modelinin olasılığı (sadece bilgi)",
+    "margin": "bahis payı %{pct}",
     "finalHt": "İY sonucu",
-    "empty": "Bu gün için İY tahmini olan maç yok",
-    "tierHigh": "güçlü",
-    "tierMedium": "orta"
+    "won": "Tuttu",
+    "lost": "Tutmadı",
+    "push": "İade",
+    "half": "Yarım kayıp",
+    "expectedGoals": "Modelin İY gol beklentisi",
+    "empty": "Bu gün için İY oranı açılmış maç yok",
+    "oddsTime": "oran saati {time}"
   },
   "auth": {
     "title": "Giriş",

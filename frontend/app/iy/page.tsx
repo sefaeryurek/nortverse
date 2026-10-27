@@ -5,16 +5,15 @@ import { Suspense } from "react";
 import Link from "next/link";
 import DayTabs from "@/components/DayTabs";
 import { getHtStrategy } from "@/lib/api";
-import type { HtMatch, HtPick } from "@/lib/api";
+import type { HtMatch, HtOption } from "@/lib/api";
 import { formatTime, resolvePageDate } from "@/lib/dates";
 import { type Dictionary, type Locale, COOKIE_NAME, defaultLocale, getDictionary, isLocale } from "@/lib/i18n";
 import { leagueDisplay } from "@/lib/leagues";
-import { liveMarketLabel, liveSelectionLabel } from "@/lib/live-labels";
 import { SHADOW_COOKIE, shadowFromCookie } from "@/lib/shadow";
 
 export const metadata: Metadata = {
-  title: "İY Strateji",
-  description: "Maç öncesi ilk yarı tahminleri",
+  title: "İY Oranları",
+  description: "İlk yarı pazarları: oran ve ima ettiği olasılık",
 };
 
 interface Props {
@@ -26,40 +25,62 @@ function pct(value: number, locale: Locale): string {
   return locale === "en" ? `${v}%` : `%${v.replace(".", ",")}`;
 }
 
-function PickChip({ pick, t, locale }: { pick: HtPick; t: Dictionary; locale: Locale }) {
-  const strong = pick.tier === "high";
-  return (
-    <div
-      className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-2.5 py-1.5 min-w-0"
-      style={{
-        borderRadius: "var(--nv-radius-md)",
-        backgroundColor: strong ? "var(--nv-accent-green-dim)" : "var(--nv-bg-elevated)",
-        border: "1px solid var(--nv-border-subtle)",
-      }}
-    >
-      <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>{liveMarketLabel("ht", pick.market, t)}</span>
-      <span className="font-bold" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>{liveSelectionLabel(pick.selection, t)}</span>
-      <span className="font-extrabold" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)", color: strong ? "var(--nv-accent-green)" : "var(--nv-text-primary)" }}>
-        {pct(pick.pct, locale)}
-      </span>
-      {pick.base_pct != null && (
-        <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
-          {t.ht.leagueAvg.replace("{pct}", locale === "en" ? pick.base_pct.toFixed(1) : pick.base_pct.toFixed(1).replace(".", ","))}
-        </span>
-      )}
-    </div>
-  );
+function lineText(line: number, locale: Locale): string {
+  const v = String(line);
+  return locale === "en" ? v : v.replace(".", ",");
 }
 
-function Bar({ label, value, locale }: { label: string; value: number; locale: Locale }) {
+function optionLabel(o: HtOption, t: Dictionary, locale: Locale): string {
+  if (o.market === "result") return `${t.ht.result} ${o.selection}`;
+  return `${t.ht.total.replace("{line}", lineText(o.line ?? 0, locale))} ${o.selection === "over" ? t.ht.over : t.ht.under}`;
+}
+
+function lineHint(line: number, t: Dictionary, locale: Locale): string | undefined {
+  const quarter = Math.round(line * 4) % 4;
+  if (quarter === 1 || quarter === 3) {
+    return t.ht.quarterHint.replace("{lo}", lineText(line - 0.25, locale)).replace("{hi}", lineText(line + 0.25, locale));
+  }
+  if (quarter === 0) return t.ht.integerHint.replace("{line}", lineText(line, locale));
+  return undefined;
+}
+
+const OUTCOME: Record<NonNullable<HtOption["outcome"]>, { icon: string; color: string; key: "won" | "lost" | "push" | "half" }> = {
+  hit: { icon: "✓", color: "var(--nv-accent-green)", key: "won" },
+  miss: { icon: "✕", color: "var(--nv-accent-red)", key: "lost" },
+  push: { icon: "↺", color: "var(--nv-text-tertiary)", key: "push" },
+  half: { icon: "½", color: "var(--nv-accent-amber)", key: "half" },
+};
+
+function OptionCell({ o, label, strongest, t, locale }: { o: HtOption; label: string; strongest: boolean; t: Dictionary; locale: Locale }) {
+  const out = o.outcome ? OUTCOME[o.outcome] : null;
   return (
-    <div className="min-w-0">
-      <div className="flex justify-between gap-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
-        <span className="truncate">{label}</span>
-        <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)" }}>{pct(value, locale)}</span>
+    <div
+      className="flex flex-col gap-0.5 px-2.5 py-1.5 min-w-0"
+      style={{
+        borderRadius: "var(--nv-radius-md)",
+        backgroundColor: strongest ? "var(--nv-accent-green-dim)" : "var(--nv-bg-elevated)",
+        border: strongest ? "1px solid var(--nv-accent-green)" : "1px solid var(--nv-border-subtle)",
+      }}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-semibold truncate" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>{label}</span>
+        <span className="font-extrabold" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>
+          {o.odds.toFixed(2)}
+        </span>
       </div>
-      <div className="nv-pct-bar mt-1" style={{ height: 4 }}>
-        <div style={{ width: `${Math.min(100, value)}%`, height: "100%", backgroundColor: "var(--nv-accent-blue)", borderRadius: 2 }} />
+      <div className="flex items-baseline justify-between gap-2" style={{ fontSize: "var(--nv-text-2xs)", fontVariantNumeric: "tabular-nums" }}>
+        <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", color: strongest ? "var(--nv-accent-green)" : "var(--nv-text-primary)" }}>
+          {pct(o.pct, locale)}
+        </span>
+        {out ? (
+          <span className="font-semibold" style={{ color: out.color }}>
+            <span aria-hidden="true">{out.icon}</span> {t.ht[out.key]}
+          </span>
+        ) : o.model_pct != null ? (
+          <span title={t.ht.modelTip} style={{ color: "var(--nv-text-tertiary)" }}>
+            {t.ht.model.replace("{pct}", locale === "en" ? o.model_pct.toFixed(1) : o.model_pct.toFixed(1).replace(".", ","))}
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -67,9 +88,19 @@ function Bar({ label, value, locale }: { label: string; value: number; locale: L
 
 function MatchCard({ match, t, locale }: { match: HtMatch; t: Dictionary; locale: Locale }) {
   const { flag, short } = leagueDisplay(null, match.league_name);
-  const p = match.probs;
+  const strongest = match.options[0];
+  const result = (["1", "X", "2"] as const)
+    .map((sel) => match.options.find((o) => o.market === "result" && o.selection === sel))
+    .filter((o): o is HtOption => o != null);
+  const totals = (["over", "under"] as const)
+    .map((sel) => match.options.find((o) => o.market === "ou" && o.selection === sel))
+    .filter((o): o is HtOption => o != null);
+  const totalLine = totals[0]?.line;
+  const isStrongest = (o: HtOption) => o.market === strongest.market && o.selection === strongest.selection;
+  const margin = match.options.find((o) => o.market === "result")?.margin_pct;
+
   return (
-    <article className="nv-card p-3 space-y-3 min-w-0">
+    <article className="nv-card p-3 space-y-2.5 min-w-0">
       <header className="flex flex-wrap items-center gap-2" style={{ fontSize: "var(--nv-text-xs)" }}>
         <span aria-hidden="true">{flag}</span>
         <span style={{ color: "var(--nv-text-tertiary)" }}>{short}{match.kickoff_time ? ` · ${formatTime(match.kickoff_time)}` : ""}</span>
@@ -80,45 +111,46 @@ function MatchCard({ match, t, locale }: { match: HtMatch; t: Dictionary; locale
           </span>
         )}
         <span className="flex-1" />
-        {match.final_ht ? (
+        {match.final_ht && (
           <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>{t.ht.finalHt} {match.final_ht}</span>
-        ) : (
-          <span style={{ fontSize: "var(--nv-text-2xs)", color: match.frozen ? "var(--nv-accent-green)" : "var(--nv-text-tertiary)" }}>
-            {match.frozen ? t.ht.frozen : t.ht.notFrozen}
-          </span>
         )}
       </header>
-      <Link href={`/analyze/${match.match_id}?home=${encodeURIComponent(match.home_team)}&away=${encodeURIComponent(match.away_team)}`}
-        className="block font-semibold hover:underline" style={{ fontSize: "var(--nv-text-base)", color: "var(--nv-text-primary)" }}>
-        {match.home_team} - {match.away_team}
-      </Link>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <Link href={`/analyze/${match.match_id}?home=${encodeURIComponent(match.home_team)}&away=${encodeURIComponent(match.away_team)}`}
+          className="font-semibold hover:underline min-w-0" style={{ fontSize: "var(--nv-text-base)", color: "var(--nv-text-primary)" }}>
+          {match.home_team} - {match.away_team}
+        </Link>
+        <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>
+          {t.ht.strongest}: <b style={{ color: "var(--nv-accent-green)" }}>{optionLabel(strongest, t, locale)}</b>{" "}
+          <span style={{ fontFamily: "var(--nv-font-mono)" }}>{pct(strongest.pct, locale)} · {strongest.odds.toFixed(2)}</span>
+        </span>
+      </div>
 
-      {match.picks.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {match.picks.map((pick) => <PickChip key={`${pick.market}:${pick.selection}`} pick={pick} t={t} locale={locale} />)}
-        </div>
-      ) : (
-        <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{t.ht.noPick}</p>
-      )}
-
-      {p && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2 min-w-0">
-            <Bar label={`${liveMarketLabel("ht", "result", t)} 1`} value={p.result["1"]} locale={locale} />
-            <Bar label={`${liveMarketLabel("ht", "result", t)} X`} value={p.result["X"]} locale={locale} />
-            <Bar label={`${liveMarketLabel("ht", "result", t)} 2`} value={p.result["2"]} locale={locale} />
-          </div>
-          <div className="space-y-2 min-w-0">
-            <Bar label={t.ht.goal} value={p.ou_05.over} locale={locale} />
-            <Bar label={t.ht.under15} value={p.ou_15.under} locale={locale} />
-            <Bar label={t.ht.homeScores} value={p.ev_05.over} locale={locale} />
-          </div>
-          <div className="sm:col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
-            <span>{t.ht.expectedGoals}: <b style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)" }}>{p.lambda.home.toFixed(2)} – {p.lambda.away.toFixed(2)}</b></span>
-            <span>{t.ht.topScores}: {p.top_scores.map((s) => `${s.score} (${pct(s.pct, locale)})`).join(" · ")}</span>
-          </div>
+      {result.length > 0 && (
+        <div className="grid grid-cols-3 gap-1.5">
+          {result.map((o) => <OptionCell key={o.selection} o={o} label={`${t.ht.result} ${o.selection}`} strongest={isStrongest(o)} t={t} locale={locale} />)}
         </div>
       )}
+      {totals.length > 0 && totalLine != null && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-2 gap-1.5">
+            {totals.map((o) => (
+              <OptionCell key={o.selection} o={o} t={t} locale={locale} strongest={isStrongest(o)}
+                label={optionLabel(o, t, locale)} />
+            ))}
+          </div>
+          {lineHint(totalLine, t, locale) && (
+            <p style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>{lineHint(totalLine, t, locale)}</p>
+          )}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
+        {margin != null && <span>{t.ht.margin.replace("{pct}", locale === "en" ? margin.toFixed(1) : margin.toFixed(1).replace(".", ","))}</span>}
+        {match.odds_at && <span>{t.ht.oddsTime.replace("{time}", formatTime(new Date(match.odds_at * 1000).toISOString()))}</span>}
+        {match.expected_goals && (
+          <span>{t.ht.expectedGoals}: <span style={{ fontFamily: "var(--nv-font-mono)" }}>{match.expected_goals.home.toFixed(2)} – {match.expected_goals.away.toFixed(2)}</span></span>
+        )}
+      </div>
     </article>
   );
 }
@@ -134,11 +166,10 @@ async function MatchList({ date, locale, shadow }: { date: string; locale: Local
   if (matches.length === 0) {
     return <p className="nv-card p-6 m-4 text-center" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-tertiary)" }}>{t.ht.empty}</p>;
   }
-  // Kararı olan maçlar önce
-  const sorted = [...matches].sort((a, b) => (b.picks.length > 0 ? 1 : 0) - (a.picks.length > 0 ? 1 : 0));
+  // Sunucu en güçlü seçeneğe göre sıralı gönderir
   return (
     <div className="grid gap-3 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
-      {sorted.map((m) => <MatchCard key={m.match_id} match={m} t={t} locale={locale} />)}
+      {matches.map((m) => <MatchCard key={m.match_id} match={m} t={t} locale={locale} />)}
     </div>
   );
 }
@@ -157,16 +188,11 @@ export default async function IyPage({ searchParams }: Props) {
   return (
     <div className="flex flex-col h-full pb-[60px] md:pb-0">
       <div className="px-[var(--nv-page-gutter)] py-5 flex-shrink-0" style={{ borderBottom: "1px solid var(--nv-border)" }}>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="font-bold" style={{ fontSize: "var(--nv-text-xl)", color: "var(--nv-text-primary)", letterSpacing: "var(--nv-tracking-tight)" }}>
-            {t.ht.title}
-          </h1>
-          <span className="px-2 py-0.5 font-semibold" style={{ fontSize: "var(--nv-text-xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-accent-amber-dim)", color: "var(--nv-accent-amber)" }}>
-            {t.ht.trialBadge}
-          </span>
-        </div>
+        <h1 className="font-bold" style={{ fontSize: "var(--nv-text-xl)", color: "var(--nv-text-primary)", letterSpacing: "var(--nv-tracking-tight)" }}>
+          {t.ht.title}
+        </h1>
         <p className="mt-1" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{t.ht.subtitle}</p>
-        <p className="mt-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", maxWidth: "65ch" }}>{t.ht.trialNote}</p>
+        <p className="mt-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", maxWidth: "65ch" }}>{t.ht.note}</p>
       </div>
       <DayTabs referenceDate={today} activeDate={date} basePath="/iy" locale={locale} />
       <div className="flex-1 overflow-y-auto">

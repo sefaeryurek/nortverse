@@ -91,6 +91,24 @@ def latest_prematch(history: dict | None, before: datetime | None = None) -> dic
 _resolved_base: str | None = None
 
 
+def market_options(odds: dict) -> list[dict]:
+    """Oranlardan seçenekler: oran + bahis payı çıkarılmış olasılık (yüzde). Pazar içinde olasılıklar toplamı 100."""
+    out: list[dict] = []
+    op = odds.get("op")
+    if op:
+        inv = {k: 1 / op[k] for k in ("1", "X", "2")}
+        total = sum(inv.values())
+        out += [{"market": "result", "selection": k, "line": None, "odds": op[k],
+                 "pct": round(100 * inv[k] / total, 1), "margin_pct": round(100 * (total - 1), 1)} for k in inv]
+    ou = odds.get("ou")
+    if ou:
+        inv = {"over": 1 / ou["over"], "under": 1 / ou["under"]}
+        total = sum(inv.values())
+        out += [{"market": "ou", "selection": k, "line": ou["line"], "odds": ou[k],
+                 "pct": round(100 * inv[k] / total, 1), "margin_pct": round(100 * (total - 1), 1)} for k in inv]
+    return out
+
+
 async def fetch_odds(match_id: str, *, half: bool) -> dict[str, list[dict]] | None:
     """Tek maçın oran geçmişi (İY için half=True)."""
     def fetch() -> bytes:
