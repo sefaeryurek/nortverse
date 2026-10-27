@@ -24,16 +24,17 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 _ODDS_TTL = 30.0  # aynı maç için 30 sn içinde tekrar kaynağa gidilmez
+_SAVE_MAX_AGE = 15.0  # kaydederken: kullanıcının son 15 sn'de gördüğü oran yeniden kullanılır, daha eskiyse yeniden çekilir
 _odds_cache: dict[str, tuple[float, dict]] = {}
 _FINISHED_STATES = {-1, -10, -11, -12, -13, -14}  # nowgoal: bitti / iptal / ertelendi vb.
 
 
-async def _odds(match_id: str, *, fresh: bool = False) -> dict:
+async def _odds(match_id: str, *, max_age: float = _ODDS_TTL) -> dict:
     cached = _odds_cache.get(match_id)
-    if cached and not fresh and time.monotonic() - cached[0] < _ODDS_TTL:
+    if cached and time.monotonic() - cached[0] < max_age:
         return cached[1]
     try:
-        odds = await asyncio.wait_for(current_odds(match_id), timeout=20)
+        odds = await asyncio.wait_for(current_odds(match_id), timeout=28)  # tarayıcı isteği 30 sn
     except Exception:
         log.warning("Kupon oranı alınamadı [%s]", match_id, exc_info=True)
         raise HTTPException(503, "Oranlar şu an alınamadı, biraz sonra tekrar deneyin")
@@ -54,6 +55,33 @@ def _closed_reason(odds: dict, match: Match, period: str) -> str | None:
                 or (minute.isdigit() and int(minute) > 45)):
             return "İlk yarı bitti"
     return None
+
+
+@router.get("/api/coupon-matches")
+async def coupon_matches(target_date: str = Query(..., alias="date", pattern=r"^\d{4}-\d{2}-\d{2}$")) -> list[dict]:
+    """Kupona eklenebilecek maçlar: veritabanındaki, bitmemiş ana + gölge lig maçları (kaynağa hiç gitmez)."""
+    from datetime import date as _date, timedelta
+
+    from app.analysis.league_filter import is_tracked_league
+    from app.config import ISTANBUL_TZ
+
+    try:
+        day = _date.fromisoformat(target_date)
+    except ValueError:
+        raise HTTPException(400, "Geçersiz tarih")
+    start = datetime.combine(day, datetime.min.time(), ISTANBUL_TZ)
+    async with get_session() as session:
+        rows = (await session.execute(
+            select(Match.match_id, Match.home_team, Match.away_team, Match.league_name, Match.kickoff_time)
+            .where(Match.deleted_at.is_(None), Match.actual_ft_home.is_(None),
+                   Match.kickoff_time >= start, Match.kickoff_time < start + timedelta(days=1))
+            .order_by(Match.kickoff_time)
+        )).all()
+    now = datetime.now(timezone.utc)
+    return [{"match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
+             "league_name": r.league_name, "kickoff_time": r.kickoff_time.isoformat() if r.kickoff_time else None,
+             "started": bool(r.kickoff_time and r.kickoff_time <= now)}
+            for r in rows if is_tracked_league(r.league_name)]
 
 
 @router.get("/api/odds/{match_id}")
@@ -107,7 +135,7 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
         )).scalars().all()}
     if len(matches) != len(match_ids):
         raise HTTPException(404, "Kupondaki bir maç bulunamadı")
-    odds_by_match = dict(zip(match_ids, await asyncio.gather(*(_odds(m, fresh=True) for m in match_ids))))
+    odds_by_match = dict(zip(match_ids, await asyncio.gather(*(_odds(m, max_age=_SAVE_MAX_AGE) for m in match_ids))))
     now = datetime.now(timezone.utc)
     legs = []
     for leg in body.legs:

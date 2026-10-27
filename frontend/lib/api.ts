@@ -538,6 +538,20 @@ export interface CouponView {
   return: number | null;
 }
 
+export interface CouponMatch {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  league_name: string | null;
+  kickoff_time: string | null;
+  started: boolean;
+}
+
+/** Kupona eklenebilecek maçlar (veritabanındaki, bitmemiş; kaynağa gitmez → hızlı). */
+export async function getCouponMatches(date: string): Promise<CouponMatch[]> {
+  return request<CouponMatch[]>(`/api/coupon-matches?${new URLSearchParams({ date })}`, { cache: "no-store" });
+}
+
 export async function getMatchOdds(matchId: string): Promise<MatchOdds> {
   return request<MatchOdds>(`/api/odds/${encodeURIComponent(matchId)}`, { cache: "no-store" });
 }

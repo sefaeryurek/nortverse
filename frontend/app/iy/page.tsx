@@ -159,7 +159,8 @@ async function MatchList({ date, locale, shadow }: { date: string; locale: Local
   const t = getDictionary(locale);
   let matches: HtMatch[] = [];
   try {
-    matches = (await getHtStrategy(date, shadow)).matches;
+    // Önbellekte eski biçimli yanıt kalmış olabilir → seçeneği olmayan maç gösterilmez
+    matches = ((await getHtStrategy(date, shadow)).matches ?? []).filter((m) => Array.isArray(m.options) && m.options.length > 0);
   } catch {
     return <p className="nv-card p-4 m-4" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{t.common.loadError}</p>;
   }

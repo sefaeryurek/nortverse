@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createCoupon, getCoupons, getFixture, getMatchOdds } from "@/lib/api";
-import type { CouponMarket, CouponPeriod, CouponView, MatchOdds } from "@/lib/api";
-import type { FixtureMatch } from "@/lib/types";
+import { createCoupon, getCouponMatches, getCoupons, getMatchOdds } from "@/lib/api";
+import type { CouponMarket, CouponMatch, CouponPeriod, CouponView, MatchOdds } from "@/lib/api";
 import { formatTime } from "@/lib/dates";
 import { useLocale } from "@/lib/locale-context";
 
@@ -144,7 +143,7 @@ export default function KupondasPage() {
   const c = t.coupon;
   const [day, setDay] = useState(0);
   // Yüklenen veri hangi güne / maça ait — "yükleniyor" durumu buradan türetilir
-  const [fixtureState, setFixtureState] = useState<{ day: number; list: FixtureMatch[] } | null>(null);
+  const [fixtureState, setFixtureState] = useState<{ day: number; list: CouponMatch[] } | null>(null);
   const [selected, setSelected] = useState<string>("");
   const [oddsResult, setOddsResult] = useState<{ id: string; odds: MatchOdds | null } | null>(null);
   const [draft, setDraft] = useState<Draft[]>([]);
@@ -156,8 +155,8 @@ export default function KupondasPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getFixture(istanbulDate(day))
-      .then((list) => { if (!cancelled) setFixtureState({ day, list: list.filter((m) => m.status !== "pending") }); })
+    getCouponMatches(istanbulDate(day))
+      .then((list) => { if (!cancelled) setFixtureState({ day, list }); })
       .catch(() => { if (!cancelled) setFixtureState({ day, list: [] }); });
     return () => { cancelled = true; };
   }, [day]);
@@ -238,7 +237,7 @@ export default function KupondasPage() {
                   <option value="">—</option>
                   {fixtures.map((m) => (
                     <option key={m.match_id} value={m.match_id}>
-                      {m.kickoff_time ? `${formatTime(m.kickoff_time)} · ` : ""}{m.home_team} - {m.away_team}{m.status === "live" ? ` (${c.liveTag})` : ""}
+                      {m.kickoff_time ? `${formatTime(m.kickoff_time)} · ` : ""}{m.home_team} - {m.away_team}{m.started ? ` (${c.liveTag})` : ""}
                     </option>
                   ))}
                 </select>
