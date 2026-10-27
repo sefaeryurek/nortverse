@@ -10,8 +10,9 @@ from collections import OrderedDict
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.auth import is_admin_request
 from app.config import ISTANBUL_TZ
 from app.analysis.league_filter import is_main_league, is_shadow_league
 from app.analysis.prematch_v4 import RULE_PARAMS
@@ -126,6 +127,7 @@ async def _bulletin_items(items: list[dict], req_date: date) -> list[FixtureMatc
 async def fixture(
     target_date: Optional[str] = Query(None, alias="date"),
     shadow: bool = Query(False, description="Gölgedeki ligleri de listele (deneme)"),
+    request: Request = None,  # sonda: testler fixture(tarih) diye doğrudan çağırıyor
 ) -> list[FixtureMatchOut]:
     """Günlük Hot maçları döndürür.
 
@@ -190,7 +192,9 @@ async def fixture(
         except (ValueError, TypeError, AttributeError) as exc:
             log.warning("Fixture DB cache geçersiz, yeniden çekilecek [%s]: %s", cache_key, exc)
 
-    # 3. Playwright scrape
+    # 3. Playwright scrape — sadece yönetici hesabı (diğer hesaplar kaynağa yük bindirmez)
+    if not is_admin_request(request):
+        raise HTTPException(503, "Bu günün bülteni henüz hazır değil")
     log.info("Fixture Playwright scrape başlıyor: %s", cache_key)
     try:
         matches = await asyncio.wait_for(

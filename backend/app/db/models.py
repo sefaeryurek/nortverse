@@ -158,6 +158,37 @@ class MatchOdds(Base):
     )
 
 
+class User(Base):
+    """Site hesabı (Sprint 93 — paylaşım). Hesapları sahibi CLI ile açar (`create-user`); kayıt sayfası yok."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
+    # "scrypt$n$r$p$tuz$özet" (app/auth.py) — düz şifre hiçbir yerde saklanmaz
+    password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class UserSession(Base):
+    """Giriş oturumu. Çerezdeki rastgele anahtarın sadece SHA-256 özeti saklanır."""
+
+    __tablename__ = "user_sessions"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    user_agent: Mapped[str | None] = mapped_column(String(200))
+
+    __table_args__ = (
+        ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+        Index("ix_user_sessions_user", "user_id"),
+    )
+
+
 class SkippedAnalysis(Base):
     """Recent filter result so an ineligible match is not scraped on every visit."""
 

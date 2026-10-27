@@ -48,6 +48,7 @@ from app.api.live_ledger import start_live_watcher, stop_live_watcher
 from app.api.live_snapshot import shutdown_live_snapshot
 from app.api.routes_admin import router as admin_router
 from app.api.routes_analysis import router as analysis_router
+from app.api.routes_auth import router as auth_router
 from app.api.routes_evaluation import router as evaluation_router
 from app.api.routes_fixture import router as fixture_router
 from app.api.routes_ht import router as ht_router
@@ -164,8 +165,31 @@ async def add_cache_headers(request, call_next):
     return response
 
 
+# ─── Giriş zorunluluğu (Sprint 93) ───────────────────────────────────────────
+# En dıştaki katman: her /api isteği geçerli oturum ister (WebSocket kendi ucunda kontrol eder).
+_PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/me"}
+
+
+@app.middleware("http")
+async def require_session(request, call_next):
+    from fastapi.responses import JSONResponse
+
+    from app.auth import COOKIE_NAME, INTERNAL_HEADER, auth_required, internal_user, resolve
+
+    path = request.url.path
+    request.state.user = None
+    if path.startswith("/api/"):
+        request.state.user = (internal_user(request.headers.get(INTERNAL_HEADER))
+                              or await resolve(request.cookies.get(COOKIE_NAME)))
+    if (path.startswith("/api/") and path not in _PUBLIC_PATHS and request.method != "OPTIONS"
+            and request.state.user is None and auth_required()):
+        return JSONResponse({"detail": "Giriş gerekli"}, status_code=401, headers={"Cache-Control": "no-store"})
+    return await call_next(request)
+
+
 # ─── Router kayıtları ────────────────────────────────────────────────────────
 
+app.include_router(auth_router)
 app.include_router(fixture_router)
 app.include_router(analysis_router)
 app.include_router(results_router)

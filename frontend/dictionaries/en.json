@@ -583,5 +583,18 @@
     "empty": "No matches with first-half predictions for this day",
     "tierHigh": "strong",
     "tierMedium": "medium"
+  },
+  "auth": {
+    "title": "Sign in",
+    "subtitle": "Sign in with your account to continue",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "wrong": "Wrong username or password",
+    "locked": "Too many failed attempts. Try again in 15 minutes.",
+    "failed": "Could not reach the server. Try again shortly.",
+    "logout": "Sign out",
+    "noAccount": "If you don't have an account, ask the site owner."
   }
 }

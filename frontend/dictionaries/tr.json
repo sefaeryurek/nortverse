@@ -583,5 +583,18 @@
     "empty": "Bu gün için İY tahmini olan maç yok",
     "tierHigh": "güçlü",
     "tierMedium": "orta"
+  },
+  "auth": {
+    "title": "Giriş",
+    "subtitle": "Devam etmek için hesabınla giriş yap",
+    "username": "Kullanıcı adı",
+    "password": "Şifre",
+    "submit": "Giriş yap",
+    "submitting": "Giriş yapılıyor…",
+    "wrong": "Kullanıcı adı veya şifre hatalı",
+    "locked": "Çok fazla hatalı deneme. 15 dakika sonra tekrar deneyin.",
+    "failed": "Sunucuya ulaşılamadı. Biraz sonra tekrar deneyin.",
+    "logout": "Çıkış",
+    "noAccount": "Hesabın yoksa site sahibinden iste."
   }
 }

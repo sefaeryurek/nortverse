@@ -216,6 +216,26 @@ export default function Sidebar() {
             )}
           </button>
           <button
+            onClick={async () => {
+              try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* çerez yine de süresiyle düşer */ }
+              window.location.assign("/giris");
+            }}
+            className="flex items-center gap-3 rounded-lg transition-all"
+            style={{
+              padding: expanded ? "8px 12px" : "8px 0",
+              justifyContent: expanded ? "flex-start" : "center",
+              color: "var(--nv-text-tertiary)",
+              transitionDuration: "var(--nv-duration-normal)",
+            }}
+            title={expanded ? undefined : t.auth.logout}
+            aria-label={t.auth.logout}
+          >
+            <span className="flex-shrink-0 flex items-center justify-center text-xs font-bold" style={{ width: 20, height: 20 }} aria-hidden="true">
+              ⎋
+            </span>
+            {expanded && <span className="text-sm font-medium truncate">{t.auth.logout}</span>}
+          </button>
+          <button
             onClick={() => setShadowEnabled(!shadowOn)}
             className="flex items-center gap-3 rounded-lg transition-all"
             style={{

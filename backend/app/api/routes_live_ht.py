@@ -345,8 +345,13 @@ async def ws_live_ht(ws: WebSocket) -> None:
 
     Bağlantı açılır açılmaz mevcut veriyi gönderir,
     sonra broadcaster periyodik güncelleme yapar.
-    İstemci "ping" gönderirse "pong" döner.
+    İstemci "ping" gönderirse "pong" döner. Giriş yapılmamışsa bağlantı reddedilir (4401).
     """
+    from app.auth import COOKIE_NAME, auth_required, resolve
+
+    if auth_required() and await resolve(ws.cookies.get(COOKIE_NAME)) is None:
+        await ws.close(code=4401)
+        return
     await _ws_manager.connect(ws)
     try:
         matches = await get_live_ht_matches()

@@ -397,8 +397,9 @@ def _skipped_response(
     )
 
 
-async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
-    """DB kontrol et → bulursa B/C hesapla (hızlı). Yoksa Playwright scrape (yavaş)."""
+async def analyze_and_cache(match_id: str, *, allow_scrape: bool = True) -> AnalyzeResponse:
+    """DB kontrol et → bulursa B/C hesapla (hızlı). Yoksa Playwright scrape (yavaş) — sadece `allow_scrape`
+    (admin) iken; diğer hesaplar kaynağa yük bindiremez (Sprint 93)."""
     cached = cache_get(match_id)
     if cached is not None:
         return await _refresh_cached_recommendations(cached)
@@ -458,6 +459,10 @@ async def analyze_and_cache(match_id: str) -> AnalyzeResponse:
             cache_put(match_id, response)
             return response
 
+        if not allow_scrape:
+            from fastapi import HTTPException
+
+            raise HTTPException(404, "Bu maç henüz analiz edilmedi")
         log.info("DB miss — Playwright scrape: %s", match_id)
         response = await do_analyze(match_id)
         cache_put(match_id, response)

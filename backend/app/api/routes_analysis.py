@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
+
+from app.auth import is_admin_request
 from sqlalchemy import select
 
 from app.api.schemas import AnalyzeResponse, MatchSummary
@@ -87,7 +89,8 @@ async def get_analyze(
     """Maçı analiz eder. Cache'te varsa anında döner, yoksa scrape eder."""
     _check_rate(_client_ip(request), _RATE_LIMIT_GET)
     try:
-        return await asyncio.wait_for(analyze_and_cache(match_id), timeout=ANALYSIS_TIMEOUT)
+        return await asyncio.wait_for(analyze_and_cache(match_id, allow_scrape=is_admin_request(request)),
+                                      timeout=ANALYSIS_TIMEOUT)
     except asyncio.TimeoutError:
         raise HTTPException(504, "Analiz zaman aşımına uğradı")
 
@@ -103,6 +106,8 @@ async def post_analyze(
     taşırdı (değerlendirme bozulur); bu yüzden 409 döner.
     """
     _check_rate(_client_ip(request), _RATE_LIMIT_POST)
+    if not is_admin_request(request):
+        raise HTTPException(403, "Yeniden analiz sadece yönetici hesabıyla yapılabilir")
     kickoff = await _kickoff_of(match_id)
     if kickoff is not None and kickoff <= datetime.now(timezone.utc):
         raise HTTPException(409, "Maç başladı; maç öncesi analiz korunuyor")
@@ -133,6 +138,8 @@ async def get_match(
             )
         ).scalar_one_or_none()
 
+    if not row and not is_admin_request(request):
+        raise HTTPException(404, f"Maç bulunamadı: {match_id}")
     if not row:
         log.info("/api/match miss — Playwright fallback: %s", match_id)
 

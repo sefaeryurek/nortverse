@@ -11,13 +11,25 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Sunucu tarafı istekler (sayfa çizimi) backend'e iç anahtarla gider; sayfanın kendisini `proxy.ts` oturum
+ * kontrolüyle korur. Tarayıcıda `INTERNAL_API_KEY` tanımsızdır → istek kullanıcının çereziyle gider.
+ */
+function withServerAuth(headers: HeadersInit | undefined): HeadersInit | undefined {
+  const key = typeof window === "undefined" ? process.env.INTERNAL_API_KEY : undefined;
+  if (!key) return headers;
+  const merged = new Headers(headers);
+  merged.set("x-internal-key", key);
+  return merged;
+}
+
 async function request<T>(path: string, options: RequestInit & { next?: { revalidate: number } } = {}): Promise<T> {
   const timeout = AbortSignal.timeout(30_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   const msg = errorMessages();
   let response: Response;
   try {
-    response = await fetch(`${getApiBase()}${path}`, { ...options, signal });
+    response = await fetch(`${getApiBase()}${path}`, { ...options, headers: withServerAuth(options.headers), signal });
   } catch (error) {
     if (options.signal?.aborted) throw error;
     throw new ApiError(timeout.aborted ? msg.timeout : msg.network, 0);
