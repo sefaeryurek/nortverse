@@ -557,6 +557,7 @@ const LIVE_ARCHIVE_OLD_VERSION = "live-arch-v1";
 /** Maç öncesi: ekranda Dixon-Coles (v5); arşiv havuzu (v4) gölgede ölçülmeye devam eder. */
 const PREMATCH_RULE_VERSION = "ft-display-v5";
 const PREMATCH_SHADOW_VERSION = "ft-display-v4.1";
+const HT_RULE_VERSION = "ht-display-v1";
 const TAB_SOURCE = { canli: "live_ht", "mac-oncesi": "top_pick" } as const;
 const TAB_GROUPS = {
   canli: ["period_market", "archive", "league", "week"],
@@ -763,6 +764,22 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
                   ruleVersion={LIVE_ARCHIVE_OLD_VERSION}
                   title={t.evaluation.perf.liveOldTitle}
                   hint={t.evaluation.perf.liveOldHint}
+                  dateFrom={bounds.from}
+                  dateTo={bounds.to}
+                  headline={rangeHeadline(range, date, t)}
+                />
+              </Suspense>
+            )}
+            {tab === "mac-oncesi" && (
+              <Suspense fallback={<EvalSkeleton />}>
+                <PerformanceOverview
+                  scope={scope}
+                  source="top_pick"
+                  t={t}
+                  groups={["market", "tier"]}
+                  ruleVersion={HT_RULE_VERSION}
+                  title={t.evaluation.perf.htTitle}
+                  hint={t.evaluation.perf.htHint}
                   dateFrom={bounds.from}
                   dateTo={bounds.to}
                   headline={rangeHeadline(range, date, t)}

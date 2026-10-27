@@ -418,3 +418,43 @@ export async function getLivePrediction(matchId: string, detail = false): Promis
   );
 }
 
+
+/* ---- İY strateji (ht-display-v1, Deneme) ---- */
+export interface HtPick {
+  period: "ht";
+  market: string;
+  selection: string;
+  pct: number;
+  tier: "high" | "medium";
+  base_pct: number | null;
+}
+
+export interface HtProbs {
+  lambda: { home: number; away: number };
+  result: Record<"1" | "X" | "2", number>;
+  dc: Record<"1X" | "X2" | "12", number>;
+  ou_05: Record<"over" | "under", number>;
+  ou_15: Record<"over" | "under", number>;
+  ev_05: Record<"over" | "under", number>;
+  top_scores: { score: string; pct: number }[];
+}
+
+export interface HtMatch {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  league_name: string | null;
+  kickoff_time: string | null;
+  shadow: boolean;
+  final_ht: string | null;
+  probs: HtProbs | null;
+  picks: HtPick[];
+  frozen: boolean;
+  frozen_at: string | null;
+}
+
+export async function getHtStrategy(date: string, shadow = false): Promise<{ date: string; matches: HtMatch[] }> {
+  const params = new URLSearchParams({ date });
+  if (shadow) params.set("shadow", "1");
+  return request<{ date: string; matches: HtMatch[] }>(`/api/ht-strategy?${params}`, { next: { revalidate: 60 } });
+}

@@ -20,6 +20,17 @@ const NAV_ICONS = [
     ),
   },
   {
+    href: "/iy",
+    key: "firstHalf" as const,
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 3v18" />
+        <path d="M12 3a9 9 0 010 18" fill="currentColor" fillOpacity="0.25" stroke="none" />
+      </svg>
+    ),
+  },
+  {
     href: "/sonuclar",
     key: "results" as const,
     icon: (

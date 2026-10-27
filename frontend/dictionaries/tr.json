@@ -15,7 +15,8 @@
     "language": "Dil",
     "shadowShow": "Gölge ligleri göster",
     "shadowHide": "Gölge ligleri gizle",
-    "shadowHint": "Championship, Almanya 2, Portekiz, Belçika, İskoçya — tahminleri deneme aşamasında, karnesi ayrı tutulur"
+    "shadowHint": "Championship, Almanya 2, Portekiz, Belçika, İskoçya — tahminleri deneme aşamasında, karnesi ayrı tutulur",
+    "firstHalf": "İY Strateji"
   },
   "common": {
     "retry": "Tekrar dene",
@@ -206,16 +207,20 @@
       "recordedAt": "Kayıt {time}",
       "liveSummaryNote": "Devre arasında kaydedilen kararlar: en az 5 maçlık arşiv %85+ ve aynı lig + aynı İY geçmişi %85+; pazar başına tek karar. Maç bitince tuttu/tutmadı olarak işaretlenir.",
       "strategy_live_archive": "Canlı arşiv (%85+)",
-      "market_ou_05": "2Y 0.5 Alt/Üst",
-      "market_ou_15": "MS 1.5 Alt/Üst",
-      "market_ou_35": "MS 3.5 Alt/Üst",
+      "market_ou_05": "0.5 Alt/Üst",
+      "market_ou_15": "1.5 Alt/Üst",
+      "market_ou_35": "3.5 Alt/Üst",
       "strategy_live_poisson": "Canlı Poisson (gölge)",
       "strategy_prematch_v5": "Maç öncesi (takım gücü)",
       "pctFormat": "%{v}",
       "decimalSep": ",",
       "strategy_live_2h": "Canlı 2. yarı (gölge)",
       "scopeMain": "Ana ligler",
-      "scopeShadow": "Gölge ligler (deneme)"
+      "scopeShadow": "Gölge ligler (deneme)",
+      "htTitle": "İY maç öncesi (deneme)",
+      "htHint": "İY çifte şans, İY 1/2, İY gol var, İY 1.5 alt, İY ev gol — takım gücü modeli; 100 tekil karardan önce hüküm yok.",
+      "market_ev_05": "Ev 0.5 Alt/Üst",
+      "market_dep_05": "Dep 0.5 Alt/Üst"
     }
   },
   "live": {
@@ -294,7 +299,14 @@
         "h2_result": "2Y",
         "h2_ou_05": "2Y 0.5",
         "h2_ou_15": "2Y 1.5",
-        "h2_kg": "2Y KG"
+        "h2_kg": "2Y KG",
+        "ht_result": "İY",
+        "ht_dc": "İY ÇŞ",
+        "ht_ou_05": "İY 0.5",
+        "ht_ou_15": "İY 1.5",
+        "ht_ev_05": "İY ev gol",
+        "ht_dep_05": "İY dep gol",
+        "ht_kg": "İY KG"
       },
       "selections": {
         "under": "Alt",
@@ -537,5 +549,25 @@
     "ht": "İY",
     "lastCheck": "Son kontrol {time}",
     "unknownCheck": "Kontrol zamanı bilinmiyor"
+  },
+  "ht": {
+    "title": "İY Strateji",
+    "subtitle": "Maç öncesi ilk yarı tahminleri — takım gücü modeli",
+    "trialBadge": "Deneme",
+    "trialNote": "Deneme aşamasında: geçmiş 6.126 maçta İY çifte şans ≥%85 %88,7, İY 1/2 ≥%50 %58,5 tuttu. Gerçek karnesi 100 tekil karardan sonra değerlendirme sayfasında.",
+    "picks": "İY kararları",
+    "noPick": "Eşiği geçen İY kararı yok",
+    "leagueAvg": "lig ort. %{pct}",
+    "expectedGoals": "Beklenen İY golü",
+    "topScores": "En olası İY skorları",
+    "goal": "İY gol var",
+    "under15": "İY 1.5 alt",
+    "homeScores": "Ev İY gol atar",
+    "frozen": "Kaydedildi",
+    "notFrozen": "Başlamaya 48 saat kala kaydedilir",
+    "finalHt": "İY sonucu",
+    "empty": "Bu gün için İY tahmini olan maç yok",
+    "tierHigh": "güçlü",
+    "tierMedium": "orta"
   }
 }

@@ -15,7 +15,8 @@
     "language": "Language",
     "shadowShow": "Show trial leagues",
     "shadowHide": "Hide trial leagues",
-    "shadowHint": "Championship, 2. Bundesliga, Portugal, Belgium, Scotland — predictions on trial, scored separately"
+    "shadowHint": "Championship, 2. Bundesliga, Portugal, Belgium, Scotland — predictions on trial, scored separately",
+    "firstHalf": "First Half"
   },
   "common": {
     "retry": "Retry",
@@ -206,16 +207,20 @@
       "recordedAt": "Recorded {time}",
       "liveSummaryNote": "Decisions recorded at half-time: an archive with 5+ matches at 85%+ and the same-league, same half-time history at 85%+; one decision per market. Marked hit/miss when the match ends.",
       "strategy_live_archive": "Live archive (85%+)",
-      "market_ou_05": "2H Over/Under 0.5",
-      "market_ou_15": "FT Over/Under 1.5",
-      "market_ou_35": "FT Over/Under 3.5",
+      "market_ou_05": "O/U 0.5",
+      "market_ou_15": "O/U 1.5",
+      "market_ou_35": "O/U 3.5",
       "strategy_live_poisson": "Live Poisson (shadow)",
       "strategy_prematch_v5": "Pre-match (team strength)",
       "pctFormat": "{v}%",
       "decimalSep": ".",
       "strategy_live_2h": "Live 2nd half (shadow)",
       "scopeMain": "Main leagues",
-      "scopeShadow": "Trial leagues"
+      "scopeShadow": "Trial leagues",
+      "htTitle": "First half pre-match (trial)",
+      "htHint": "HT double chance, HT 1/2, HT goal, HT under 1.5, HT home goal — team strength model; no verdict before 100 decisions.",
+      "market_ev_05": "Home 0.5 O/U",
+      "market_dep_05": "Away 0.5 O/U"
     }
   },
   "live": {
@@ -294,7 +299,14 @@
         "h2_result": "2H",
         "h2_ou_05": "2H 0.5",
         "h2_ou_15": "2H 1.5",
-        "h2_kg": "2H BTTS"
+        "h2_kg": "2H BTTS",
+        "ht_result": "HT",
+        "ht_dc": "HT DC",
+        "ht_ou_05": "HT 0.5",
+        "ht_ou_15": "HT 1.5",
+        "ht_ev_05": "HT home goal",
+        "ht_dep_05": "HT away goal",
+        "ht_kg": "HT BTTS"
       },
       "selections": {
         "under": "Under",
@@ -537,5 +549,25 @@
     "ht": "HT",
     "lastCheck": "Last check {time}",
     "unknownCheck": "Check time unknown"
+  },
+  "ht": {
+    "title": "First Half",
+    "subtitle": "Pre-match first-half predictions — team strength model",
+    "trialBadge": "Trial",
+    "trialNote": "On trial: over 6,126 past matches HT double chance ≥85% hit 88.7%, HT 1/2 ≥50% hit 58.5%. Real track record appears on the evaluation page after 100 decisions.",
+    "picks": "First-half picks",
+    "noPick": "No first-half pick above threshold",
+    "leagueAvg": "league avg {pct}%",
+    "expectedGoals": "Expected HT goals",
+    "topScores": "Most likely HT scores",
+    "goal": "HT goal",
+    "under15": "HT under 1.5",
+    "homeScores": "Home scores in HT",
+    "frozen": "Recorded",
+    "notFrozen": "Recorded 48 h before kickoff",
+    "finalHt": "HT result",
+    "empty": "No matches with first-half predictions for this day",
+    "tierHigh": "strong",
+    "tierMedium": "medium"
   }
 }
