@@ -34,7 +34,7 @@ def test_parse_odds_rejects_garbage():
 def test_asian_total_returns():
     # 1.25 üst = yarısı 1.0 (iade), yarısı 1.5 (kayıp) → toplam 1 golde −0.5
     assert hv.total_return(1, 1.25, "over", 1.9) == -0.5
-    assert hv.total_return(2, 1.25, "over", 1.9) == 0.9
+    assert abs(hv.total_return(2, 1.25, "over", 1.9) - 0.9) < 1e-9
     assert hv.total_return(1, 1.0, "over", 1.9) == 0.0
     assert hv.total_return(0, 0.75, "under", 2.0) == 1.0
     assert hv.total_return(1, 0.75, "under", 2.0) == -0.5
