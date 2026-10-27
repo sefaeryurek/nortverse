@@ -21,6 +21,7 @@ from app.cli.archive_cmds import (
     normalize_leagues_cmd,
     repair_archive_cmd,
 )
+from app.cli.events_cmds import backfill_goal_events_cmd
 from app.cli.audit_cmds import (
     audit_db_cmd,
     audit_patterns_cmd,
@@ -65,6 +66,7 @@ app.command()(serve)
 # --- Arşiv / Onarım ---
 app.command("build-archive")(build_archive_cmd)
 app.command("build-multi-archive")(build_multi_archive_cmd)
+app.command("backfill-goal-events")(backfill_goal_events_cmd)
 app.command("list-leagues")(list_leagues_cmd)
 app.command("repair-archive")(repair_archive_cmd)
 app.command("normalize-leagues")(normalize_leagues_cmd)

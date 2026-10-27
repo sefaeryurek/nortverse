@@ -75,6 +75,10 @@ class Match(Base):
     team_lambda_home: Mapped[float | None] = mapped_column(Float)
     team_lambda_away: Mapped[float | None] = mapped_column(Float)
     team_lambda_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Maç olayları (gol dakikaları + kırmızı kart) — anlık maç modeli kalibrasyonu (Sprint 93)
+    goal_events: Mapped[list | None] = mapped_column(JSONB(none_as_null=True))
+    goal_events_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    goal_events_ok: Mapped[bool | None] = mapped_column(Boolean)
 
     # Form & H2H trendleri (Sprint 8.8) — TrendsData JSON
     trends: Mapped[dict | None] = mapped_column(JSONB)
