@@ -138,6 +138,26 @@ class FixtureCache(Base):
     cached_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class MatchOdds(Base):
+    """Kaynaktan çekilen oran geçmişi (Bet365 via nowgoal, Sprint 93) — ham önbellek, yenilenince üzerine yazılır.
+
+    `scope` "ht" (ilk yarı) / "ft" (maç sonu). `history` = `scraper.odds.parse_odds` çıktısı. Kupona ya da deftere
+    giren oran ayrıca o kayda dondurulur; bu tablo değişmez kayıt değildir.
+    """
+
+    __tablename__ = "match_odds"
+
+    match_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    scope: Mapped[str] = mapped_column(String(2), primary_key=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    history: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(["match_id"], ["matches.match_id"], ondelete="CASCADE"),
+        CheckConstraint("scope IN ('ht', 'ft')", name="ck_match_odds_scope"),
+    )
+
+
 class SkippedAnalysis(Base):
     """Recent filter result so an ineligible match is not scraped on every visit."""
 
