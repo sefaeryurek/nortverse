@@ -485,3 +485,82 @@ export async function getHtStrategy(date: string, shadow = false): Promise<{ dat
   if (shadow) params.set("shadow", "1");
   return request<{ date: string; matches: HtMatch[] }>(`/api/ht-strategy?${params}`, { next: { revalidate: 60 } });
 }
+
+
+/* ---- Kupondaş (Sprint 93) ---- */
+export type CouponPeriod = "ft" | "ht";
+export type CouponMarket = "result" | "dc" | "ou";
+
+export interface PeriodOdds {
+  /** Doluysa bu periyoda artık kupon yazılamaz (ör. "İlk yarı bitti") */
+  closed: string | null;
+  result?: Record<"1" | "X" | "2", number>;
+  dc?: Record<"1X" | "12" | "X2", number>;
+  ou?: { line: number; over: number; under: number };
+}
+
+export interface MatchOdds {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  league_name: string | null;
+  live: { minute: string | null; score: string | null } | null;
+  markets: Record<CouponPeriod, PeriodOdds>;
+}
+
+export interface CouponLegView {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  league_name: string | null;
+  kickoff_time: string | null;
+  period: CouponPeriod;
+  market: CouponMarket;
+  selection: string;
+  line: number | null;
+  odds: number;
+  live_minute: string | null;
+  live_score: string | null;
+  outcome: "hit" | "miss" | "push" | "half_win" | "half_loss" | "void" | null;
+  return_factor: number | null;
+  score: string | null;
+}
+
+export interface CouponView {
+  id: number;
+  created_at: string;
+  note: string | null;
+  username: string;
+  mine: boolean;
+  legs: CouponLegView[];
+  total_odds: number;
+  status: "pending" | "won" | "lost" | "refund";
+  return: number | null;
+}
+
+export async function getMatchOdds(matchId: string): Promise<MatchOdds> {
+  return request<MatchOdds>(`/api/odds/${encodeURIComponent(matchId)}`, { cache: "no-store" });
+}
+
+export async function getCoupons(scope: "all" | "mine"): Promise<{ coupons: CouponView[] }> {
+  return request<{ coupons: CouponView[] }>(`/api/coupons?scope=${scope}`, { cache: "no-store" });
+}
+
+/** Kuponu kaydeder; hata olursa sunucunun açıklamasını döndürür (ör. "İlk yarı bitti"). */
+export async function createCoupon(
+  legs: { match_id: string; period: CouponPeriod; market: CouponMarket; selection: string }[],
+  note: string | null,
+): Promise<{ ok: true; id: number } | { ok: false; message: string }> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/coupons`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ legs, note }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) return { ok: true, id: body.id };
+    return { ok: false, message: typeof body.detail === "string" ? body.detail : errorMessages().generic };
+  } catch {
+    return { ok: false, message: errorMessages().network };
+  }
+}

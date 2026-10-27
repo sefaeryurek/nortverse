@@ -20,6 +20,16 @@ const NAV_ICONS = [
     ),
   },
   {
+    href: "/kupondas",
+    key: "coupons" as const,
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 5h16v4a2 2 0 000 4v4H4v-4a2 2 0 000-4V5z" />
+        <path d="M10 5v12" strokeDasharray="2 2" />
+      </svg>
+    ),
+  },
+  {
     href: "/iy",
     key: "firstHalf" as const,
     icon: (

@@ -16,7 +16,8 @@
     "shadowShow": "Gölge ligleri göster",
     "shadowHide": "Gölge ligleri gizle",
     "shadowHint": "Championship, Almanya 2, Portekiz, Belçika, İskoçya — tahminleri deneme aşamasında, karnesi ayrı tutulur",
-    "firstHalf": "İY Oranları"
+    "firstHalf": "İY Oranları",
+    "coupons": "Kupondaş"
   },
   "common": {
     "retry": "Tekrar dene",
@@ -599,5 +600,52 @@
     "failed": "Sunucuya ulaşılamadı. Biraz sonra tekrar deneyin.",
     "logout": "Çıkış",
     "noAccount": "Hesabın yoksa site sahibinden iste."
+  },
+  "coupon": {
+    "title": "Kupondaş",
+    "subtitle": "Anlık oranlarla tahmin kuponları — herkes herkesinkini görür",
+    "newCoupon": "Yeni kupon",
+    "pickMatch": "Maç seç",
+    "today": "Bugün",
+    "tomorrow": "Yarın",
+    "noMatches": "Bu gün kupona eklenebilecek maç yok",
+    "ft": "Maç sonu",
+    "ht": "İlk yarı",
+    "result": "1X2",
+    "dc": "Çifte şans",
+    "ou": "Alt/Üst {line}",
+    "over": "Üst",
+    "under": "Alt",
+    "draft": "Kupon",
+    "draftEmpty": "Oranlara tıklayarak maç ekle",
+    "totalOdds": "Toplam oran",
+    "note": "Not (isteğe bağlı)",
+    "save": "Kuponu kaydet",
+    "saving": "Kaydediliyor…",
+    "saved": "Kupon kaydedildi",
+    "frozenNote": "Kaydettiğin anda oranlar kaynaktan yeniden alınır ve dondurulur; kupon sonradan değiştirilemez.",
+    "all": "Herkes",
+    "mine": "Benim",
+    "noCoupons": "Henüz kupon yok",
+    "live": "canlı {minute}' · {score}",
+    "remove": "Çıkar",
+    "loadingOdds": "Oranlar alınıyor…",
+    "oddsError": "Oranlar alınamadı",
+    "returnText": "getiri x{value}",
+    "status": {
+      "pending": "Bekliyor",
+      "won": "Kazandı",
+      "lost": "Kaybetti",
+      "refund": "İade"
+    },
+    "outcome": {
+      "hit": "Tuttu",
+      "miss": "Tutmadı",
+      "push": "İade",
+      "half_win": "Yarım kazanç",
+      "half_loss": "Yarım kayıp",
+      "void": "Geçersiz"
+    },
+    "liveTag": "canlı"
   }
 }

@@ -7,6 +7,7 @@ Herkes herkesin kuponunu görür (ortak sayfa); kupon sahibinin kullanıcı adı
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import datetime, timezone
 
@@ -19,6 +20,7 @@ from app.db.connection import get_session
 from app.db.models import Coupon, CouponLeg, CouponLegResult, Match, User
 from app.scraper.odds import current_odds
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 _ODDS_TTL = 30.0  # aynı maç için 30 sn içinde tekrar kaynağa gidilmez
@@ -33,6 +35,7 @@ async def _odds(match_id: str, *, fresh: bool = False) -> dict:
     try:
         odds = await asyncio.wait_for(current_odds(match_id), timeout=20)
     except Exception:
+        log.warning("Kupon oranı alınamadı [%s]", match_id, exc_info=True)
         raise HTTPException(503, "Oranlar şu an alınamadı, biraz sonra tekrar deneyin")
     if len(_odds_cache) > 300:
         _odds_cache.clear()
@@ -57,8 +60,10 @@ def _closed_reason(odds: dict, match: Match, period: str) -> str | None:
 async def get_odds(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> dict:
     """Kupon için güncel oranlar (maç sonu 1X2/ÇŞ/Ü-A, İY 1X2/Ü-A) — kapanmış periyot boş döner."""
     async with get_session() as session:
-        match = await session.get(Match, match_id)
-    if match is None or match.deleted_at is not None:
+        match = (await session.execute(
+            select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+        )).scalar_one_or_none()
+    if match is None:
         raise HTTPException(404, "Maç bulunamadı")
     odds = await _odds(match_id)
     out = {"match_id": match_id, "home_team": match.home_team, "away_team": match.away_team,

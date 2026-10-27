@@ -16,7 +16,8 @@
     "shadowShow": "Show trial leagues",
     "shadowHide": "Hide trial leagues",
     "shadowHint": "Championship, 2. Bundesliga, Portugal, Belgium, Scotland — predictions on trial, scored separately",
-    "firstHalf": "HT odds"
+    "firstHalf": "HT odds",
+    "coupons": "Coupons"
   },
   "common": {
     "retry": "Retry",
@@ -599,5 +600,52 @@
     "failed": "Could not reach the server. Try again shortly.",
     "logout": "Sign out",
     "noAccount": "If you don't have an account, ask the site owner."
+  },
+  "coupon": {
+    "title": "Coupon mates",
+    "subtitle": "Prediction coupons at live odds — everyone sees everyone's",
+    "newCoupon": "New coupon",
+    "pickMatch": "Pick a match",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "noMatches": "No match available for coupons on this day",
+    "ft": "Full time",
+    "ht": "First half",
+    "result": "1X2",
+    "dc": "Double chance",
+    "ou": "Over/Under {line}",
+    "over": "Over",
+    "under": "Under",
+    "draft": "Coupon",
+    "draftEmpty": "Click odds to add a match",
+    "totalOdds": "Total odds",
+    "note": "Note (optional)",
+    "save": "Save coupon",
+    "saving": "Saving…",
+    "saved": "Coupon saved",
+    "frozenNote": "When you save, odds are fetched again from the source and frozen; the coupon cannot be changed later.",
+    "all": "Everyone",
+    "mine": "Mine",
+    "noCoupons": "No coupons yet",
+    "live": "live {minute}' · {score}",
+    "remove": "Remove",
+    "loadingOdds": "Loading odds…",
+    "oddsError": "Could not load odds",
+    "returnText": "return x{value}",
+    "status": {
+      "pending": "Pending",
+      "won": "Won",
+      "lost": "Lost",
+      "refund": "Refund"
+    },
+    "outcome": {
+      "hit": "Won",
+      "miss": "Lost",
+      "push": "Refund",
+      "half_win": "Half win",
+      "half_loss": "Half loss",
+      "void": "Void"
+    },
+    "liveTag": "live"
   }
 }
