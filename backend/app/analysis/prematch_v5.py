@@ -17,10 +17,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 
 from app.analysis.live_poisson import PoissonModel, dc_tau
 from app.analysis.live_poisson import rule_params_fingerprint as team_model_fingerprint
+
+log = logging.getLogger(__name__)
 
 V5_RULE_VERSION = "ft-display-v5"
 RULE_PARAMS = {
@@ -143,6 +146,27 @@ def ledger_rows_v5(probabilities: dict | None, prior: dict[str, float], goal_pri
     return rows
 
 
+async def _capture_ht(session, *, match_id, analyzed_at, captured_at, kickoff_time, league_name, league_code,
+                      pattern_hash) -> None:
+    from sqlalchemy import select
+
+    from app.analysis.league_filter import canonical_league_name
+    from app.analysis.live_poisson import get_poisson_model
+    from app.analysis.persist import hash_string, pattern_hashes
+    from app.analysis.prematch_ht import capture_ht
+    from app.db.models import Match
+
+    teams = (await session.execute(
+        select(Match.home_team, Match.away_team, Match.league_name).where(Match.match_id == match_id)
+    )).first()
+    if teams is None:
+        return
+    league = teams.league_name or canonical_league_name(league_name or league_code or "")
+    await capture_ht(session, match_id=match_id, analyzed_at=analyzed_at, captured_at=captured_at,
+                     kickoff_time=kickoff_time, league=league, home=teams.home_team, away=teams.away_team,
+                     model=await get_poisson_model(), pattern_hash=pattern_hash or hash_string(pattern_hashes()))
+
+
 async def capture_recommendations(
     session, *, match_id: str, analyzed_at, captured_at, kickoff_time, league_name: str | None,
     league_code: str | None, patterns: dict | None, pattern_hash: str | None = None,
@@ -170,6 +194,14 @@ async def capture_recommendations(
     )
     if v4_picks is None:
         return None, False
+    try:
+        # İY (ht-display-v1, Deneme): aynı uygunluk ve 48 saat kuralıyla, savepoint — hata maç öncesi kararı engellemez
+        async with session.begin_nested():
+            await _capture_ht(session, match_id=match_id, analyzed_at=analyzed_at, captured_at=captured_at,
+                              kickoff_time=kickoff_time, league_name=league_name, league_code=league_code,
+                              pattern_hash=pattern_hash)
+    except Exception:
+        log.warning("İY kararı dondurulamadı [%s]", match_id, exc_info=True)
     existing = await session.get(AnalysisSnapshot, (match_id, V5_RULE_VERSION))
     if existing is not None:
         return (existing.picks if isinstance(existing.picks, list) else []), False

@@ -50,6 +50,7 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_analysis import router as analysis_router
 from app.api.routes_evaluation import router as evaluation_router
 from app.api.routes_fixture import router as fixture_router
+from app.api.routes_ht import router as ht_router
 from app.api.routes_live_ht import router as live_ht_router, start_ws_broadcaster, stop_ws_broadcaster
 from app.api.routes_performance import router as performance_router
 from app.api.routes_results import router as results_router
@@ -170,5 +171,6 @@ app.include_router(analysis_router)
 app.include_router(results_router)
 app.include_router(evaluation_router)
 app.include_router(live_ht_router)
+app.include_router(ht_router)
 app.include_router(performance_router)
 app.include_router(admin_router)

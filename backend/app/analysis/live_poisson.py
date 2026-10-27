@@ -85,6 +85,10 @@ class LeagueModel:
     share: dict[int, tuple[float, float]] = field(default_factory=dict)
     # pay hesabı için ham toplamlar (tüm ligler ortalamasına çekmek için)
     _share_sums: dict[int, list[float]] = field(default_factory=dict, repr=False)
+    # İlk yarı (Sprint 93, maç öncesi İY ht-display-v1): golün İY'de atılan payı (ev, dep) ve
+    # İY lig ortalamaları — aynı zaman ağırlığıyla, sadece eğitim penceresinden (sızıntısız)
+    ht_share: tuple[float, float] = (0.445, 0.445)
+    ht_base: dict[str, float] = field(default_factory=dict)
 
     def expected_goals(self, home: str, away: str) -> tuple[float, float]:
         att, dfn = self.attack, self.defense
@@ -157,7 +161,29 @@ def fit_league(rows: list[TrainMatch], as_of: datetime) -> LeagueModel | None:
         acc[2] += weight * (r.ft_a - r.ht_a)
         acc[3] += weight * lam_a
     model._share_sums = sums
+    _fit_first_half(model, rows, w.tolist())
     return model
+
+
+def _fit_first_half(model: LeagueModel, rows: list[TrainMatch], weights: list[float]) -> None:
+    """İY gol payı (ev/dep ayrı) ve İY lig ortalamaları (Laplace 0.5) — ağırlıklı eğitim penceresinden."""
+    ht_h = ft_h = ht_a = ft_a = total = 0.0
+    counts = {"1": 0.0, "X": 0.0, "2": 0.0, "goal": 0.0, "under15": 0.0, "home_scores": 0.0,
+              "away_scores": 0.0, "btts": 0.0}
+    for r, w in zip(rows, weights):
+        ht_h += w * r.ht_h
+        ft_h += w * r.ft_h
+        ht_a += w * r.ht_a
+        ft_a += w * r.ft_a
+        total += w
+        counts["1" if r.ht_h > r.ht_a else "2" if r.ht_h < r.ht_a else "X"] += w
+        counts["goal"] += w * (r.ht_h + r.ht_a > 0)
+        counts["under15"] += w * (r.ht_h + r.ht_a < 2)
+        counts["home_scores"] += w * (r.ht_h > 0)
+        counts["away_scores"] += w * (r.ht_a > 0)
+        counts["btts"] += w * (r.ht_h > 0 and r.ht_a > 0)
+    model.ht_share = (ht_h / ft_h if ft_h else 0.445, ht_a / ft_a if ft_a else 0.445)
+    model.ht_base = {k: (v + 0.5) / (total + 1.0) for k, v in counts.items()}
 
 
 def dc_tau(x: int, y: int, lam_h: float, lam_a: float, rho: float) -> float:
