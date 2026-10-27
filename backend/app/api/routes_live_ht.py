@@ -16,8 +16,8 @@ from pydantic import BaseModel
 from sqlalchemy import exists, select
 
 from app.analysis.league_filter import canonical_league_name, is_shadow_league, is_tracked_league
-from app.analysis import live_archive
-from app.analysis.live_model import LIVE_RULE_VERSION
+from app.analysis import live_archive, live_poisson
+from app.analysis.live_model import LIVE_RULE_VERSION, get_cond_table
 from app.api.live_ledger import match_phase, observed_ht
 from app.api.live_snapshot import get_live_snapshot
 from app.db.connection import get_session
@@ -46,6 +46,8 @@ class LiveHTMatch(BaseModel):
     frozen: bool = False
     frozen_at: str | None = None
     archive_view: dict | None = None
+    # Ekrandaki ana canlı kararlar (live-poisson-v1.1, Sprint 93)
+    decisions: list[dict] = []
     # Gölgedeki lig (Sprint 92): ekran varsayılan olarak gizler, "gölge ligleri göster" açıkken "Deneme" etiketiyle
     shadow: bool = False
 
@@ -84,7 +86,8 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
                PredictionLedger.details)
         .where(
             PredictionLedger.source == "live_ht",
-            PredictionLedger.rule_version.in_([LIVE_RULE_VERSION, *live_archive.LIVE_ARCHIVE_RULE_VERSIONS]),
+            PredictionLedger.rule_version.in_([LIVE_RULE_VERSION, *live_archive.LIVE_ARCHIVE_RULE_VERSIONS,
+                                               *live_poisson.LIVE_POISSON_RULE_VERSIONS]),
             PredictionLedger.match_id.in_(ids),
             # Hatalı veriyle üretilip geçersiz sayılan kayıtlar ekranda "kayıt" gibi gösterilmez.
             ~exists().where(
@@ -99,9 +102,17 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
         entry = out.setdefault(r.match_id, {"frozen_at": r.recorded_at.isoformat(), "highlights": [], "archived": False})
         if r.rule_version == LIVE_RULE_VERSION and r.market == "result":
             entry["archived"] = (r.details or {}).get("archive_rule_version") in live_archive.LIVE_ARCHIVE_RULE_VERSIONS
+        details = r.details or {}
+        if r.rule_version in live_poisson.LIVE_POISSON_RULE_VERSIONS:
+            # Takım gücü modeli kararları (v1.1'den beri ekrandaki ana karar)
+            entry.setdefault("poisson", []).append({
+                "period": r.period, "market": r.market, "selection": r.selection, "pct": r.prob_shown_bp / 100,
+                "cond_pct": details.get("cond_pct"), "cond_n": details.get("cond_n"),
+                "best": bool(details.get("best")), "rule_version": r.rule_version,
+            })
+            continue
         if r.rule_version not in live_archive.LIVE_ARCHIVE_RULE_VERSIONS:
             continue
-        details = r.details or {}
         entry["archived"] = True
         entry["highlights"].append({
             "period": r.period, "market": r.market, "selection": r.selection,
@@ -117,6 +128,38 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
     for entry in out.values():
         entry["highlights"].sort(key=lambda h: (h["risky"], -h["pct"], -h["n"]))
     return out
+
+
+async def _poisson_decisions(match: Match, ht: tuple[int, int], frozen: dict | None, view: dict | None) -> list[dict]:
+    """Ekrandaki ana canlı kararlar (live-poisson-v1.1). Kaydedildiyse defterden, değilse anlık hesap.
+
+    `confirmed`: arşiv + lig geçmişi kuralı (live-arch-v2) aynı seçimi yaptı mı (geçmişte ikisinin uyuştuğu
+    kararlar %93,5 tuttu). `historical`: aynı pazarda geçmiş isabet (backtest).
+    """
+    if frozen and frozen.get("poisson") is not None:
+        picks = frozen["poisson"]
+    else:
+        try:
+            league = match.league_name or ""
+            prediction = live_poisson.predict(await live_poisson.get_poisson_model(), league,
+                                              match.home_team, match.away_team, ht)
+            picks = [{
+                "period": p["period"], "market": p["market"], "selection": p["selection"], "pct": p["pct"],
+                "cond_pct": p["cond_pct"], "cond_n": p["cond_n"], "best": p["best"],
+                "rule_version": live_poisson.LIVE_POISSON_RULE_VERSION,
+            } for p in live_poisson.decisions(prediction, live_poisson.cond_lookup(await get_cond_table(), league, ht))]
+        except Exception:
+            log.warning("Canlı Poisson kararları hesaplanamadı [%s]", match.match_id, exc_info=True)
+            picks = []
+    confirmed = {(h["period"], h["market"], h["selection"]) for h in (view or {}).get("highlights", [])
+                 if h.get("sources")}
+    try:
+        table = await live_poisson.load_hit_table()
+    except Exception:
+        table = {}
+    return sorted(({**p, "confirmed": (p["period"], p["market"], p["selection"]) in confirmed,
+                    "historical": table.get((p["period"], p["market"]))} for p in picks),
+                  key=lambda p: -p["pct"])
 
 
 async def _view_for(match: Match, ht: tuple[int, int], frozen: dict | None, *, with_matches: bool = False) -> dict:
@@ -172,13 +215,14 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
             continue
         record = frozen.get(mid)
         view = await _view_for(match, ht, record)
+        decisions = await _poisson_decisions(match, ht, record, view)
         result.append(LiveHTMatch(
             match_id=mid, home_team=home, away_team=away,
             ht_home=ht[0], ht_away=ht[1], live_home=fs.home, live_away=fs.away,
             live_minute=fs.minute, phase=match_phase(fs), league_name=league,
             kickoff_time=kickoff.isoformat() if kickoff else None,
             frozen=record is not None, frozen_at=record["frozen_at"] if record else None,
-            archive_view=view, shadow=is_shadow_league(league),
+            archive_view=view, shadow=is_shadow_league(league), decisions=decisions,
         ))
     return result
 
@@ -205,9 +249,10 @@ async def get_live_prediction(
         ht = (match.actual_ht_home, match.actual_ht_away)
     if ht is None:
         raise HTTPException(409, "İY skoru henüz bilinmiyor")
+    view = await _view_for(match, ht, record, with_matches=detail)
     return {
         "frozen": record is not None, "frozen_at": record["frozen_at"] if record else None,
-        "archive_view": await _view_for(match, ht, record, with_matches=detail),
+        "archive_view": view, "decisions": await _poisson_decisions(match, ht, record, view),
     }
 
 

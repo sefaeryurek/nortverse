@@ -162,5 +162,5 @@ def test_backtest_run_current_flag_uses_its_own_rule_version():
 
 def test_summary_defaults_to_on_screen_rule_version():
     from app.api.routes_performance import on_screen_rule_version
-    assert on_screen_rule_version("live_ht") == "live-arch-v2"
+    assert on_screen_rule_version("live_ht") == "live-poisson-v1.1"
     assert on_screen_rule_version("top_pick") == "ft-display-v5"

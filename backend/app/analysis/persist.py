@@ -59,9 +59,9 @@ def hash_string(hashes: dict[str, str | None]) -> str | None:
 
 
 def _team_model_fingerprint() -> str:
-    from app.analysis.live_poisson import rule_params_fingerprint
+    from app.analysis.live_poisson import team_model_fingerprint
 
-    return rule_params_fingerprint()
+    return team_model_fingerprint()
 
 
 def pattern_hashes() -> dict[str, str]:

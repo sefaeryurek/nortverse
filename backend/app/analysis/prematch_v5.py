@@ -21,7 +21,7 @@ import logging
 import math
 
 from app.analysis.live_poisson import PoissonModel, dc_tau
-from app.analysis.live_poisson import rule_params_fingerprint as team_model_fingerprint
+from app.analysis.live_poisson import team_model_fingerprint
 
 log = logging.getLogger(__name__)
 

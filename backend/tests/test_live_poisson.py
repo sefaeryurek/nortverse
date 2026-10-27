@@ -39,8 +39,9 @@ def _poisson(rng, lam):
 
 def test_rule_params_fingerprint_is_pinned():
     # Model parametresi değişirse kural sürümü (LIVE_POISSON_RULE_VERSION) artırılmalı.
-    assert lp.LIVE_POISSON_RULE_VERSION == "live-poisson-v1"
-    assert lp.rule_params_fingerprint() == "0882f85814ef"
+    assert lp.LIVE_POISSON_RULE_VERSION == "live-poisson-v1.1"
+    assert lp.team_model_fingerprint() == "0882f85814ef"   # takım modeli değişmedi (v5 ve A3 etkilenmez)
+    assert lp.rule_params_fingerprint() == "bcfb140f66db"
 
 
 def test_fit_ranks_strong_team_above_weak():
@@ -81,8 +82,8 @@ def test_decisions_flag_valuable_and_best():
     assert by["dc"]["best"] and not by["ou_35"]["best"]
     assert by["dc"]["valuable"] is False and by["ou_35"]["valuable"] is True   # COND yok → değerli
     rows = lp.ledger_rows(pred, picks, {"match_id": "1"})
-    assert {r["rule_version"] for r in rows} == {"live-poisson-v1"}
-    assert all(r["details"]["shadow"] for r in rows) and rows[0]["prob_shown_bp"] == 9500
+    assert {r["rule_version"] for r in rows} == {"live-poisson-v1.1"}
+    assert not any(r["details"]["shadow"] for r in rows) and rows[0]["prob_shown_bp"] == 9500
 
 
 def test_train_window_excludes_recent_and_old():
@@ -134,3 +135,16 @@ async def test_new_match_without_row_uses_given_teams(monkeypatch):
                                            kickoff=NOW_L + timedelta(hours=5))
     assert pair == (1.6, 0.9)
     assert session.execute.await_count == 1   # satır yok → yazma denenmez
+
+
+def test_v11_excludes_full_time_under_25():
+    """v1.1: MS 2.5 alt backtest'te %87,7 gösterip %83,6 tuttu → karar verilmez; 2.5 üst kalır."""
+    prediction = {"cells": [
+        {"period": "ft", "market": "ou_25", "selection": "under", "pct": 91.0, "options": {}},
+        {"period": "ft", "market": "dc", "selection": "1X", "pct": 93.0, "options": {}},
+        {"period": "ft", "market": "ou_35", "selection": "under", "pct": 95.0, "options": {}},
+    ]}
+    picks = lp.decisions(prediction, lambda *_: {"pct": 90.0, "n": 100, "level": "league"})
+    assert [(p["market"], p["selection"]) for p in picks] == [("dc", "1X"), ("ou_35", "under")]
+    rows = lp.ledger_rows({"lambda_2h": {}, "lambda_ft": {}}, picks, {"match_id": "1"})
+    assert all(r["rule_version"] == "live-poisson-v1.1" and r["details"]["shadow"] is False for r in rows)

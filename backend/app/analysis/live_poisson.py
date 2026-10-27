@@ -36,7 +36,10 @@ from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 
 log = logging.getLogger(__name__)
 
-LIVE_POISSON_RULE_VERSION = "live-poisson-v1"
+# v1.1 (Sprint 93, ekrandaki ana canlı karar): v1'den farkı sadece MS 2.5 alt çıkarıldı — 3 yıllık
+# backtest'te %87,7 gösterip %83,6 tuttu (390 seçim, beklentinin altında). Takım modeli aynı.
+LIVE_POISSON_RULE_VERSION = "live-poisson-v1.1"
+LIVE_POISSON_RULE_VERSIONS = ("live-poisson-v1", "live-poisson-v1.1")  # değerlendirme geçmişi için
 RULE_PARAMS = {
     "half_life_days": 365,
     "train_days": 1095,
@@ -56,8 +59,18 @@ MAX_EXTRA = RULE_PARAMS["max_extra_goals"]
 STATES = (-2, -1, 0, 1, 2)
 
 
-def rule_params_fingerprint() -> str:
+DECISION_PARAMS = {"exclude": [["ft", "ou_25", "under"]]}
+
+
+def team_model_fingerprint() -> str:
+    """Takım gücü modelinin parmak izi (maç öncesi v5 ve A3 de bunu kullanır — karar kuralından bağımsız)."""
     return hashlib.sha1(json.dumps(RULE_PARAMS, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def rule_params_fingerprint() -> str:
+    """Canlı karar kuralının (live-poisson) parmak izi: takım modeli + karar ayarları."""
+    payload = {"team_model": team_model_fingerprint(), **DECISION_PARAMS}
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
 @dataclass(frozen=True)
@@ -302,8 +315,9 @@ def decisions(prediction: dict | None, cond_of) -> list[dict]:
     if prediction is None:
         return []
     out = []
+    excluded = {tuple(x) for x in DECISION_PARAMS["exclude"]}
     for cell in prediction["cells"]:
-        if cell["pct"] < THRESHOLD_PCT:
+        if cell["pct"] < THRESHOLD_PCT or (cell["period"], cell["market"], cell["selection"]) in excluded:
             continue
         cond = cond_of(cell["period"], cell["market"], cell["selection"])
         out.append({**cell, "cond_pct": cond["pct"] if cond else None, "cond_n": cond["n"] if cond else None,
@@ -314,12 +328,12 @@ def decisions(prediction: dict | None, cond_of) -> list[dict]:
 
 
 def ledger_rows(prediction: dict, picks: list[dict], common: dict, *, late: bool = False) -> list[dict]:
-    """Gölge kayıtlar: ekranda gösterilmez, sadece ölçülür."""
+    """Canlı ana kararlar (v1.1'den beri ekranda; v1 gölgede yazılmıştı)."""
     return [{
         **common, "source": "live_ht", "rule_version": LIVE_POISSON_RULE_VERSION,
         "period": p["period"], "market": p["market"], "selection": p["selection"], "archive": None,
         "prob_shown_bp": round(p["pct"] * 100), "sample_n": None, "confidence_tier": "high",
-        "details": {"shadow": True, "valuable": p["valuable"], "best": p["best"],
+        "details": {"shadow": False, "valuable": p["valuable"], "best": p["best"],
                     "cond_pct": p["cond_pct"], "cond_n": p["cond_n"], "options": p["options"],
                     "lambda_2h": prediction["lambda_2h"], "lambda_ft": prediction["lambda_ft"],
                     "params": rule_params_fingerprint(), "late": late},
@@ -535,3 +549,35 @@ async def team_lambdas_for_match(match_id: str, as_of: datetime, *, league: str 
             await session.execute(update(Match).where(Match.match_id == match_id).values(
                 team_lambda_home=pair[0], team_lambda_away=pair[1], team_lambda_as_of=model.as_of))
     return pair
+
+
+_HIT_TTL = 3600.0
+_hit_cache: tuple[float, dict] | None = None
+
+
+async def load_hit_table() -> dict:
+    """Bugünkü kural sürümü + parmak iziyle üretilmiş en son backtest koşusundan pazar başına geçmiş isabet.
+
+    Döner: {(periyot, pazar): {"pct": isabet %, "n": karar sayısı}} — 1 saat önbellek.
+    """
+    from sqlalchemy import text
+
+    from app.db.connection import get_session
+
+    global _hit_cache
+    if _hit_cache is not None and time.monotonic() - _hit_cache[0] < _HIT_TTL:
+        return _hit_cache[1]
+    async with get_session() as session:
+        run_id = (await session.execute(text("""
+            SELECT max(id) FROM backtest_runs
+            WHERE rule_version = :rv AND params->>'params_fingerprint' = :fp
+        """), {"rv": LIVE_POISSON_RULE_VERSION, "fp": rule_params_fingerprint()})).scalar()
+        rows = [] if run_id is None else (await session.execute(text("""
+            SELECT period, market, count(*) FILTER (WHERE outcome = 'hit'), count(*)
+            FROM prediction_backtest WHERE run_id = :run AND outcome IN ('hit', 'miss')
+            GROUP BY period, market
+        """), {"run": run_id})).all()
+    table = {(period, market): {"pct": round(100 * hits / total, 1), "n": total}
+             for period, market, hits, total in rows if total >= 30}
+    _hit_cache = (time.monotonic(), table)
+    return table

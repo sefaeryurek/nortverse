@@ -65,11 +65,12 @@ def _with_baseline(row) -> dict:
 
 def on_screen_rule_version(source: str) -> str:
     """Kaynağın ekranda gösterilen kural sürümü. Sürüm verilmeyen özetler gölge/eski kayıtları karıştırmaz."""
-    from app.analysis.live_archive import LIVE_ARCHIVE_RULE_VERSION
+    from app.analysis.live_poisson import LIVE_POISSON_RULE_VERSION
     from app.analysis.prematch_v4 import MARKET_SUMMARY_RULE_VERSION
     from app.analysis.prematch_v5 import V5_RULE_VERSION
 
-    return {"live_ht": LIVE_ARCHIVE_RULE_VERSION, "top_pick": V5_RULE_VERSION,
+    # Sprint 93: canlıda ekrandaki karar takım gücü modeli (live-poisson-v1.1); live-arch-v2 onay rozeti + gölge
+    return {"live_ht": LIVE_POISSON_RULE_VERSION, "top_pick": V5_RULE_VERSION,
             "market_summary": MARKET_SUMMARY_RULE_VERSION}[source]
 
 
