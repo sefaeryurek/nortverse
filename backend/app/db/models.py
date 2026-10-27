@@ -189,6 +189,62 @@ class UserSession(Base):
     )
 
 
+class Coupon(Base):
+    """Kupondaş kuponu (Sprint 93) — değişmez; sahibi ve oluşturma anı."""
+
+    __tablename__ = "coupons"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                 server_default=func.clock_timestamp())
+    note: Mapped[str | None] = mapped_column(String(200))
+
+    __table_args__ = (ForeignKeyConstraint(["user_id"], ["users.id"]),)
+
+
+class CouponLeg(Base):
+    """Kupondaki maç seçimi — oran ve (canlıysa) dakika/skor kayıt anında dondurulur, değişmez."""
+
+    __tablename__ = "coupon_legs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    coupon_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    match_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    home_team: Mapped[str] = mapped_column(String(100), nullable=False)
+    away_team: Mapped[str] = mapped_column(String(100), nullable=False)
+    league_name: Mapped[str | None] = mapped_column(String(100))
+    kickoff_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    period: Mapped[str] = mapped_column(String(2), nullable=False)       # ft | ht
+    market: Mapped[str] = mapped_column(String(10), nullable=False)      # result | dc | ou
+    selection: Mapped[str] = mapped_column(String(10), nullable=False)
+    line: Mapped[float | None] = mapped_column(Float)
+    odds: Mapped[float] = mapped_column(Float, nullable=False)
+    odds_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    live_minute: Mapped[str | None] = mapped_column(String(10))
+    live_score: Mapped[str | None] = mapped_column(String(10))
+
+    __table_args__ = (
+        ForeignKeyConstraint(["coupon_id"], ["coupons.id"]),
+        ForeignKeyConstraint(["match_id"], ["matches.match_id"]),
+    )
+
+
+class CouponLegResult(Base):
+    """Kupon maçının sonucu — bir kez yazılır. return_factor: 1 birim başına geri dönen (kayıp 0, iade 1)."""
+
+    __tablename__ = "coupon_leg_results"
+
+    leg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    outcome: Mapped[str] = mapped_column(String(10), nullable=False)
+    return_factor: Mapped[float] = mapped_column(Float, nullable=False)
+    score: Mapped[str | None] = mapped_column(String(10))
+    resolved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                  server_default=func.clock_timestamp())
+
+    __table_args__ = (ForeignKeyConstraint(["leg_id"], ["coupon_legs.id"]),)
+
+
 class SkippedAnalysis(Base):
     """Recent filter result so an ineligible match is not scraped on every visit."""
 

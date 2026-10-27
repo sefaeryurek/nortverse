@@ -54,7 +54,11 @@ def parse_odds(payload: str | bytes) -> dict[str, list[dict]] | None:
                 continue
             if market == "op" and g <= 0:
                 continue
-            rows.append({"mt": int(entry["mt"]), "pre": not entry.get("ht"), "u": u, "g": g, "d": d})
+            row = {"mt": int(entry["mt"]), "pre": not entry.get("ht"), "u": u, "g": g, "d": d}
+            if entry.get("ht"):  # maç içi: dakika ve o anki skor
+                row["min"] = str(entry["ht"])
+                row["score"] = f"{entry.get('hs', 0)}-{entry.get('gs', 0)}"
+            rows.append(row)
         rows.sort(key=lambda r: -r["mt"])
         out[market] = rows
     return out
@@ -109,23 +113,76 @@ def market_options(odds: dict) -> list[dict]:
     return out
 
 
+def _get(path: str, referer_id: str) -> bytes:
+    """Kaynaktan ham yanıt (yönlendirilen adres hatırlanır; gzip açılır)."""
+    global _resolved_base
+    base = _resolved_base or SCRAPER.base_url
+    request = Request(f"{base}{path}", headers={"User-Agent": SCRAPER.user_agent,
+                                                 "Referer": f"{base}/oddscomp/{referer_id}"})
+    with urlopen(request, timeout=20) as response:
+        final = urlsplit(response.geturl())
+        _resolved_base = f"{final.scheme}://{final.netloc}"
+        body = response.read()
+    # Kaynak istemese de gzip gönderiyor
+    return gzip.decompress(body) if body[:2] == bytes((0x1F, 0x8B)) else body
+
+
 async def fetch_odds(match_id: str, *, half: bool) -> dict[str, list[dict]] | None:
     """Tek maçın oran geçmişi (İY için half=True)."""
-    def fetch() -> bytes:
-        global _resolved_base
-        base = _resolved_base or SCRAPER.base_url
-        request = Request(
-            f"{base}/ajax/SoccerAjax?type=14&t=20&id={match_id}&cid=8&h={1 if half else 0}&r1=0&r2=0&r3=0",
-            headers={"User-Agent": SCRAPER.user_agent, "Referer": f"{base}/oddscomp/{match_id}"},
-        )
-        with urlopen(request, timeout=20) as response:
-            final = urlsplit(response.geturl())
-            _resolved_base = f"{final.scheme}://{final.netloc}"
-            body = response.read()
-        # Kaynak istemese de gzip gönderiyor
-        return gzip.decompress(body) if body[:2] == bytes((0x1F, 0x8B)) else body
+    path = f"/ajax/SoccerAjax?type=14&t=20&id={match_id}&cid=8&h={1 if half else 0}&r1=0&r2=0&r3=0"
+    return parse_odds(await asyncio.to_thread(_get, path, match_id))
 
-    return parse_odds(await asyncio.to_thread(fetch))
+
+def parse_summary(payload: str | bytes) -> dict | None:
+    """Güncel maç sonu oranları (t=10): 1X2 (ondalık), çifte şans ve Ü/A (Hong Kong → ondalık) + maç durumu."""
+    try:
+        body = json.loads(payload)
+        data = body["Data"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    out: dict = {"state": body.get("MatchState")}
+    op = data.get("op") or {}
+    u, g, d = _num(op.get("u")), _num(op.get("g")), _num(op.get("d"))
+    if u and g and d:
+        out["result"] = {"1": u, "X": g, "2": d}
+    dc = data.get("double") or {}
+    u, g, d = _num(dc.get("u")), _num(dc.get("g")), _num(dc.get("d"))
+    if u and g and d:
+        out["dc"] = {"1X": round(1 + u, 3), "12": round(1 + g, 3), "X2": round(1 + d, 3)}
+    ou = data.get("ou") or {}
+    u, d = _num(ou.get("u")), _num(ou.get("d"))
+    try:
+        line = float(ou.get("g"))
+    except (TypeError, ValueError):
+        line = None
+    if u and d and line is not None:
+        out["ou"] = {"line": line, "over": round(1 + u, 3), "under": round(1 + d, 3)}
+    return out
+
+
+async def current_odds(match_id: str) -> dict:
+    """Kupon için şu anki oranlar: {"ft": {...}, "ht": {...}, "live": {"minute", "score"} | None, "state"}.
+
+    Maç sonu: özet uç (canlıyken canlı oran). İlk yarı: İY geçmişinin en son satırı (canlıysa canlı).
+    """
+    summary_raw, ht_hist = await asyncio.gather(
+        asyncio.to_thread(_get, f"/ajax/SoccerAjax?type=14&t=10&id={match_id}&cid=8&h=0&r1=0&r2=0&r3=0", match_id),
+        fetch_odds(match_id, half=True),
+    )
+    summary = parse_summary(summary_raw) or {}
+    out: dict = {"state": summary.get("state"), "ft": {k: summary[k] for k in ("result", "dc", "ou") if k in summary},
+                 "ht": {}, "live": None}
+    latest = {m: (ht_hist or {}).get(m, [None])[0] if (ht_hist or {}).get(m) else None for m in ("op", "ou")}
+    if latest["op"]:
+        r = latest["op"]
+        out["ht"]["result"] = {"1": r["u"], "X": r["g"], "2": r["d"]}
+    if latest["ou"]:
+        r = latest["ou"]
+        out["ht"]["ou"] = {"line": r["g"], "over": round(1 + r["u"], 3), "under": round(1 + r["d"], 3)}
+    live_row = next((r for r in (latest["op"], latest["ou"]) if r and not r["pre"]), None)
+    if live_row:
+        out["live"] = {"minute": live_row.get("min"), "score": live_row.get("score")}
+    return out
 
 
 async def load_or_fetch(session, match_id: str, *, half: bool, max_age_s: int) -> dict | None:

@@ -49,6 +49,7 @@ from app.api.live_snapshot import shutdown_live_snapshot
 from app.api.routes_admin import router as admin_router
 from app.api.routes_analysis import router as analysis_router
 from app.api.routes_auth import router as auth_router
+from app.api.routes_coupons import router as coupons_router
 from app.api.routes_evaluation import router as evaluation_router
 from app.api.routes_fixture import router as fixture_router
 from app.api.routes_ht import router as ht_router
@@ -190,6 +191,7 @@ async def require_session(request, call_next):
 # ─── Router kayıtları ────────────────────────────────────────────────────────
 
 app.include_router(auth_router)
+app.include_router(coupons_router)
 app.include_router(fixture_router)
 app.include_router(analysis_router)
 app.include_router(results_router)

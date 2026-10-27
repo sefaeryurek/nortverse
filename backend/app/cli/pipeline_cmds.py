@@ -476,6 +476,12 @@ def update_scores_cmd(
                     continue
                 _print_stats(f"Eksik gün {day.isoformat()}", await update_results(target_date=day))
         _print_resolution(await resolve_pending())
+        from app.analysis.coupons import settle_pending
+        from app.db.connection import get_session
+
+        async with get_session() as session:
+            settled = await settle_pending(session)
+        console.print(f"[bold green]Kupondaş:[/bold green] {settled} kupon maçı sonuçlandı")
 
     asyncio.run(_run())
 
