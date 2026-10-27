@@ -502,7 +502,7 @@ def resolve_predictions_cmd(
 
 
 def serve(
-    host: str = typer.Option("0.0.0.0", "--host", help="Dinlenecek adres"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Dinlenecek adres (varsayılan sadece bu bilgisayar; paylaşım Tailscale serve ile)"),
     port: int = typer.Option(8000, "--port", help="Port"),
     reload: bool = typer.Option(False, "--reload", help="Geliştirme modu (dosya değişikliğinde yeniden yükle)"),
 ) -> None:
