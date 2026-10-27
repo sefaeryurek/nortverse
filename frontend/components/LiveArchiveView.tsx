@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { LiveArchiveMatch, LiveArchiveSource, LiveArchiveView, LiveHighlight, LiveOutcome } from "@/lib/api";
+import type { LiveArchiveMatch, LiveArchiveSource, LiveArchiveView, LiveHighlight, LiveOutcome, LivePoissonDecision } from "@/lib/api";
 import { liveMarketLabel, liveSelectionLabel } from "@/lib/live-labels";
 import { useLocale } from "@/lib/locale-context";
 
@@ -98,16 +98,81 @@ function DecisionRow({ h }: { h: LiveHighlight }) {
   );
 }
 
-export function HighlightList({ view }: { view: LiveArchiveView }) {
+/** Canlı ana karar (live-poisson-v1.1): pazar başına tek satır, model oranı + lig geçmişi + onay + geçmiş isabet. */
+export function PoissonDecisionList({ decisions }: { decisions: LivePoissonDecision[] }) {
+  const { t } = useLocale();
+  const a = t.live.archive;
+  return (
+    <section className="space-y-1.5" aria-label={a.poissonTitle}>
+      <h4 className="font-bold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", letterSpacing: "var(--nv-tracking-wide)" }}>
+        {a.poissonTitle}
+      </h4>
+      {decisions.length === 0 ? (
+        <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{a.poissonNone}</p>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {decisions.map((d) => (
+            <li
+              key={`${d.period}:${d.market}`}
+              className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1.5"
+              style={{
+                borderRadius: "var(--nv-radius-md)",
+                backgroundColor: "var(--nv-accent-green-dim)",
+                border: d.best ? "1px solid var(--nv-accent-green)" : "1px solid var(--nv-border-subtle)",
+              }}
+            >
+              <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>{liveMarketLabel(d.period, d.market, t)}</span>
+              <span className="font-bold" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>{liveSelectionLabel(d.selection, t)}</span>
+              <span className="font-extrabold" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-green)" }}>
+                {fmtPct(d.pct)}
+              </span>
+              {d.best && (
+                <span className="px-1.5 font-semibold" style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-accent-green)", color: "var(--nv-text-on-accent)" }}>
+                  {a.bestPick}
+                </span>
+              )}
+              <span className="flex-1" />
+              <span className="inline-flex flex-wrap items-center gap-1.5" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+                {d.cond_pct != null && (
+                  <span style={{ color: "var(--nv-text-tertiary)" }} title={a.condTooltip.replace("{n}", String(d.cond_n ?? "?"))}>
+                    {a.condShort.replace("{pct}", d.cond_pct.toFixed(0)).replace("{n}", String(d.cond_n ?? "?"))}
+                  </span>
+                )}
+                {d.confirmed && (
+                  <span className="font-semibold" title={a.confirmedTooltip} style={{ color: "var(--nv-accent-green)" }}>
+                    <span aria-hidden="true">✓</span> {a.confirmed}
+                  </span>
+                )}
+                {d.historical && (
+                  <span
+                    className="px-1.5"
+                    style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-surface)", color: "var(--nv-text-primary)", fontFamily: "var(--nv-font-mono)" }}
+                    title={a.historicalMarketTooltip.replace("{n}", String(d.historical.n))}
+                  >
+                    {a.historicalMarket.replace("{pct}", d.historical.pct.toFixed(0))}
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>{a.poissonRule}</p>
+    </section>
+  );
+}
+
+export function HighlightList({ view, secondary = false }: { view: LiveArchiveView; secondary?: boolean }) {
   const { t } = useLocale();
   const a = t.live.archive;
   const threshold = String(view.threshold_pct);
   const decisions = view.highlights.filter((h) => h.sources);
   if (decisions.length > 0 || view.rule_version !== "live-arch-v1") {
+    const title = (secondary ? a.archiveRuleTitle : a.decisionsTitle).replace("{pct}", threshold);
     return (
-      <section className="space-y-1.5" aria-label={a.decisionsTitle.replace("{pct}", threshold)}>
+      <section className="space-y-1.5" aria-label={title}>
         <h4 className="font-bold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)", letterSpacing: "var(--nv-tracking-wide)" }}>
-          {a.decisionsTitle.replace("{pct}", threshold)}
+          {title}
         </h4>
         {decisions.length === 0 ? (
           <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{a.noDecisions}</p>

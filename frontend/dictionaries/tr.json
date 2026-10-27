@@ -205,7 +205,7 @@
       "noPicks": "Bu maçta %85+ işaret yoktu",
       "emptyLiveDay": "Bu gün canlıya giren kayıtlı maç yok.",
       "recordedAt": "Kayıt {time}",
-      "liveSummaryNote": "Devre arasında kaydedilen kararlar: en az 5 maçlık arşiv %85+ ve aynı lig + aynı İY geçmişi %85+; pazar başına tek karar. Maç bitince tuttu/tutmadı olarak işaretlenir.",
+      "liveSummaryNote": "27 Ekim'den beri ekrandaki canlı karar: takım gücü modeli (live-poisson-v1.1), devre arasında %85+ pazarlar, pazar başına tek karar. Maç bitince tuttu/tutmadı olarak işaretlenir.",
       "strategy_live_archive": "Canlı arşiv (%85+)",
       "market_ou_05": "0.5 Alt/Üst",
       "market_ou_15": "1.5 Alt/Üst",
@@ -220,7 +220,11 @@
       "htTitle": "İY maç öncesi (deneme)",
       "htHint": "İY çifte şans, İY 1/2, İY gol var, İY 1.5 alt, İY ev gol — takım gücü modeli; 100 tekil karardan önce hüküm yok.",
       "market_ev_05": "Ev 0.5 Alt/Üst",
-      "market_dep_05": "Dep 0.5 Alt/Üst"
+      "market_dep_05": "Dep 0.5 Alt/Üst",
+      "liveV2Title": "Arşiv + lig geçmişi kuralı (live-arch-v2)",
+      "liveV2Hint": "19–27 Ekim arası ekrandaki karar; şimdi takım gücü kararının yanında onay olarak duruyor ve ölçülmeye devam ediyor.",
+      "livePoissonV1Title": "Takım gücü modeli gölge dönemi (live-poisson-v1)",
+      "livePoissonV1Hint": "19–27 Ekim arası ekranda değildi, arka planda kaydedildi. Bu kayıtlar ekrana alma kararının dayanağı. v1.1'den farkı: MS 2.5 alt da vardı (geçmişte %87,7 gösterip %83,6 tuttuğu için çıkarıldı)."
     }
   },
   "live": {
@@ -318,7 +322,17 @@
       "historical": "geçmiş %{pct}",
       "historicalTooltip": "Geçmiş testte bu pazarda {bucket} maçlık örneklemle verilen %85+ işaretlerin gerçekte tutma oranı ({n} işaret).",
       "historicalPooled": "Bu pazarda yeterli veri olmadığı için aynı örneklem büyüklüğündeki tüm pazarların ortalaması.",
-      "historicalNote": "\"geçmiş %X\": aynı türdeki işaretlerin geçmiş maçlarda gerçek isabeti — ekrandaki oran örneklem küçükken olduğundan yüksek görünür."
+      "historicalNote": "\"geçmiş %X\": aynı türdeki işaretlerin geçmiş maçlarda gerçek isabeti — ekrandaki oran örneklem küçükken olduğundan yüksek görünür.",
+      "poissonTitle": "Karar · takım gücü modeli",
+      "poissonRule": "Takım gücüyle kalan 45 dakikanın gol beklentisi (Poisson). %85+ çıkan pazarlar gösterilir; aynı lig + aynı İY skorlu geçmiş maçların oranı yanında. Pazar başına tek karar.",
+      "poissonNone": "Bu maçta modelin %85+ kararı yok",
+      "confirmed": "Arşiv + lig geçmişi de onaylıyor",
+      "confirmedTooltip": "Arşiv + lig geçmişi kuralı (live-arch-v2) aynı seçimi yaptı. Geçmişte iki kuralın uyuştuğu kararlar %93,5 tuttu.",
+      "bestPick": "En iyi",
+      "historicalMarket": "geçmiş %{pct}",
+      "historicalMarketTooltip": "Geçmiş testte (2023-07 → bugün, sızıntısız) bu pazardaki kararların gerçek tutma oranı ({n} karar).",
+      "condShort": "lig geçmişi %{pct} · {n} maç",
+      "archiveRuleTitle": "Arşiv + lig geçmişi kuralı (%{pct}+)"
     },
     "staleData": "veri eski",
     "staleTooltip": "Canlı veri {s} sn'dir güncellenmedi; kaynak gecikiyor olabilir."

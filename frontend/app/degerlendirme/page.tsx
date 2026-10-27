@@ -550,8 +550,12 @@ function rangeHeadline(range: Range, day: string, t: Dictionary): string {
 
 const TABS = ["canli", "mac-oncesi", "backtest", "pattern"] as const;
 type Tab = (typeof TABS)[number];
-/** Canlı sekmesi güncel arşiv karar kuralını ölçer (eski COND modeli arka planda). */
+/** Canlı sekmesi ekrandaki kararı ölçer: 27 Ekim'den beri takım gücü modeli (live-poisson-v1.1). */
+const LIVE_RULE_VERSION = "live-poisson-v1.1";
+/** 19–27 Ekim ekrandaki kural; şimdi onay olarak duruyor. */
 const LIVE_ARCHIVE_RULE_VERSION = "live-arch-v2";
+/** Takım gücü modelinin gölge dönemi (19–27 Ekim). */
+const LIVE_POISSON_SHADOW_VERSION = "live-poisson-v1";
 /** Eski kural (18 Ekim 2026'ya kadar): arşiv başına işaret, n<5 dahil — geçmiş ayrı gösterilir. */
 const LIVE_ARCHIVE_OLD_VERSION = "live-arch-v1";
 /** Maç öncesi: ekranda Dixon-Coles (v5); arşiv havuzu (v4) gölgede ölçülmeye devam eder. */
@@ -560,7 +564,7 @@ const PREMATCH_SHADOW_VERSION = "ft-display-v4.1";
 const HT_RULE_VERSION = "ht-display-v1";
 const TAB_SOURCE = { canli: "live_ht", "mac-oncesi": "top_pick" } as const;
 const TAB_GROUPS = {
-  canli: ["period_market", "archive", "league", "week"],
+  canli: ["period_market", "league", "week"],
   "mac-oncesi": ["tier", "agreement", "market", "league", "week"],
 } as const satisfies Record<keyof typeof TAB_SOURCE, readonly string[]>;
 
@@ -744,7 +748,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
                 source={TAB_SOURCE[tab]}
                 t={t}
                 groups={TAB_GROUPS[tab]}
-                ruleVersion={tab === "canli" ? LIVE_ARCHIVE_RULE_VERSION : PREMATCH_RULE_VERSION}
+                ruleVersion={tab === "canli" ? LIVE_RULE_VERSION : PREMATCH_RULE_VERSION}
                 hint={tab === "canli" ? t.evaluation.perf.liveSummaryNote : undefined}
                 dateFrom={bounds.from}
                 dateTo={bounds.to}
@@ -754,6 +758,38 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
             <Suspense fallback={<EvalSkeleton />}>
               {tab === "canli" ? <LiveDayList day={date} t={t} scope={scope} /> : <PredictionDayList source={TAB_SOURCE[tab]} day={date} t={t} ruleVersion={PREMATCH_RULE_VERSION} scope={scope} />}
             </Suspense>
+            {tab === "canli" && (
+              <Suspense fallback={<EvalSkeleton />}>
+                <PerformanceOverview
+                  scope={scope}
+                  source="live_ht"
+                  t={t}
+                  groups={["period_market", "archive"]}
+                  ruleVersion={LIVE_ARCHIVE_RULE_VERSION}
+                  title={t.evaluation.perf.liveV2Title}
+                  hint={t.evaluation.perf.liveV2Hint}
+                  dateFrom={bounds.from}
+                  dateTo={bounds.to}
+                  headline={rangeHeadline(range, date, t)}
+                />
+              </Suspense>
+            )}
+            {tab === "canli" && (
+              <Suspense fallback={<EvalSkeleton />}>
+                <PerformanceOverview
+                  scope={scope}
+                  source="live_ht"
+                  t={t}
+                  groups={["period_market"]}
+                  ruleVersion={LIVE_POISSON_SHADOW_VERSION}
+                  title={t.evaluation.perf.livePoissonV1Title}
+                  hint={t.evaluation.perf.livePoissonV1Hint}
+                  dateFrom={bounds.from}
+                  dateTo={bounds.to}
+                  headline={rangeHeadline(range, date, t)}
+                />
+              </Suspense>
+            )}
             {tab === "canli" && (
               <Suspense fallback={<EvalSkeleton />}>
                 <PerformanceOverview

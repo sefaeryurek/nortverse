@@ -382,10 +382,28 @@ export interface LiveArchiveView {
   highlights: LiveHighlight[];
 }
 
+/** Canlı ana karar (live-poisson-v1.1): takım gücü modeli, %85+ pazarlar. */
+export interface LivePoissonDecision {
+  period: string;
+  market: string;
+  selection: string;
+  pct: number;
+  /** Aynı lig + aynı İY skorlu geçmiş maçlarda bu seçimin oranı */
+  cond_pct: number | null;
+  cond_n: number | null;
+  best: boolean;
+  rule_version: string;
+  /** Arşiv + lig geçmişi kuralı (live-arch-v2) aynı seçimi yaptı */
+  confirmed: boolean;
+  /** Bu pazarda geçmiş testteki isabet */
+  historical: { pct: number; n: number } | null;
+}
+
 export interface LiveArchiveDetail {
   frozen: boolean;
   frozen_at: string | null;
   archive_view: LiveArchiveView;
+  decisions?: LivePoissonDecision[];
 }
 
 export interface LiveHTMatch {
@@ -403,6 +421,7 @@ export interface LiveHTMatch {
   frozen?: boolean;
   frozen_at?: string | null;
   archive_view?: LiveArchiveView | null;
+  decisions?: LivePoissonDecision[];
   /** Gölgedeki lig — ekran varsayılan olarak gizler. */
   shadow?: boolean;
 }

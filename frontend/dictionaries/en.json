@@ -205,7 +205,7 @@
       "noPicks": "No 85%+ signal in this match",
       "emptyLiveDay": "No recorded live matches on this day.",
       "recordedAt": "Recorded {time}",
-      "liveSummaryNote": "Decisions recorded at half-time: an archive with 5+ matches at 85%+ and the same-league, same half-time history at 85%+; one decision per market. Marked hit/miss when the match ends.",
+      "liveSummaryNote": "On-screen live decision since 27 October: team strength model (live-poisson-v1.1), markets at 85%+ at half-time, one decision per market. Marked hit/miss when the match ends.",
       "strategy_live_archive": "Live archive (85%+)",
       "market_ou_05": "O/U 0.5",
       "market_ou_15": "O/U 1.5",
@@ -220,7 +220,11 @@
       "htTitle": "First half pre-match (trial)",
       "htHint": "HT double chance, HT 1/2, HT goal, HT under 1.5, HT home goal — team strength model; no verdict before 100 decisions.",
       "market_ev_05": "Home 0.5 O/U",
-      "market_dep_05": "Away 0.5 O/U"
+      "market_dep_05": "Away 0.5 O/U",
+      "liveV2Title": "Archive + league history rule (live-arch-v2)",
+      "liveV2Hint": "The on-screen decision from 19 to 27 October; now shown next to the team strength decision as confirmation and still measured.",
+      "livePoissonV1Title": "Team strength model shadow period (live-poisson-v1)",
+      "livePoissonV1Hint": "Not on screen from 19 to 27 October, recorded in the background. These records are the basis for putting it on screen. Difference from v1.1: it also had FT under 2.5 (removed because it showed 87.7% but hit 83.6% historically)."
     }
   },
   "live": {
@@ -318,7 +322,17 @@
       "historical": "past {pct}%",
       "historicalTooltip": "In the historical test, 85%+ signals in this market with {bucket}-match samples actually hit this often ({n} signals).",
       "historicalPooled": "Not enough data for this market, so the average of all markets with the same sample size is used.",
-      "historicalNote": "\"past X%\": the real hit rate of the same kind of signal in past matches — the shown rate looks inflated when the sample is small."
+      "historicalNote": "\"past X%\": the real hit rate of the same kind of signal in past matches — the shown rate looks inflated when the sample is small.",
+      "poissonTitle": "Decision · team strength model",
+      "poissonRule": "Expected goals for the remaining 45 minutes from team strength (Poisson). Markets at 85%+ are shown; the rate in past matches from the same league with the same half-time score is next to it. One decision per market.",
+      "poissonNone": "The model has no 85%+ decision for this match",
+      "confirmed": "Archive + league history agree",
+      "confirmedTooltip": "The archive + league history rule (live-arch-v2) made the same pick. In the past, decisions where both rules agreed hit 93.5% of the time.",
+      "bestPick": "Best",
+      "historicalMarket": "past {pct}%",
+      "historicalMarketTooltip": "Actual hit rate of this market's decisions in the historical test (2023-07 → today, leak-free) ({n} decisions).",
+      "condShort": "league history {pct}% · {n} matches",
+      "archiveRuleTitle": "Archive + league history rule ({pct}%+)"
     },
     "staleData": "stale",
     "staleTooltip": "Live data has not updated for {s}s; the source may be delayed."

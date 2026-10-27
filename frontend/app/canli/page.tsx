@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import Link from "next/link";
 import { getLiveHTMatches, getLivePrediction } from "@/lib/api";
 import type { LiveArchiveSource, LiveHTMatch } from "@/lib/api";
-import { ArchiveMatchList, ArchiveTable, HighlightList } from "@/components/LiveArchiveView";
+import { ArchiveMatchList, ArchiveTable, HighlightList, PoissonDecisionList } from "@/components/LiveArchiveView";
 import { leagueDisplay } from "@/lib/leagues";
 import { formatTime } from "@/lib/dates";
 import { minuteOrder } from "@/lib/live-order";
@@ -123,9 +123,10 @@ function MatchCard({ match }: { match: LiveHTMatch }) {
           </span>
         </div>
         )}
+        {match.decisions && <PoissonDecisionList decisions={match.decisions} />}
         {match.archive_view ? (
           <>
-            <HighlightList view={match.archive_view} />
+            <HighlightList view={match.archive_view} secondary={match.decisions != null} />
             <ArchiveTable view={match.archive_view} />
           </>
         ) : (

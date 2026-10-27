@@ -274,14 +274,20 @@ def _merge_pick(picks: list[dict], pick: dict, sources: list[str] | None = None)
 @router.get("/api/performance/live-matches")
 async def live_matches(day: date = Query(..., description="İstanbul günü (maç başlama)"),
                        scope: Scope = Query("main")) -> list[dict]:
-    """Canlıya giren (devre arasında kaydedilen) her maç: %85+ arşiv işaretleri ve tuttu/tutmadı."""
+    """Canlıya giren (devre arasında kaydedilen) her maç: o gün ekrandaki kararlar ve tuttu/tutmadı.
+
+    27 Ekim'den beri ekranda takım gücü modeli (live-poisson-v1.1): o maçta v1.1 kaydı varsa sadece onlar,
+    yoksa (eski günler) arşiv kuralının işaretleri gösterilir — sürümler birleşmez.
+    """
     from app.analysis.live_archive import LIVE_ARCHIVE_RULE_VERSIONS
+    from app.analysis.live_poisson import LIVE_POISSON_RULE_VERSION
 
     start = datetime.combine(day, datetime.min.time(), ISTANBUL_TZ)
     async with get_session() as session:
         rows = (await session.execute(text(_LIVE_MATCHES_SQL),
                                       {"start": start, "end": start + timedelta(days=1)})).all()
     matches: dict[str, dict] = {}
+    model_picks: dict[str, list[dict]] = {}
     for r in rows:
         if not _in_scope(r.league_name, scope):
             continue  # canlı sayfada olmayan küçük lig kayıtları değerlendirmede de gösterilmez
@@ -294,9 +300,17 @@ async def live_matches(day: date = Query(..., description="İstanbul günü (ma�
         if r.res_ft_home is not None:
             entry["final_ft"] = f"{r.res_ft_home}-{r.res_ft_away}"
             entry["final_ht"] = None if r.res_ht_home is None else f"{r.res_ht_home}-{r.res_ht_away}"
-        if r.rule_version not in LIVE_ARCHIVE_RULE_VERSIONS:
-            continue  # eski COND modeli ekranda yok; sadece arka planda ölçülür
         details = r.details or {}
+        if r.rule_version == LIVE_POISSON_RULE_VERSION:
+            model_picks.setdefault(r.match_id, []).append({
+                "period": r.period, "market": r.market, "selection": r.selection, "archive": "model",
+                "label": "Model", "labels": ["Model"], "pct": round(r.prob_shown_bp / 100, 1),
+                "n": details.get("cond_n") or 0, "risky": False, "outcome": r.outcome or "pending",
+                "rule_version": r.rule_version, "archive_pct": details.get("cond_pct"),
+            })
+            continue
+        if r.rule_version not in LIVE_ARCHIVE_RULE_VERSIONS:
+            continue  # gölgedeki modeller (COND, live-2h, Poisson v1) ekranda yoktu; sadece ölçülür
         label = details.get("label") or (r.archive or "genel").upper()
         _merge_pick(entry["picks"], {
             "period": r.period, "market": r.market, "selection": r.selection,
@@ -305,6 +319,9 @@ async def live_matches(day: date = Query(..., description="İstanbul günü (ma�
             "risky": r.confidence_tier == "insufficient", "outcome": r.outcome or "pending",
             "rule_version": r.rule_version, "archive_pct": details.get("archive_pct"),
         }, sources=details.get("sources"))
+    for match_id, picks in model_picks.items():
+        if match_id in matches:
+            matches[match_id]["picks"] = picks
     for entry in matches.values():
         resolved = [p for p in entry["picks"] if p["outcome"] in ("hit", "miss")]
         entry["hits"] = sum(p["outcome"] == "hit" for p in resolved)
