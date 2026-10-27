@@ -16,6 +16,7 @@ import asyncio
 import gzip
 import json
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from app.config import SCRAPER
@@ -86,15 +87,22 @@ def latest_prematch(history: dict | None, before: datetime | None = None) -> dic
     return out
 
 
+# Kaynak her isteği başka alan adına yönlendiriyor (yavaş DNS + ikinci bağlantı) → ilk yönlendirilen adres hatırlanır
+_resolved_base: str | None = None
+
+
 async def fetch_odds(match_id: str, *, half: bool) -> dict[str, list[dict]] | None:
     """Tek maçın oran geçmişi (İY için half=True)."""
     def fetch() -> bytes:
+        global _resolved_base
+        base = _resolved_base or SCRAPER.base_url
         request = Request(
-            f"{SCRAPER.base_url}/ajax/SoccerAjax?type=14&t=20&id={match_id}&cid=8&h={1 if half else 0}"
-            "&r1=0&r2=0&r3=0",
-            headers={"User-Agent": SCRAPER.user_agent, "Referer": f"{SCRAPER.base_url}/oddscomp/{match_id}"},
+            f"{base}/ajax/SoccerAjax?type=14&t=20&id={match_id}&cid=8&h={1 if half else 0}&r1=0&r2=0&r3=0",
+            headers={"User-Agent": SCRAPER.user_agent, "Referer": f"{base}/oddscomp/{match_id}"},
         )
         with urlopen(request, timeout=20) as response:
+            final = urlsplit(response.geturl())
+            _resolved_base = f"{final.scheme}://{final.netloc}"
             body = response.read()
         # Kaynak istemese de gzip gönderiyor
         return gzip.decompress(body) if body[:2] == bytes((0x1F, 0x8B)) else body
