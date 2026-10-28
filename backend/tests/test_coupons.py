@@ -70,3 +70,39 @@ def test_ht_leg_void_when_full_time_known_but_no_ht_for_24h():
                            ft_known=True, period="ht") == "no_ht_24h"
     assert leg_void_reason(deleted=False, status=None, has_score=False, kickoff=kick, now=now,
                            ft_known=False, period="ht") is None
+
+
+# ─── Sprint 94 J8: açık kuponların canlı durumu ─────────────────────────────────────────────────
+
+def _board(status="live", home=1, away=0, ht=(None, None), phase="1h", minute="30"):
+    from app.scraper.fixture_scores import FixtureScore
+
+    return FixtureScore(match_id="1", status=status, home=home, away=away, ht_home=ht[0], ht_away=ht[1],
+                        minute=minute, phase=phase)
+
+
+def test_live_leg_state_ft_and_ht():
+    from app.analysis.coupons import live_leg_state
+
+    s = live_leg_state("ft", "result", "1", None, 2.0, _board())
+    assert s["state"] == "winning" and s["score"] == "1-0" and not s["period_over"]
+    assert live_leg_state("ft", "ou", "over", 2.5, 1.9, _board())["state"] == "losing"
+    assert live_leg_state("ft", "ou", "under", 1.0, 1.9, _board())["state"] == "level"  # tam çizgide şu an iade
+    # İY bacağı: 2. yarıda panonun İY skoru esas, sonuç kesin
+    s = live_leg_state("ht", "result", "X", None, 2.1, _board(home=2, away=1, ht=(1, 1), phase="2h", minute="60"))
+    assert s["state"] == "winning" and s["period_score"] == "1-1" and s["period_over"]
+    # Başlamamış / ertelenmiş / uzatmalı maç sonucu yok
+    assert live_leg_state("ft", "result", "1", None, 2.0, _board(status="postponed")) is None
+    assert live_leg_state("ft", "result", "1", None, 2.0, _board(status="finished_extra")) is None
+    assert live_leg_state("ft", "result", "1", None, 2.0, None) is None
+
+
+def test_live_summary():
+    from app.analysis.coupons import live_summary
+
+    win, lose, level = ({"live": {"state": s}} for s in ("winning", "losing", "level"))
+    settled = {"return_factor": 1.8, "live": None}
+    assert live_summary([settled, win, level]) == "winning"
+    assert live_summary([win, lose]) == "losing"
+    assert live_summary([win, {"live": None}]) is None  # bir bacak henüz başlamadı
+    assert live_summary([settled]) is None

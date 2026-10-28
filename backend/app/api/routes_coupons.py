@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.ratelimit import check_rate
-from app.analysis.coupons import MARKETS, MAX_LEGS, coupon_status
+from app.analysis.coupons import MARKETS, MAX_LEGS, coupon_status, live_leg_state, live_summary
 from app.analysis.match_ref import MatchRef, load_match_refs, ref_from_fixture
 from app.db.connection import get_session
 from app.db.models import Coupon, CouponLeg, CouponLegResult, Match, User
@@ -355,18 +355,45 @@ async def list_coupons(
             .outerjoin(CouponLegResult, CouponLegResult.leg_id == CouponLeg.id)
             .where(CouponLeg.coupon_id.in_(ids)).order_by(CouponLeg.id)
         )).all() if ids else []
+    boards = await _live_boards([leg for leg, outcome, _f, _s in legs if outcome is None])
     by_coupon: dict[int, list[dict]] = {}
     for leg, outcome, factor, score in legs:
+        live = None
+        if outcome is None and leg.match_id in boards:
+            live = live_leg_state(leg.period, leg.market, leg.selection, leg.line, leg.odds, boards[leg.match_id])
         by_coupon.setdefault(leg.coupon_id, []).append({
             "match_id": leg.match_id, "home_team": leg.home_team, "away_team": leg.away_team,
             "league_name": leg.league_name, "kickoff_time": leg.kickoff_time.isoformat() if leg.kickoff_time else None,
             "period": leg.period, "market": leg.market, "selection": leg.selection, "line": leg.line,
             "odds": leg.odds, "live_minute": leg.live_minute, "live_score": leg.live_score,
-            "outcome": outcome, "return_factor": factor, "score": score,
+            "outcome": outcome, "return_factor": factor, "score": score, "live": live,
         })
     out = []
     for c in coupons:
         c_legs = by_coupon.get(c.id, [])
+        status = coupon_status(c_legs)
         out.append({"id": c.id, "created_at": c.created_at.isoformat(), "note": c.note, "username": c.username,
-                    "mine": bool(user and c.user_id == user.id), "legs": c_legs, **coupon_status(c_legs)})
+                    "mine": bool(user and c.user_id == user.id), "legs": c_legs, **status,
+                    "live_state": live_summary(c_legs) if status["status"] == "pending" else None})
     return {"coupons": out}
+
+
+async def _live_boards(pending_legs: list) -> dict:
+    """Başlamış ama sonuçlanmamış bacakların canlı pano kayıtları (Sprint 94 J8). Hiç başlamış bacak yoksa
+    panoya gidilmez; pano taze değilse boş (eski dakika gösterilmez)."""
+    from app.api.live_snapshot import get_live_snapshot
+
+    now = datetime.now(timezone.utc)
+    ids = {leg.match_id for leg in pending_legs
+           if leg.kickoff_time is not None and leg.kickoff_time <= now + timedelta(minutes=5)
+           and now - leg.kickoff_time < timedelta(hours=6)}
+    if not ids:
+        return {}
+    try:
+        snapshot = await get_live_snapshot()
+    except Exception:
+        log.debug("Kupon canlı durumu: pano okunamadı", exc_info=True)
+        return {}
+    if snapshot is None or not snapshot.live_is_fresh():
+        return {}
+    return {mid: snapshot.scores[mid] for mid in ids if mid in snapshot.scores}

@@ -682,6 +682,18 @@
     "matchCount": "{n} matches",
     "noSearchResult": "No match fits the search",
     "unknownLeague": "Unknown league",
-    "analyzedTag": "analyzed"
+    "analyzedTag": "analyzed",
+    "liveState": {
+      "winning": "winning now",
+      "level": "push now",
+      "losing": "losing now"
+    },
+    "couponLive": {
+      "winning": "Winning now",
+      "losing": "Losing now"
+    },
+    "periodOver": "awaiting settlement",
+    "liveMinute": "{minute}'",
+    "halftime": "HT"
   }
 }

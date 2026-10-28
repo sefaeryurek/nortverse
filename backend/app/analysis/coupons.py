@@ -67,6 +67,52 @@ def coupon_status(legs: list[dict]) -> dict:
             "return": None if realized is None else round(realized, 3)}
 
 
+_LIVE_STATE = {"hit": "winning", "half_win": "winning", "push": "level", "miss": "losing", "half_loss": "losing"}
+
+
+def live_leg_state(period: str, market: str, selection: str, line: float | None, odds: float,
+                   board) -> dict | None:
+    """Sonuçlanmamış bacağın anlık durumu (Sprint 94 J8): maç şimdi bitse ne olurdu.
+
+    `board`: canlı skor panosunun maç kaydı (`FixtureScore`). İY bacağında devre arası / 2. yarıda panonun İY skoru
+    esas alınır (`period_over` — sonuç kesinleşti, sadece kayıt bekliyor). Başlamamış / ertelenmiş maç → None.
+    """
+    if board is None or board.status not in ("live", "finished", "finished_extra"):
+        return None
+    if board.home is None or board.away is None:
+        return None
+    ht_done = board.phase in ("ht", "2h") or board.status != "live"
+    if period == "ht":
+        score = (board.ht_home, board.ht_away) if ht_done else (board.home, board.away)
+        if score[0] is None or score[1] is None:
+            return None
+        period_over = ht_done
+    else:
+        if board.status == "finished_extra":
+            return None  # uzatmalı maçta panodaki skor 90. dakika mı belli değil
+        score = (board.home, board.away)
+        period_over = board.status == "finished"
+    result = leg_return(period, market, selection, line, odds, score if period == "ht" else None,
+                        score if period == "ft" else None)
+    if result is None:
+        return None
+    return {"status": board.status, "minute": board.minute, "phase": board.phase,
+            "score": f"{board.home}-{board.away}", "period_score": f"{score[0]}-{score[1]}",
+            "state": _LIVE_STATE[result[0]], "period_over": period_over}
+
+
+def live_summary(legs: list[dict]) -> str | None:
+    """Bekleyen kuponun anlık özeti: "losing" (bir bacak şu an tutmuyor), "winning" (sonuçlanmamış her bacak canlı
+    ve tutuyor/berabere), yoksa None (henüz başlamamış bacak var)."""
+    pending = [leg for leg in legs if leg.get("return_factor") is None]
+    states = [(leg.get("live") or {}).get("state") for leg in pending]
+    if "losing" in states:
+        return "losing"
+    if pending and all(s in ("winning", "level") for s in states):
+        return "winning"
+    return None
+
+
 VOID_AFTER = timedelta(hours=48)  # dondurulmuş başlama saatinden 48 saat sonra skor yoksa bacak iade
 HT_VOID_AFTER = timedelta(hours=24)  # maç bitti ama İY skoru 24 saat gelmediyse İY bacağı iade
 

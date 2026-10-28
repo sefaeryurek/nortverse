@@ -59,3 +59,21 @@ it("picks a match from the searchable list; started matches hidden by default (S
   const started = screen.getByRole("option", { name: /Oynuyor - X/ }) as HTMLButtonElement;
   expect(started.disabled).toBe(true);
 });
+
+it("shows live score and 'losing now' on a pending coupon (Sprint 94 J8)", async () => {
+  const kick = new Date(Date.now() - 30 * 60_000).toISOString();
+  api.getCouponMatches.mockResolvedValue([]);
+  api.getCoupons.mockResolvedValue({ coupons: [{
+    id: 5, created_at: kick, note: null, username: "sefa", mine: true, total_odds: 2, status: "pending", return: null,
+    live_state: "losing",
+    legs: [{ match_id: "9", home_team: "Arsenal", away_team: "Chelsea", league_name: "English Premier League",
+      kickoff_time: kick, period: "ft", market: "result", selection: "1", line: null, odds: 2, live_minute: null,
+      live_score: null, outcome: null, return_factor: null, score: null,
+      live: { status: "live", minute: "31", phase: "1h", score: "0-1", period_score: "0-1", state: "losing", period_over: false } }],
+  }] });
+  renderPage();
+  expect(await screen.findByText("Şu an tutmuyor")).toBeTruthy();
+  expect(screen.getByText("şu an tutmuyor")).toBeTruthy();
+  expect(screen.getByText("31'")).toBeTruthy();
+  expect(screen.getByText("0-1")).toBeTruthy();
+});

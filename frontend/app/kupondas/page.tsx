@@ -3,9 +3,9 @@
 import { fmtNum } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCoupon, getCouponMatches, getCoupons, getMatchOdds } from "@/lib/api";
-import type { CouponMatch, CouponOddsChange, CouponView, MatchOdds } from "@/lib/api";
+import type { CouponLegLive, CouponMatch, CouponOddsChange, CouponView, MatchOdds } from "@/lib/api";
 import { useLocale } from "@/lib/locale-context";
-import { num, OddsPanel, pickLabel, priceFor } from "@/components/CouponOddsPanel";
+import { hasStarted, num, OddsPanel, pickLabel, priceFor } from "@/components/CouponOddsPanel";
 import CouponMatchPicker from "@/components/CouponMatchPicker";
 import type { Dict, Draft } from "@/components/CouponOddsPanel";
 
@@ -28,6 +28,24 @@ const OUTCOME_ICON: Record<string, { icon: string; color: string }> = {
   miss: { icon: "✕", color: "var(--nv-accent-red)" }, half_loss: { icon: "½✕", color: "var(--nv-accent-amber)" },
   push: { icon: "↺", color: "var(--nv-text-tertiary)" }, void: { icon: "–", color: "var(--nv-text-tertiary)" },
 };
+const LIVE_COLOR: Record<CouponLegLive["state"], string> = {
+  winning: "var(--nv-accent-green)", level: "var(--nv-text-secondary)", losing: "var(--nv-accent-red)",
+};
+const LIVE_REFRESH_MS = 45_000;  // canlı bacak varken kupon listesi (pano 45 sn'de bir tazelenir)
+
+/** Bacağın anlık durumu (Sprint 94 J8): dakika · skor · şu an tutuyor/tutmuyor. */
+function LiveLeg({ live, t }: { live: CouponLegLive; t: Dict }) {
+  const c = t.coupon;
+  const minute = live.phase === "ht" || live.minute === "HT" ? c.halftime : live.minute ? c.liveMinute.replace("{minute}", live.minute) : null;
+  return (
+    <span className="inline-flex items-center gap-1.5" style={{ fontSize: "var(--nv-text-2xs)" }}>
+      {live.status === "live" && <span className="nv-live-pulse" aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 9999, backgroundColor: "var(--nv-live)" }} />}
+      {minute && <span style={{ color: "var(--nv-live)" }}>{minute}</span>}
+      <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>{live.period_score}</span>
+      <span className="font-semibold" style={{ color: LIVE_COLOR[live.state] }}>{live.period_over ? c.periodOver : c.liveState[live.state]}</span>
+    </span>
+  );
+}
 
 function CouponCard({ coupon, t, locale }: { coupon: CouponView; t: Dict; locale: string }) {
   const c = t.coupon;
@@ -37,6 +55,9 @@ function CouponCard({ coupon, t, locale }: { coupon: CouponView; t: Dict; locale
         <span className="font-bold" style={{ color: "var(--nv-text-primary)" }}>{coupon.username}</span>
         <span style={{ color: "var(--nv-text-tertiary)" }}>#{coupon.id} · {new Date(coupon.created_at).toLocaleString(locale === "en" ? "en-GB" : "tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
         <span className="flex-1" />
+        {coupon.live_state && (
+          <span className="font-semibold" style={{ color: LIVE_COLOR[coupon.live_state] }}>{c.couponLive[coupon.live_state]}</span>
+        )}
         <span className="font-semibold" style={{ color: STATUS_COLOR[coupon.status] }}>{c.status[coupon.status]}</span>
         <span className="font-extrabold" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>{fmtNum(coupon.total_odds, 2)}</span>
       </header>
@@ -49,6 +70,7 @@ function CouponCard({ coupon, t, locale }: { coupon: CouponView; t: Dict; locale
               <span className="min-w-0 truncate" style={{ color: "var(--nv-text-primary)" }}>{leg.home_team} - {leg.away_team}</span>
               <span style={{ color: "var(--nv-text-secondary)" }}>{pickLabel(leg.period, leg.market, leg.selection, leg.line, t, locale)}</span>
               {leg.live_minute && <span style={{ color: "var(--nv-live)" }}>{c.live.replace("{minute}", leg.live_minute).replace("{score}", leg.live_score ?? "")}</span>}
+              {leg.live && !leg.outcome && <LiveLeg live={leg.live} t={t} />}
               <span className="flex-1" />
               {leg.score && <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-tertiary)" }}>{leg.score}</span>}
               <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>{fmtNum(leg.odds, 2)}</span>
@@ -123,6 +145,14 @@ export default function KupondasPage() {
       .catch((err: unknown) => { setCoupons([]); setCouponsError(err instanceof Error ? err.message : ""); });
   }, [scope]);
   useEffect(() => { loadCoupons(); }, [loadCoupons]);
+  // Başlamış ve sonuçlanmamış bacak varken liste kendini yeniler (Sprint 94 J8)
+  const hasLive = useMemo(() => (coupons ?? []).some((cp) => cp.status === "pending"
+    && cp.legs.some((l) => !l.outcome && (l.live != null || hasStarted(l.kickoff_time, now)))), [coupons, now]);
+  useEffect(() => {
+    if (!hasLive) return;
+    const id = setInterval(loadCoupons, LIVE_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [hasLive, loadCoupons]);
 
   // Maç başına tek seçim (K3): aynı maçtan başka bir seçim öncekinin yerine geçer
   const toggle = (d: Draft) => setDraft((prev) => {

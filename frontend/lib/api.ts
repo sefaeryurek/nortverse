@@ -580,6 +580,21 @@ export interface CouponLegView {
   outcome: "hit" | "miss" | "push" | "half_win" | "half_loss" | "void" | null;
   return_factor: number | null;
   score: string | null;
+  /** Sonuçlanmamış bacağın anlık durumu (Sprint 94 J8) — maç başlamadıysa / pano yoksa null */
+  live?: CouponLegLive | null;
+}
+
+export interface CouponLegLive {
+  status: string;
+  minute: string | null;
+  phase: string | null;
+  /** Maçın anlık skoru */
+  score: string;
+  /** Bacağın periyodunun skoru (İY bacağında İY skoru) */
+  period_score: string;
+  state: "winning" | "level" | "losing";
+  /** Periyot bitti, sonuç sadece kayıt bekliyor */
+  period_over: boolean;
 }
 
 export interface CouponView {
@@ -592,6 +607,8 @@ export interface CouponView {
   total_odds: number;
   status: "pending" | "won" | "lost" | "refund" | "partial_loss";
   return: number | null;
+  /** Bekleyen kuponun anlık özeti (Sprint 94 J8): şu an tutuyor / tutmuyor; başlamamış bacak varsa null */
+  live_state?: "winning" | "losing" | null;
 }
 
 /** Kayıt anında oran/çizgi kullanıcının gördüğünden kötüleştiyse sunucunun döndürdüğü fark (409 odds_changed). */

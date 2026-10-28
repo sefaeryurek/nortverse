@@ -241,3 +241,34 @@ def test_match_state_uses_fixture_postponed_status(monkeypatch):
     state = asyncio.run(rc._match_state(None, ref, KICK - timedelta(hours=2)))
     assert state["board_status"] == "postponed"
     assert rc.closed_reason(period="ft", now=KICK - timedelta(hours=2), **state) == "Maç ertelendi / iptal"
+
+
+def test_list_coupons_attaches_live_state(monkeypatch):
+    """Sprint 94 J8: sonuçlanmamış bacağa panodan anlık skor + durum, kupona özet."""
+    from app.scraper.fixture_scores import FixtureScore
+
+    now = datetime.now(timezone.utc)
+    coupon = SimpleNamespace(id=5, created_at=now, note=None, user_id=1, username="sefa")
+    leg = SimpleNamespace(coupon_id=5, match_id="9", home_team="A", away_team="B", league_name="L",
+                          kickoff_time=now - timedelta(minutes=30), period="ft", market="result", selection="1",
+                          line=None, odds=2.0, live_minute=None, live_score=None)
+    results = [[coupon], [(leg, None, None, None)]]
+
+    class _Session:
+        async def execute(self, *_a, **_k):
+            return _Result(results.pop(0))
+
+    @asynccontextmanager
+    async def fake_session():
+        yield _Session()
+
+    async def boards(pending):
+        assert [p.match_id for p in pending] == ["9"]
+        return {"9": FixtureScore(match_id="9", status="live", home=0, away=1, minute="31", phase="1h")}
+
+    monkeypatch.setattr(rc, "get_session", fake_session)
+    monkeypatch.setattr(rc, "_live_boards", boards)
+    out = asyncio.run(rc.list_coupons(request=_request(), scope="all", limit=50, before=None))
+    c = out["coupons"][0]
+    assert c["legs"][0]["live"]["state"] == "losing" and c["legs"][0]["live"]["minute"] == "31"
+    assert c["status"] == "pending" and c["live_state"] == "losing"

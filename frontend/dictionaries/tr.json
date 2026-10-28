@@ -682,6 +682,18 @@
     "matchCount": "{n} maç",
     "noSearchResult": "Aramaya uyan maç yok",
     "unknownLeague": "Lig bilinmiyor",
-    "analyzedTag": "analizli"
+    "analyzedTag": "analizli",
+    "liveState": {
+      "winning": "şu an tutuyor",
+      "level": "şu an iade",
+      "losing": "şu an tutmuyor"
+    },
+    "couponLive": {
+      "winning": "Şu an tutuyor",
+      "losing": "Şu an tutmuyor"
+    },
+    "periodOver": "sonuç kaydı bekleniyor",
+    "liveMinute": "{minute}'",
+    "halftime": "İY"
   }
 }
