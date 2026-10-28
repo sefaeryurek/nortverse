@@ -228,6 +228,8 @@ export default function Sidebar() {
           <button
             onClick={async () => {
               try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* çerez yine de süresiyle düşer */ }
+              // Tam sayfa yükleme kasıtlı: çıkışta istemci yönlendirici önbelleğindeki kullanıcı verisi de silinsin
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination
               window.location.assign("/giris");
             }}
             className="flex items-center gap-3 rounded-lg transition-all"
