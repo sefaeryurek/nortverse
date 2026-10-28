@@ -162,7 +162,7 @@ def _capture_writes(monkeypatch, *, poisson=(None, [])):
 
     monkeypatch.setattr(live_ledger, "get_cond_table", AsyncMock(return_value=_table(_many(LEAGUE, (1, 0), (1, 0), 40))))
     monkeypatch.setattr(live_ledger, "_poisson_shadow", AsyncMock(return_value=poisson))
-    monkeypatch.setattr(live_ledger, "_live_2h_shadow", AsyncMock(return_value=([], None)))
+    monkeypatch.setattr(live_ledger, "_live_2h_shadow", AsyncMock(return_value=([], None, [])))
     obs = AsyncMock(return_value=11)
     monkeypatch.setattr(live_ledger, "_ht_observation_id", obs)
     written: list = []

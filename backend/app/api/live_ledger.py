@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.analysis import live_2h, live_archive, live_cond_filter, live_poisson
+from app.analysis import live_2h, live_archive, live_comeback, live_cond_filter, live_poisson
 from app.analysis.league_filter import is_tracked_league
 from app.analysis.ledger import record_predictions
 from app.analysis.live_model import COND_WINDOW_YEARS, LIVE_RULE_VERSION, get_cond_table, predict_live
@@ -201,24 +201,25 @@ async def _windowed_shadows(match: Match, fs: FixtureScore,
     return view, picks, warns
 
 
-async def _live_2h_shadow(match: Match, fs: FixtureScore) -> tuple[list[dict], dict | None]:
-    """Gölge 2. yarı işaretleri (live-2h-v1.1); hata ana kaydı asla engellemez."""
+async def _live_2h_shadow(match: Match, fs: FixtureScore) -> tuple[list[dict], dict | None, list[dict]]:
+    """Gölge 2. yarı işaretleri (live-2h-v1.1) + güçlü takım geride kararları (live-comeback-v1, Faz O3);
+    hata ana kaydı asla engellemez."""
     try:
         ht = observed_ht(fs)
         league = match.league_name or ""
         model = await live_poisson.get_poisson_model()
         dist = live_poisson.final_grid(model, league, match.home_team, match.away_team, ht)
         if dist is None:
-            return [], None
+            return [], None, []
         # live-2h-v1.1: COND 10 yıllık pencereyle
         table = await get_cond_table(live_2h.RULE_PARAMS["cond_window_years"])
         picks = live_2h.decide(dist["grid"], ht, live_2h.cond_lookup(table, league, ht))
         lambdas = {"2h": {"home": round(dist["r_h"], 3), "away": round(dist["r_a"], 3)},
                    "ft": {"home": round(dist["lam_h"], 3), "away": round(dist["lam_a"], 3)}}
-        return picks, lambdas
+        return picks, lambdas, live_comeback.decide(dist, ht)
     except Exception:
         log.warning("Gölge 2. yarı işaretleri hesaplanamadı [%s]", match.match_id, exc_info=True)
-        return [], None
+        return [], None, []
 
 
 MARKET_SNAPSHOT_TIMEOUT = 10.0
@@ -262,7 +263,7 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             # Arşiv görünümü hatası ana kaydı ve İY gözlemini engellemez (eskiden tüm dondurma düşüyordu).
             log.warning("Canlı arşiv görünümü hesaplanamadı [%s]", match.match_id, exc_info=True)
     shadow_pred, shadow_picks = await _poisson_shadow(match, fs) if status == "ready" else (None, [])
-    h2_picks, h2_lambdas = await _live_2h_shadow(match, fs) if status == "ready" else ([], None)
+    h2_picks, h2_lambdas, comeback = await _live_2h_shadow(match, fs) if status == "ready" else ([], None, [])
     view_w, poisson_w, cond_warns = (await _windowed_shadows(match, fs, shadow_pred) if status == "ready"
                                      else (None, [], []))
     if report is not None:
@@ -308,6 +309,8 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
         if window_ok and h2_picks:
             # Gölge 2. yarı işaretleri (live-2h-v1.1): ekranda yok, 100 tekil karar sonra karne
             rows += live_2h.ledger_rows(h2_picks, common, lambdas=h2_lambdas, late=phase == "2h")
+        if window_ok and comeback:
+            rows += live_comeback.ledger_rows(comeback, common, lambdas=h2_lambdas, late=phase == "2h")
         if not window_ok:
             log.info("Arşiv/gölge işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)
         elif view is None:
