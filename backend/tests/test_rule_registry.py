@@ -19,6 +19,7 @@ PINNED = {
     "live-poisson-v1.1": "bcfb140f66db",
     "live-poisson-v1.2": "1dd58b310735",
     "live-2h-v1.1": "5a6896243ca1",
+    "live-cond-filter-v1": "bffbdc9eb23a",
     "ft-display-v5": "60715673e89e",
     "ft-display-v4.1": "6eb9a5a2aca8",
     "market-summary-v2": "538550936f14",

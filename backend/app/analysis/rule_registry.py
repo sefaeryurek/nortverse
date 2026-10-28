@@ -12,7 +12,8 @@ from typing import Callable
 
 def fingerprints() -> dict[str, Callable[[], str]]:
     from app.analysis import (
-        ht_value, live_2h, live_archive, live_model, live_poisson, market_summary_v3, prematch_ht, prematch_v4,
+        ht_value, live_2h, live_archive, live_cond_filter, live_model, live_poisson, market_summary_v3, prematch_ht,
+        prematch_v4,
         prematch_v5, score_snapshots,
     )
 
@@ -23,6 +24,7 @@ def fingerprints() -> dict[str, Callable[[], str]]:
         live_poisson.LIVE_POISSON_RULE_VERSION: live_poisson.rule_params_fingerprint,
         live_poisson.LIVE_POISSON_SHADOW_VERSION: live_poisson.shadow_params_fingerprint,
         live_2h.LIVE_2H_RULE_VERSION: live_2h.rule_params_fingerprint,
+        live_cond_filter.LIVE_COND_FILTER_SHADOW_VERSION: live_cond_filter.shadow_params_fingerprint,
         prematch_v5.V5_RULE_VERSION: prematch_v5.rule_params_fingerprint,
         prematch_v4.V4_RULE_VERSION: prematch_v4.rule_params_fingerprint,
         prematch_v4.MARKET_SUMMARY_RULE_VERSION: prematch_v4.market_summary_fingerprint,

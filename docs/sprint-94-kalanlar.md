@@ -23,7 +23,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 
 ### 19 — Faz O (gölge kurallar)
 - [x] O1 live-poisson-v1.2 trivial etiketi (H3) — 94.34
-- [ ] O2 live-cond-filter-v1: COND ≥%85 ama Poisson <%85 → uyarı (gölge kayıt)
+- [x] O2 live-cond-filter-v1: COND ≥%85 ama Poisson <%85 → uyarı (gölge kayıt) — 94.35
 - [ ] O3 live-comeback-v1: λ(geride)/λ(önde) ≥2,2 dilimi — önce backtest satırlarında kalibrasyon
 - [x] O4 market-summary-v3 (H1, 94.11)
 - [ ] O5 ft-display-v5.1: H5 kademe avantaja bağlı + K15 "yalnız model"

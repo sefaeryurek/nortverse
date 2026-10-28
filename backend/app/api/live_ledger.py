@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.analysis import live_2h, live_archive, live_poisson
+from app.analysis import live_2h, live_archive, live_cond_filter, live_poisson
 from app.analysis.league_filter import is_tracked_league
 from app.analysis.ledger import record_predictions
 from app.analysis.live_model import COND_WINDOW_YEARS, LIVE_RULE_VERSION, get_cond_table, predict_live
@@ -178,22 +178,27 @@ async def _poisson_shadow(match: Match, fs: FixtureScore) -> tuple[dict | None, 
         return None, []
 
 
-async def _windowed_shadows(match: Match, fs: FixtureScore, prediction: dict | None) -> tuple[dict | None, list[dict]]:
-    """Pencereli COND'lu gölge sürümler (Sprint 94 C1): live-arch-v2.1 görünümü + live-poisson-v1.2 kararları."""
+async def _windowed_shadows(match: Match, fs: FixtureScore,
+                            prediction: dict | None) -> tuple[dict | None, list[dict], list[dict]]:
+    """Pencereli COND'lu gölge sürümler (Sprint 94 C1): live-arch-v2.1 görünümü + live-poisson-v1.2 kararları
+    + live-cond-filter-v1 uyarıları (Faz O: lig geçmişi ≥%85 ama model <%85)."""
     ht = observed_ht(fs)
     league = match.league_name or ""
     view = None
     picks: list[dict] = []
+    warns: list[dict] = []
     try:
         table = await get_cond_table(COND_WINDOW_YEARS)
         view = await live_archive.load_view(
             match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
             ht, league=league, table=table)
         if prediction is not None:
-            picks = live_poisson.decisions(prediction, live_poisson.cond_lookup(table, league, ht))
+            cond_of = live_poisson.cond_lookup(table, league, ht)
+            picks = live_poisson.decisions(prediction, cond_of)
+            warns = live_cond_filter.warnings(prediction, cond_of)
     except Exception:
         log.warning("Pencereli COND gölge kararları hesaplanamadı [%s]", match.match_id, exc_info=True)
-    return view, picks
+    return view, picks, warns
 
 
 async def _live_2h_shadow(match: Match, fs: FixtureScore) -> tuple[list[dict], dict | None]:
@@ -258,7 +263,8 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             log.warning("Canlı arşiv görünümü hesaplanamadı [%s]", match.match_id, exc_info=True)
     shadow_pred, shadow_picks = await _poisson_shadow(match, fs) if status == "ready" else (None, [])
     h2_picks, h2_lambdas = await _live_2h_shadow(match, fs) if status == "ready" else ([], None)
-    view_w, poisson_w = await _windowed_shadows(match, fs, shadow_pred) if status == "ready" else (None, [])
+    view_w, poisson_w, cond_warns = (await _windowed_shadows(match, fs, shadow_pred) if status == "ready"
+                                     else (None, [], []))
     if report is not None:
         report["prediction"] = prediction
         report["view"] = view
@@ -297,6 +303,8 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             rows += live_archive.ledger_rows(view_w, common, late=phase == "2h", shadow=True)
         if window_ok and poisson_w:
             rows += live_poisson.ledger_rows(shadow_pred, poisson_w, common, late=phase == "2h", shadow=True)
+        if window_ok and cond_warns and shadow_pred is not None:
+            rows += live_cond_filter.ledger_rows(shadow_pred, cond_warns, common, late=phase == "2h")
         if window_ok and h2_picks:
             # Gölge 2. yarı işaretleri (live-2h-v1.1): ekranda yok, 100 tekil karar sonra karne
             rows += live_2h.ledger_rows(h2_picks, common, lambdas=h2_lambdas, late=phase == "2h")
