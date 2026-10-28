@@ -39,6 +39,43 @@ def rule_params_fingerprint() -> str:
     return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
+# Sprint 94 O5 (H5 + K15): v5.1 GÖLGEDE — seçim v5 ile aynı, kademe avantaj büyüklüğüne bağlı. Backtest #12'de
+# v4 onayı kademeyi ayırt etmiyordu (29 seçimin 27'si "high"); avantaj ayırıyor: ≥20 puan %70,1 (1.395),
+# 15–20 %61,4 (733), 10–15 %52,6 (891). Model güçlü favorileri olduğundan düşük gösteriyor (≥20'de %65,9 → %70,1)
+# — gölge karnede ölçülür, ayar yapılmaz. "Yalnız model" maçları (H2H <5, K15/P1) da v5.1 ile yazılır.
+V51_SHADOW_VERSION = "ft-display-v5.1"
+V51_PARAMS = {"tier_edges": {"high": 0.20, "medium": 0.15}, "model_only_matches": True}
+
+
+def v51_fingerprint() -> str:
+    payload = {**RULE_PARAMS, **V51_PARAMS, "team_model_params": team_model_fingerprint()}
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def edge_tier(edge: float) -> str:
+    edges = V51_PARAMS["tier_edges"]
+    return "high" if edge >= edges["high"] else "medium" if edge >= edges["medium"] else "low"
+
+
+def ledger_rows_v51(probabilities: dict | None, prior: dict[str, float], common: dict, *,
+                    model_only: bool = False) -> list[dict]:
+    """Gölge v5.1 satırı (sadece MS 1X2 seçimi). `model_only`: H2H yetersiz, arşivsiz maç (P1)."""
+    decision = decide(probabilities, prior, None)
+    if decision.get("abstain_reason"):
+        return []
+    pick = decision["selection"]
+    prior_pick = max(prior, key=prior.get)
+    return [{
+        **common, "source": "top_pick", "rule_version": V51_SHADOW_VERSION, "period": "ft",
+        "market": "result", "selection": pick, "prob_shown_bp": round(decision["prob"] * 10000),
+        "baseline_selection": prior_pick, "baseline_prob_bp": round(prior[prior_pick] * 10000),
+        "confidence_tier": edge_tier(decision["edge"]), "sample_n": probabilities["train_n"],
+        "details": {"shadow": True, "model_only": model_only, "probs": decision["probs"], "prior": prior,
+                    "edge": decision["edge"], "lambda": probabilities["lambda"], "rho": probabilities["rho"],
+                    "params": v51_fingerprint()},
+    }]
+
+
 def _pmf(lam: float, n: int) -> list[float]:
     return [math.exp(-lam) * lam ** k / math.factorial(k) for k in range(n + 1)]
 
@@ -251,4 +288,9 @@ async def capture_recommendations(
             await record_predictions(session, market_summary_v3.ledger_rows(grid, patterns, common))
     except Exception:
         log.warning("Ana Pazar v3 gölge kaydı yazılamadı [%s]", match_id, exc_info=True)
+    try:
+        async with session.begin_nested():
+            await record_predictions(session, ledger_rows_v51(probabilities, prior, common))
+    except Exception:
+        log.warning("v5.1 gölge kaydı yazılamadı [%s]", match_id, exc_info=True)
     return picks, True

@@ -58,3 +58,19 @@ def test_recommendation_and_ledger_rows():
     main = [r for r in rows if not r.get("informational")]
     assert [r["market"] for r in main] == ["result"] and main[0]["rule_version"] == "ft-display-v5"
     assert {r["market"] for r in rows if r.get("informational")} == {"ou_25", "kg"}
+
+
+def test_v51_tier_follows_edge_not_v4():
+    """Sprint 94 O5: kademe avantaja bağlı (≥20 high, ≥15 medium, ≥10 low); seçim v5 ile aynı, gölge."""
+    from app.analysis.prematch_v5 import edge_tier, ledger_rows_v51
+
+    assert [edge_tier(e) for e in (0.25, 0.20, 0.17, 0.12)] == ["high", "high", "medium", "low"]
+    prior = {"1": 0.45, "X": 0.27, "2": 0.28}
+    probs = {"result": {"1": 0.62, "X": 0.22, "2": 0.16}, "lambda": {"home": 1.8, "away": 0.9}, "rho": -0.05,
+             "train_n": 900, "over25": 0.5, "btts": 0.5}
+    (row,) = ledger_rows_v51(probs, prior, {"match_id": "1"}, model_only=True)
+    assert row["rule_version"] == "ft-display-v5.1" and row["selection"] == "1"
+    assert row["confidence_tier"] == "medium"  # avantaj 17 puan
+    assert row["details"]["shadow"] is True and row["details"]["model_only"] is True
+    weak = {**probs, "result": {"1": 0.50, "X": 0.27, "2": 0.23}}
+    assert ledger_rows_v51(weak, prior, {"match_id": "1"}) == []  # avantaj <10 → yayın yok

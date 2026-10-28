@@ -27,6 +27,7 @@ def fingerprints() -> dict[str, Callable[[], str]]:
         live_cond_filter.LIVE_COND_FILTER_SHADOW_VERSION: live_cond_filter.shadow_params_fingerprint,
         live_comeback.LIVE_COMEBACK_SHADOW_VERSION: live_comeback.shadow_params_fingerprint,
         prematch_v5.V5_RULE_VERSION: prematch_v5.rule_params_fingerprint,
+        prematch_v5.V51_SHADOW_VERSION: prematch_v5.v51_fingerprint,
         prematch_v4.V4_RULE_VERSION: prematch_v4.rule_params_fingerprint,
         prematch_v4.MARKET_SUMMARY_RULE_VERSION: prematch_v4.market_summary_fingerprint,
         market_summary_v3.MARKET_SUMMARY_SHADOW_VERSION: market_summary_v3.fingerprint,

@@ -26,11 +26,20 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [x] O2 live-cond-filter-v1: COND ≥%85 ama Poisson <%85 → uyarı (gölge kayıt) — 94.35
 - [x] O3 live-comeback-v1: λ(geride)/λ(önde) ≥2,2 dilimi — kalibrasyon #14 (%78,5 → %79,1) — 94.36
 - [x] O4 market-summary-v3 (H1, 94.11)
-- [ ] O5 ft-display-v5.1: H5 kademe avantaja bağlı + K15 "yalnız model"
+- [x] O5 ft-display-v5.1 (H5): kademe avantaja bağlı (#12: ≥20 %70,1 · 15–20 %61,4 · 10–15 %52,6) — 94.37; "yalnız model" kapsamı P1 ile gelir
 - [ ] O6 ft-display-v6-mkt (I6) — I1 sonrası
 
 ### 19 — Faz P (kapsam)
-- [ ] P1 "yalnız model" analizi (K15): H2H <5 → model_only, A3 + λ, v5/Poisson; v5.1 gölge
+- [ ] P1 "yalnız model" analizi (K15): H2H <5 → model_only, A3 + λ, v5/Poisson; v5.1 gölge (L — temiz oturumda)
+  - Engel: `prediction_ledger.match_id` → `matches` yabancı anahtarı; kayıt için `matches` satırı şart.
+  - Tasarım: migration `matches.model_only boolean default false`; runner H2H_INSUFFICIENT + takip ligi →
+    takım/lig/saat + λ yazan satır (Katman A ve A1/A2 boş), `prematch_v5.ledger_rows_v51(model_only=True)`
+    48 saat ufku + başlamış maç korumasıyla.
+  - Ana liglerin oranları değişmesin diye model_only satırları şunlardan HARİÇ: COND tablosu (`live_model`),
+    lig ortalamaları (`league_priors`), takım gücü eğitimi (`live_poisson.load_training`), A3 aday havuzu,
+    bülten / sonuçlar / analiz listeleri, `_prepared_match_ids`, recompute-patterns, audit-db kalite metrikleri,
+    canlı izleyici ekrandaki kayıtlar (model_only maçta sadece gölge sürümler yazılır), değerlendirme sayımları.
+  - Test: her hariç tutma için bir test; v5.1 satırı `details.model_only=true`.
 - [ ] F7 lig alias'ları (P2 ön koşulu)
 - [ ] P2 lig partisi (K16): League Two, Çekya, Eerste Divisie, Yunanistan, Polonya — 5 sezon, gece görevinde
 - [ ] P3 DISPLAY_LEAGUES / POOL_LEAGUES ayrımı + terfi süreci
