@@ -2,14 +2,18 @@
 
 Kuponlar değişmez: oran kaydedildiği anda kaynaktan alınıp dondurulur, silinemez/düzenlenemez.
 Herkes herkesin kuponunu görür (ortak sayfa); kupon sahibinin kullanıcı adı yazılır.
+
+Sprint 94 (kullanıcı kararı K2): kupon **sadece maç öncesi** yazılır. Maç içi oranla kayıt, golü TV'de görüp
+gol öncesi oranı kilitlemeye (past-posting) ve kapanmış İY'nin son oranını "bedava" kazanca açıktı.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
@@ -26,7 +30,10 @@ router = APIRouter()
 _ODDS_TTL = 30.0  # aynı maç için 30 sn içinde tekrar kaynağa gidilmez
 _SAVE_MAX_AGE = 15.0  # kaydederken: kullanıcının son 15 sn'de gördüğü oran yeniden kullanılır, daha eskiyse yeniden çekilir
 _odds_cache: dict[str, tuple[float, dict]] = {}
-_FINISHED_STATES = {-1, -10, -11, -12, -13, -14}  # nowgoal: bitti / iptal / ertelendi vb.
+PREMATCH_ONLY = True  # K2: maç başladıysa hiçbir periyoda kupon yazılmaz
+HT_CLOSE_AFTER = timedelta(minutes=47)   # pano/dakika bilinmese de başlamadan 47 dk sonra İY kapalı
+FT_CLOSE_AFTER = timedelta(minutes=115)  # ... 115 dk sonra maç kapalı
+_MINUTE_RE = re.compile(r"\s*(\d+)\s*(?:\+\s*(\d+))?")
 
 
 async def _odds(match_id: str, *, max_age: float = _ODDS_TTL) -> dict:
@@ -44,17 +51,63 @@ async def _odds(match_id: str, *, max_age: float = _ODDS_TTL) -> dict:
     return odds
 
 
-def _closed_reason(odds: dict, match: Match, period: str) -> str | None:
-    """Bu periyoda artık kupon yazılamaz mı (maç / ilk yarı bitti)."""
-    state = odds.get("state")
-    if match.actual_ft_home is not None or (isinstance(state, int) and state in _FINISHED_STATES):
+def minute_value(minute: str | None) -> tuple[int, int] | None:
+    """Kaynağın dakika metni → (dakika, uzatma). "45+2" → (45, 2); "HT" ve tanınmayan → None."""
+    m = _MINUTE_RE.match(minute or "")
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2) or 0)
+
+
+def closed_reason(*, period: str, now: datetime, kickoff: datetime | None, actual_ft: bool, actual_ht: bool,
+                  odds: dict | None = None, board_status: str | None = None, board_phase: str | None = None,
+                  board_minute: str | None = None, started_reason: str | None = None) -> str | None:
+    """Bu periyoda artık kupon yazılamaz mı? Neden metni ya da None.
+
+    Kaynakların hiçbiri tek başına güvenilir değil (oran ucunun durum alanı hep 0, DB skoru saatler sonra gelir,
+    DB başlama saati yer tutucu olabilir) → hepsine bakılır, biri "kapalı" derse kapalı.
+    - `board_*`: kaynak pano / canlı skor (status finished|live|postponed|abandoned, evre 1h|ht|2h, dakika)
+    - `started_reason`: `prematch_v4.match_already_started` (sonuç, İY gözlemi, bültenin güncel saati/durumu)
+    - `odds`: `scraper.odds.build_current` (maç içi oran satırı görüldüyse `started`, son dakika `live.minute`)
+    """
+    odds = odds or {}
+    elapsed = (now - kickoff) if kickoff is not None else None
+    if actual_ft or board_status == "finished" or started_reason == "result_known":
+        return "Maç bitti"
+    if board_status in ("postponed", "abandoned"):
+        return "Maç ertelendi / iptal"
+    if period == "ft" and elapsed is not None and elapsed >= FT_CLOSE_AFTER:
         return "Maç bitti"
     if period == "ht":
-        minute = ((odds.get("live") or {}).get("minute") or "").strip().upper()
-        if (match.actual_ht_home is not None or state in (2, 3) or minute == "HT"
-                or (minute.isdigit() and int(minute) > 45)):
+        minutes = [m for m in (board_minute, (odds.get("live") or {}).get("minute")) if m]
+        ht_over = (actual_ht or started_reason == "ht_observed" or board_phase in ("ht", "2h")
+                   or any(m.strip().upper() == "HT" for m in minutes)
+                   or any((v := minute_value(m)) is not None and v[0] >= 45 for m in minutes)
+                   or (elapsed is not None and elapsed >= HT_CLOSE_AFTER))
+        if ht_over:
             return "İlk yarı bitti"
+    if PREMATCH_ONLY and (started_reason is not None or odds.get("started") or board_status == "live"
+                          or (elapsed is not None and elapsed >= timedelta(0))):
+        return "Maç başladı — kupon sadece maç öncesi"
     return None
+
+
+async def _match_state(session, match: Match, now: datetime) -> dict:
+    """Kapanış kararı için maçın durum kanıtları (pano + defter + bülten)."""
+    from app.analysis.prematch_v4 import match_already_started
+    from app.api.live_snapshot import get_live_snapshot
+
+    started_reason = await match_already_started(session, match.match_id, now)
+    board = None
+    try:
+        snapshot = await get_live_snapshot()
+        board = snapshot.scores.get(match.match_id) if snapshot is not None else None
+    except Exception:  # pano yoksa diğer kanıtlar yeter
+        log.debug("Kupon kapanışı: pano okunamadı [%s]", match.match_id, exc_info=True)
+    return {"kickoff": match.kickoff_time, "actual_ft": match.actual_ft_home is not None,
+            "actual_ht": match.actual_ht_home is not None, "started_reason": started_reason,
+            "board_status": board.status if board else None, "board_phase": board.phase if board else None,
+            "board_minute": board.minute if board else None}
 
 
 @router.get("/api/coupon-matches")
@@ -91,13 +144,16 @@ async def get_odds(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> dict:
         match = (await session.execute(
             select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
         )).scalar_one_or_none()
-    if match is None:
-        raise HTTPException(404, "Maç bulunamadı")
-    odds = await _odds(match_id)
+        if match is None:
+            raise HTTPException(404, "Maç bulunamadı")
+        now = datetime.now(timezone.utc)
+        state = await _match_state(session, match, now)
+    pre = {p: closed_reason(period=p, now=now, **state) for p in ("ft", "ht")}
+    odds = {} if all(pre.values()) else await _odds(match_id)  # başlamış maçta kaynağa hiç gidilmez
     out = {"match_id": match_id, "home_team": match.home_team, "away_team": match.away_team,
-           "league_name": match.league_name, "live": odds.get("live"), "markets": {}}
+           "league_name": match.league_name, "live": None, "markets": {}}
     for period in ("ft", "ht"):
-        closed = _closed_reason(odds, match, period)
+        closed = pre[period] or closed_reason(period=period, now=now, odds=odds, **state)
         out["markets"][period] = {"closed": closed, **({} if closed else odds.get(period, {}))}
     return out
 
@@ -129,18 +185,26 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
             raise HTTPException(400, "Aynı maçta aynı pazar iki kez seçilemez")
         seen.add(key)
     match_ids = sorted({leg.match_id for leg in body.legs})
+    now = datetime.now(timezone.utc)
     async with get_session() as session:
         matches = {m.match_id: m for m in (await session.execute(
             select(Match).where(Match.match_id.in_(match_ids), Match.deleted_at.is_(None))
         )).scalars().all()}
-    if len(matches) != len(match_ids):
-        raise HTTPException(404, "Kupondaki bir maç bulunamadı")
+        if len(matches) != len(match_ids):
+            raise HTTPException(404, "Kupondaki bir maç bulunamadı")
+        states = {m: await _match_state(session, matches[m], now) for m in match_ids}
+    # Önce kaynağa gitmeden kapanış (başlama saati, pano, bülten) — başlamış maç için oran hiç çekilmez
+    for leg in body.legs:
+        closed = closed_reason(period=leg.period, now=now, **states[leg.match_id])
+        if closed:
+            match = matches[leg.match_id]
+            raise HTTPException(409, f"{match.home_team} - {match.away_team}: {closed}")
     odds_by_match = dict(zip(match_ids, await asyncio.gather(*(_odds(m, max_age=_SAVE_MAX_AGE) for m in match_ids))))
     now = datetime.now(timezone.utc)
     legs = []
     for leg in body.legs:
         match, odds = matches[leg.match_id], odds_by_match[leg.match_id]
-        closed = _closed_reason(odds, match, leg.period)
+        closed = closed_reason(period=leg.period, now=now, odds=odds, **states[leg.match_id])
         if closed:
             raise HTTPException(409, f"{match.home_team} - {match.away_team}: {closed}")
         market = (odds.get(leg.period) or {}).get(leg.market) or {}

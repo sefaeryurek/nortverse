@@ -603,7 +603,7 @@
   },
   "coupon": {
     "title": "Kupondaş",
-    "subtitle": "Anlık oranlarla tahmin kuponları — herkes herkesinkini görür",
+    "subtitle": "Maç öncesi oranlarla tahmin kuponları — herkes herkesinkini görür",
     "newCoupon": "Yeni kupon",
     "pickMatch": "Maç seç",
     "today": "Bugün",
@@ -646,6 +646,7 @@
       "half_loss": "Yarım kayıp",
       "void": "Geçersiz"
     },
-    "liveTag": "canlı"
+    "startedTag": "başladı",
+    "prematchOnly": "Maç başladı — kupon sadece maç öncesi yazılabilir."
   }
 }

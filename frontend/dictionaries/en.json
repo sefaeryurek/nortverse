@@ -603,7 +603,7 @@
   },
   "coupon": {
     "title": "Coupon mates",
-    "subtitle": "Prediction coupons at live odds — everyone sees everyone's",
+    "subtitle": "Prediction coupons at pre-match odds — everyone sees everyone's",
     "newCoupon": "New coupon",
     "pickMatch": "Pick a match",
     "today": "Today",
@@ -646,6 +646,7 @@
       "half_loss": "Half loss",
       "void": "Void"
     },
-    "liveTag": "live"
+    "startedTag": "started",
+    "prematchOnly": "The match has started — coupons can only be written before kick-off."
   }
 }

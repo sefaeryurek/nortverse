@@ -2,92 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createCoupon, getCouponMatches, getCoupons, getMatchOdds } from "@/lib/api";
-import type { CouponMarket, CouponMatch, CouponPeriod, CouponView, MatchOdds } from "@/lib/api";
+import type { CouponMatch, CouponView, MatchOdds } from "@/lib/api";
 import { formatTime } from "@/lib/dates";
 import { useLocale } from "@/lib/locale-context";
-
-type Dict = ReturnType<typeof useLocale>["t"];
-type Draft = { match_id: string; home: string; away: string; period: CouponPeriod; market: CouponMarket; selection: string; line: number | null; odds: number };
+import { hasStarted, num, OddsPanel, pickLabel } from "@/components/CouponOddsPanel";
+import type { Dict, Draft } from "@/components/CouponOddsPanel";
 
 function istanbulDate(offsetDays: number): string {
   const d = new Date(Date.now() + offsetDays * 86_400_000);
   return d.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
-}
-
-function num(value: number, digits: number, locale: string): string {
-  const v = value.toFixed(digits);
-  return locale === "en" ? v : v.replace(".", ",");
-}
-
-function pickLabel(period: CouponPeriod, market: CouponMarket, selection: string, line: number | null, t: Dict, locale: string): string {
-  const c = t.coupon;
-  const head = period === "ht" ? c.ht : c.ft;
-  if (market === "ou") return `${head} ${c.ou.replace("{line}", num(line ?? 0, 2, locale).replace(/[.,]?0+$/, ""))} ${selection === "over" ? c.over : c.under}`;
-  return `${head} ${market === "dc" ? c.dc : c.result} ${selection}`;
-}
-
-function OddsButton({ label, odds, active, onClick }: { label: string; odds: number; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className="flex flex-col items-center px-2 py-1.5 min-w-0 transition-colors"
-      style={{
-        borderRadius: "var(--nv-radius-md)",
-        backgroundColor: active ? "var(--nv-accent-blue)" : "var(--nv-bg-elevated)",
-        color: active ? "var(--nv-text-on-accent)" : "var(--nv-text-primary)",
-        border: "1px solid var(--nv-border-subtle)",
-      }}
-    >
-      <span style={{ fontSize: "var(--nv-text-2xs)", opacity: 0.8 }}>{label}</span>
-      <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)" }}>{odds.toFixed(2)}</span>
-    </button>
-  );
-}
-
-function OddsPanel({ odds, draft, toggle, t, locale }: { odds: MatchOdds; draft: Draft[]; toggle: (d: Draft) => void; t: Dict; locale: string }) {
-  const c = t.coupon;
-  const isActive = (period: CouponPeriod, market: CouponMarket, selection: string) =>
-    draft.some((d) => d.match_id === odds.match_id && d.period === period && d.market === market && d.selection === selection);
-  const add = (period: CouponPeriod, market: CouponMarket, selection: string, price: number, line: number | null) =>
-    toggle({ match_id: odds.match_id, home: odds.home_team, away: odds.away_team, period, market, selection, line, odds: price });
-
-  return (
-    <div className="space-y-3">
-      {odds.live?.minute && (
-        <p className="font-semibold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-live)" }}>
-          {c.live.replace("{minute}", odds.live.minute).replace("{score}", odds.live.score ?? "")}
-        </p>
-      )}
-      {(["ft", "ht"] as const).map((period) => {
-        const m = odds.markets[period];
-        return (
-          <section key={period} className="space-y-1.5">
-            <h3 className="font-bold" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>
-              {period === "ft" ? c.ft : c.ht}{m.closed ? ` — ${m.closed}` : ""}
-            </h3>
-            {!m.closed && (
-              <div className="grid grid-cols-3 gap-1.5">
-                {m.result && (["1", "X", "2"] as const).map((s) => (
-                  <OddsButton key={`r${s}`} label={`${c.result} ${s}`} odds={m.result![s]} active={isActive(period, "result", s)}
-                    onClick={() => add(period, "result", s, m.result![s], null)} />
-                ))}
-                {m.dc && (["1X", "12", "X2"] as const).map((s) => (
-                  <OddsButton key={`d${s}`} label={`${c.dc} ${s}`} odds={m.dc![s]} active={isActive(period, "dc", s)}
-                    onClick={() => add(period, "dc", s, m.dc![s], null)} />
-                ))}
-                {m.ou && (["over", "under"] as const).map((s) => (
-                  <OddsButton key={`o${s}`} label={pickLabel(period, "ou", s, m.ou!.line, t, locale).replace(`${period === "ht" ? c.ht : c.ft} `, "")}
-                    odds={m.ou![s]} active={isActive(period, "ou", s)} onClick={() => add(period, "ou", s, m.ou![s], m.ou!.line)} />
-                ))}
-              </div>
-            )}
-          </section>
-        );
-      })}
-    </div>
-  );
 }
 
 const STATUS_COLOR: Record<CouponView["status"], string> = {
@@ -152,6 +75,12 @@ export default function KupondasPage() {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [scope, setScope] = useState<"all" | "mine">("all");
   const [coupons, setCoupons] = useState<CouponView[] | null>(null);
+  // Başlama saati geçen maç seçilemesin diye saat 30 sn'de bir yenilenir
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,17 +164,23 @@ export default function KupondasPage() {
                 <select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-full px-2 py-2"
                   style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)", backgroundColor: "var(--nv-bg-elevated)", border: "1px solid var(--nv-border)", borderRadius: "var(--nv-radius-md)" }}>
                   <option value="">—</option>
-                  {fixtures.map((m) => (
-                    <option key={m.match_id} value={m.match_id}>
-                      {m.kickoff_time ? `${formatTime(m.kickoff_time)} · ` : ""}{m.home_team} - {m.away_team}{m.started ? ` (${c.liveTag})` : ""}
-                    </option>
-                  ))}
+                  {fixtures.map((m) => {
+                    const started = m.started || hasStarted(m.kickoff_time, now);
+                    return (
+                      <option key={m.match_id} value={m.match_id} disabled={started}>
+                        {m.kickoff_time ? `${formatTime(m.kickoff_time)} · ` : ""}{m.home_team} - {m.away_team}{started ? ` (${c.startedTag})` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </label>
             )}
             {oddsState === "loading" && <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{c.loadingOdds}</p>}
             {oddsState === "error" && <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-accent-red)" }}>{c.oddsError}</p>}
-            {odds && oddsState === "idle" && <OddsPanel odds={odds} draft={draft} toggle={toggle} t={t} locale={locale} />}
+            {odds && oddsState === "idle" && (
+              <OddsPanel odds={odds} kickoff={fixtures?.find((m) => m.match_id === odds.match_id)?.kickoff_time ?? null}
+                now={now} draft={draft} toggle={toggle} t={t} locale={locale} />
+            )}
 
             <div className="space-y-2 pt-2" style={{ borderTop: "1px solid var(--nv-border-subtle)" }}>
               <h3 className="font-bold" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>{c.draft}</h3>
