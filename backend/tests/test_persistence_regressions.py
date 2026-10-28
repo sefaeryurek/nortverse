@@ -1,9 +1,9 @@
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.dialects import postgresql
 
+from tests.conftest import fake_db_session
 from app.analysis import analyze_match
 from app.db.connection import normalize_async_url
 from app.models import MatchRawData
@@ -21,7 +21,7 @@ def test_database_url_normalized_without_losing_password(scheme):
 async def test_upsert_preserves_existing_scores_when_scraper_returns_null(monkeypatch):
     raw = MatchRawData(match_id="123", home_team="Home", away_team="Away", league_code="ENG PR")
     result = analyze_match(raw)
-    session = AsyncMock()
+    session = fake_db_session()
 
     @asynccontextmanager
     async def fake_session():

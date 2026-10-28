@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -9,6 +9,14 @@ from fastapi import HTTPException
 from app.api import routes_fixture as rf
 from app.api import services as svc
 from app.models import FixtureMatch
+
+
+def _session():
+    """Sahte oturum: `execute` sonucu gerçek SQLAlchemy sonucu gibi senkron (`.scalars().all()`) — Sprint 94 M2.
+    Düz AsyncMock'ta `.scalars()` da AsyncMock olur, bekletilmeyen eşyordam uyarısı bırakırdı."""
+    session = AsyncMock()
+    session.execute.return_value = MagicMock()
+    return session
 
 
 @pytest.fixture(autouse=True)
@@ -19,7 +27,7 @@ def no_live_source(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [{}, [None], [{"match_id": "123"}], "bad"])
 async def test_invalid_cache_recovers_by_fetching_fixture(monkeypatch, payload):
-    session = AsyncMock()
+    session = _session()
     session.get.return_value = SimpleNamespace(cached_at=datetime.now(timezone.utc), matches_json=payload)
 
     @asynccontextmanager
@@ -40,7 +48,7 @@ async def test_invalid_cache_recovers_by_fetching_fixture(monkeypatch, payload):
 
 @pytest.mark.asyncio
 async def test_scraped_bulletin_hides_cup_but_keeps_competition_for_direct_link(monkeypatch):
-    session = AsyncMock()
+    session = _session()
     session.get.return_value = None
 
     @asynccontextmanager
@@ -65,7 +73,7 @@ async def test_scraped_bulletin_hides_cup_but_keeps_competition_for_direct_link(
 
 @pytest.mark.asyncio
 async def test_legacy_naive_cache_timestamp_uses_utc(monkeypatch):
-    session = AsyncMock()
+    session = _session()
     session.get.return_value = SimpleNamespace(cached_at=datetime.now(timezone.utc).replace(tzinfo=None),
                                               matches_json=[])
 
@@ -84,7 +92,7 @@ async def test_legacy_naive_cache_timestamp_uses_utc(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_old_daily_fixture_cache_returns_without_scraping(monkeypatch):
-    session = AsyncMock()
+    session = _session()
     session.get.return_value = SimpleNamespace(
         cached_at=datetime.now(timezone.utc) - timedelta(hours=8),
         matches_json=[{
@@ -110,7 +118,7 @@ async def test_old_daily_fixture_cache_returns_without_scraping(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fixture_cache_hit_does_not_queue_all_matches_for_analysis(monkeypatch):
-    session = AsyncMock()
+    session = _session()
     session.get.return_value = SimpleNamespace(
         cached_at=datetime.now(timezone.utc),
         matches_json=[{
@@ -136,7 +144,7 @@ async def test_fixture_cache_hit_does_not_queue_all_matches_for_analysis(monkeyp
 
 @pytest.mark.asyncio
 async def test_scraper_failure_returns_service_unavailable(monkeypatch):
-    session = AsyncMock()
+    session = _session()
     session.get.return_value = None
 
     @asynccontextmanager

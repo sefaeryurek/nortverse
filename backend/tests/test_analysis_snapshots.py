@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+from tests.conftest import fake_db_session
+
 import pytest
 from sqlalchemy.dialects import postgresql
 
@@ -81,12 +83,13 @@ async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatc
     )
     listing_session = AsyncMock()
     listing_session.execute.return_value = MagicMock(all=lambda: [prepared])
-    capture_session = AsyncMock()
+    capture_session = fake_db_session()
     capture_session.get.return_value = None
     capture_session.execute.side_effect = [
         MagicMock(scalar_one_or_none=lambda: prepared),
         MagicMock(rowcount=1),   # v4 snapshot (gölge)
         MagicMock(rowcount=5),   # v4 defter
+        TEAMS,                   # İY (savepoint içi; sahte model → İY kararı yazılmaz, hata yutulur)
         TEAMS,                   # v5 için takımlar
         MagicMock(rowcount=1),   # v5 snapshot (ekranda)
         MagicMock(rowcount=3),   # v5 defter
@@ -114,14 +117,16 @@ async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatc
     calls = capture_session.execute.await_args_list
     assert "INSERT INTO analysis_snapshots" in _sql(calls[1])
     assert "INSERT INTO prediction_ledger" in _sql(calls[2])
-    assert "INSERT INTO analysis_snapshots" in _sql(calls[4])
-    assert "ft-display-v5" in str(calls[4].args[0].compile(dialect=postgresql.dialect()).params)
-    assert "INSERT INTO prediction_ledger" in _sql(calls[5])
+    assert "INSERT INTO analysis_snapshots" in _sql(calls[5])
+    assert "ft-display-v5" in str(calls[5].args[0].compile(dialect=postgresql.dialect()).params)
+    assert "INSERT INTO prediction_ledger" in _sql(calls[6])
+    # Sprint 94 M2: İY ve Ana Pazar v3 gölge savepoint'lerine gerçekten girildi (eskiden testte hiç çalışmıyordu)
+    assert capture_session.begin_nested.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeypatch):
-    session = AsyncMock()
+    session = fake_db_session()
     session.get.return_value = None
 
     @asynccontextmanager
@@ -138,6 +143,7 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
         MagicMock(scalar_one_or_none=lambda: row),
         MagicMock(rowcount=1),
         MagicMock(rowcount=5),
+        TEAMS,                   # İY (savepoint içi)
         TEAMS,
         MagicMock(rowcount=1),
         MagicMock(rowcount=3),
@@ -145,6 +151,7 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
     _empty_cond_table(monkeypatch)
     _v5_model(monkeypatch)
     picks = await services._frozen_recommendations(row, {"pattern_ft_b": _pattern()})
+    assert session.begin_nested.call_count == 2  # İY + Ana Pazar v3 gölge savepoint'leri
 
     assert [pick["market"] for pick in picks] == ["result"]
     assert picks[0]["recommendation_id"].startswith("ft-display-v5")

@@ -19,3 +19,29 @@ def _fresh_rate_limits():
     ratelimit.reset()
     yield
     ratelimit.reset()
+
+
+def fake_db_session():
+    """AsyncMock oturum + gerçekten girilen savepoint (`begin_nested`) — Sprint 94 M2.
+
+    Düz AsyncMock'ta `session.begin_nested()` beklenmemiş bir eşyordam döndürür; `async with` hata verir, kod bunu
+    `except Exception` ile yutar ve savepoint içi testte HİÇ çalışmaz (RuntimeWarning: never awaited).
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    session = AsyncMock()
+    session.begin_nested = MagicMock(side_effect=lambda: _Savepoint())
+    return session
+
+
+class _Savepoint:
+    """Gerçek savepoint gibi: içerideki hata dışarı çıkar (AsyncMock'un __aexit__'i hatayı yutuyordu)."""
+
+    entered = 0
+
+    async def __aenter__(self):
+        _Savepoint.entered += 1
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
