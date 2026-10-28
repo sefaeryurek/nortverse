@@ -8,24 +8,27 @@ from typing import Optional
 import typer
 
 from app.cli._helpers import _setup_logging, console
+from app.cli._long_jobs import backoff_delay, paced_delay, parse_until, past_deadline
 
 
 def backfill_goal_events_cmd(
     since: str = typer.Option("2024-07-01", "--since", help="Bu tarihten sonraki biten maçlar (YYYY-MM-DD)"),
     limit: Optional[int] = typer.Option(None, "--limit", help="En fazla bu kadar maç (deneme için)"),
-    delay: float = typer.Option(5.0, "--delay", help="İstekler arası bekleme (sn) — kaynağı yormamak için"),
+    delay: float = typer.Option(5.0, "--delay", help="İstekler arası bekleme (sn) — maç saatlerinde en az 12"),
+    until: Optional[str] = typer.Option(None, "--until", help="Bu saatte (HH:MM, İstanbul) kendiliğinden biter"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Biten ana + gölge lig maçlarının gol dakikalarını çeker (en yeniden geriye).
 
-    Kesilirse tekrar çalıştırın: sadece henüz çekilmemiş maçlar işlenir.
+    Kesilirse tekrar çalıştırın: sadece henüz çekilmemiş maçlar işlenir. Kaynak hatasında durmaz, artan aralıklarla
+    bekler; maç saatlerinde yavaşlar (Sprint 94 D5).
     """
     _setup_logging("DEBUG" if verbose else "WARNING")
     start = datetime.combine(date.fromisoformat(since), datetime.min.time(), timezone.utc)
-    asyncio.run(_backfill(start, limit, delay))
+    asyncio.run(_backfill(start, limit, delay, parse_until(until)))
 
 
-async def _backfill(start: datetime, limit: int | None, delay: float) -> None:
+async def _backfill(start: datetime, limit: int | None, delay: float, deadline: datetime | None = None) -> None:
     from sqlalchemy import select, update
 
     from app.analysis.league_filter import is_tracked_league
@@ -53,17 +56,17 @@ async def _backfill(start: datetime, limit: int | None, delay: float) -> None:
     failures_in_row = 0
     started = time.monotonic()
     for i, r in enumerate(targets, 1):
+        if past_deadline(deadline):
+            console.print(f"[cyan]Süre doldu ({deadline:%H:%M}) — kaldığı yerden sonra devam edecek.[/cyan]")
+            break
         try:
             events = await fetch_goal_events(r.match_id)
-        except Exception as exc:  # ağ / kaynak hatası
+        except Exception as exc:  # ağ / kaynak hatası: durmaz, artan aralıklarla bekler
             stats["error"] += 1
             failures_in_row += 1
-            console.print(f"[yellow]Hata [{r.match_id}]: {exc}[/yellow]")
-            if failures_in_row >= 5:
-                console.print("[red]Üst üste 5 hata — kaynak erişilemiyor olabilir, durduruldu. "
-                              "Sonra tekrar çalıştırın.[/red]")
-                break
-            await asyncio.sleep(delay * 3)
+            wait = backoff_delay(failures_in_row)
+            console.print(f"[yellow]Hata [{r.match_id}]: {exc} — {wait / 60:.0f} dk beklenip devam edilecek[/yellow]")
+            await asyncio.sleep(wait)
             continue
         failures_in_row = 0
         ok = events_match_score(events, (r.actual_ft_home, r.actual_ft_away))
@@ -76,6 +79,6 @@ async def _backfill(start: datetime, limit: int | None, delay: float) -> None:
             rate = i / max(1.0, time.monotonic() - started) * 3600
             console.print(f"  ({i}/{total}) uyuşan {stats['ok']} · uyuşmayan {stats['mismatch']} · "
                           f"tablosuz {stats['no_table']} · hata {stats['error']} · ~{rate:.0f} maç/saat")
-        await asyncio.sleep(delay)
+        await asyncio.sleep(paced_delay(delay))
     console.print(f"[green]Bitti:[/green] uyuşan {stats['ok']} · uyuşmayan {stats['mismatch']} · "
                   f"tablosuz {stats['no_table']} · hata {stats['error']}")

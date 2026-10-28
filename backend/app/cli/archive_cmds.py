@@ -19,8 +19,14 @@ def build_archive_cmd(
     concurrency: int = typer.Option(5, "--concurrency", "-c", help="Aynı anda kaç maç çekilsin (default 5)."),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """Geçmiş sezon maçlarını çekip DB'ye arşivle (paralel)."""
+    """Geçmiş sezon maçlarını çekip DB'ye arşivle (paralel; maç saatlerinde tek maç — Sprint 94 D5)."""
     _setup_logging("DEBUG" if verbose else "INFO")
+    from app.cli._long_jobs import MATCH_HOURS_CONCURRENCY, in_match_hours
+
+    if in_match_hours() and concurrency > MATCH_HOURS_CONCURRENCY:
+        console.print(f"[yellow]Maç saatleri: eşzamanlılık {concurrency} → {MATCH_HOURS_CONCURRENCY} "
+                      "(canlı skor ve devre arası kayıtlarıyla yarışmasın)[/yellow]")
+        concurrency = MATCH_HOURS_CONCURRENCY
 
     from app.pipeline.runner import _upsert
     from app.scraper.browser import browser_context
@@ -123,8 +129,13 @@ def build_multi_archive_cmd(
     concurrency: int = typer.Option(5, "--concurrency", "-c", help="Aynı anda kaç maç çekilsin (default 5)."),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """Birden fazla lig için arşiv oluşturur — her ligi son N sezonda çeker (paralel)."""
+    """Birden fazla lig için arşiv oluşturur — her ligi son N sezonda çeker (paralel; maç saatlerinde tek maç)."""
     _setup_logging("DEBUG" if verbose else "INFO")
+    from app.cli._long_jobs import MATCH_HOURS_CONCURRENCY, in_match_hours
+
+    if in_match_hours() and concurrency > MATCH_HOURS_CONCURRENCY:
+        console.print(f"[yellow]Maç saatleri: eşzamanlılık {concurrency} → {MATCH_HOURS_CONCURRENCY}[/yellow]")
+        concurrency = MATCH_HOURS_CONCURRENCY
     n_seasons = int(seasons) if seasons and str(seasons).isdigit() else 5
     from app.pipeline.runner import _upsert
     from app.scraper.browser import browser_context

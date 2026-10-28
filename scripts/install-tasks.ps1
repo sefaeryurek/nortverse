@@ -7,6 +7,7 @@
 # - BackupDB ve RunPipeline uykudaki bilgisayari uyandirir (WakeToRun); ag yoksa zamanlanmis isler baslamaz.
 # - Backend denetleyicisi oturum acilisinda, uyanista, kilit acilisinda ve 15 dk'da bir tetiklenir; tek kopya calisir.
 # - Frontend denetleyicisi (uretim sunucusu, 127.0.0.1:3000) ayni tetikleyicilerle (Sprint 94 E6).
+# - Saglik kontrolu 11:00-01:30 arasi 15 dk'da bir; gece uzun isleri 01:00-12:00 (Sprint 94 D4, D5).
 #
 # Sprint 94 D1: UpdateScores2 (00:30) UpdateScores1'e birlestirildi - uyaninca ikisi paralel calisiyordu;
 # pipeline sure siniri 2 -> 4 saat (72/87/70 dk surdu); gorev gecmisi acildi; aylik geri yukleme testi.
@@ -63,6 +64,10 @@ $health.Repetition = (New-ScheduledTaskTrigger -Once -At "11:00" -RepetitionInte
     -RepetitionDuration (New-TimeSpan -Hours 14 -Minutes 30)).Repetition
 New-NortverseTask "HealthCheck" "health-check.bat" $health `
     "Saglik kontrolu: DB, backend/frontend, pipeline, canli kayit, skor, yedek, disk (15 dk'da bir)" (New-NortverseSettings 1)
+
+# Gece uzun isleri (Sprint 94 D5): 01:00'de baslar, en gec 12:00'de kendiliginden biter, kaldigi yerden devam eder
+New-NortverseTask "LongJobs" "long-jobs.bat" (New-ScheduledTaskTrigger -Daily -At "01:00") `
+    "Gece uzun isleri: gol dakikalari backfill (01:00-12:00, mac saatlerinde degil)" (New-NortverseSettings 11)
 
 # Aylik yedek geri yukleme testi (gecici konteyner 127.0.0.1:5544; canli DB'ye dokunmaz)
 New-NortverseTask "RestoreTest" "restore-test.bat" (New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek Sunday -At "10:00") `
