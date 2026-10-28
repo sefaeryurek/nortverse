@@ -136,3 +136,53 @@ class TestNeedsNormalization:
 
     def test_turkish_league(self):
         assert needs_normalization("TUR D1", "Turkish Super Lig")
+
+
+# --- Sprint 94 B3 (K20): lig-sezon grubu kuralları ---------------------------------------------------------
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz  # noqa: E402
+
+from app.analysis.repair import detect_group_issues  # noqa: E402
+
+_NOW = _dt(2026, 10, 28, tzinfo=_tz.utc)
+
+
+def _g(mid, league, season, home, away, day, ft=1):
+    return {"match_id": mid, "league_name": league, "season": season, "home_team": home, "away_team": away,
+            "kickoff_time": day, "actual_ft_home": ft, "actual_ft_away": 0 if ft is not None else None}
+
+
+def _season(league, season, start, n=30):
+    return [_g(f"{league[:3]}{season}{i}", league, season, f"T{i}", f"U{i}", start + _td(days=7 * i)) for i in range(n)]
+
+
+def test_cancelled_only_when_season_closed():
+    old = _season("French Ligue 1", "2019/2020", _dt(2019, 8, 10, tzinfo=_tz.utc))
+    old.append(_g("covid", "French Ligue 1", "2019/2020", "A", "B", _dt(2020, 3, 20, tzinfo=_tz.utc), ft=None))
+    current = _season("Turkish Super Lig", "2026/2027", _NOW - _td(days=7 * 29))
+    current.append(_g("postponed", "Turkish Super Lig", "2026/2027", "A", "B", _NOW - _td(days=40), ft=None))
+    found = {mid: reason for mid, reason, _ in detect_group_issues(old + current, now=_NOW)}
+    assert found == {"covid": "cancelled"}  # süren sezondaki ertelenmiş maç silinmez
+
+
+def test_playoff_repeat_at_season_end():
+    rows = _season("Dutch Eredivisie", "2023/2024", _dt(2023, 8, 12, tzinfo=_tz.utc))
+    end = rows[-1]["kickoff_time"]
+    rows.append(_g("po1", "Dutch Eredivisie", "2023/2024", "T3", "U3", end + _td(days=3)))
+    rows.append(_g("early", "Dutch Eredivisie", "2023/2024", "T4", "U4", rows[10]["kickoff_time"]))
+    found = {mid: reason for mid, reason, _ in detect_group_issues(rows, now=_NOW)}
+    assert found == {"po1": "playoff"}  # sezon ortasındaki tekrar play-off sayılmaz
+
+
+def test_split_format_league_repeats_are_normal():
+    rows = _season("Scottish Premiership", "2023/2024", _dt(2023, 8, 5, tzinfo=_tz.utc))
+    rows.append(_g("split", "Scottish Premiership", "2023/2024", "T3", "U3", rows[-1]["kickoff_time"] + _td(days=3)))
+    assert detect_group_issues(rows, now=_NOW) == []
+
+
+def test_stray_old_league_season():
+    rows = _season("German Bundesliga", "2006/2007", _dt(2006, 8, 11, tzinfo=_tz.utc))
+    rows.append(_g("88734", "German 2. Bundesliga", "2006/2007", "Alemannia Aachen", "Energie Cottbus",
+                   _dt(2006, 10, 21, tzinfo=_tz.utc)))
+    recent = [_g("new", "Chile Primera B", "2026/2027", "A", "B", _NOW - _td(days=3))]
+    found = {mid: reason for mid, reason, _ in detect_group_issues(rows + recent, now=_NOW)}
+    assert found == {"88734": "stray_season"}  # yeni sezondaki tek maçlık küçük lig dokunulmaz

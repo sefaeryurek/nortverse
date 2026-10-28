@@ -6,9 +6,19 @@ Pure fonksiyonlar: DB bağımlılığı yok, test edilebilir.
 
 from __future__ import annotations
 
-from typing import Any
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Iterable
 
 from app.analysis.league_filter import canonical_league_name, is_supported_league
+
+# Sprint 94 B3 (K20) — grup kuralları
+SEASON_CLOSED_AFTER = timedelta(days=30)   # sezonun son maçından bu kadar sonra skorsuz maç "iptal"
+PLAYOFF_WINDOW = timedelta(days=30)        # sezonun son 30 gününde aynı ev-dep eşleşmesinin tekrarı = play-off
+STRAY_MAX_ROWS = 3                         # eski bir lig-sezonunda ≤3 maç = arşiv değil, başıboş satır
+STRAY_MIN_AGE = timedelta(days=365)
+# Bu liglerde aynı eşleşmenin sezonda tekrarı normal (lig ikiye bölünüyor / play-off ligin parçası)
+REPEAT_FORMAT_LEAGUES = frozenset({"Scottish Premiership", "Belgian Pro League"})
 
 
 def detect_issues(row: dict[str, Any]) -> tuple[str, str] | None:
@@ -53,6 +63,43 @@ def detect_issues(row: dict[str, Any]) -> tuple[str, str] | None:
         return "inconsistent_half", f"ht_away={ht_away} > ft_away={ft_away} ({label})"
 
     return None
+
+
+def detect_group_issues(rows: Iterable[dict[str, Any]], now: datetime | None = None) -> list[tuple[str, str, str]]:
+    """Tek satıra bakarak görülmeyen sorunlar (lig + sezon grubu). Döner: (match_id, reason, detail).
+
+    - `cancelled`: sezonu bitmiş (son maçı 30+ gün önce) ve skoru hiç gelmemiş maç (2019/20 COVID iptalleri)
+    - `playoff`: sezonun son 30 gününde aynı ev-deplasman eşleşmesinin ikinci kez oynanması (Eredivisie
+      Avrupa play-off'u, Championship play-off'u, 2011/12 Süper Final grubu) — normal lig maçı değil
+    - `stray_season`: bir yıldan eski, ≤3 maçlık lig-sezonu (başka bir ligin arşivine karışmış tek satırlar)
+    """
+    now = now or datetime.now(timezone.utc)
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if row.get("kickoff_time") is None or not row.get("season"):
+            continue
+        groups[(row.get("league_name") or "", row["season"])].append(row)
+    out: list[tuple[str, str, str]] = []
+    for (league, season), items in groups.items():
+        items.sort(key=lambda r: r["kickoff_time"])
+        season_end = items[-1]["kickoff_time"]
+        if len(items) <= STRAY_MAX_ROWS and season_end < now - STRAY_MIN_AGE:
+            out += [(r["match_id"], "stray_season", f"{league} {season}: {len(items)} maç") for r in items]
+            continue
+        closed = season_end < now - SEASON_CLOSED_AFTER
+        seen: set[tuple[str, str]] = set()
+        for r in items:
+            if r.get("actual_ft_home") is None:
+                if closed:
+                    out.append((r["match_id"], "cancelled", f"{league} {season}: skor yok, sezon bitti"))
+                continue
+            pair = (r.get("home_team"), r.get("away_team"))
+            if (pair in seen and league not in REPEAT_FORMAT_LEAGUES
+                    and r["kickoff_time"] >= season_end - PLAYOFF_WINDOW):
+                out.append((r["match_id"], "playoff",
+                            f"{league} {season}: {pair[0]} - {pair[1]} ikinci kez ({r['kickoff_time']:%Y-%m-%d})"))
+            seen.add(pair)
+    return out
 
 
 def needs_normalization(league_code: str | None, league_name: str | None) -> bool:

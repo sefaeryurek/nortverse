@@ -288,7 +288,7 @@ def repair_archive_cmd(
     from datetime import timezone
     from sqlalchemy import select, update as sa_update
     from sqlalchemy.dialects.postgresql import insert as pg_insert
-    from app.analysis.league_filter import is_supported_league
+    from app.analysis.repair import detect_group_issues, detect_issues
     from app.db.connection import get_session
     from app.db.models import AuditLog, Match
 
@@ -297,57 +297,23 @@ def repair_archive_cmd(
             rows = (await session.execute(
                 select(
                     Match.match_id, Match.home_team, Match.away_team,
-                    Match.league_code, Match.league_name,
+                    Match.league_code, Match.league_name, Match.season, Match.kickoff_time,
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.actual_ht_home, Match.actual_ht_away,
                     Match.actual_h2_home, Match.actual_h2_away,
                 ).where(Match.deleted_at.is_(None))
             )).all()
 
+        # Tek satır kuralları (repair.detect_issues) + lig-sezon grubu kuralları (iptal / play-off / başıboş)
+        dicts = [dict(r._mapping) for r in rows]
         issues: list[tuple[str, str, str]] = []
-
-        for r in rows:
-            mid = r.match_id
-            label = f"{r.home_team} vs {r.away_team}"
-
-            if not r.home_team or r.home_team.strip() in ("", "?"):
-                issues.append((mid, "empty_team", f"home_team='{r.home_team}'"))
-                continue
-            if not r.away_team or r.away_team.strip() in ("", "?"):
-                issues.append((mid, "empty_team", f"away_team='{r.away_team}'"))
-                continue
-
-            if not is_supported_league(r.league_name, r.league_code):
-                issues.append((mid, "non_league", f"league={r.league_code or r.league_name}"))
-                continue
-
-            score_fields = [
-                ("actual_ft_home", r.actual_ft_home),
-                ("actual_ft_away", r.actual_ft_away),
-                ("actual_ht_home", r.actual_ht_home),
-                ("actual_ht_away", r.actual_ht_away),
-                ("actual_h2_home", r.actual_h2_home),
-                ("actual_h2_away", r.actual_h2_away),
-            ]
-            bad_score = False
-            for fname, val in score_fields:
-                if val is not None and (val < 0 or val > 15):
-                    issues.append((mid, "bad_score", f"{fname}={val} ({label})"))
-                    bad_score = True
-                    break
-            if bad_score:
-                continue
-
-            if (r.actual_ht_home is not None and r.actual_ft_home is not None
-                    and r.actual_ht_home > r.actual_ft_home):
-                issues.append((mid, "inconsistent_half",
-                               f"ht_home={r.actual_ht_home} > ft_home={r.actual_ft_home} ({label})"))
-                continue
-            if (r.actual_ht_away is not None and r.actual_ft_away is not None
-                    and r.actual_ht_away > r.actual_ft_away):
-                issues.append((mid, "inconsistent_half",
-                               f"ht_away={r.actual_ht_away} > ft_away={r.actual_ft_away} ({label})"))
-                continue
+        flagged: set[str] = set()
+        for row in dicts:
+            found = detect_issues(row)
+            if found:
+                issues.append((row["match_id"], *found))
+                flagged.add(row["match_id"])
+        issues += [i for i in detect_group_issues(dicts) if i[0] not in flagged]
 
         if not issues:
             console.print(f"[green]✓ Temiz! {len(rows)} aktif kayıtta sorun bulunamadı.[/green]")
@@ -380,12 +346,17 @@ def repair_archive_cmd(
         ts = datetime.now(timezone.utc)
         match_ids = [mid for mid, _, _ in issues]
 
+        by_reason: dict[str, list[str]] = {}
+        for mid, reason, _ in issues:
+            by_reason.setdefault(reason, []).append(mid)
         async with get_session() as session:
-            await session.execute(
-                sa_update(Match)
-                .where(Match.match_id.in_(match_ids))
-                .values(deleted_at=ts, deleted_reason="repair_archive")
-            )
+            # deleted_reason = kural adı (cancelled / playoff / stray_season / non_league ...) — geri alınabilir
+            for reason, ids in by_reason.items():
+                await session.execute(
+                    sa_update(Match)
+                    .where(Match.match_id.in_(ids), Match.deleted_at.is_(None))
+                    .values(deleted_at=ts, deleted_reason=reason[:50])
+                )
             await session.execute(
                 pg_insert(AuditLog).values(
                     operation="repair_archive",
