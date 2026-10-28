@@ -72,7 +72,7 @@ export default function KupondasPage() {
   const c = t.coupon;
   const [day, setDay] = useState(0);
   // Yüklenen veri hangi güne / maça ait — "yükleniyor" durumu buradan türetilir
-  const [fixtureState, setFixtureState] = useState<{ day: number; list: CouponMatch[] } | null>(null);
+  const [fixtureState, setFixtureState] = useState<{ day: number; list: CouponMatch[]; error: string | null } | null>(null);
   const [selected, setSelected] = useState<string>("");
   const [oddsResult, setOddsResult] = useState<{ id: string; odds: MatchOdds | null } | null>(null);
   const [draft, setDraft] = useState<Draft[]>([]);
@@ -81,6 +81,8 @@ export default function KupondasPage() {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [scope, setScope] = useState<"all" | "mine">("all");
   const [coupons, setCoupons] = useState<CouponView[] | null>(null);
+  // Hata ve boş durum ayrı (Sprint 94 L1): eskiden yükleme hatası "Henüz kupon yok" gibi görünüyordu
+  const [couponsError, setCouponsError] = useState<string | null>(null);
   const [changes, setChanges] = useState<CouponOddsChange[] | null>(null);
   // Aynı gönderim için aynı anahtar (çift tıklama / ağ tekrarı ikinci kupon yazmaz); başarı ya da onaydan sonra yenilenir
   const idemKey = useRef<string>("");
@@ -94,8 +96,10 @@ export default function KupondasPage() {
   useEffect(() => {
     let cancelled = false;
     getCouponMatches(istanbulDate(day))
-      .then((list) => { if (!cancelled) setFixtureState({ day, list }); })
-      .catch(() => { if (!cancelled) setFixtureState({ day, list: [] }); });
+      .then((list) => { if (!cancelled) setFixtureState({ day, list, error: null }); })
+      .catch((err: unknown) => {
+        if (!cancelled) setFixtureState({ day, list: [], error: err instanceof Error ? err.message : "" });
+      });
     return () => { cancelled = true; };
   }, [day]);
   const fixtures = fixtureState?.day === day ? fixtureState.list : null;
@@ -113,7 +117,9 @@ export default function KupondasPage() {
   const oddsState: "idle" | "loading" | "error" = !selected ? "idle" : !oddsReady ? "loading" : odds ? "idle" : "error";
 
   const loadCoupons = useCallback(() => {
-    getCoupons(scope).then((r) => setCoupons(r.coupons)).catch(() => setCoupons([]));
+    getCoupons(scope)
+      .then((r) => { setCoupons(r.coupons); setCouponsError(null); })
+      .catch((err: unknown) => { setCoupons([]); setCouponsError(err instanceof Error ? err.message : ""); });
   }, [scope]);
   useEffect(() => { loadCoupons(); }, [loadCoupons]);
 
@@ -207,6 +213,8 @@ export default function KupondasPage() {
             </div>
             {fixtures === null ? (
               <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>…</p>
+            ) : fixtureState?.error != null ? (
+              <p role="alert" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-accent-red)" }}>{fixtureState.error || c.loadFailed}</p>
             ) : fixtures.length === 0 ? (
               <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{c.noMatches}</p>
             ) : (
@@ -301,6 +309,11 @@ export default function KupondasPage() {
             </div>
             {coupons === null ? (
               <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>…</p>
+            ) : couponsError !== null ? (
+              <div className="nv-card p-4 flex flex-wrap items-center gap-3" role="alert">
+                <p style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{couponsError || c.loadFailed}</p>
+                <button type="button" className="px-3 py-1" style={tabStyle(false)} onClick={loadCoupons}>{t.common.retry}</button>
+              </div>
             ) : coupons.length === 0 ? (
               <p className="nv-card p-4" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-tertiary)" }}>{c.noCoupons}</p>
             ) : (

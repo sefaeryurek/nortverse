@@ -658,6 +658,7 @@
     "lineChanged": "çizgi {old} → {new}",
     "acceptNewOdds": "Yeni oranlarla kaydet",
     "cancel": "Vazgeç",
-    "unavailable": "kapandı"
+    "unavailable": "kapandı",
+    "loadFailed": "Kuponlar yüklenemedi."
   }
 }

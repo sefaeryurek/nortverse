@@ -658,6 +658,7 @@
     "lineChanged": "line {old} → {new}",
     "acceptNewOdds": "Save with new odds",
     "cancel": "Cancel",
-    "unavailable": "closed"
+    "unavailable": "closed",
+    "loadFailed": "Coupons could not be loaded."
   }
 }

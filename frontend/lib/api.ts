@@ -34,6 +34,21 @@ async function withServerAuth(headers: HeadersInit | undefined): Promise<Headers
   return merged;
 }
 
+let loginRedirectStarted = false;
+
+/**
+ * Oturum düştü (401): tarayıcıda giriş sayfasına, dönüş adresiyle (Sprint 94 L1). Eskiden sayfa sessizce boş
+ * ("Henüz kupon yok") ya da eski veriyle kalıyordu. Sunucu tarafında bir şey yapmaz (orada proxy.ts yönlendirir).
+ */
+export function redirectToLogin(): void {
+  if (typeof window === "undefined" || loginRedirectStarted) return;
+  if (window.location.pathname === "/giris" || window.location.pathname.startsWith("/giris/")) return;
+  loginRedirectStarted = true;
+  const target = new URL("/giris", window.location.origin);
+  target.searchParams.set("next", window.location.pathname + window.location.search);
+  window.location.assign(target.toString());
+}
+
 async function request<T>(path: string, options: RequestInit & { next?: { revalidate: number } } = {}): Promise<T> {
   const timeout = AbortSignal.timeout(30_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
@@ -46,6 +61,7 @@ async function request<T>(path: string, options: RequestInit & { next?: { revali
     throw new ApiError(timeout.aborted ? msg.timeout : msg.network, 0);
   }
   if (!response.ok) {
+    if (response.status === 401) redirectToLogin();
     throw new ApiError(msg.status[response.status] ?? msg.generic, response.status);
   }
   try { return await response.json() as T; }
@@ -612,6 +628,7 @@ export async function createCoupon(
     });
     const body = await res.json().catch(() => ({}));
     if (res.ok) return { ok: true, id: body.id };
+    if (res.status === 401) redirectToLogin();
     const detail = body.detail;
     if (detail && typeof detail === "object" && detail.code === "odds_changed" && Array.isArray(detail.changes)) {
       return { ok: false, message: String(detail.message ?? ""), changes: detail.changes as CouponOddsChange[] };
