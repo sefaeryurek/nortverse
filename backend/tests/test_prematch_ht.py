@@ -5,7 +5,8 @@ from app.analysis import prematch_ht as ht
 
 def test_rule_params_fingerprint_is_pinned():
     # Kural değişirse bu test kırılır: sabiti güncelle VE HT_RULE_VERSION'ı artır.
-    assert (ht.HT_RULE_VERSION, ht.rule_params_fingerprint()) == ("ht-display-v1", "19735060419a")
+    # v1.1 (Sprint 94): takım gücü modeli parmak izinde
+    assert (ht.HT_RULE_VERSION, ht.rule_params_fingerprint()) == ("ht-display-v1.1", "39fe438b9d24")
 
 
 def test_probabilities_are_consistent():
@@ -37,4 +38,4 @@ def test_ledger_rows_mark_informational_markets():
     view["picks"] = ht.decide(view["probs"], None)
     rows = ht.ledger_rows(view, {"match_id": "1"})
     assert {r["market"] for r in rows if r["informational"]} == {"kg", "dep_05"}
-    assert all(r["period"] == "ht" and r["rule_version"] == "ht-display-v1" for r in rows)
+    assert all(r["period"] == "ht" and r["rule_version"] == "ht-display-v1.1" for r in rows)

@@ -15,14 +15,22 @@ from sqlalchemy import func, select
 CHECK_INTERVAL = 300.0
 
 
+MARKER_DAYS = 30
+
+
 async def results_marker() -> tuple:
+    """Son 30 günün sonuçlu maç sayısı + son sonuç zamanı. Eski sezon arşiv eklemeleri işareti değiştirmez
+    (Sprint 94 C1: arşiv tamamlama her 5 dk'da bir COND/A3 önbelleklerini yeniden kurduruyordu)."""
+    from datetime import datetime, timedelta, timezone
+
     from app.db.connection import get_session
     from app.db.models import Match
 
+    since = datetime.now(timezone.utc) - timedelta(days=MARKER_DAYS)
     async with get_session() as session:
         row = (await session.execute(
             select(func.count(Match.id), func.max(Match.result_fetched_at)).where(
-                Match.deleted_at.is_(None), Match.actual_ft_home.isnot(None),
+                Match.deleted_at.is_(None), Match.actual_ft_home.isnot(None), Match.kickoff_time >= since,
             )
         )).one()
     return (int(row[0] or 0), row[1].isoformat() if row[1] else None)

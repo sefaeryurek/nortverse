@@ -18,7 +18,14 @@ def _cond(pct, n=200, level="league"):
 
 def test_rule_params_fingerprint_is_pinned():
     # Kural değişirse bu test kırılır: sabiti güncelle VE LIVE_2H_RULE_VERSION'ı artır.
-    assert (live_2h.LIVE_2H_RULE_VERSION, live_2h.rule_params_fingerprint()) == ("live-2h-v1", "e7d28833d597")
+    # v1.1 (Sprint 94): takım gücü modeli parmak izinde + 10 yıllık COND
+    assert (live_2h.LIVE_2H_RULE_VERSION, live_2h.rule_params_fingerprint()) == ("live-2h-v1.1", "5a6896243ca1")
+
+
+def test_cond_window_matches_live_model():
+    from app.analysis.live_model import COND_WINDOW_YEARS
+
+    assert live_2h.RULE_PARAMS["cond_window_years"] == COND_WINDOW_YEARS
 
 
 def test_safe_under_needs_cond_gate():
@@ -65,5 +72,5 @@ def test_no_model_no_decision():
 def test_ledger_rows_are_shadow():
     picks = live_2h.decide(_grid((0, 0), 1.5, 0.2), (0, 0), _cond(90.0))
     rows = live_2h.ledger_rows(picks, {"match_id": "1"}, lambdas={"2h": {}}, late=False)
-    assert rows and all(r["rule_version"] == "live-2h-v1" and r["details"]["shadow"] for r in rows)
+    assert rows and all(r["rule_version"] == "live-2h-v1.1" and r["details"]["shadow"] for r in rows)
     assert {r["confidence_tier"] for r in rows} <= {"high", "medium"}

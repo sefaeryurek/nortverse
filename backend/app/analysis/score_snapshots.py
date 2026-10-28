@@ -16,6 +16,14 @@ from app.db.connection import get_session
 
 
 SCORE_RULE_VERSION = "score-list-v1"
+SCORE_RULE_PARAMS = {"max_scores": 50, "dedupe": "keep_display_order", "baseline": "results_fetched_before_capture"}
+
+
+def rule_params_fingerprint() -> str:
+    import hashlib
+    import json
+
+    return hashlib.sha1(json.dumps(SCORE_RULE_PARAMS, sort_keys=True).encode()).hexdigest()[:12]
 _SCORE_RE = re.compile(r"^(\d{1,2})-(\d{1,2})$")
 
 

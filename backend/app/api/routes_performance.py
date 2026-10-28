@@ -195,20 +195,13 @@ def _is_current(rule_version: str, params: dict) -> bool:
     Parmak izi koşunun kendi kural sürümüne göre seçilir (eskiden v5 v4'le, Poisson canlı arşivle
     karşılaştırılıyordu → ekrandaki strateji "güncel değil" görünüyordu). Sürüm artmışsa eski koşu güncel değildir.
     """
-    from app.analysis import live_2h, live_archive, live_model, live_poisson, prematch_v4, prematch_v5
+    from app.analysis import live_model
+    from app.analysis.rule_registry import fingerprint_of
 
     if rule_version == live_model.LIVE_RULE_VERSION:
         return params.get("alpha") == live_model.ALPHA
-    fingerprints = {
-        live_archive.LIVE_ARCHIVE_RULE_VERSION: live_archive.rule_params_fingerprint,
-        live_poisson.LIVE_POISSON_RULE_VERSION: live_poisson.rule_params_fingerprint,
-        live_2h.LIVE_2H_RULE_VERSION: live_2h.rule_params_fingerprint,
-        prematch_v5.V5_RULE_VERSION: prematch_v5.rule_params_fingerprint,
-        prematch_v4.V4_RULE_VERSION: prematch_v4.rule_params_fingerprint,
-        prematch_v4.MARKET_SUMMARY_RULE_VERSION: prematch_v4.rule_params_fingerprint,
-    }
-    fingerprint = fingerprints.get(rule_version)
-    return fingerprint is not None and params.get("params_fingerprint") == fingerprint()
+    fingerprint = fingerprint_of(rule_version)
+    return fingerprint is not None and params.get("params_fingerprint") == fingerprint
 
 
 @router.get("/api/performance/backtest/{run_id}/summary")

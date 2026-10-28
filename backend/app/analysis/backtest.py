@@ -20,14 +20,16 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, func, insert, select
 
 from app.analysis.live_model import (
-    ALPHA, LIVE_RULE_VERSION, OUTCOMES, PRIOR_SEASON_DAYS, CondTable, Counts, predict_live,
+    ALPHA, COND_WINDOW_YEARS, LIVE_RULE_VERSION, OUTCOMES, PRIOR_SEASON_DAYS, CondTable, Counts, predict_live,
+    window_start,
 )
 from app.analysis.league_filter import canonical_league_name
 from app.analysis.ledger import PREDICTION_DEFAULTS, uniform_rows
 from app.analysis.market_resolver import resolve
+from app.analysis.rule_registry import fingerprint_of
 from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 from app.analysis.prematch_v4 import (
-    MARKET_SUMMARY_RULE_VERSION, RULE_PARAMS, V4_RULE_VERSION, ledger_rows_v4, rule_params_fingerprint,
+    MARKET_SUMMARY_RULE_VERSION, RULE_PARAMS, V4_RULE_VERSION, ledger_rows_v4,
 )
 from app.db.connection import get_session
 from app.db.models import BacktestRun, Match, PredictionBacktest
@@ -40,17 +42,20 @@ _BATCH = 1000
 
 @dataclass
 class IncrementalCondTable(CondTable):
-    """CondTable + kayan pencereli lig prior'u (backtest için O(N))."""
+    """CondTable + kayan pencereli lig prior'u ve (istenirse) kayan COND penceresi (backtest için O(N)).
 
+    Sayaçlar canlı tabloyla aynı `_add_cond`'dan geçer: "tüm ligler" yedeği sadece ana liglerden
+    (eskiden backtest gölge ligleri de havuza katıyordu, canlı tabloyla farklıydı — Sprint 94).
+    """
+
+    window_years: int | None = None
     _prior_queue: deque = field(default_factory=deque)
+    _cond_queue: deque = field(default_factory=deque)
 
     def add(self, league: str, ht_h: int, ht_a: int, ft_h: int, ft_a: int, kickoff: datetime) -> None:
-        key = (ht_h, ht_a)
-        diff = max(-3, min(3, ht_h - ht_a))
-        self.by_score.setdefault(league, {}).setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
-        self.by_diff.setdefault(league, {}).setdefault(diff, Counts()).add(ft_h, ft_a)
-        self.global_by_score.setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
-        self.global_by_diff.setdefault(diff, Counts()).add(ft_h, ft_a)
+        self._add_cond(league, ht_h, ht_a, ft_h, ft_a)
+        if self.window_years is not None:
+            self._cond_queue.append((kickoff, league, ht_h, ht_a, ft_h, ft_a))
         self.prior.setdefault(league, Counts()).add(ft_h, ft_a)
         self._prior_queue.append((kickoff, league, ft_h, ft_a))
 
@@ -59,6 +64,15 @@ class IncrementalCondTable(CondTable):
         while self._prior_queue and self._prior_queue[0][0] < prior_from:
             _, league, ft_h, ft_a = self._prior_queue.popleft()
             self.prior[league].add(ft_h, ft_a, sign=-1)
+
+    def advance_window(self, as_of: datetime) -> None:
+        """COND penceresinin dışına düşen maçları sayaçlardan çıkarır (pencere yoksa bir şey yapmaz)."""
+        self.window_from = window_start(as_of, self.window_years)
+        if self.window_from is None:
+            return
+        while self._cond_queue and self._cond_queue[0][0] < self.window_from:
+            _, league, ht_h, ht_a, ft_h, ft_a = self._cond_queue.popleft()
+            self._add_cond(league, ht_h, ht_a, ft_h, ft_a, sign=-1)
 
 
 def _git_sha() -> str | None:
@@ -144,9 +158,12 @@ async def _start_run(strategy: str, rule_version: str, params: dict, date_from: 
 
 
 async def _replay(run_id: int, history: list, target_ids: list[str], date_from: datetime,
-                  as_of_of, rows_of) -> int:
-    """Hedef maçları zaman sırasıyla işler; tablo her maçta sadece as_of − 3 saate kadar bilinenleri görür."""
-    table = IncrementalCondTable(cutoff=date_from, prior_from=date_from)
+                  as_of_of, rows_of, *, window_years: int | None = None) -> int:
+    """Hedef maçları zaman sırasıyla işler; tablo her maçta sadece as_of − 3 saate kadar bilinenleri görür.
+
+    `window_years`: COND sayaçlarına sadece son N yılın maçları girer (gölge sürümlerin kuralı).
+    """
+    table = IncrementalCondTable(cutoff=date_from, prior_from=date_from, window_years=window_years)
     cursor = 0
     written = 0
     for start in range(0, len(target_ids), _BATCH):
@@ -166,6 +183,7 @@ async def _replay(run_id: int, history: list, target_ids: list[str], date_from: 
                 cursor += 1
             table.cutoff = cutoff
             table.advance_prior(as_of - timedelta(days=PRIOR_SEASON_DAYS))
+            table.advance_window(as_of)
             rows.extend(rows_of(table, match, as_of))
         async with get_session() as session:
             for i in range(0, len(rows), 500):
@@ -221,7 +239,7 @@ async def run_prematch_backtest(strategy: str, date_from: datetime, date_to: dat
     rule_version = V4_RULE_VERSION if strategy == "top_pick" else MARKET_SUMMARY_RULE_VERSION
     run_id, history, target_ids = await _start_run(
         strategy, rule_version,
-        {"rule_params": RULE_PARAMS, "params_fingerprint": rule_params_fingerprint()},
+        {"rule_params": RULE_PARAMS, "params_fingerprint": fingerprint_of(rule_version)},
         date_from, date_to, notes, replace_run,
     )
     log.info("Maç öncesi backtest #%d (%s): %d hedef maç", run_id, strategy, len(target_ids))
@@ -272,17 +290,19 @@ async def run_prematch_v5_backtest(date_from: datetime, date_to: datetime, *, no
 
 
 async def run_live_archive_backtest(date_from: datetime, date_to: datetime, *, notes: str | None = None,
-                                    replace_run: int | None = None) -> int:
+                                    replace_run: int | None = None, shadow: bool = False) -> int:
     """Canlı arşiv kararları (güncel live-arch kuralı), gerçek İY/MS ile çözülür. COND kapısı artımlı tablodan.
 
     Arşiv üyelikleri maç öncesi `matched_ids`'ten (sonucu kickoff − 3 saatten önce bilinen maçlar) → sızıntısız.
     """
     from app.analysis import live_archive
 
+    version = live_archive.LIVE_ARCHIVE_SHADOW_VERSION if shadow else live_archive.LIVE_ARCHIVE_RULE_VERSION
+    window = COND_WINDOW_YEARS if shadow else None
     run_id, history, target_ids = await _start_run(
-        "live_ht", live_archive.LIVE_ARCHIVE_RULE_VERSION,
-        {"rule_params": live_archive.RULE_PARAMS, "params_fingerprint": live_archive.rule_params_fingerprint(),
-         "ht_capture_offset_min": 47},
+        "live_ht", version,
+        {"rule_params": live_archive.RULE_PARAMS, "params_fingerprint": fingerprint_of(version),
+         "cond_window_years": window, "ht_capture_offset_min": 47},
         date_from, date_to, notes, replace_run,
     )
     async with get_session() as session:
@@ -303,24 +323,27 @@ async def run_live_archive_backtest(date_from: datetime, date_to: datetime, *, n
                   "kickoff_time": match.kickoff_time, "as_of": as_of}
         return [{**row, "run_id": run_id, "ht_home": ht[0], "ht_away": ht[1], "ft_home": ft[0], "ft_away": ft[1],
                  "outcome": resolve(row["period"], row["market"], row["selection"], ht, ft)}
-                for row in live_archive.ledger_rows(view, common)]
+                for row in live_archive.ledger_rows(view, common, shadow=shadow)]
 
-    await _replay(run_id, history, target_ids, date_from, lambda ko: ko + HT_CAPTURE_OFFSET, rows_of)
+    await _replay(run_id, history, target_ids, date_from, lambda ko: ko + HT_CAPTURE_OFFSET, rows_of,
+                  window_years=window)
     return run_id
 
 
 async def run_live_poisson_backtest(date_from: datetime, date_to: datetime, *, notes: str | None = None,
-                                    replace_run: int | None = None) -> int:
+                                    replace_run: int | None = None, shadow: bool = False) -> int:
     """Poisson canlı modeli (live-poisson-v1, gölge): her maçın %85+ işaretleri, gerçek İY/MS ile çözülür.
 
     Model haftada bir (`refit_days`) yeniden kurulur; her kurulum sadece `as_of − 3 saat` öncesini görür.
     """
     from app.analysis import live_poisson as lp
 
+    version = lp.LIVE_POISSON_SHADOW_VERSION if shadow else lp.LIVE_POISSON_RULE_VERSION
+    window = COND_WINDOW_YEARS if shadow else None
     run_id, _history, target_ids = await _start_run(
-        "live_ht", lp.LIVE_POISSON_RULE_VERSION,
-        {"rule_params": lp.RULE_PARAMS, "params_fingerprint": lp.rule_params_fingerprint(),
-         "ht_capture_offset_min": 47},
+        "live_ht", version,
+        {"rule_params": lp.RULE_PARAMS, "params_fingerprint": fingerprint_of(version),
+         "cond_window_years": window, "ht_capture_offset_min": 47},
         date_from, date_to, notes, replace_run,
     )
     training = await lp.load_training()
@@ -344,22 +367,24 @@ async def run_live_poisson_backtest(date_from: datetime, date_to: datetime, *, n
                   "kickoff_time": match.kickoff_time, "as_of": as_of}
         return [{**row, "run_id": run_id, "ht_home": ht[0], "ht_away": ht[1], "ft_home": ft[0], "ft_away": ft[1],
                  "outcome": resolve(row["period"], row["market"], row["selection"], ht, ft)}
-                for row in lp.ledger_rows(prediction, picks, common)]
+                for row in lp.ledger_rows(prediction, picks, common, shadow=shadow)]
 
-    await _replay(run_id, _history, target_ids, date_from, lambda ko: ko + HT_CAPTURE_OFFSET, rows_of)
+    await _replay(run_id, _history, target_ids, date_from, lambda ko: ko + HT_CAPTURE_OFFSET, rows_of,
+                  window_years=window)
     return run_id
 
 
 async def run_live_2h_backtest(date_from: datetime, date_to: datetime, *, notes: str | None = None,
                                replace_run: int | None = None) -> int:
-    """2. yarı gölge kuralı (live-2h-v1): Poisson son skor ızgarası + COND, sızıntısız (haftalık model)."""
+    """2. yarı gölge kuralı (live-2h-v1.1): Poisson son skor ızgarası + 10 yıllık COND, sızıntısız (haftalık model)."""
     from app.analysis import live_2h
     from app.analysis import live_poisson as lp
 
     run_id, _history, target_ids = await _start_run(
         "live_ht", live_2h.LIVE_2H_RULE_VERSION,
         {"rule_params": live_2h.RULE_PARAMS, "params_fingerprint": live_2h.rule_params_fingerprint(),
-         "poisson_params": lp.rule_params_fingerprint(), "ht_capture_offset_min": 47},
+         "poisson_params": lp.rule_params_fingerprint(), "ht_capture_offset_min": 47,
+         "cond_window_years": live_2h.RULE_PARAMS["cond_window_years"]},
         date_from, date_to, notes, replace_run,
     )
     training = await lp.load_training()
@@ -385,7 +410,8 @@ async def run_live_2h_backtest(date_from: datetime, date_to: datetime, *, notes:
                  "outcome": resolve(row["period"], row["market"], row["selection"], ht, ft)}
                 for row in live_2h.ledger_rows(picks, common)]
 
-    await _replay(run_id, _history, target_ids, date_from, lambda ko: ko + HT_CAPTURE_OFFSET, rows_of)
+    await _replay(run_id, _history, target_ids, date_from, lambda ko: ko + HT_CAPTURE_OFFSET, rows_of,
+                  window_years=live_2h.RULE_PARAMS["cond_window_years"])
     return run_id
 
 

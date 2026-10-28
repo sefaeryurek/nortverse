@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.analysis import live_2h, live_archive, live_poisson
 from app.analysis.league_filter import is_tracked_league
 from app.analysis.ledger import record_predictions
-from app.analysis.live_model import LIVE_RULE_VERSION, get_cond_table, predict_live
+from app.analysis.live_model import COND_WINDOW_YEARS, LIVE_RULE_VERSION, get_cond_table, predict_live
 from app.analysis.persist import hash_string
 from app.api.live_snapshot import get_live_snapshot
 from app.db.connection import get_session
@@ -165,7 +165,7 @@ async def plan_live_freeze(match: Match, fs: FixtureScore) -> tuple[str, dict | 
 
 
 async def _poisson_shadow(match: Match, fs: FixtureScore) -> tuple[dict | None, list[dict]]:
-    """Gölge Poisson kararları; hata ana kaydı asla engellemez."""
+    """Poisson kararları (ekrandaki live-poisson-v1.1, penceresiz COND); hata diğer kayıtları asla engellemez."""
     try:
         ht = observed_ht(fs)
         league = match.league_name or ""
@@ -178,8 +178,26 @@ async def _poisson_shadow(match: Match, fs: FixtureScore) -> tuple[dict | None, 
         return None, []
 
 
+async def _windowed_shadows(match: Match, fs: FixtureScore, prediction: dict | None) -> tuple[dict | None, list[dict]]:
+    """Pencereli COND'lu gölge sürümler (Sprint 94 C1): live-arch-v2.1 görünümü + live-poisson-v1.2 kararları."""
+    ht = observed_ht(fs)
+    league = match.league_name or ""
+    view = None
+    picks: list[dict] = []
+    try:
+        table = await get_cond_table(COND_WINDOW_YEARS)
+        view = await live_archive.load_view(
+            match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
+            ht, league=league, table=table)
+        if prediction is not None:
+            picks = live_poisson.decisions(prediction, live_poisson.cond_lookup(table, league, ht))
+    except Exception:
+        log.warning("Pencereli COND gölge kararları hesaplanamadı [%s]", match.match_id, exc_info=True)
+    return view, picks
+
+
 async def _live_2h_shadow(match: Match, fs: FixtureScore) -> tuple[list[dict], dict | None]:
-    """Gölge 2. yarı işaretleri (live-2h-v1); hata ana kaydı asla engellemez."""
+    """Gölge 2. yarı işaretleri (live-2h-v1.1); hata ana kaydı asla engellemez."""
     try:
         ht = observed_ht(fs)
         league = match.league_name or ""
@@ -187,7 +205,9 @@ async def _live_2h_shadow(match: Match, fs: FixtureScore) -> tuple[list[dict], d
         dist = live_poisson.final_grid(model, league, match.home_team, match.away_team, ht)
         if dist is None:
             return [], None
-        picks = live_2h.decide(dist["grid"], ht, live_2h.cond_lookup(await get_cond_table(), league, ht))
+        # live-2h-v1.1: COND 10 yıllık pencereyle
+        table = await get_cond_table(live_2h.RULE_PARAMS["cond_window_years"])
+        picks = live_2h.decide(dist["grid"], ht, live_2h.cond_lookup(table, league, ht))
         lambdas = {"2h": {"home": round(dist["r_h"], 3), "away": round(dist["r_a"], 3)},
                    "ft": {"home": round(dist["lam_h"], 3), "away": round(dist["lam_a"], 3)}}
         return picks, lambdas
@@ -211,6 +231,7 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             log.warning("Canlı arşiv görünümü hesaplanamadı [%s]", match.match_id, exc_info=True)
     shadow_pred, shadow_picks = await _poisson_shadow(match, fs) if status == "ready" else (None, [])
     h2_picks, h2_lambdas = await _live_2h_shadow(match, fs) if status == "ready" else ([], None)
+    view_w, poisson_w = await _windowed_shadows(match, fs, shadow_pred) if status == "ready" else (None, [])
     if report is not None:
         report["prediction"] = prediction
         report["view"] = view
@@ -241,10 +262,15 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
         if archive_ok:
             rows += live_archive.ledger_rows(view, common, late=phase == "2h")
         if window_ok and shadow_picks:
-            # Gölge model (live-poisson-v1): ekranda yok, bir hafta ölçülüp v2 ile karşılaştırılacak
+            # Ekrandaki ana canlı karar (live-poisson-v1.1)
             rows += live_poisson.ledger_rows(shadow_pred, shadow_picks, common, late=phase == "2h")
+        if window_ok and view_w is not None:
+            # Gölge: aynı kurallar 10 yıllık COND ile (live-arch-v2.1, live-poisson-v1.2) — K9, 100 karar sonra karne
+            rows += live_archive.ledger_rows(view_w, common, late=phase == "2h", shadow=True)
+        if window_ok and poisson_w:
+            rows += live_poisson.ledger_rows(shadow_pred, poisson_w, common, late=phase == "2h", shadow=True)
         if window_ok and h2_picks:
-            # Gölge 2. yarı işaretleri (live-2h-v1): ekranda yok, 100 tekil karar sonra karne
+            # Gölge 2. yarı işaretleri (live-2h-v1.1): ekranda yok, 100 tekil karar sonra karne
             rows += live_2h.ledger_rows(h2_picks, common, lambdas=h2_lambdas, late=phase == "2h")
         if not window_ok:
             log.info("Arşiv/gölge işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)

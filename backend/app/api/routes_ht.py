@@ -20,7 +20,7 @@ from sqlalchemy import select
 from app.analysis.ht_value import settle
 from app.analysis.league_filter import is_main_league, is_shadow_league
 from app.analysis.live_poisson import get_poisson_model
-from app.analysis.prematch_ht import HT_RULE_VERSION, match_ht
+from app.analysis.prematch_ht import HT_RULE_VERSIONS, match_ht
 from app.config import ISTANBUL_TZ
 from app.db.connection import get_session
 from app.db.models import AnalysisSnapshot, Match
@@ -128,10 +128,11 @@ async def ht_strategy(
         )).all()
         rows = [r for r in rows if is_main_league(r.league_name, r.league_code)
                 or (shadow and is_shadow_league(r.league_name, r.league_code))]
-        snapshots = {s.match_id: s for s in (await session.execute(
-            select(AnalysisSnapshot).where(AnalysisSnapshot.rule_version == HT_RULE_VERSION,
+        # Sürüm sırasıyla: aynı maçta hem v1 hem v1.1 varsa yenisi kazanır
+        snapshots = {s.match_id: s for s in sorted((await session.execute(
+            select(AnalysisSnapshot).where(AnalysisSnapshot.rule_version.in_(HT_RULE_VERSIONS),
                                            AnalysisSnapshot.match_id.in_([r.match_id for r in rows]))
-        )).scalars().all()} if rows else {}
+        )).scalars().all(), key=lambda s: HT_RULE_VERSIONS.index(s.rule_version))} if rows else {}
     model = await get_poisson_model() if rows else None
     odds_by_match = await _odds_by_match(rows)
     matches = []

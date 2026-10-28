@@ -1,4 +1,4 @@
-"""Canlı 2. yarı işaretleri (live-2h-v1) — GÖLGEDE: ekranda yok, sadece deftere yazılır.
+"""Canlı 2. yarı işaretleri (live-2h-v1.1) — GÖLGEDE: ekranda yok, sadece deftere yazılır.
 
 Sprint 92 ajan ölçümü (6.071 ana lig maçı, 2023-07 → 2026-10, sızıntısız):
 - Arşivler (A1/A2/A3/Genel) 2. yarı için kullanılabilir sinyal vermiyor: yüksek eşikte gösterilenin
@@ -24,7 +24,10 @@ import json
 
 from app.analysis.live_archive import _pair_hit, cond_probability, market_decided
 
-LIVE_2H_RULE_VERSION = "live-2h-v1"
+# v1.1 (Sprint 94 C1+C2): parmak izine takım gücü modeli eklendi (Poisson ızgarasını o üretiyor) ve COND
+# tablosu 10 yıllık pencereyle kurulur. Hâlâ gölge.
+LIVE_2H_RULE_VERSION = "live-2h-v1.1"
+LIVE_2H_RULE_VERSIONS = ("live-2h-v1", "live-2h-v1.1")  # değerlendirme geçmişi için
 RULE_PARAMS = {
     "safe": {
         "prob": "min(poisson, cond)", "threshold_pct": 85.0,
@@ -38,12 +41,16 @@ RULE_PARAMS = {
     },
     "trivial_cond_pct": 80.0,
     "dedupe_equivalent_events": True,
+    "cond_window_years": 10,  # live_model.COND_WINDOW_YEARS ile aynı olmalı (testte sınanır)
 }
 _EXTRA = 9  # eşdeğer olay kontrolünde 2. yarı gol ızgarası 0..8
 
 
 def rule_params_fingerprint() -> str:
-    return hashlib.sha1(json.dumps(RULE_PARAMS, sort_keys=True).encode()).hexdigest()[:12]
+    from app.analysis.live_poisson import team_model_fingerprint
+
+    payload = {**RULE_PARAMS, "team_model": team_model_fingerprint()}
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
 def _selection(kind: str, market: str) -> str:

@@ -42,6 +42,15 @@ TIER_HIGH = 0.70
 TIER_MEDIUM = 0.55
 MIN_ARCHIVE_N = 5
 OUTCOMES = ("1", "X", "2")
+RULE_PARAMS = {"alpha": ALPHA, "min_cond_n": MIN_COND_N, "prematch_k": PREMATCH_K, "tier_high": TIER_HIGH,
+               "tier_medium": TIER_MEDIUM, "min_archive_n": MIN_ARCHIVE_N, "laplace": 0.5}
+
+
+def rule_params_fingerprint() -> str:
+    import hashlib
+    import json
+
+    return hashlib.sha1(json.dumps(RULE_PARAMS, sort_keys=True).encode()).hexdigest()[:12]
 
 
 @dataclass
@@ -86,12 +95,27 @@ def _in_reference_pool(league: str) -> bool:
     return is_main_league(league)
 
 
+# Sprint 94 C1 (K9): COND tablosuna zaman penceresi. Pencere yokken arşiv tamamlama (NED +1.513, GER +1.048
+# eski sezon) tabloyu sessizce değiştirdi; aynı kural farklı veriyle farklı karar verebiliyordu.
+# Pencereli tablo yeni gölge sürümlerde (live-arch-v2.1, live-poisson-v1.2, live-2h-v1.1); ekrandaki sürümler
+# karşılaştırma bitene kadar eski (penceresiz) tabloyla devam eder.
+COND_WINDOW_YEARS = 10
+
+
+def window_start(as_of: datetime, years: int | None) -> datetime | None:
+    return None if years is None else as_of - timedelta(days=round(365.25 * years))
+
+
 @dataclass
 class CondTable:
-    """İY skoruna koşullu MS sayaçları + lig prior'u. `add` ile artımlı büyür (backtest)."""
+    """İY skoruna koşullu MS sayaçları + lig prior'u. `add` ile artımlı büyür (backtest).
+
+    `window_from` verilirse daha eski maçlar COND sayaçlarına girmez (lig prior'u ayrıca son 3 sezon).
+    """
 
     cutoff: datetime
     prior_from: datetime
+    window_from: datetime | None = None
     by_score: dict[str, dict[tuple[int, int], Counts]] = field(default_factory=dict)
     by_diff: dict[str, dict[int, Counts]] = field(default_factory=dict)
     global_by_score: dict[tuple[int, int], Counts] = field(default_factory=dict)
@@ -99,15 +123,19 @@ class CondTable:
     prior: dict[str, Counts] = field(default_factory=dict)
 
     def add(self, league: str, ht_h: int, ht_a: int, ft_h: int, ft_a: int, kickoff: datetime) -> None:
-        key, diff = (ht_h, ht_a), _diff_key(ht_h, ht_a)
-        self.by_score.setdefault(league, {}).setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
-        self.by_diff.setdefault(league, {}).setdefault(diff, Counts()).add(ft_h, ft_a)
-        if _in_reference_pool(league):
-            # "Tüm ligler" yedeği sadece ana liglerden: gölgedeki yeni ligler ana liglerin oranlarını kaydırmasın
-            self.global_by_score.setdefault(key, Counts()).add(ft_h, ft_a, ht=key)
-            self.global_by_diff.setdefault(diff, Counts()).add(ft_h, ft_a)
+        if self.window_from is None or kickoff >= self.window_from:
+            self._add_cond(league, ht_h, ht_a, ft_h, ft_a)
         if kickoff >= self.prior_from:
             self.prior.setdefault(league, Counts()).add(ft_h, ft_a)
+
+    def _add_cond(self, league: str, ht_h: int, ht_a: int, ft_h: int, ft_a: int, sign: int = 1) -> None:
+        key, diff = (ht_h, ht_a), _diff_key(ht_h, ht_a)
+        self.by_score.setdefault(league, {}).setdefault(key, Counts()).add(ft_h, ft_a, sign=sign, ht=key)
+        self.by_diff.setdefault(league, {}).setdefault(diff, Counts()).add(ft_h, ft_a, sign=sign)
+        if _in_reference_pool(league):
+            # "Tüm ligler" yedeği sadece ana liglerden: gölgedeki yeni ligler ana liglerin oranlarını kaydırmasın
+            self.global_by_score.setdefault(key, Counts()).add(ft_h, ft_a, sign=sign, ht=key)
+            self.global_by_diff.setdefault(diff, Counts()).add(ft_h, ft_a, sign=sign)
 
     def cond(self, league: str, ht: tuple[int, int]) -> tuple[str, Counts]:
         same = self.by_score.get(league, {}).get(ht)
@@ -221,13 +249,11 @@ def predict_live(
 
 # ─── Günlük COND önbelleği ──────────────────────────────────────────────────
 
-_table: CondTable | None = None
-_table_built_at: float = 0.0
 _lock = asyncio.Lock()
 TABLE_TTL_SECONDS = 6 * 3600
 
 
-async def build_cond_table(as_of: datetime) -> CondTable:
+async def build_cond_table(as_of: datetime, window_years: int | None = None) -> CondTable:
     cutoff = as_of - RESULT_KNOWN_DELAY
     known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
     stmt = select(
@@ -244,7 +270,8 @@ async def build_cond_table(as_of: datetime) -> CondTable:
         rows = (await session.execute(stmt)).all()
 
     def _build() -> CondTable:
-        table = CondTable(cutoff=cutoff, prior_from=as_of - timedelta(days=PRIOR_SEASON_DAYS))
+        table = CondTable(cutoff=cutoff, prior_from=as_of - timedelta(days=PRIOR_SEASON_DAYS),
+                          window_from=window_start(as_of, window_years))
         for league, ht_h, ht_a, ft_h, ft_a, kickoff in rows:
             if ht_h > ft_h or ht_a > ft_a or league is None:
                 continue
@@ -253,37 +280,36 @@ async def build_cond_table(as_of: datetime) -> CondTable:
         return table
 
     table = await asyncio.to_thread(_build)
-    log.info("Canlı COND tablosu kuruldu: %d maç (kesim %s)", len(rows), cutoff.isoformat())
+    log.info("Canlı COND tablosu kuruldu: %d maç (kesim %s, pencere %s)", len(rows), cutoff.isoformat(),
+             f"{window_years} yıl" if window_years else "yok")
     return table
 
 
-_table_watch = ResultsWatch()
+# Pencere → (tablo, kuruluş anı, sonuç işareti): penceresiz (ekrandaki sürümler) ve 10 yıllık (gölge sürümler)
+_tables: dict[int | None, tuple[CondTable, float, ResultsWatch]] = {}
 
 
-async def _table_fresh() -> bool:
-    return (_table is not None and time.monotonic() - _table_built_at < TABLE_TTL_SECONDS
-            and not await _table_watch.stale())
+async def _table_fresh(window_years: int | None) -> bool:
+    entry = _tables.get(window_years)
+    return (entry is not None and time.monotonic() - entry[1] < TABLE_TTL_SECONDS
+            and not await entry[2].stale())
 
 
-async def get_cond_table() -> CondTable:
+async def get_cond_table(window_years: int | None = None) -> CondTable:
     """6 saatte bir ya da yeni sonuç gelince (en fazla 5 dk'da bir kontrol) kurulur.
 
-    Sızıntısız: kesim = kuruluş anı − 3 saat.
+    Sızıntısız: kesim = kuruluş anı − 3 saat. `window_years` verilirse daha eski maçlar sayılmaz.
     """
-    global _table, _table_built_at
-    if await _table_fresh():
-        return _table
+    if await _table_fresh(window_years):
+        return _tables[window_years][0]
     async with _lock:
-        if not await _table_fresh():
-            marker = await results_marker()
-            _table = await build_cond_table(datetime.now(timezone.utc))
-            _table_built_at = time.monotonic()
-            _table_watch.mark(marker)
-    return _table
+        if not await _table_fresh(window_years):
+            watch = ResultsWatch()
+            watch.mark(await results_marker())
+            table = await build_cond_table(datetime.now(timezone.utc), window_years)
+            _tables[window_years] = (table, time.monotonic(), watch)
+    return _tables[window_years][0]
 
 
 def invalidate_cond_table() -> None:
-    global _table, _table_built_at
-    _table = None
-    _table_built_at = 0.0
-    _table_watch.marker = None
+    _tables.clear()

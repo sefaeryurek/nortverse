@@ -1,4 +1,4 @@
-"""Maç öncesi İLK YARI (İY) tahminleri — ht-display-v1 (Sprint 93, ekranda "Deneme" etiketiyle).
+"""Maç öncesi İLK YARI (İY) tahminleri — ht-display-v1.1 (Sprint 93, ekranda "Deneme" etiketiyle).
 
 Model: maç öncesi takım gücü (`live_poisson`, v5 ile aynı) → İY λ = maç λ × ligin İY gol payı (ev/dep ayrı,
 eğitim penceresinden) → bağımsız Poisson İY skor ızgarası. Arşivler (A1/A2/A3) İY'de lig ortalamasından bile
@@ -18,7 +18,9 @@ import hashlib
 import json
 import math
 
-HT_RULE_VERSION = "ht-display-v1"
+# v1.1 (Sprint 94 C2): λ'ları üreten takım gücü modeli parmak izine girdi (model değişse sürüm atlamıyordu).
+HT_RULE_VERSION = "ht-display-v1.1"
+HT_RULE_VERSIONS = ("ht-display-v1", "ht-display-v1.1")  # o gün dondurulmuş eski kayıtlar okunabilsin
 RULE_PARAMS = {
     "share": "league_ht_goal_share_home_away",
     "markets": {
@@ -35,7 +37,10 @@ _N = RULE_PARAMS["max_goals"]
 
 
 def rule_params_fingerprint() -> str:
-    return hashlib.sha1(json.dumps(RULE_PARAMS, sort_keys=True).encode()).hexdigest()[:12]
+    from app.analysis.live_poisson import team_model_fingerprint
+
+    payload = {**RULE_PARAMS, "team_model": team_model_fingerprint()}
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
 def _pmf(lam: float) -> list[float]:

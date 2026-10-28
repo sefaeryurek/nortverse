@@ -132,6 +132,20 @@ def _pooled_binary(archives: list[tuple[str, dict]], field: str, prior: float) -
     return (hits + k * prior) / (total + k), total
 
 
+MARKET_SUMMARY_PARAMS = {
+    "periods": ["ht", "h2", "ft"], "archives": ["a1", "a2", "a3"], "selection": "argmax_no_threshold",
+    "min_match_count": 1, "skip_all_zero": True,
+}
+
+
+def market_summary_fingerprint() -> str:
+    """Ana Pazar Özeti kuralının parmak izi: pazar listesi + seçim kuralı + arşiv algoritması (Sprint 94 C2)."""
+    from app.analysis.persist import PATTERN_ALGO_VERSION
+
+    payload = {**MARKET_SUMMARY_PARAMS, "markets": list(SUMMARY_MARKET_KEYS), "pattern_algo": PATTERN_ALGO_VERSION}
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
+
+
 def _market_summary_rows(patterns: dict, common: dict) -> list[dict]:
     """Ana Pazar Özeti kazananları (confidence.ts getMarketSummary ile aynı: eşiksiz en yüksek)."""
     rows = []

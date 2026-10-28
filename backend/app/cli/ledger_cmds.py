@@ -155,6 +155,8 @@ def backtest_ledger_cmd(
     alpha: float = typer.Option(0.5, "--alpha", help="Maç öncesi LR üssü (live_model.ALPHA)"),
     notes: Optional[str] = typer.Option(None, "--notes"),
     replace_run: Optional[int] = typer.Option(None, "--replace-run", help="Bu koşuyu silip yeniden üret"),
+    shadow: bool = typer.Option(False, "--shadow",
+                                help="live_archive/live_poisson: gölge sürüm (v2.1 / v1.2, 10 yıllık COND penceresi)"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Sızıntısız backtest — sonuçlar prediction_backtest'e yazılır (gerçek defterle karışmaz)."""
@@ -185,14 +187,16 @@ def backtest_ledger_cmd(
 
     async def _run() -> None:
         if strategy == "live_archive":
-            run_id = await run_live_archive_backtest(start, end, notes=notes, replace_run=replace_run)
-            title = f"Canlı arşiv (%85+) backtest #{run_id} ({from_date} → {to_date})"
+            run_id = await run_live_archive_backtest(start, end, notes=notes, replace_run=replace_run, shadow=shadow)
+            title = (f"Canlı arşiv (%85+{', gölge v2.1' if shadow else ''}) backtest #{run_id} "
+                     f"({from_date} → {to_date})")
         elif strategy == "top_pick_v5":
             run_id = await run_prematch_v5_backtest(start, end, notes=notes, replace_run=replace_run)
             title = f"Maç öncesi v5 (Dixon-Coles) backtest #{run_id} ({from_date} → {to_date})"
         elif strategy == "live_poisson":
-            run_id = await run_live_poisson_backtest(start, end, notes=notes, replace_run=replace_run)
-            title = f"Canlı Poisson (gölge, %85+) backtest #{run_id} ({from_date} → {to_date})"
+            run_id = await run_live_poisson_backtest(start, end, notes=notes, replace_run=replace_run, shadow=shadow)
+            title = (f"Canlı Poisson (%85+{', gölge v1.2' if shadow else ''}) backtest #{run_id} "
+                     f"({from_date} → {to_date})")
         elif strategy == "live_2h":
             run_id = await run_live_2h_backtest(start, end, notes=notes, replace_run=replace_run)
             title = f"Canlı 2. yarı (gölge: güvenli alt ≥%85, gol ≥%70) backtest #{run_id} ({from_date} → {to_date})"

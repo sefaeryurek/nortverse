@@ -73,6 +73,18 @@ def rule_params_fingerprint() -> str:
     return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
+# Sprint 94 C1 (K9): v1.2 = v1.1 + 10 yıllık COND (seçimler aynı; sadece "değerli" etiketi ve cond_pct değişir).
+# GÖLGEDE — ayrı sabit, LIVE_POISSON_RULE_VERSIONS'a girmez (ekrandaki kararlar iki kez görünmesin).
+LIVE_POISSON_SHADOW_VERSION = "live-poisson-v1.2"
+
+
+def shadow_params_fingerprint() -> str:
+    from app.analysis.live_model import COND_WINDOW_YEARS
+
+    payload = {"team_model": team_model_fingerprint(), **DECISION_PARAMS, "cond_window_years": COND_WINDOW_YEARS}
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
+
+
 @dataclass(frozen=True)
 class TrainMatch:
     kickoff: datetime
@@ -327,16 +339,19 @@ def decisions(prediction: dict | None, cond_of) -> list[dict]:
     return out
 
 
-def ledger_rows(prediction: dict, picks: list[dict], common: dict, *, late: bool = False) -> list[dict]:
-    """Canlı ana kararlar (v1.1'den beri ekranda; v1 gölgede yazılmıştı)."""
+def ledger_rows(prediction: dict, picks: list[dict], common: dict, *, late: bool = False,
+                shadow: bool = False) -> list[dict]:
+    """Canlı ana kararlar (v1.1'den beri ekranda; v1 gölgede yazılmıştı). `shadow=True` → v1.2 gölge satırları."""
+    version = LIVE_POISSON_SHADOW_VERSION if shadow else LIVE_POISSON_RULE_VERSION
+    params = shadow_params_fingerprint() if shadow else rule_params_fingerprint()
     return [{
-        **common, "source": "live_ht", "rule_version": LIVE_POISSON_RULE_VERSION,
+        **common, "source": "live_ht", "rule_version": version,
         "period": p["period"], "market": p["market"], "selection": p["selection"], "archive": None,
         "prob_shown_bp": round(p["pct"] * 100), "sample_n": None, "confidence_tier": "high",
-        "details": {"shadow": False, "valuable": p["valuable"], "best": p["best"],
+        "details": {"shadow": shadow, "valuable": p["valuable"], "best": p["best"],
                     "cond_pct": p["cond_pct"], "cond_n": p["cond_n"], "options": p["options"],
                     "lambda_2h": prediction["lambda_2h"], "lambda_ft": prediction["lambda_ft"],
-                    "params": rule_params_fingerprint(), "late": late},
+                    "params": params, "late": late},
     } for p in picks]
 
 

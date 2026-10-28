@@ -56,6 +56,21 @@ def rule_params_fingerprint() -> str:
     return hashlib.sha1(json.dumps(RULE_PARAMS, sort_keys=True).encode()).hexdigest()[:12]
 
 
+# Sprint 94 C1+C2 (K9): v2'nin parmak izinde arşiv algoritması (A2 c4 / A3 d4 olduğunda sürüm atlamadı) ve
+# COND alt sınırı yoktu; COND tablosu penceresizdi. v2.1 = aynı kural + 10 yıllık COND, GÖLGEDE
+# (ekranda v2; ayrı sabit — LIVE_ARCHIVE_RULE_VERSIONS'a girmez, yoksa ekranda kararlar iki kez görünür).
+LIVE_ARCHIVE_SHADOW_VERSION = "live-arch-v2.1"
+
+
+def shadow_params_fingerprint() -> str:
+    from app.analysis.live_model import COND_WINDOW_YEARS, MIN_COND_N
+    from app.analysis.persist import PATTERN_ALGO_VERSION
+
+    payload = {**RULE_PARAMS, "cond_window_years": COND_WINDOW_YEARS, "min_cond_n": MIN_COND_N,
+               "pattern_algo": PATTERN_ALGO_VERSION}
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
+
+
 @dataclass(frozen=True)
 class ArchiveMatch:
     """Eşleşen arşiv maçının skorları (compute_stats satırı)."""
@@ -202,19 +217,24 @@ def ht_filtered_rows(blobs: dict[str, dict | None], results: dict[str, tuple], h
     return out
 
 
-def ledger_rows(view: dict, common: dict, *, late: bool = False) -> list[dict]:
-    """Her karar için tek defter satırı (kazanan arşiv; Genel → archive NULL). Gösterilen = COND oranı."""
+def ledger_rows(view: dict, common: dict, *, late: bool = False, shadow: bool = False) -> list[dict]:
+    """Her karar için tek defter satırı (kazanan arşiv; Genel → archive NULL). Gösterilen = COND oranı.
+
+    `shadow=True`: gölge sürüm (v2.1, pencereli COND ile kurulmuş görünümden).
+    """
     rows = []
+    version = LIVE_ARCHIVE_SHADOW_VERSION if shadow else LIVE_ARCHIVE_RULE_VERSION
+    params = shadow_params_fingerprint() if shadow else rule_params_fingerprint()
     for h in view["highlights"]:
         rows.append({
-            **common, "source": "live_ht", "rule_version": LIVE_ARCHIVE_RULE_VERSION,
+            **common, "source": "live_ht", "rule_version": version,
             "period": h["period"], "market": h["market"], "selection": h["selection"],
             "archive": None if h["archive"] == GENERAL else h["archive"],
             "prob_shown_bp": round(h["pct"] * 100), "sample_n": h["n"] or None,
             "confidence_tier": "high",
             "details": {"label": h["label"], "sources": h["sources"], "archive_pct": h["archive_pct"],
                         "cond_n": h["cond_n"], "cond_level": h["cond_level"], "conflict": h["conflict"],
-                        "options": h["options"], "params": rule_params_fingerprint(),
+                        "options": h["options"], "params": params, "shadow": shadow,
                         "historical": h.get("historical"), "late": late},
         })
     return rows
@@ -245,7 +265,8 @@ async def load_view(match_id: str, blobs: dict[str, dict | None], ht: tuple[int,
     from app.db.connection import get_session
     from app.db.models import Match
 
-    key = (match_id, tuple(ht), with_matches, league, _blobs_digest(blobs))
+    windowed = table is not None and getattr(table, "window_from", None) is not None
+    key = (match_id, tuple(ht), with_matches, league, _blobs_digest(blobs), windowed)
     cached = _view_cache.get(key)
     if cached is not None and time.monotonic() - cached[0] < _VIEW_TTL:
         return cached[1]

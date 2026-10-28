@@ -229,11 +229,13 @@ async def test_cond_model_failure_does_not_block_other_records(monkeypatch):
     monkeypatch.setattr(live_ledger, "predict_live", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("bozuk")))
     monkeypatch.setattr(live_ledger.live_archive, "load_view", AsyncMock(return_value={"highlights": []}))
     monkeypatch.setattr(live_ledger.live_archive, "ledger_rows",
-                        lambda view, common, late=False: [{**common, "rule_version": "live-arch-v2"}])
+                        lambda view, common, late=False, shadow=False:
+                        [{**common, "rule_version": "live-arch-v2.1" if shadow else "live-arch-v2"}])
     fs = FixtureScore("900", "live", 1, 0, minute="HT")
     match = _match(kickoff_time=datetime.now(timezone.utc) - timedelta(minutes=50))
     assert await freeze_live_prediction(match, fs) == "frozen"
-    assert [r["rule_version"] for r in written] == ["live-arch-v2"]
+    # ekrandaki v2 + pencereli COND'lu gölge v2.1 (Sprint 94 C1)
+    assert [r["rule_version"] for r in written] == ["live-arch-v2", "live-arch-v2.1"]
 
 
 @pytest.mark.asyncio
