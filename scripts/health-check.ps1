@@ -93,7 +93,7 @@ $free = [int]((Get-PSDrive C).Free / 1GB)
 Add-Check "disk_c" ($free -gt 20) ("C: bos alan {0} GB" -f $free)
 
 # 8. Uzun islerin loglarinda "durduruldu" yok (son 30 satir)
-foreach ($job in @("goal_events.log", "archive.log")) {
+foreach ($job in @("goal_events.log", "archive.log", "odds_ft.log", "odds_daily.log")) {
     $path = Join-Path $logs $job
     if (Test-Path $path) {
         $stopped = Get-Content $path -Tail 30 -Encoding UTF8 | Select-String -SimpleMatch "durduruldu" | Select-Object -Last 1

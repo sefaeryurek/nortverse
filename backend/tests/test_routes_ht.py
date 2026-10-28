@@ -110,3 +110,30 @@ def test_stale_odds_refreshed_but_finished_closing_kept(monkeypatch):
     monkeypatch.setattr(routes_ht, "_spawn", lambda mid: spawned.append(mid))
     asyncio.run(routes_ht._odds_by_match(rows))
     assert spawned == ["1"]  # biten maçın kapanış oranı yeterli, kaynağa gidilmez
+
+
+@pytest.mark.asyncio
+async def test_prefetch_only_main_league_missing_or_stale(monkeypatch):
+    """Sprint 94 I2: yaklaşan ana lig maçlarından İY oranı olmayan / 15 dk'dan eski olanlar önceden çekilir."""
+    now = datetime(2026, 10, 28, 12, 0, tzinfo=timezone.utc)
+    rows = [SimpleNamespace(match_id=mid, league_name=league, league_code=None)
+            for mid, league in (("fresh", "English Premier League"), ("stale", "English Premier League"),
+                                ("missing", "Spanish La Liga"), ("cup", "UEFA Champions League"))]
+    session = AsyncMock()
+    session.execute.return_value = MagicMock(all=lambda: rows)
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    stored = {"fresh": (now - timedelta(minutes=5), {}), "stale": (now - timedelta(minutes=40), {})}
+    fetched = []
+
+    async def fake_refresh(mid):
+        fetched.append(mid)
+
+    monkeypatch.setattr(routes_ht, "get_session", fake_session)
+    monkeypatch.setattr(routes_ht, "_stored_odds", AsyncMock(return_value=stored))
+    monkeypatch.setattr(routes_ht, "_refresh", fake_refresh)
+    assert await routes_ht.prefetch_upcoming(now) == 2
+    assert fetched == ["stale", "missing"]  # taze olan ve ana lig dışı çekilmez

@@ -45,3 +45,15 @@ class _Savepoint:
 
     async def __aexit__(self, *exc):
         return False
+
+
+@pytest.fixture(autouse=True)
+def _no_odds_network(monkeypatch):
+    """Testler oran kaynağına asla gerçek istek atmasın (Sprint 94 I2: canlı dondurma artık fiyat da çeker).
+    `_get`'i sınayan testler `_request_once`'ı kendileri taklit eder."""
+    from app.scraper import odds
+
+    def blocked(url, headers):
+        raise ConnectionError(f"testte ağ kapalı: {url}")
+
+    monkeypatch.setattr(odds, "_request_once", blocked)

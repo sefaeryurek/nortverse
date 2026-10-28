@@ -216,6 +216,33 @@ async def _live_2h_shadow(match: Match, fs: FixtureScore) -> tuple[list[dict], d
         return [], None
 
 
+MARKET_SNAPSHOT_TIMEOUT = 10.0
+
+
+async def market_snapshot(match_id: str, now: datetime) -> dict | None:
+    """Devre arası anındaki MS piyasa fiyatı (Sprint 94 I2). Karar kuralına girmez (sürüm artmaz); canlı kararların
+    gerçek fiyatını sonradan ölçmek için `details.market`'e yazılır. Kaynak yanıt vermezse kayıt yine yapılır."""
+    try:
+        from app.scraper.odds import current_odds
+
+        snap = await asyncio.wait_for(current_odds(match_id), MARKET_SNAPSHOT_TIMEOUT)
+    except Exception as exc:
+        log.info("Devre arası fiyatı alınamadı [%s]: %s", match_id, exc)
+        return None
+    if not snap.get("ft"):
+        return None
+    return {"ft": snap["ft"], "live": snap.get("live"), "fetched_at": now.isoformat()}
+
+
+def attach_market(rows: list[dict], market: dict | None) -> list[dict]:
+    """Maç sonu (ve 2. yarı) kararlarına devre arası fiyatını ekler; İY periyodu zaten bitmiş."""
+    if market:
+        for row in rows:
+            if row.get("period") in ("ft", "h2") and isinstance(row.get("details"), dict):
+                row["details"] = {**row["details"], "market": market}
+    return rows
+
+
 async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: bool = False,
                                  report: dict | None = None) -> str:
     """İY gözlemini ve tahmini bir kez kaydeder. Durum kodunu döner (tahmin `report`'a yazılır)."""
@@ -246,6 +273,7 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
     ht = observed_ht(fs)
     phase = match_phase(fs)
     now = datetime.now(timezone.utc)
+    market = await market_snapshot(match.match_id, now)  # DB işlemi açılmadan (HTTP beklerken kilit tutulmasın)
     async with get_session() as session:
         obs_id = await _ht_observation_id(session, match, ht, phase, now)
         rows = (ledger_rows(match, prediction, now, obs_id, late=phase == "2h")
@@ -276,7 +304,7 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             log.info("Arşiv/gölge işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)
         elif view is None:
             log.warning("Arşiv işaretleri yazılmadı (görünüm yok) [%s]", match.match_id)
-        written = await record_predictions(session, rows)
+        written = await record_predictions(session, attach_market(rows, market))
     if written:
         log.info("Canlı kararlar donduruldu [%s] İY %s-%s · %d satır (%d arşiv işareti, %d Poisson)",
                  match.match_id, ht[0], ht[1], written, len(view["highlights"]) if archive_ok else 0,

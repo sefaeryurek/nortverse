@@ -52,7 +52,7 @@ from app.api.routes_auth import router as auth_router
 from app.api.routes_coupons import router as coupons_router
 from app.api.routes_evaluation import router as evaluation_router
 from app.api.routes_fixture import router as fixture_router
-from app.api.routes_ht import router as ht_router
+from app.api.routes_ht import router as ht_router, start_ht_prefetch, stop_ht_prefetch
 from app.api.routes_live_ht import router as live_ht_router, start_ws_broadcaster, stop_ws_broadcaster
 from app.api.routes_performance import router as performance_router
 from app.api.routes_results import router as results_router
@@ -74,11 +74,13 @@ async def lifespan(app: FastAPI):
     if background_jobs_enabled():
         start_ws_broadcaster()
         start_live_watcher()
+        start_ht_prefetch()
     else:
         logging.getLogger(__name__).info("BACKGROUND_JOBS=0 — canlı izleyici ve WebSocket yayıncısı kapalı")
     try:
         yield
     finally:
+        await stop_ht_prefetch()
         await stop_live_watcher()
         await stop_ws_broadcaster()
         await shutdown_live_snapshot()

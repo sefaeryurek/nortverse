@@ -102,6 +102,60 @@ async def _odds_by_match(rows) -> dict[str, dict]:
     return out
 
 
+# Sprint 94 I2: yaklaşan maçların İY oranları önceden çekilir — sayfa açılınca beklemesin (kaydı olmayan maç için
+# 8 sn bekliyordu). Backend içinde 15 dk'da bir; istekler kapılı istemciden (saniyede ~1) sırayla geçer.
+PREFETCH_EVERY_S = 15 * 60
+PREFETCH_HORIZON = timedelta(hours=12)
+PREFETCH_MAX = 60
+_prefetch_task: asyncio.Task | None = None
+
+
+async def prefetch_upcoming(now: datetime | None = None) -> int:
+    """Önümüzdeki 12 saatte başlayacak ana lig maçlarından İY oranı olmayan ya da 15 dk'dan eski olanları çeker."""
+    now = now or datetime.now(timezone.utc)
+    async with get_session() as session:
+        rows = (await session.execute(
+            select(Match.match_id, Match.league_name, Match.league_code)
+            .where(Match.deleted_at.is_(None), Match.kickoff_time > now, Match.kickoff_time <= now + PREFETCH_HORIZON)
+            .order_by(Match.kickoff_time)
+        )).all()
+    ids = [r.match_id for r in rows if is_main_league(r.league_name, r.league_code)]
+    stored = await _stored_odds(ids)
+    due = [mid for mid in ids
+           if mid not in stored or (now - stored[mid][0]).total_seconds() > ODDS_MAX_AGE_S][:PREFETCH_MAX]
+    for mid in due:
+        await _refresh(mid)
+    return len(due)
+
+
+async def _prefetch_loop() -> None:
+    while True:
+        try:
+            count = await prefetch_upcoming()
+            if count:
+                log.info("İY oranları önceden çekildi: %d maç", count)
+        except Exception:
+            log.warning("İY oran ön çekimi başarısız", exc_info=True)
+        await asyncio.sleep(PREFETCH_EVERY_S)
+
+
+def start_ht_prefetch() -> None:
+    global _prefetch_task
+    if _prefetch_task is None or _prefetch_task.done():
+        _prefetch_task = asyncio.create_task(_prefetch_loop())
+
+
+async def stop_ht_prefetch() -> None:
+    global _prefetch_task
+    task, _prefetch_task = _prefetch_task, None
+    if task is not None and not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
 def _with_model(options: list[dict], probs: dict | None) -> list[dict]:
     """İY 1/X/2 seçeneklerine modelin olasılığını ekler (Ü/A'da çizgi iadeli olduğu için kıyas anlamlı değil)."""
     result = (probs or {}).get("result") or {}

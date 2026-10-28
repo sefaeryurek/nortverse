@@ -10,10 +10,13 @@ import typer
 from app.cli._helpers import _setup_logging, console
 from app.cli._long_jobs import backoff_delay, paced_delay, parse_until, past_deadline
 
+POST_MATCH = timedelta(hours=2)  # bundan önce çekilen geçmişte kapanış ve canlı satırlar eksik olabilir
+
 
 def backfill_odds_cmd(
     since: str = typer.Option("2026-02-01", "--since", help="Bu tarihten sonraki biten maçlar (kaynakta daha eskisi yok)"),
-    scope: str = typer.Option("ht", "--scope", help="ht = ilk yarı oranları, ft = maç sonu"),
+    days: Optional[int] = typer.Option(None, "--days", help="--since yerine: son N gün (günlük oran kaydı)"),
+    scope: str = typer.Option("ht", "--scope", help="ht = ilk yarı, ft = maç sonu, both = ikisi"),
     limit: Optional[int] = typer.Option(None, "--limit", help="En fazla bu kadar maç (deneme için)"),
     delay: float = typer.Option(3.0, "--delay", help="İstekler arası bekleme (sn) — maç saatlerinde en az 12"),
     until: Optional[str] = typer.Option(None, "--until", help="Bu saatte (HH:MM, İstanbul) kendiliğinden biter"),
@@ -21,19 +24,29 @@ def backfill_odds_cmd(
 ) -> None:
     """Biten ana + gölge lig maçlarının oran geçmişini `match_odds`'a yazar (en yeniden geriye).
 
-    Kesilirse tekrar çalıştırın: sadece henüz çekilmemiş maçlar işlenir. Kaynak hatasında durmaz, artan aralıklarla
-    bekler; maç saatlerinde yavaşlar (Sprint 94 D5).
+    Kesilirse tekrar çalıştırın: sadece henüz çekilmemiş maçlar işlenir; maç bitmeden çekilmiş (açılış/kapanış/
+    canlı satırları eksik) geçmiş de yenilenir. Kaynak hatasında durmaz, artan aralıklarla bekler; maç saatlerinde
+    yavaşlar (Sprint 94 D5). Günlük kayıt: `--days 2 --scope both` (update-scores.bat, Sprint 94 I2).
     """
-    if scope not in ("ht", "ft"):
-        raise typer.BadParameter("--scope ht veya ft olmalı")
+    if scope not in ("ht", "ft", "both"):
+        raise typer.BadParameter("--scope ht, ft veya both olmalı")
     _setup_logging("DEBUG" if verbose else "WARNING")
-    start = datetime.combine(date.fromisoformat(since), datetime.min.time(), timezone.utc)
-    asyncio.run(_backfill(start, scope, limit, delay, parse_until(until)))
+    if days is not None:
+        start = datetime.now(timezone.utc) - timedelta(days=days)
+    else:
+        start = datetime.combine(date.fromisoformat(since), datetime.min.time(), timezone.utc)
+    deadline = parse_until(until)
+
+    async def run_all() -> None:  # tek olay döngüsü: DB bağlantı havuzu döngüye bağlı
+        for one in (("ft", "ht") if scope == "both" else (scope,)):
+            await _backfill(start, one, limit, delay, deadline)
+
+    asyncio.run(run_all())
 
 
 async def _backfill(start: datetime, scope: str, limit: int | None, delay: float,
                     deadline: datetime | None = None) -> None:
-    from sqlalchemy import and_, select
+    from sqlalchemy import and_, or_, select
 
     from app.analysis.league_filter import is_tracked_league
     from app.db.connection import get_session
@@ -46,7 +59,9 @@ async def _backfill(start: datetime, scope: str, limit: int | None, delay: float
             select(Match.match_id, Match.league_name)
             .outerjoin(MatchOdds, and_(MatchOdds.match_id == Match.match_id, MatchOdds.scope == scope))
             .where(Match.deleted_at.is_(None), Match.actual_ft_home.isnot(None),
-                   Match.kickoff_time >= start, Match.kickoff_time <= cutoff, MatchOdds.match_id.is_(None))
+                   Match.kickoff_time >= start, Match.kickoff_time <= cutoff,
+                   # hiç yok ya da maç bitmeden çekilmiş (İY sayfası maç öncesi çeker) → tam geçmiş için yenile
+                   or_(MatchOdds.match_id.is_(None), MatchOdds.fetched_at < Match.kickoff_time + POST_MATCH))
             .order_by(Match.kickoff_time.desc())
         )).all()
     targets = [r for r in rows if is_tracked_league(r.league_name)]

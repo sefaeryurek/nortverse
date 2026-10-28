@@ -27,6 +27,10 @@ echo [%date% %time%] Skor guncelleme basliyor... >> "%LOGFILE%"
 python -m app.cli.main update-scores --pending-days 3 >> "%LOGFILE%" 2>&1
 set EXITCODE=%errorlevel%
 
+REM Gunluk oran kaydi (Sprint 94 I2): son 2 gunde biten takip maclarinin MS + IY oran gecmisi (acilis, kapanis,
+REM canli satirlar). Sadece eksik / mac bitmeden cekilmis olanlar; hatasi skor gorevini basarisiz saymaz.
+python -m app.cli.main backfill-odds --days 2 --scope both --delay 3 >> "%ROOT%\scripts\logs\odds_daily.log" 2>&1
+
 if %EXITCODE% equ 0 (
     echo [%date% %time%] Skor guncelleme basarili >> "%LOGFILE%"
     REM Saglik kontrolu icin basari isareti + olu adam ping'i

@@ -67,7 +67,7 @@ New-NortverseTask "HealthCheck" "health-check.bat" $health `
 
 # Gece uzun isleri (Sprint 94 D5): 01:00'de baslar, en gec 12:00'de kendiliginden biter, kaldigi yerden devam eder
 New-NortverseTask "LongJobs" "long-jobs.bat" (New-ScheduledTaskTrigger -Daily -At "01:00") `
-    "Gece uzun isleri: gol dakikalari backfill (01:00-12:00, mac saatlerinde degil)" (New-NortverseSettings 11)
+    "Gece uzun isleri: gol dakikalari, sonra mac sonu oran gecmisi (01:00-12:00, sirayla)" (New-NortverseSettings 11)
 
 # Aylik yedek geri yukleme testi (gecici konteyner 127.0.0.1:5544; canli DB'ye dokunmaz)
 New-NortverseTask "RestoreTest" "restore-test.bat" (New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek Sunday -At "10:00") `

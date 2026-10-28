@@ -297,3 +297,33 @@ async def test_run_tick_dry_run_reports_every_candidate_without_writing(monkeypa
     status = {e["match"].match_id: e["status"] for e in report}
     assert status == {"4": "already_frozen", "1": "dry_run", "2": "no_ht", "3": "not_live"}  # küçük lig (5) hiç aday değil
     assert next(e for e in report if e["match"].match_id == "1")["prediction"]["ms"]["pick"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_half_time_market_price_attached_to_full_time_decisions(monkeypatch):
+    """Sprint 94 I2: devre arası MS fiyatı kararlara `details.market` olarak eklenir (kural değişmez)."""
+    picks = [{"period": "ft", "market": "dc", "selection": "1X", "pct": 91.0, "cond_pct": 90.0, "cond_n": 40,
+              "best": True, "valuable": False}]
+    written, _obs = _capture_writes(monkeypatch, poisson=({"lambda": 1}, picks))
+    monkeypatch.setattr(live_ledger.live_archive, "load_view", AsyncMock(side_effect=RuntimeError("bozuk")))
+    monkeypatch.setattr(live_ledger.live_poisson, "ledger_rows", lambda pred, p, common, late=False: [
+        {**common, "rule_version": "live-poisson-v1.1", "period": "ft", "details": {"best": True}},
+        {**common, "rule_version": "x", "period": "ht", "details": {}}])
+    snapshot = {"ft": {"result": {"1": 1.5, "X": 4.0, "2": 7.0}}, "live": {"minute": "HT", "score": "1-0"}}
+    monkeypatch.setattr("app.scraper.odds.current_odds", AsyncMock(return_value=snapshot))
+    fs = FixtureScore("900", "live", 1, 0, minute="HT")
+    match = _match(kickoff_time=datetime.now(timezone.utc) - timedelta(minutes=50))
+    assert await freeze_live_prediction(match, fs) == "frozen"
+    ft_row = next(r for r in written if r["period"] == "ft")
+    assert ft_row["details"]["best"] is True                      # mevcut ayrıntı korunur
+    assert ft_row["details"]["market"]["ft"]["result"]["1"] == 1.5
+    assert "market" not in next(r for r in written if r["period"] == "ht")["details"]  # İY bitmiş
+
+
+@pytest.mark.asyncio
+async def test_market_price_failure_does_not_block_freeze(monkeypatch):
+    monkeypatch.setattr("app.scraper.odds.current_odds", AsyncMock(side_effect=TimeoutError("yavaş")))
+    assert await live_ledger.market_snapshot("900", datetime.now(timezone.utc)) is None
+    monkeypatch.setattr("app.scraper.odds.current_odds", AsyncMock(return_value={"ft": {}, "live": None}))
+    assert await live_ledger.market_snapshot("900", datetime.now(timezone.utc)) is None  # boş pazar kaydedilmez
+    assert live_ledger.attach_market([{"period": "ft", "details": {}}], None) == [{"period": "ft", "details": {}}]
