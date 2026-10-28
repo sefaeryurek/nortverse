@@ -65,6 +65,8 @@ class HealthResponse(BaseModel):
     last_fixture_cached_at: Optional[str] = None
     bg_queue_size: int = 0
     cached_analyses: int = 0
+    # Sprint 94 E9: tarayıcı sırası ve oran isteği sayaçları (kaynak engeli / bellek baskısı görünür olsun)
+    scraper: Optional[dict] = None
 
 
 class FixtureMatchOut(BaseModel):

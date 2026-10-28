@@ -197,10 +197,7 @@ async def fixture(
         raise HTTPException(503, "Bu günün bülteni henüz hazır değil")
     log.info("Fixture Playwright scrape başlıyor: %s", cache_key)
     try:
-        matches = await asyncio.wait_for(
-            fetch_istanbul_fixture(req_date, only_hot=False),
-            timeout=45.0,
-        )
+        matches = await _scrape_fixture_once(req_date)
     except asyncio.TimeoutError:
         log.error("Fixture scrape 45sn içinde dönmedi: %s", cache_key)
         raise HTTPException(
@@ -237,6 +234,22 @@ async def fixture(
 
     fixture_cache_put(mem_key, [m.model_dump() for m in result])
     return await _bulletin_items([m.model_dump() for m in result], req_date)
+
+
+# Sprint 94 E9: aynı gün için aynı anda tek kazıma — eşzamanlı istekler aynı sonucu bekler (tarayıcı fırtınası yok)
+_scrapes_in_flight: dict[str, asyncio.Future] = {}
+
+
+async def _scrape_fixture_once(req_date: date):
+    key = req_date.isoformat()
+    task = _scrapes_in_flight.get(key)
+    if task is None:
+        task = asyncio.ensure_future(asyncio.wait_for(fetch_istanbul_fixture(req_date, only_hot=False), timeout=45.0))
+        _scrapes_in_flight[key] = task
+        task.add_done_callback(lambda _t, k=key: _scrapes_in_flight.pop(k, None))
+    else:
+        log.info("Fixture kazıması zaten sürüyor, sonucu bekleniyor: %s", key)
+    return await asyncio.shield(task)
 
 
 _pattern_status_cache: OrderedDict[str, tuple[float, dict]] = OrderedDict()

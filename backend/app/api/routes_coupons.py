@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.api.ratelimit import check_rate
 from app.analysis.coupons import MARKETS, MAX_LEGS, coupon_status
 from app.db.connection import get_session
 from app.db.models import Coupon, CouponLeg, CouponLegResult, Match, User
@@ -34,6 +35,11 @@ PREMATCH_ONLY = True  # K2: maç başladıysa hiçbir periyoda kupon yazılmaz
 HT_CLOSE_AFTER = timedelta(minutes=47)   # pano/dakika bilinmese de başlamadan 47 dk sonra İY kapalı
 FT_CLOSE_AFTER = timedelta(minutes=115)  # ... 115 dk sonra maç kapalı
 _MINUTE_RE = re.compile(r"\s*(\d+)\s*(?:\+\s*(\d+))?")
+
+
+def _odds_fresh(match_id: str, max_age: float = _ODDS_TTL) -> bool:
+    cached = _odds_cache.get(match_id)
+    return bool(cached) and time.monotonic() - cached[0] < max_age
 
 
 async def _odds(match_id: str, *, max_age: float = _ODDS_TTL) -> dict:
@@ -137,9 +143,15 @@ async def coupon_matches(target_date: str = Query(..., alias="date", pattern=r"^
             for r in rows if is_tracked_league(r.league_name)]
 
 
+ODDS_RATE_PER_MIN = 20     # Sprint 94 E9: kullanıcı başına, KAYNAĞA GİDEN istek (önbellekten dönen sayılmaz) — her biri 3 HTTP
+COUPON_RATE_PER_MIN = 6
+
+
 @router.get("/api/odds/{match_id}")
-async def get_odds(match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> dict:
+async def get_odds(request: Request, match_id: str = Path(pattern=r"^[0-9]{1,12}$")) -> dict:
     """Kupon için güncel oranlar (maç sonu 1X2/ÇŞ/Ü-A, İY 1X2/Ü-A) — kapanmış periyot boş döner."""
+    if not _odds_fresh(match_id):
+        check_rate(request, "odds", ODDS_RATE_PER_MIN)
     async with get_session() as session:
         match = (await session.execute(
             select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
@@ -223,6 +235,7 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
     idem_key = (request.headers.get("idempotency-key") or "").strip()[:80] or None
     if idem_key and (user.id, idem_key) in _idempotency:
         return _idempotency[(user.id, idem_key)][1]
+    check_rate(request, "coupon", COUPON_RATE_PER_MIN)  # tekrar gönderilen aynı istek sayılmaz
     seen = set()
     for leg in body.legs:
         if leg.selection not in MARKETS.get((leg.period, leg.market), ()):

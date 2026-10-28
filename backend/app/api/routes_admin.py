@@ -10,6 +10,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import case, func, or_, select, text
 
+from app.scraper.browser import playwright_stats
+from app.scraper.odds import odds_stats
 from app.config import ISTANBUL_TZ
 from app.analysis.correlation import compute_poisson_correlations
 from app.analysis.league_filter import CUP_KEYWORDS
@@ -94,6 +96,7 @@ async def health() -> HealthResponse:
         last_fixture_cached_at=last_fixture_cached.isoformat() if last_fixture_cached else None,
         bg_queue_size=bg_queue.qsize() if bg_queue else 0,
         cached_analyses=len(analysis_cache),
+        scraper={"playwright": playwright_stats(), "odds": odds_stats()},
     )
 
 

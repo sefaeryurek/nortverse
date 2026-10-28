@@ -20,6 +20,7 @@ import gzip
 import json
 import time
 from datetime import datetime, timezone
+from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -140,10 +141,74 @@ def _get(path: str, referer_id: str) -> bytes:
     return gzip.decompress(body) if body[:2] == bytes((0x1F, 0x8B)) else body
 
 
+class SourceThrottled(RuntimeError):
+    """Kaynak 403/429 verdi; bekleme süresi dolana kadar istek gönderilmez."""
+
+
+# Sprint 94 E9 — kaynağa nazik istemci: eşzamanlı en fazla N istek, saniyede ~1 istek, 403/429'da üstel bekleme
+# (30 sn → 15 dk). Amaç evin IP'sinin kaynakta engellenmemesi; sayaçlar /api/health'te.
+_BACKOFF_START = 30.0
+_BACKOFF_MAX = 15 * 60.0
+_gate: tuple[asyncio.AbstractEventLoop, asyncio.Semaphore, asyncio.Lock] | None = None
+_next_slot = 0.0
+_backoff = 0.0
+_blocked_until = 0.0
+_stats = {"requests": 0, "errors": 0, "throttled": 0, "blocked_skips": 0}
+
+
+def _gate_for_loop() -> tuple[asyncio.Semaphore, asyncio.Lock]:
+    global _gate
+    loop = asyncio.get_running_loop()
+    if _gate is None or _gate[0] is not loop:
+        _gate = (loop, asyncio.Semaphore(max(1, SCRAPER.odds_max_concurrency)), asyncio.Lock())
+    return _gate[1], _gate[2]
+
+
+def odds_stats() -> dict:
+    remaining = max(0.0, _blocked_until - time.monotonic())
+    return {**_stats, "blocked_for_s": round(remaining)}
+
+
+def _register_throttle() -> None:
+    global _backoff, _blocked_until
+    _backoff = min(_BACKOFF_MAX, _backoff * 2) if _backoff else _BACKOFF_START
+    _blocked_until = time.monotonic() + _backoff
+    _stats["throttled"] += 1
+
+
+async def _fetch(path: str, referer_id: str) -> bytes:
+    """`_get`'in kapılı hali: sıra + hız sınırı + engel sonrası bekleme. Tüm oran istekleri buradan geçer."""
+    global _next_slot, _backoff
+    if time.monotonic() < _blocked_until:
+        _stats["blocked_skips"] += 1
+        raise SourceThrottled(f"Kaynak geçici olarak isteği kısıtladı ({odds_stats()['blocked_for_s']} sn)")
+    sem, pace = _gate_for_loop()
+    async with sem:
+        async with pace:  # istekler arası en az 1/rps saniye
+            now = time.monotonic()
+            wait = _next_slot - now
+            _next_slot = max(now, _next_slot) + 1.0 / max(0.1, SCRAPER.odds_requests_per_second)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        _stats["requests"] += 1
+        try:
+            body = await asyncio.to_thread(_get, path, referer_id)
+        except HTTPError as exc:
+            _stats["errors"] += 1
+            if exc.code in (403, 429):
+                _register_throttle()
+            raise
+        except Exception:
+            _stats["errors"] += 1
+            raise
+    _backoff = 0.0  # başarılı istek → bekleme kademesi sıfırlanır
+    return body
+
+
 async def fetch_odds(match_id: str, *, half: bool) -> dict[str, list[dict]] | None:
     """Tek maçın oran geçmişi (İY için half=True)."""
     path = f"/ajax/SoccerAjax?type=14&t=20&id={match_id}&cid=8&h={1 if half else 0}&r1=0&r2=0&r3=0"
-    return parse_odds(await asyncio.to_thread(_get, path, match_id))
+    return parse_odds(await _fetch(path, match_id))
 
 
 def parse_summary(payload: str | bytes) -> dict | None:
@@ -227,7 +292,7 @@ def build_current(summary: dict | None, ft_hist: dict | None, ht_hist: dict | No
 async def current_odds(match_id: str) -> dict:
     """Kupon için şu anki oranlar (`build_current`). Üç istek paralel; biri düşse de diğerleriyle devam eder."""
     summary_raw, ft_hist, ht_hist = await asyncio.gather(
-        asyncio.to_thread(_get, f"/ajax/SoccerAjax?type=14&t=10&id={match_id}&cid=8&h=0&r1=0&r2=0&r3=0", match_id),
+        _fetch(f"/ajax/SoccerAjax?type=14&t=10&id={match_id}&cid=8&h=0&r1=0&r2=0&r3=0", match_id),
         fetch_odds(match_id, half=False),
         fetch_odds(match_id, half=True),
         return_exceptions=True,

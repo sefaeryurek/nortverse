@@ -17,7 +17,7 @@ const STATUS_COLOR: Record<CouponView["status"], string> = {
   pending: "var(--nv-text-tertiary)", won: "var(--nv-accent-green)", lost: "var(--nv-accent-red)", refund: "var(--nv-text-secondary)",
   partial_loss: "var(--nv-accent-amber)",
 };
-const DRAFT_REFRESH_MS = 30_000;
+const DRAFT_REFRESH_MS = 60_000;  // 10 bacakta dakikada 10 istek: kullanıcı başına oran sınırının (20) altında
 
 function newKey(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -126,7 +126,7 @@ export default function KupondasPage() {
   });
   const total = useMemo(() => draft.reduce((acc, d) => acc * d.odds, 1), [draft]);
 
-  // Taslaktaki oranlar 30 sn'de bir tazelenir (kayıt anındaki oran gösterilenden çok farklı olmasın)
+  // Taslaktaki oranlar 60 sn'de bir tazelenir (kayıt anındaki oran gösterilenden çok farklı olmasın)
   const draftIds = useMemo(() => [...new Set(draft.map((d) => d.match_id))].sort().join(","), [draft]);
   useEffect(() => {
     if (!draftIds) return;
