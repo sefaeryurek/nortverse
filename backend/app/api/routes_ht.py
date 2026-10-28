@@ -208,6 +208,9 @@ async def ht_strategy(
         snap = snapshots.get(r.match_id)
         if snap is not None and isinstance(snap.picks, list) and snap.picks:
             probs = (snap.picks[0] or {}).get("probs")
+        elif r.actual_ht_home is not None or (r.kickoff_time is not None and r.kickoff_time <= datetime.now(timezone.utc)):
+            # Sprint 94 K-4: başlamış/bitmiş maçta güncel model sonucu görmüş olabilir → dondurulmuş kayıt yoksa gösterilmez
+            probs = None
         else:
             live = match_ht(model, r.league_name or "", r.home_team, r.away_team)
             probs = live["probs"] if live else None

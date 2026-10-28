@@ -13,15 +13,18 @@ from app.api import routes_ht
 KICK = datetime(2026, 10, 28, 17, 0, tzinfo=timezone.utc)
 
 
-def _row(mid, ht=None):
+FUTURE = datetime.now(timezone.utc) + timedelta(days=1)
+
+
+def _row(mid, ht=None, kickoff=KICK):
     return SimpleNamespace(match_id=mid, home_team=f"H{mid}", away_team=f"A{mid}", league_name="English Premier League",
-                           league_code="ENG PR", kickoff_time=KICK,
+                           league_code="ENG PR", kickoff_time=kickoff,
                            actual_ht_home=None if ht is None else ht[0], actual_ht_away=None if ht is None else ht[1])
 
 
 @pytest.fixture
 def board(monkeypatch):
-    rows = [_row("1"), _row("2"), _row("3", ht=(1, 0))]
+    rows = [_row("1", kickoff=FUTURE), _row("2"), _row("3", ht=(1, 0))]
     session = AsyncMock()
     session.execute.side_effect = [MagicMock(all=lambda: rows),
                                    MagicMock(scalars=lambda: MagicMock(all=lambda: []))]
@@ -57,14 +60,19 @@ async def test_hides_matches_without_odds_and_orders_by_strongest(board):
 @pytest.mark.asyncio
 async def test_model_note_only_on_result_market_and_outcome_for_finished(board):
     out = await routes_ht.ht_strategy(target_date="2026-10-28", shadow=False)
+    upcoming = next(m for m in out["matches"] if m["match_id"] == "1")
+    for o in upcoming["options"]:
+        assert (o["model_pct"] is None) == (o["market"] == "ou")
+    assert upcoming["expected_goals"] == {"home": 0.7, "away": 0.4}
     finished = next(m for m in out["matches"] if m["match_id"] == "3")
     assert finished["final_ht"] == "1-0"
     for o in finished["options"]:
-        assert (o["model_pct"] is None) == (o["market"] == "ou")
         assert o["outcome"] in ("hit", "miss", "push", "half")
+        # Sprint 94 K-4: dondurulmuş kayıt yok → güncel model sonucu görmüş olabilir, gösterilmez
+        assert o["model_pct"] is None
     home = next(o for o in finished["options"] if o["market"] == "result" and o["selection"] == "1")
-    assert home["outcome"] == "hit" and home["model_pct"] == 40.0
-    assert finished["expected_goals"] == {"home": 0.7, "away": 0.4}
+    assert home["outcome"] == "hit"
+    assert finished["expected_goals"] is None
 
 
 @pytest.mark.asyncio
