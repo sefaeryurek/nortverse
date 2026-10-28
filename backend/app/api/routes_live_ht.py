@@ -13,7 +13,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Path, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 
 from app.analysis.league_filter import canonical_league_name, is_shadow_league, is_tracked_league
 from app.analysis import live_archive, live_poisson
@@ -125,6 +125,17 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
             "cond_level": details.get("cond_level"),
             "conflict": bool(details.get("conflict")), "rule_version": r.rule_version,
         })
+    # İzleyicinin değerlendirdiği ama karar çıkmayan maçlar da "kayıtlı" sayılır: ekranda kararlar sonradan
+    # (biten maçın güncel modeliyle) yeniden hesaplanmaz, boş liste gösterilir (Sprint 94 B4).
+    evaluated = (await session.execute(
+        select(MatchHtObservation.match_id, func.min(MatchHtObservation.observed_at))
+        .where(MatchHtObservation.source == "livescore", MatchHtObservation.match_id.in_(ids))
+        .group_by(MatchHtObservation.match_id)
+    )).all()
+    for match_id, observed_at in evaluated:
+        entry = out.setdefault(match_id, {"frozen_at": observed_at.isoformat(), "highlights": [], "archived": True})
+        entry["archived"] = True
+        entry.setdefault("poisson", [])
     for entry in out.values():
         entry["highlights"].sort(key=lambda h: (h["risky"], -h["pct"], -h["n"]))
     return out

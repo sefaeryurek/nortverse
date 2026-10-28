@@ -11,7 +11,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.analysis import live_2h, live_archive, live_poisson
@@ -21,7 +21,7 @@ from app.analysis.live_model import LIVE_RULE_VERSION, get_cond_table, predict_l
 from app.analysis.persist import hash_string
 from app.api.live_snapshot import get_live_snapshot
 from app.db.connection import get_session
-from app.db.models import Match, MatchHtObservation, PredictionLedger
+from app.db.models import Match, MatchHtObservation
 from app.scraper.fixture_scores import FixtureScore, phase_from_minute
 
 log = logging.getLogger(__name__)
@@ -30,6 +30,10 @@ WATCH_INTERVAL = 60.0
 WINDOW_START = timedelta(minutes=150)
 WINDOW_END = timedelta(minutes=40)
 _OBS_SOURCE = "livescore"
+# K10 (Sprint 94): eski COND modeli (live-ms-v1) ekranda yok ve penceresiz yazılıyordu (24 Ekim'de 17 kayıt
+# ~97. dakikada) → artık deftere yazılmaz. Tahmin yine hesaplanır (CLI denemesi gösterir).
+# "Bu maç değerlendirildi" işareti: izleyicinin yazdığı İY gözlemi (source=livescore) — kayıt çıkmasa da yazılır.
+RECORD_LIVE_MS = False
 
 _watcher_task: asyncio.Task | None = None
 
@@ -147,11 +151,16 @@ async def plan_live_freeze(match: Match, fs: FixtureScore) -> tuple[str, dict | 
     if phase == "2h" and (fs.home, fs.away) != ht:
         # 2. yarıda gol gördükten sonra "tahmin" yazılmaz.
         return "late_score_changed", None
-    table = await get_cond_table()
-    prediction = predict_live(
-        table, match.league_name or "", ht,
-        [match.pattern_ft_b, match.pattern_ft_c, match.pattern_ft_d],
-    )
+    try:
+        table = await get_cond_table()
+        prediction = predict_live(
+            table, match.league_name or "", ht,
+            [match.pattern_ft_b, match.pattern_ft_c, match.pattern_ft_d],
+        )
+    except Exception:
+        # Eski COND modelinin hatası ekrandaki karar (live-poisson-v1.1) ve gölge kayıtları engellemez.
+        log.warning("COND tahmini hesaplanamadı [%s]", match.match_id, exc_info=True)
+        prediction = None
     return "ready", prediction
 
 
@@ -218,7 +227,8 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
     now = datetime.now(timezone.utc)
     async with get_session() as session:
         obs_id = await _ht_observation_id(session, match, ht, phase, now)
-        rows = ledger_rows(match, prediction, now, obs_id, late=phase == "2h")
+        rows = (ledger_rows(match, prediction, now, obs_id, late=phase == "2h")
+                if RECORD_LIVE_MS and prediction is not None else [])
         # Canlı arşiv %85+ işaretleri: ana kayıt ile aynı İY gözlemine bağlı; geç kalındıysa yazılmaz.
         # Arşiv ve gölge işaretleri sadece devre arası / 2. yarının başında; geç kalındıysa yazılmaz.
         window_ok = archive_freeze_allowed(fs, match.kickoff_time, now)
@@ -242,11 +252,12 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             log.warning("Arşiv işaretleri yazılmadı (görünüm yok) [%s]", match.match_id)
         written = await record_predictions(session, rows)
     if written:
-        log.info("Canlı tahmin donduruldu [%s] İY %s-%s → %s %%%.1f · %d arşiv işareti (%%85+)",
-                 match.match_id, ht[0], ht[1], prediction["ms"]["pick"], prediction["ms"]["prob"] * 100,
-                 len(view["highlights"]) if archive_ok else 0)
+        log.info("Canlı kararlar donduruldu [%s] İY %s-%s · %d satır (%d arşiv işareti, %d Poisson)",
+                 match.match_id, ht[0], ht[1], written, len(view["highlights"]) if archive_ok else 0,
+                 len(shadow_picks) if window_ok else 0)
         return "frozen"
-    return "already_frozen"
+    # İY gözlemi yazıldı ama kaydedilecek karar yok (ya da geç kalındı) → maç değerlendirilmiş sayılır
+    return "evaluated"
 
 
 async def run_tick(*, dry_run: bool = False, snapshot=None) -> list[dict]:
@@ -276,19 +287,12 @@ async def run_tick(*, dry_run: bool = False, snapshot=None) -> list[dict]:
         candidates = [m for m in candidates if is_tracked_league(m.league_name, m.league_code)]
         if not candidates:
             return []
+        # Değerlendirilmiş maç = izleyicinin İY gözlemi var (kararlarla aynı işlemde yazılır).
+        # Eskiden live-ms-v1 ana satırına bakılıyordu; o model hata verince diğer kayıtlar da tekrar denenmiyordu.
         frozen = set((await session.execute(
-            select(PredictionLedger.match_id).where(
-                PredictionLedger.source == "live_ht",
-                PredictionLedger.match_id.in_([m.match_id for m in candidates]),
-                or_(
-                    # Arşiv işaretleriyle birlikte kaydedilmiş ana satır …
-                    (PredictionLedger.rule_version == LIVE_RULE_VERSION)
-                    & (PredictionLedger.market == "result")
-                    & (PredictionLedger.details["archive_rule_version"].astext
-                       == live_archive.LIVE_ARCHIVE_RULE_VERSION),
-                    # … ya da eski sürümde kaydedilip arşiv işaretleri sonradan tamamlanmış maç.
-                    PredictionLedger.rule_version == live_archive.LIVE_ARCHIVE_RULE_VERSION,
-                ),
+            select(MatchHtObservation.match_id).where(
+                MatchHtObservation.source == _OBS_SOURCE,
+                MatchHtObservation.match_id.in_([m.match_id for m in candidates]),
             ).distinct()
         )).scalars().all())
     report = [{"match": m, "score": None, "status": "already_frozen", "prediction": None}

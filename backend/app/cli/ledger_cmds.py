@@ -10,6 +10,7 @@ from app.cli._helpers import _setup_logging, console
 
 _STATUS_TEXT = {
     "frozen": "[green]kaydedildi[/green]",
+    "evaluated": "değerlendirildi (kaydedilecek karar yok / geç)",
     "dry_run": "[cyan]kaydedilirdi (deneme)[/cyan]",
     "already_frozen": "zaten kayıtlı",
     "late_score_changed": "[yellow]2. yarıda skor değişmiş — kaydedilmez[/yellow]",
@@ -22,6 +23,7 @@ _STATUS_TEXT = {
 
 
 def _prediction_text(prediction: dict | None) -> str:
+    """Eski COND modelinin (live-ms-v1) tahmini — artık deftere yazılmaz, sadece bilgi (Sprint 94 K10)."""
     if not prediction:
         return "—"
     ms = prediction["ms"]

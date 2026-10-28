@@ -157,15 +157,14 @@ async def test_freeze_dry_run_computes_without_writing(monkeypatch):
     assert await freeze_live_prediction(match, fs, dry_run=True) == "dry_run"
 
 
-@pytest.mark.asyncio
-async def test_freeze_writes_main_row_when_archive_view_fails(monkeypatch):
-    """Arşiv görünümü hata verirse ana kayıt ve İY gözlemi yine yazılır (eskiden tüm dondurma düşüyordu)."""
+def _capture_writes(monkeypatch, *, poisson=(None, [])):
     from contextlib import asynccontextmanager
 
     monkeypatch.setattr(live_ledger, "get_cond_table", AsyncMock(return_value=_table(_many(LEAGUE, (1, 0), (1, 0), 40))))
-    monkeypatch.setattr(live_ledger.live_archive, "load_view", AsyncMock(side_effect=RuntimeError("bozuk")))
-    monkeypatch.setattr(live_ledger, "_poisson_shadow", AsyncMock(return_value=(None, [])))
-    monkeypatch.setattr(live_ledger, "_ht_observation_id", AsyncMock(return_value=11))
+    monkeypatch.setattr(live_ledger, "_poisson_shadow", AsyncMock(return_value=poisson))
+    monkeypatch.setattr(live_ledger, "_live_2h_shadow", AsyncMock(return_value=([], None)))
+    obs = AsyncMock(return_value=11)
+    monkeypatch.setattr(live_ledger, "_ht_observation_id", obs)
     written: list = []
 
     async def record(_session, rows):
@@ -179,11 +178,74 @@ async def test_freeze_writes_main_row_when_archive_view_fails(monkeypatch):
         yield object()
 
     monkeypatch.setattr(live_ledger, "get_session", fake_session)
+    return written, obs
+
+
+@pytest.mark.asyncio
+async def test_freeze_writes_observation_when_archive_view_fails(monkeypatch):
+    """Arşiv görünümü hata verirse İY gözlemi (değerlendirildi işareti) yine yazılır."""
+    written, obs = _capture_writes(monkeypatch)
+    monkeypatch.setattr(live_ledger.live_archive, "load_view", AsyncMock(side_effect=RuntimeError("bozuk")))
+    fs = FixtureScore("900", "live", 1, 0, minute="HT")
+    match = _match(kickoff_time=datetime.now(timezone.utc) - timedelta(minutes=50))
+    assert await freeze_live_prediction(match, fs) == "evaluated"
+    obs.assert_awaited_once()
+    assert written == []
+
+
+@pytest.mark.asyncio
+async def test_live_ms_v1_is_no_longer_recorded(monkeypatch):
+    """K10: eski COND modeli (live-ms-v1) deftere yazılmaz; Poisson kararları aynı İY gözlemine bağlanır."""
+    poisson_pred = {"lambda": 1}
+    picks = [{"period": "ft", "market": "dc", "selection": "1X", "pct": 91.0, "cond_pct": 90.0, "cond_n": 40,
+              "best": True, "valuable": False}]
+    written, _obs = _capture_writes(monkeypatch, poisson=(poisson_pred, picks))
+    monkeypatch.setattr(live_ledger.live_archive, "load_view", AsyncMock(side_effect=RuntimeError("bozuk")))
+    monkeypatch.setattr(live_ledger.live_poisson, "ledger_rows",
+                        lambda pred, p, common, late=False: [{**common, "rule_version": "live-poisson-v1.1"}])
     fs = FixtureScore("900", "live", 1, 0, minute="HT")
     match = _match(kickoff_time=datetime.now(timezone.utc) - timedelta(minutes=50))
     assert await freeze_live_prediction(match, fs) == "frozen"
-    assert written and all(r["rule_version"] == live_ledger.LIVE_RULE_VERSION for r in written)
+    assert [r["rule_version"] for r in written] == ["live-poisson-v1.1"]
     assert written[0]["ht_observation_id"] == 11
+
+
+@pytest.mark.asyncio
+async def test_live_ms_not_frozen_after_minute_50(monkeypatch):
+    """2. yarının 60. dakikasında (skor hâlâ İY skoru) hiçbir canlı satır yazılmaz; maç değerlendirilmiş sayılır."""
+    picks = [{"period": "ft", "market": "dc", "selection": "1X", "pct": 91.0, "cond_pct": 90.0, "cond_n": 40,
+              "best": True, "valuable": False}]
+    written, obs = _capture_writes(monkeypatch, poisson=({"lambda": 1}, picks))
+    monkeypatch.setattr(live_ledger.live_archive, "load_view", AsyncMock(return_value={"highlights": []}))
+    fs = FixtureScore("900", "live", 1, 0, ht_home=1, ht_away=0, minute="60", phase="2h")
+    match = _match(kickoff_time=datetime.now(timezone.utc) - timedelta(minutes=80))
+    assert await freeze_live_prediction(match, fs) == "evaluated"
+    assert written == [] and obs.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_cond_model_failure_does_not_block_other_records(monkeypatch):
+    written, _obs = _capture_writes(monkeypatch)
+    monkeypatch.setattr(live_ledger, "predict_live", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("bozuk")))
+    monkeypatch.setattr(live_ledger.live_archive, "load_view", AsyncMock(return_value={"highlights": []}))
+    monkeypatch.setattr(live_ledger.live_archive, "ledger_rows",
+                        lambda view, common, late=False: [{**common, "rule_version": "live-arch-v2"}])
+    fs = FixtureScore("900", "live", 1, 0, minute="HT")
+    match = _match(kickoff_time=datetime.now(timezone.utc) - timedelta(minutes=50))
+    assert await freeze_live_prediction(match, fs) == "frozen"
+    assert [r["rule_version"] for r in written] == ["live-arch-v2"]
+
+
+@pytest.mark.asyncio
+async def test_frozen_match_without_poisson_rows_shows_no_decisions(monkeypatch):
+    """Değerlendirilmiş ama Poisson kararı çıkmamış maçta kararlar sonradan yeniden hesaplanmaz."""
+    from app.api import routes_live_ht
+
+    monkeypatch.setattr(routes_live_ht.live_poisson, "get_poisson_model",
+                        AsyncMock(side_effect=AssertionError("yeniden hesaplanmamalı")))
+    monkeypatch.setattr(routes_live_ht.live_poisson, "load_hit_table", AsyncMock(return_value={}))
+    decisions = await routes_live_ht._poisson_decisions(_match(), (1, 0), {"poisson": []}, None)
+    assert decisions == []
 
 
 @pytest.mark.asyncio
