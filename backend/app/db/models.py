@@ -223,10 +223,12 @@ class CouponLeg(Base):
     odds_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     live_minute: Mapped[str | None] = mapped_column(String(10))
     live_score: Mapped[str | None] = mapped_column(String(10))
+    # Sprint 94 J6: maç kayıt anında nereden geldi — 'db' (matches) | 'fixture' (sadece bülten, analizsiz)
+    source: Mapped[str] = mapped_column(String(10), nullable=False, server_default="db")
 
     __table_args__ = (
         ForeignKeyConstraint(["coupon_id"], ["coupons.id"]),
-        ForeignKeyConstraint(["match_id"], ["matches.match_id"]),
+        CheckConstraint("source IN ('db', 'fixture')", name="ck_coupon_legs_source"),
     )
 
 

@@ -104,34 +104,35 @@ async def _ht_observations(session, match_ids: list[str]) -> dict[str, tuple[int
 async def settle_pending(session) -> int:
     """Skoru belli olan sonuçsuz kupon maçlarını sonuçlandırır (her maç bir kez); oynanmayan maç iade.
 
-    Yazılan sonuç sayısı.
+    Maç bilgisi `match_ref.load_match_refs`'ten: analizli maç `matches`'tan, bülten tabanlı bacak (Sprint 94 J6)
+    bülten önbelleğinden. Yazılan sonuç sayısı.
     """
     from sqlalchemy import select
     from sqlalchemy.dialects.postgresql import insert
 
-    from app.analysis.match_status import fixture_statuses
-    from app.db.models import CouponLeg, CouponLegResult, Match
+    from app.analysis.match_ref import load_match_refs
+    from app.db.models import CouponLeg, CouponLegResult
 
     rows = (await session.execute(
         select(CouponLeg.id, CouponLeg.match_id, CouponLeg.period, CouponLeg.market, CouponLeg.selection,
-               CouponLeg.line, CouponLeg.odds, CouponLeg.kickoff_time,
-               Match.actual_ht_home, Match.actual_ht_away, Match.actual_ft_home, Match.actual_ft_away,
-               Match.deleted_at)
-        .join(Match, Match.match_id == CouponLeg.match_id)
+               CouponLeg.line, CouponLeg.odds, CouponLeg.kickoff_time)
         .outerjoin(CouponLegResult, CouponLegResult.leg_id == CouponLeg.id)
         .where(CouponLegResult.leg_id.is_(None))
     )).all()
+    if not rows:
+        return 0
     now = datetime.now(timezone.utc)
     ids = sorted({r.match_id for r in rows})
-    statuses = await fixture_statuses(session, ids, now) if rows else {}
-    ht_obs = await _ht_observations(session, ids) if rows else {}
+    refs = await load_match_refs(session, ids, now)
+    ht_obs = await _ht_observations(session, ids)
     written = 0
     for r in rows:
+        ref = refs.get(r.match_id)
         # İY bacağı devre arasında gözlenen İY skoruyla sonuçlanır (DB'ye sonuç saatler sonra geliyordu)
-        ht = ((r.actual_ht_home, r.actual_ht_away) if r.actual_ht_home is not None else ht_obs.get(r.match_id))
-        ft = (r.actual_ft_home, r.actual_ft_away) if r.actual_ft_home is not None else None
+        ht = (ref.ht if ref is not None else None) or ht_obs.get(r.match_id)
+        ft = ref.ft if ref is not None else None
         score = ht if r.period == "ht" else ft
-        void = leg_void_reason(deleted=r.deleted_at is not None, status=statuses.get(r.match_id),
+        void = leg_void_reason(deleted=bool(ref and ref.deleted), status=ref.status if ref else None,
                                has_score=score is not None, kickoff=r.kickoff_time, now=now,
                                ft_known=ft is not None, period=r.period)
         if void is not None:

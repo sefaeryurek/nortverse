@@ -675,6 +675,13 @@
     "acceptNewOdds": "Yeni oranlarla kaydet",
     "cancel": "Vazgeç",
     "unavailable": "kapandı",
-    "loadFailed": "Kuponlar yüklenemedi."
+    "loadFailed": "Kuponlar yüklenemedi.",
+    "searchMatch": "Takım veya lig ara",
+    "onlyAnalyzed": "Sadece analizli",
+    "showStarted": "Başlamışları göster",
+    "matchCount": "{n} maç",
+    "noSearchResult": "Aramaya uyan maç yok",
+    "unknownLeague": "Lig bilinmiyor",
+    "analyzedTag": "analizli"
   }
 }

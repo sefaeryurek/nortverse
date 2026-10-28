@@ -624,9 +624,11 @@ export interface CouponMatch {
   league_name: string | null;
   kickoff_time: string | null;
   started: boolean;
+  /** Maçın tahmin analizi var (ana + gölge lig); bülten maçlarında false (Sprint 94 J6) */
+  analyzed?: boolean;
 }
 
-/** Kupona eklenebilecek maçlar (veritabanındaki, bitmemiş; kaynağa gitmez → hızlı). */
+/** Kupona eklenebilecek maçlar: günün bülteni (kupa dahil) + analizli bitmemiş maçlar; kaynağa gitmez → hızlı. */
 export async function getCouponMatches(date: string): Promise<CouponMatch[]> {
   return request<CouponMatch[]>(`/api/coupon-matches?${new URLSearchParams({ date })}`, { cache: "no-store" });
 }

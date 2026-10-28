@@ -21,6 +21,7 @@ from sqlalchemy import select
 
 from app.api.ratelimit import check_rate
 from app.analysis.coupons import MARKETS, MAX_LEGS, coupon_status
+from app.analysis.match_ref import MatchRef, load_match_refs, ref_from_fixture
 from app.db.connection import get_session
 from app.db.models import Coupon, CouponLeg, CouponLegResult, Match, User
 from app.scraper.odds import current_odds
@@ -98,7 +99,7 @@ def closed_reason(*, period: str, now: datetime, kickoff: datetime | None, actua
     return None
 
 
-async def _match_state(session, match: Match, now: datetime) -> dict:
+async def _match_state(session, match: MatchRef, now: datetime) -> dict:
     """Kapanış kararı için maçın durum kanıtları (pano + defter + bülten)."""
     from app.analysis.prematch_v4 import match_already_started
     from app.api.live_snapshot import get_live_snapshot
@@ -110,19 +111,33 @@ async def _match_state(session, match: Match, now: datetime) -> dict:
         board = snapshot.scores.get(match.match_id) if snapshot is not None else None
     except Exception:  # pano yoksa diğer kanıtlar yeter
         log.debug("Kupon kapanışı: pano okunamadı [%s]", match.match_id, exc_info=True)
-    return {"kickoff": match.kickoff_time, "actual_ft": match.actual_ft_home is not None,
-            "actual_ht": match.actual_ht_home is not None, "started_reason": started_reason,
-            "board_status": board.status if board else None, "board_phase": board.phase if board else None,
+    # Pano görmüyorsa bültenin son durumu (ertelendi / iptal) da kapatır
+    board_status = board.status if board else (match.status if match.status in ("postponed", "abandoned") else None)
+    return {"kickoff": match.kickoff_time, "actual_ft": match.ft is not None,
+            "actual_ht": match.ht is not None, "started_reason": started_reason,
+            "board_status": board_status, "board_phase": board.phase if board else None,
             "board_minute": board.minute if board else None}
+
+
+async def _open_refs(session, match_ids: list[str], now: datetime) -> dict[str, MatchRef]:
+    """Kupon için kullanılabilir maçlar (silinmiş DB kaydı kullanılmaz)."""
+    return {mid: ref for mid, ref in (await load_match_refs(session, match_ids, now)).items() if not ref.deleted}
+
+
+_UNAVAILABLE = ("finished", "finished_extra", "postponed", "abandoned")
 
 
 @router.get("/api/coupon-matches")
 async def coupon_matches(target_date: str = Query(..., alias="date", pattern=r"^\d{4}-\d{2}-\d{2}$")) -> list[dict]:
-    """Kupona eklenebilecek maçlar: veritabanındaki, bitmemiş ana + gölge lig maçları (kaynağa hiç gitmez)."""
+    """Kupona eklenebilecek maçlar: o günün bülteni (kupa dahil, Sprint 94 J6/K4) + veritabanındaki bitmemiş maçlar.
+
+    Kaynağa hiç gitmez. Bitmiş / ertelenmiş / iptal maç listelenmez; başlamış maç `started` ile işaretlenir
+    (kupon sadece maç öncesi — seçilemez). `analyzed`: maçın analizi var (ana + gölge lig).
+    """
     from datetime import date as _date, timedelta
 
-    from app.analysis.league_filter import is_tracked_league
     from app.config import ISTANBUL_TZ
+    from app.db.models import FixtureCache
 
     try:
         day = _date.fromisoformat(target_date)
@@ -134,13 +149,38 @@ async def coupon_matches(target_date: str = Query(..., alias="date", pattern=r"^
             select(Match.match_id, Match.home_team, Match.away_team, Match.league_name, Match.kickoff_time)
             .where(Match.deleted_at.is_(None), Match.actual_ft_home.is_(None),
                    Match.kickoff_time >= start, Match.kickoff_time < start + timedelta(days=1))
-            .order_by(Match.kickoff_time)
         )).all()
+        deleted = set((await session.execute(
+            select(Match.match_id).where(Match.deleted_at.is_not(None), Match.kickoff_time >= start - timedelta(days=1),
+                                         Match.kickoff_time < start + timedelta(days=2))
+        )).scalars().all())
+        fixture = await session.get(FixtureCache, day.isoformat())
     now = datetime.now(timezone.utc)
-    return [{"match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
-             "league_name": r.league_name, "kickoff_time": r.kickoff_time.isoformat() if r.kickoff_time else None,
-             "started": bool(r.kickoff_time and r.kickoff_time <= now)}
-            for r in rows if is_tracked_league(r.league_name)]
+    out: dict[str, dict] = {}
+    items = fixture.matches_json if fixture is not None and isinstance(fixture.matches_json, list) else []
+    for item in items:
+        if not isinstance(item, dict) or item.get("carried") or item.get("score_status") in _UNAVAILABLE:
+            continue
+        ref = ref_from_fixture(item)
+        if ref is None or ref.match_id in deleted:
+            continue
+        out[ref.match_id] = {"match_id": ref.match_id, "home_team": ref.home_team, "away_team": ref.away_team,
+                             "league_name": ref.league_name, "kickoff_time": ref.kickoff_time,
+                             "started": item.get("score_status") == "live", "analyzed": False}
+    for r in rows:  # analizli maç: takım/lig adı DB'den (kanonik)
+        prev = out.get(r.match_id) or {}
+        out[r.match_id] = {"match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
+                           "league_name": r.league_name, "kickoff_time": r.kickoff_time or prev.get("kickoff_time"),
+                           "started": bool(prev.get("started")), "analyzed": True}
+    result = []
+    for m in out.values():
+        kickoff = m["kickoff_time"]
+        m["started"] = m["started"] or bool(kickoff and kickoff <= now)
+        m["kickoff_time"] = kickoff.isoformat() if kickoff else None
+        result.append(m)
+    far = "9999"
+    result.sort(key=lambda m: (m["kickoff_time"] or far, m["league_name"] or "", m["home_team"]))
+    return result
 
 
 ODDS_RATE_PER_MIN = 20     # Sprint 94 E9: kullanıcı başına, KAYNAĞA GİDEN istek (önbellekten dönen sayılmaz) — her biri 3 HTTP
@@ -152,13 +192,11 @@ async def get_odds(request: Request, match_id: str = Path(pattern=r"^[0-9]{1,12}
     """Kupon için güncel oranlar (maç sonu 1X2/ÇŞ/Ü-A, İY 1X2/Ü-A) — kapanmış periyot boş döner."""
     if not _odds_fresh(match_id):
         check_rate(request, "odds", ODDS_RATE_PER_MIN)
+    now = datetime.now(timezone.utc)
     async with get_session() as session:
-        match = (await session.execute(
-            select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
-        )).scalar_one_or_none()
+        match = (await _open_refs(session, [match_id], now)).get(match_id)
         if match is None:
             raise HTTPException(404, "Maç bulunamadı")
-        now = datetime.now(timezone.utc)
         state = await _match_state(session, match, now)
     pre = {p: closed_reason(period=p, now=now, **state) for p in ("ft", "ht")}
     odds = {} if all(pre.values()) else await _odds(match_id)  # başlamış maçta kaynağa hiç gidilmez
@@ -211,7 +249,7 @@ def _remember(user_id: int, key: str | None, response: dict) -> dict:
     return response
 
 
-async def _odds_for_save(match: Match) -> dict:
+async def _odds_for_save(match: MatchRef) -> dict:
     async with _FETCH_LIMIT:
         try:
             return await _odds(match.match_id, max_age=_SAVE_MAX_AGE)
@@ -246,9 +284,7 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
     match_ids = sorted(seen)
     now = datetime.now(timezone.utc)
     async with get_session() as session:
-        matches = {m.match_id: m for m in (await session.execute(
-            select(Match).where(Match.match_id.in_(match_ids), Match.deleted_at.is_(None))
-        )).scalars().all()}
+        matches = await _open_refs(session, match_ids, now)
         if len(matches) != len(match_ids):
             raise HTTPException(404, "Kupondaki bir maç bulunamadı")
         states = {m: await _match_state(session, matches[m], now) for m in match_ids}
@@ -279,7 +315,7 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
             match_id=match.match_id, home_team=match.home_team, away_team=match.away_team,
             league_name=match.league_name, kickoff_time=match.kickoff_time, period=leg.period, market=leg.market,
             selection=leg.selection, line=market.get("line") if leg.market == "ou" else None, odds=float(price),
-            odds_at=now, live_minute=live.get("minute"), live_score=live.get("score"),
+            odds_at=now, live_minute=live.get("minute"), live_score=live.get("score"), source=match.source,
         ))
     if changes:
         raise HTTPException(409, {"code": "odds_changed", "message": "Oranlar değişti, yeni oranları onaylayın",

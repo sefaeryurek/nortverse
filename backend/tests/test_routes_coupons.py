@@ -84,14 +84,19 @@ def _patch_db(monkeypatch, match, state):
     async def no_odds(*_a, **_k):
         raise AssertionError("başlamış maç için kaynağa gidilmemeli")
 
+    async def fake_refs(_session, ids, _now):
+        return {match.match_id: match} if match.match_id in ids else {}
+
     monkeypatch.setattr(rc, "get_session", fake_session)
+    monkeypatch.setattr(rc, "_open_refs", fake_refs)
     monkeypatch.setattr(rc, "_match_state", fake_state)
     monkeypatch.setattr(rc, "_odds", no_odds)
 
 
 def test_create_coupon_409_after_kickoff(monkeypatch):
     kickoff = datetime.now(timezone.utc) - timedelta(minutes=5)
-    match = SimpleNamespace(match_id="123", home_team="A", away_team="B", league_name="L", kickoff_time=kickoff)
+    match = SimpleNamespace(match_id="123", home_team="A", away_team="B", league_name="L", kickoff_time=kickoff,
+                            source="fixture")
     state = {"kickoff": kickoff, "actual_ft": False, "actual_ht": False, "started_reason": None,
              "board_status": None, "board_phase": None, "board_minute": None}
     _patch_db(monkeypatch, match, state)
@@ -117,7 +122,8 @@ def _request(user_id=1, key=None):
 
 def _patch_prematch(monkeypatch, odds):
     kickoff = datetime.now(timezone.utc) + timedelta(hours=3)
-    match = SimpleNamespace(match_id="123", home_team="A", away_team="B", league_name="L", kickoff_time=kickoff)
+    match = SimpleNamespace(match_id="123", home_team="A", away_team="B", league_name="L", kickoff_time=kickoff,
+                            source="fixture")
     added: list = []
 
     class _Session:
@@ -145,7 +151,11 @@ def _patch_prematch(monkeypatch, odds):
         calls.append(match_id)
         return odds
 
+    async def fake_refs(_session, ids, _now):
+        return {match.match_id: match} if match.match_id in ids else {}
+
     monkeypatch.setattr(rc, "get_session", fake_session)
+    monkeypatch.setattr(rc, "_open_refs", fake_refs)
     monkeypatch.setattr(rc, "_match_state", fake_state)
     monkeypatch.setattr(rc, "_odds", fake_odds)
     rc._idempotency.clear()
@@ -194,3 +204,40 @@ def test_idempotency_key_returns_first_response(monkeypatch):
     first = asyncio.run(rc.create_coupon(body, _request(key="abc")))
     second = asyncio.run(rc.create_coupon(body, _request(key="abc")))
     assert first == second and len(calls) == 1
+
+
+def test_saved_leg_keeps_match_source(monkeypatch):
+    """Sprint 94 J6: bülten tabanlı maçın bacağı `source='fixture'` ile yazılır."""
+    _patch_prematch(monkeypatch, ODDS)
+    added = []
+    real_leg = rc.CouponLeg
+
+    def capture(**kw):
+        leg = real_leg(**kw)
+        added.append(leg)
+        return leg
+
+    monkeypatch.setattr(rc, "CouponLeg", capture)
+    body = rc.CouponIn(legs=[rc.LegIn(match_id="123", period="ft", market="result", selection="1")])
+    asyncio.run(rc.create_coupon(body, _request()))
+    assert added[0].source == "fixture"
+
+
+def test_match_state_uses_fixture_postponed_status(monkeypatch):
+    from app.analysis import prematch_v4
+    from app.analysis.match_ref import MatchRef
+    from app.api import live_snapshot
+
+    async def not_started(*_a):
+        return None
+
+    async def no_board():
+        return None
+
+    monkeypatch.setattr(prematch_v4, "match_already_started", not_started)
+    monkeypatch.setattr(live_snapshot, "get_live_snapshot", no_board)
+    ref = MatchRef(match_id="9", home_team="A", away_team="B", league_name=None, source="fixture",
+                   kickoff_time=KICK, status="postponed")
+    state = asyncio.run(rc._match_state(None, ref, KICK - timedelta(hours=2)))
+    assert state["board_status"] == "postponed"
+    assert rc.closed_reason(period="ft", now=KICK - timedelta(hours=2), **state) == "Maç ertelendi / iptal"

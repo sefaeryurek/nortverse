@@ -675,6 +675,13 @@
     "acceptNewOdds": "Save with new odds",
     "cancel": "Cancel",
     "unavailable": "closed",
-    "loadFailed": "Coupons could not be loaded."
+    "loadFailed": "Coupons could not be loaded.",
+    "searchMatch": "Search team or league",
+    "onlyAnalyzed": "Analyzed only",
+    "showStarted": "Show started",
+    "matchCount": "{n} matches",
+    "noSearchResult": "No match fits the search",
+    "unknownLeague": "Unknown league",
+    "analyzedTag": "analyzed"
   }
 }

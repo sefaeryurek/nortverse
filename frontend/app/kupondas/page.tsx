@@ -4,9 +4,9 @@ import { fmtNum } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCoupon, getCouponMatches, getCoupons, getMatchOdds } from "@/lib/api";
 import type { CouponMatch, CouponOddsChange, CouponView, MatchOdds } from "@/lib/api";
-import { formatTime } from "@/lib/dates";
 import { useLocale } from "@/lib/locale-context";
-import { hasStarted, num, OddsPanel, pickLabel, priceFor } from "@/components/CouponOddsPanel";
+import { num, OddsPanel, pickLabel, priceFor } from "@/components/CouponOddsPanel";
+import CouponMatchPicker from "@/components/CouponMatchPicker";
 import type { Dict, Draft } from "@/components/CouponOddsPanel";
 
 function istanbulDate(offsetDays: number): string {
@@ -219,21 +219,7 @@ export default function KupondasPage() {
             ) : fixtures.length === 0 ? (
               <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{c.noMatches}</p>
             ) : (
-              <label className="block space-y-1">
-                <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>{c.pickMatch}</span>
-                <select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-full px-2 py-2"
-                  style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)", backgroundColor: "var(--nv-bg-elevated)", border: "1px solid var(--nv-border)", borderRadius: "var(--nv-radius-md)" }}>
-                  <option value="">—</option>
-                  {fixtures.map((m) => {
-                    const started = m.started || hasStarted(m.kickoff_time, now);
-                    return (
-                      <option key={m.match_id} value={m.match_id} disabled={started}>
-                        {m.kickoff_time ? `${formatTime(m.kickoff_time)} · ` : ""}{m.home_team} - {m.away_team}{started ? ` (${c.startedTag})` : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </label>
+              <CouponMatchPicker matches={fixtures} selected={selected} onSelect={setSelected} now={now} t={t} />
             )}
             {oddsState === "loading" && <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{c.loadingOdds}</p>}
             {oddsState === "error" && <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-accent-red)" }}>{c.oddsError}</p>}
