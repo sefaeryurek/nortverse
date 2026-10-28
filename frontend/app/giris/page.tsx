@@ -2,12 +2,12 @@
 
 import { useState, type FormEvent } from "react";
 import { useLocale } from "@/lib/locale-context";
+import { DEFAULT_NEXT, safeNext } from "@/lib/safe-next";
 
-/** Güvenli dönüş adresi: sadece site içi yol ("//" ile başlayan dış adresler reddedilir). */
-function safeNext(): string {
-  if (typeof window === "undefined") return "/bulten";
-  const next = new URLSearchParams(window.location.search).get("next");
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/bulten";
+/** Güvenli dönüş adresi: sadece aynı sitenin yolu (Sprint 94 E4 — kodlanmış ters bölü / sekme hileleri dahil). */
+function nextTarget(): string {
+  if (typeof window === "undefined") return DEFAULT_NEXT;
+  return safeNext(new URLSearchParams(window.location.search).get("next"), window.location.origin);
 }
 
 export default function LoginPage() {
@@ -30,7 +30,7 @@ export default function LoginPage() {
       });
       if (res.ok) {
         // Tam sayfa geçişi: proxy ve sunucu tarafı veriler yeni çerezle yeniden çalışsın
-        window.location.assign(safeNext());
+        window.location.assign(nextTarget());
         return;
       }
       setError(res.status === 429 ? a.locked : res.status === 401 ? a.wrong : a.failed);
