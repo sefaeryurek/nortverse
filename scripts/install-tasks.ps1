@@ -38,7 +38,13 @@ wevtutil set-log Microsoft-Windows-TaskScheduler/Operational /enabled:true
 New-NortverseTask "BackupDB" "backup-db.bat" (New-ScheduledTaskTrigger -Daily -At "07:00") `
     "Gunluk PostgreSQL yedegi (C: son 7 gun, D: son 30 gun + .env)" (New-NortverseSettings 2 -wake)
 New-NortverseTask "RunPipeline" "run-pipeline.bat" (New-ScheduledTaskTrigger -Daily -At "08:00") `
-    "Gunluk bulten + analiz + DB (hata olursa 10 dk sonra bir kez daha)" (New-NortverseSettings 4 -wake)
+    "Gunluk bulten + analiz + DB, takip edilen ligler (hata olursa 10 dk sonra bir kez daha)" (New-NortverseSettings 4 -wake)
+# Yarinin takip maclari bir gece once (mac oncesi karar uykuya bagli kalmasin) - 23:00 skor gorevinden sonra
+New-NortverseTask "RunPipelineTomorrow" "run-pipeline-tomorrow.bat" (New-ScheduledTaskTrigger -Daily -At "23:20") `
+    "Yarinin takip maclari aksamdan analiz edilir, mac oncesi kararlar erken dondurulur" (New-NortverseSettings 3)
+# Haftada bir tum ligler (aday ligler icin veri birikir)
+New-NortverseTask "RunPipelineAll" "run-pipeline-all.bat" (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At "09:30") `
+    "Haftalik tum ligler pipeline'i" (New-NortverseSettings 4)
 
 # Aksam saat basi skor guncellemesi (18:00-23:00) + gece 00:30 - tek gorev, iki kopya ayni anda calismaz
 $scoreTriggers = @(18..23 | ForEach-Object { New-ScheduledTaskTrigger -Daily -At ("{0:00}:00" -f $_) })

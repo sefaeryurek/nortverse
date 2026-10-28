@@ -16,7 +16,9 @@ from sqlalchemy.orm import load_only
 
 from app.config import ISTANBUL_TZ
 from app.analysis import analyze_match, check_match_filters
-from app.analysis.league_filter import canonical_league_name, is_supported_league, match_league_name
+from app.analysis.league_filter import (
+    canonical_league_name, is_main_league, is_supported_league, is_tracked_league, match_league_name,
+)
 from app.analysis.score_snapshots import capture_score_snapshot
 from app.analysis.prematch_v5 import capture_recommendations
 from app.analysis.persist import FAMILIES, compute_all_patterns, hash_columns, pattern_as_of
@@ -30,7 +32,7 @@ from app.db.models import (
     MatchHtObservation,
     SkippedAnalysis,
 )
-from app.models import FixtureMatch, MatchAnalysisResult, MatchRawData
+from app.models import FixtureMatch, MatchAnalysisResult, MatchRawData, SkipReason
 from app.scraper.browser import browser_context
 from app.scraper.fixture import fetch_istanbul_fixture
 from app.scraper.fixture_scores import FixtureScore, fetch_fixture_scores
@@ -381,23 +383,76 @@ async def _prepared_match_ids(match_ids: list[str]) -> set[str]:
         return set()
 
 
+FIXTURE_RETRY_DELAYS = (300, 600, 900)  # sn — bülten çekimi DNS/zaman aşımında 5/10/15 dk sonra tekrar
+H2H_ALARM_SHARE = 0.5   # ana ligde "H2H yetersiz" oranı bunu aşarsa lig adı eşleşmesi bozulmuş olabilir
+H2H_ALARM_MIN = 4
+
+
+async def _fetch_fixture_with_retry(cache_day: date, only_hot: bool, ctx) -> list[FixtureMatch]:
+    """Bülteni çeker; hata ya da boş liste gelirse 5/10/15 dk sonra tekrar dener (Sprint 94 F1c/F5)."""
+    attempt = 0
+    while True:
+        try:
+            fixtures = await fetch_istanbul_fixture(cache_day, only_hot=only_hot, ctx=ctx)
+            if fixtures:
+                return fixtures
+            problem = "kaynak bülten boş"
+        except Exception as exc:  # DNS / zaman aşımı / sayfa değişti
+            problem = f"{type(exc).__name__}: {exc}"
+        if attempt >= len(FIXTURE_RETRY_DELAYS):
+            log.error("Bülten %d denemede alınamadı (%s)", attempt + 1, problem)
+            return []
+        delay = FIXTURE_RETRY_DELAYS[attempt]
+        log.warning("Bülten alınamadı (%s) — %d dk sonra tekrar", problem, delay // 60)
+        await asyncio.sleep(delay)
+        attempt += 1
+
+
+def order_fixtures(fixtures: list[FixtureMatch]) -> list[FixtureMatch]:
+    """Önce takip edilen ligler, sonra diğerleri; her grupta başlama saatine göre (en erken önce).
+
+    Pipeline geç çalıştığında (uyku) en yakın takip maçının kararı kaçmasın diye (21 Ekim Levante–Athletic).
+    """
+    far = datetime.max.replace(tzinfo=timezone.utc)
+    return sorted(fixtures, key=lambda f: (
+        not is_tracked_league(f.league_name, f.league_code),
+        f.kickoff_time.astimezone(timezone.utc) if f.kickoff_time else far,
+    ))
+
+
 async def run_pipeline(
     target_date: Optional[date] = None,
     only_hot: bool = False,
     incremental: bool = False,
+    scope: str = "tracked",
 ) -> dict:
-    """Hot maçları çek, analiz et, PostgreSQL'e yaz.
+    """Bülteni çek, analiz et, PostgreSQL'e yaz.
 
-    Dönüş: {"analyzed": N, "skipped": N, "errors": N}
+    `scope`: "tracked" (varsayılan, K14) sadece 7 ana + 5 gölge lig — 24 Ekim'de 263 analizin 36'sı takipteydi,
+    iş 86 dk sürdü; "all" bültendeki tüm lig maçları (haftada bir, aday ligler için veri biriktirir).
+    Dönüş: {"analyzed", "skipped", "errors", "missed_started", "source_empty", "h2h_alarm"}
     """
-    stats = {"analyzed": 0, "skipped": 0, "errors": 0}
+    if scope not in ("tracked", "all"):
+        raise ValueError(f"Geçersiz kapsam: {scope}")
+    stats = {"analyzed": 0, "skipped": 0, "errors": 0, "missed_started": 0,
+             "source_empty": False, "h2h_alarm": False}
+    main_checked = 0
+    main_h2h = 0
 
     async with browser_context() as ctx:
         cache_day = target_date or datetime.now(ISTANBUL_TZ).date()
-        source_fixtures = await fetch_istanbul_fixture(cache_day, only_hot=only_hot, ctx=ctx)
+        source_fixtures = await _fetch_fixture_with_retry(cache_day, only_hot, ctx)
+        if not source_fixtures:
+            # Sessiz sıfır: eskiden "0 analiz · 0 hata" başarılı sayılıyordu
+            stats["source_empty"] = True
+            stats["errors"] += 1
+            return stats
         fixtures = [fixture for fixture in source_fixtures
                     if is_supported_league(fixture.league_name, fixture.league_code)]
-        log.info("Pipeline başladı: %d maç işlenecek", len(fixtures))
+        if scope == "tracked":
+            fixtures = [f for f in fixtures if is_tracked_league(f.league_name, f.league_code)]
+        fixtures = order_fixtures(fixtures)
+        log.info("Pipeline başladı (%s): %d maç işlenecek", scope, len(fixtures))
 
         # GitHub Actions'taki scraper bülteni API isteğinden önce hazırlar.
         try:
@@ -416,6 +471,11 @@ async def run_pipeline(
                 continue
             if fixture.kickoff_time and fixture.kickoff_time.astimezone(timezone.utc) <= datetime.now(timezone.utc):
                 stats["skipped"] += 1
+                if is_tracked_league(fixture.league_name, fixture.league_code):
+                    # Takip maçının maç öncesi kararı kaçtı — eskiden log'suz atlanıyordu
+                    stats["missed_started"] += 1
+                    log.warning("Başlamış takip maçı atlandı, maç öncesi karar kaçtı [%s] %s - %s (%s)",
+                                mid, fixture.home_team, fixture.away_team, fixture.league_name)
                 continue
             try:
                 # Bültenden gelen lig adını match_detail'e geçir (Sprint 8.9):
@@ -427,6 +487,9 @@ async def run_pipeline(
                     expected_league_name=fixture.league_name or fixture.league_code,
                 )
                 check = check_match_filters(raw)
+                if is_main_league(fixture.league_name, fixture.league_code):
+                    main_checked += 1
+                    main_h2h += check.reason == SkipReason.H2H_INSUFFICIENT
 
                 if not check.passed:
                     log.info("Atlandı [%s]: %s", mid, check.reason.value)
@@ -463,11 +526,16 @@ async def run_pipeline(
                 log.error("Hata [%s]: %s", mid, e, exc_info=True)
                 stats["errors"] += 1
 
+    if main_checked >= H2H_ALARM_MIN and main_h2h / main_checked > H2H_ALARM_SHARE:
+        # Ana ligde H2H normalde neredeyse hep yeterli; yarıdan fazlası yetersizse lig adı eşleşmesi bozulmuştur
+        stats["h2h_alarm"] = True
+        log.error("Ana ligde %d/%d maç 'H2H yetersiz' — lig adı eşleşmesi bozulmuş olabilir", main_h2h, main_checked)
     log.info(
-        "Pipeline tamamlandı: %d analiz, %d atlandı, %d hata",
+        "Pipeline tamamlandı: %d analiz, %d atlandı, %d hata, %d başlamış takip maçı kaçtı",
         stats["analyzed"],
         stats["skipped"],
         stats["errors"],
+        stats["missed_started"],
     )
     return stats
 

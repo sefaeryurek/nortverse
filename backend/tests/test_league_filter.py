@@ -119,3 +119,21 @@ def test_match_league_name_single_source():
     assert match_league_name("", "English Premier League") == "English Premier League"
     assert match_league_name(None, "TUR D1") == canonical_league_name("TUR D1")
     assert match_league_name(None, None) == ""
+
+
+# Sprint 94 F4: "champions" alt dizesi "Championship"i kupa saymamalı
+import pytest as _pytest  # noqa: E402
+
+from app.analysis.league_filter import is_supported_league as _supported  # noqa: E402
+
+
+@_pytest.mark.parametrize("name", ["Scottish Championship", "USL Championship", "Welsh Championship",
+                                   "Northern Ireland Championship", "English Championship"])
+def test_championship_leagues_are_not_cups(name):
+    assert _supported(name)
+
+
+@_pytest.mark.parametrize("name", ["UEFA Champions League", "AFC Champions", "CONCACAF Champions Cup",
+                                   "Champions League Qualification"])
+def test_champions_competitions_still_rejected(name):
+    assert not _supported(name)

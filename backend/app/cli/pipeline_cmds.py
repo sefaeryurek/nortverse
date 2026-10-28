@@ -370,9 +370,11 @@ def run_pipeline_cmd(
     target_date: Optional[str] = typer.Option(None, "--date", help="YYYY-MM-DD. Boşsa bugün."),
     hot_only: bool = typer.Option(False, "--hot-only", help="Sadece 'hot' (popüler) maçları çek"),
     incremental: bool = typer.Option(False, "--incremental", help="Hazır maçları tekrar analiz etme"),
+    scope: str = typer.Option("tracked", "--scope",
+                              help="tracked: sadece takip edilen 12 lig (varsayılan) · all: bültendeki tüm ligler"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """Tüm lig maçlarını çek → analiz et → DB'ye kaydet."""
+    """Bülteni çek → analiz et → DB'ye kaydet (varsayılan: takip edilen ligler)."""
     _setup_logging("DEBUG" if verbose else "INFO")
 
     dt: Optional[date] = None
@@ -382,25 +384,34 @@ def run_pipeline_cmd(
     from app.pipeline import run_pipeline
 
     async def _run() -> dict:
-        stats = await run_pipeline(target_date=dt, only_hot=hot_only, incremental=incremental)
+        if scope not in ("tracked", "all"):
+            raise typer.BadParameter("--scope tracked veya all olmalı")
+        stats = await run_pipeline(target_date=dt, only_hot=hot_only, incremental=incremental, scope=scope)
         console.print(
             f"\n[bold green]Pipeline tamamlandı:[/bold green] "
             f"[green]{stats['analyzed']} kaydedildi[/green] · "
             f"[yellow]{stats['skipped']} atlandı[/yellow] · "
             f"[red]{stats['errors']} hata[/red]"
+            + (f" · [yellow]{stats['missed_started']} takip maçı başlamıştı[/yellow]"
+               if stats.get("missed_started") else "")
         )
         return stats
 
     stats = asyncio.run(_run())
     if pipeline_failed(stats):
         # Görev zamanlayıcı sıfır olmayan kodu görüp ekranda uyarı verir (eskiden hata olsa da 0 dönüyordu).
-        console.print("[bold red]Pipeline hatalı sayıldı: çok fazla maç işlenemedi[/bold red]")
+        reason = ("kaynak bülten boş" if stats.get("source_empty")
+                  else "ana ligde H2H eşleşmesi bozulmuş görünüyor" if stats.get("h2h_alarm")
+                  else "çok fazla maç işlenemedi")
+        console.print(f"[bold red]Pipeline hatalı sayıldı: {reason}[/bold red]")
         raise typer.Exit(code=2)
 
 
 def pipeline_failed(stats: dict) -> bool:
     """Tek tük sayfa zaman aşımı (her gün 1-2 olabilir) uyarı vermez; hiçbir maç kaydedilemediyse
     veya denenenlerin %20'sinden fazlası (en az 5) hata verdiyse hata sayılır."""
+    if stats.get("source_empty") or stats.get("h2h_alarm"):
+        return True
     errors, analyzed = stats.get("errors", 0), stats.get("analyzed", 0)
     if errors == 0:
         return False

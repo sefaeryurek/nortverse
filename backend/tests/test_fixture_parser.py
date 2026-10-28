@@ -223,6 +223,17 @@ class TestParseFixtureHtml:
         matches = _parse_fixture_html(html)
         assert matches == []
 
+    def test_header_without_name_uses_onclick_league(self):
+        """Sprint 94 F3: adı okunamayan lig başlığı '?' ile maç satırındaki gerçek adı ezmez."""
+        header = """
+        <tr id="tr_36" class="Leaguestitle" sclassid="36">
+          <td><span class="other">-</span></td>
+        </tr>
+        """
+        matches = _parse_fixture_html(_full_page(MATCH_ROW_VISIBLE, league=header))
+        assert matches[0].league_name == "Turkey Super Lig"
+        assert matches[0].league_code == "Turkey Super Lig"
+
     def test_hidden_rows_filtered_in_hot_mode(self):
         html = _full_page(MATCH_ROW_VISIBLE, MATCH_ROW_HIDDEN)
         matches = _parse_fixture_html(html, only_hot=True)

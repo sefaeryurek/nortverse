@@ -229,7 +229,7 @@ async def test_pipeline_saves_skipped_fixture_for_later_visits(monkeypatch):
 
     result = await runner.run_pipeline()
 
-    assert result == {"analyzed": 0, "skipped": 1, "errors": 0}
+    assert {k: result[k] for k in ("analyzed", "skipped", "errors")} == {"analyzed": 0, "skipped": 1, "errors": 0}
     save.assert_awaited_once_with(raw, SkipReason.H2H_INSUFFICIENT)
 
 
@@ -256,8 +256,8 @@ async def test_incremental_pipeline_avoids_prepared_and_cup_scrapes(monkeypatch)
     scrape = AsyncMock()
     monkeypatch.setattr(runner, "fetch_match_detail", scrape)
 
-    stats = await runner.run_pipeline(incremental=True)
-    assert stats == {"analyzed": 0, "skipped": 1, "errors": 0}
+    stats = await runner.run_pipeline(incremental=True, scope="all")
+    assert {k: stats[k] for k in ("analyzed", "skipped", "errors")} == {"analyzed": 0, "skipped": 1, "errors": 0}
     assert [fixture.match_id for fixture in save.await_args.args[1]] == ["123", "456"]
     prepared.assert_awaited_once_with(["123"])
     scrape.assert_not_awaited()

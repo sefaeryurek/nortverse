@@ -11,6 +11,8 @@ Hibrit yaklaşım: kara liste keyword (geniş kapsama) + opsiyonel kanonik form.
 
 from __future__ import annotations
 
+import re
+
 # Lig adında bu keyword'lerden biri geçiyorsa → kupa/turnuva → işleme.
 # Keyword bazlı pragmatik filtre; yanlış pozitif çıkarsa bilinen liglere whitelist
 # (LEAGUE_ALIASES kanonik dönüşümle) override edilebilir.
@@ -23,7 +25,8 @@ CUP_KEYWORDS = (
     " uel",
     " ucl",
     "europa",
-    "champions",
+    # "champions" tek kelime olarak _CUP_PATTERNS'ta — alt dize araması "Championship"i (İskoçya, USL,
+    # Galler, K. İrlanda 2. lig) kupa sayıyordu (Sprint 94 F4)
     # Ulusal kupalar
     " cup",
     "cup ",
@@ -273,6 +276,14 @@ def canonical_league_name(name: str | None) -> str:
     return LEAGUE_ALIASES.get(key, name.strip())
 
 
+_CUP_PATTERNS = (re.compile(r"\bchampions\b"),)
+
+
+def _looks_like_cup(name: str) -> bool:
+    low = name.lower()
+    return any(keyword in low for keyword in CUP_KEYWORDS) or any(p.search(low) for p in _CUP_PATTERNS)
+
+
 def is_supported_league(*names: str | None) -> bool:
     """Kupa işareti yoksa geçerli lig adı veya kodunu kabul et.
 
@@ -286,8 +297,8 @@ def is_supported_league(*names: str | None) -> bool:
         return False
 
     # An explicit competition name must not be overridden by a stale league code.
-    if any(any(keyword in candidate.lower() for keyword in CUP_KEYWORDS)
-           and candidate.lower().strip() not in LEAGUE_ALIASES for candidate in candidates):
+    if any(_looks_like_cup(candidate) and candidate.lower().strip() not in LEAGUE_ALIASES
+           for candidate in candidates):
         return False
 
     return True

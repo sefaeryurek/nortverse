@@ -80,8 +80,11 @@ def _build_league_map(soup: BeautifulSoup) -> dict[str, str]:
         if not sclassid:
             continue
         name_el = tr.select_one(".LGname")
-        name = name_el.get_text(strip=True) if name_el else "?"
-        leagues[sclassid] = name
+        name = name_el.get_text(strip=True) if name_el else ""
+        if name:
+            # Adı okunamayan başlık "?" yazmaz — maç satırının onclick'indeki gerçek ad kullanılır (Sprint 94 F3:
+            # "?" onclick adını eziyordu, 30 günde maçların %24'ü pipeline'a hiç girmiyordu)
+            leagues[sclassid] = name
     return leagues
 
 
@@ -151,14 +154,14 @@ def _parse_fixture_html(html: str, only_hot: bool = True) -> list[FixtureMatch]:
         seen_ids.add(info["match_id"])
 
         sclassid = tr.get("sclassid") or ""
-        league_name = leagues.get(sclassid) or info.get("league_name") or "?"
+        league_name = leagues.get(sclassid) or (info.get("league_name") or "").strip() or None
 
         matches.append(
             FixtureMatch(
                 match_id=info["match_id"],
                 home_team=info["home"],
                 away_team=info["away"],
-                league_code=league_name,
+                league_code=league_name or "",
                 league_name=league_name,
                 kickoff_time=info["kickoff"],
             )
