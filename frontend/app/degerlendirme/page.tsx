@@ -1,3 +1,4 @@
+import { fmtNum } from "@/lib/format";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -91,7 +92,7 @@ function SummaryCard({
           className="font-bold"
           style={{ fontSize: "var(--nv-text-xl)", color }}
         >
-          {total > 0 ? `%${pct.toFixed(0)}` : "-"}
+          {total > 0 ? `%${fmtNum(pct, 0)}` : "-"}
         </span>
         <span
           style={{
@@ -170,7 +171,7 @@ function PatternBadge({
       >
         {archiveLabel}
       </span>
-      <HitBadge hit={pat.result_hit} label={`${pat.result_pick} %${pat.result_pct.toFixed(0)}`} />
+      <HitBadge hit={pat.result_hit} label={`${pat.result_pick} %${fmtNum(pat.result_pct, 0)}`} />
       {pat.is_confident && (
         <span
           style={{
@@ -185,8 +186,8 @@ function PatternBadge({
           {t.evaluation.confident}
         </span>
       )}
-      <HitBadge hit={pat.over_25_hit} label={`${pickLabel(pat.over_25_pick, t)} %${pat.over_25_pct.toFixed(0)}`} />
-      <HitBadge hit={pat.btts_hit} label={`${pickLabel(pat.btts_pick, t)} %${pat.btts_pct.toFixed(0)}`} />
+      <HitBadge hit={pat.over_25_hit} label={`${pickLabel(pat.over_25_pick, t)} %${fmtNum(pat.over_25_pct, 0)}`} />
+      <HitBadge hit={pat.btts_hit} label={`${pickLabel(pat.btts_pick, t)} %${fmtNum(pat.btts_pct, 0)}`} />
       <span style={{ color: "var(--nv-text-tertiary)" }}>
         ({pat.match_count} {t.common.match})
       </span>
@@ -490,13 +491,13 @@ async function EvalList({ date, t }: { date: string; t: Dictionary }) {
           >
             {t.evaluation.brier}
             {s.brier_result_b != null && (
-              <span style={{ color: "var(--nv-accent-blue)" }}>A1 {s.brier_result_b.toFixed(3)}</span>
+              <span style={{ color: "var(--nv-accent-blue)" }}>A1 {fmtNum(s.brier_result_b, 3)}</span>
             )}
             {s.brier_result_c != null && (
-              <span style={{ color: "var(--nv-accent-green)" }}>A2 {s.brier_result_c.toFixed(3)}</span>
+              <span style={{ color: "var(--nv-accent-green)" }}>A2 {fmtNum(s.brier_result_c, 3)}</span>
             )}
             {s.brier_result_d != null && (
-              <span style={{ color: "var(--nv-accent-amber)" }}>A3 {s.brier_result_d.toFixed(3)}</span>
+              <span style={{ color: "var(--nv-accent-amber)" }}>A3 {fmtNum(s.brier_result_d, 3)}</span>
             )}
           </span>
         )}

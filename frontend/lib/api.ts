@@ -3,6 +3,13 @@ import { getApiBase } from "./env";
 import { isRecentScoreDate } from "./dates";
 import { validMatchList } from "./list-validation";
 import { validAnalysis } from "./analysis-validation";
+import { validHtStrategy, validMatchOdds, validPerformanceSummary } from "./response-validation";
+
+/**
+ * Yanıt şeklinin sürümü (Sprint 94 L2): önbellekli isteklerin adresine `v=` olarak eklenir. Backend bir yanıtın
+ * şeklini değiştirdiğinde artırılır → Next'in veri önbelleği eski şekli yeni koda sunmaz.
+ */
+export const API_SCHEMA_VERSION = "94";
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -34,6 +41,17 @@ async function withServerAuth(headers: HeadersInit | undefined): Promise<Headers
   return merged;
 }
 
+function versioned(path: string, options: { next?: { revalidate: number } }): string {
+  if (!options.next) return path;  // sadece önbelleğe giren istekler
+  return `${path}${path.includes("?") ? "&" : "?"}v=${API_SCHEMA_VERSION}`;
+}
+
+/** Doğrulayıcıdan geçmeyen yanıt: sayfa çökmez, okunabilir hata kartı gösterir. */
+function checked<T>(value: unknown, valid: (v: unknown) => boolean): T {
+  if (!valid(value)) throw new ApiError(errorMessages().invalid, 200);
+  return value as T;
+}
+
 let loginRedirectStarted = false;
 
 /**
@@ -55,7 +73,7 @@ async function request<T>(path: string, options: RequestInit & { next?: { revali
   const msg = errorMessages();
   let response: Response;
   try {
-    response = await fetch(`${getApiBase()}${path}`, { ...options, headers: await withServerAuth(options.headers), signal });
+    response = await fetch(`${getApiBase()}${versioned(path, options)}`, { ...options, headers: await withServerAuth(options.headers), signal });
   } catch (error) {
     if (options.signal?.aborted) throw error;
     throw new ApiError(timeout.aborted ? msg.timeout : msg.network, 0);
@@ -258,10 +276,10 @@ export async function getPerformanceSummary(
   if (ruleVersion) params.set("rule_version", ruleVersion);
   if (dateFrom) params.set("date_from", dateFrom);
   if (dateTo) params.set("date_to", dateTo);
-  return request<PerformanceSummary>(
+  return checked<PerformanceSummary>(await request<unknown>(
     `/api/performance/summary?${params}`,
     { next: { revalidate: 120 } },
-  );
+  ), validPerformanceSummary);
 }
 
 export interface BacktestRun {
@@ -288,7 +306,7 @@ export async function getBacktestRuns(): Promise<BacktestRun[]> {
 }
 
 export async function getBacktestSummary(runId: number): Promise<BacktestSummary> {
-  return request<BacktestSummary>(`/api/performance/backtest/${runId}/summary`, { next: { revalidate: 3600 } });
+  return request<BacktestSummary>(`/api/performance/backtest/${runId}/summary`, { next: { revalidate: 300 } });
 }
 
 export interface LiveMatchPick {
@@ -507,10 +525,17 @@ export interface HtMatch {
   expected_goals: { home: number; away: number } | null;
 }
 
-export async function getHtStrategy(date: string, shadow = false): Promise<{ date: string; matches: HtMatch[] }> {
+export interface HtStrategyResponse {
+  date: string;
+  matches: HtMatch[];
+}
+
+export async function getHtStrategy(date: string, shadow = false): Promise<HtStrategyResponse> {
   const params = new URLSearchParams({ date });
   if (shadow) params.set("shadow", "1");
-  return request<{ date: string; matches: HtMatch[] }>(`/api/ht-strategy?${params}`, { next: { revalidate: 60 } });
+  // Önbelleksiz (Sprint 94 L2): /iy eski önbellekli şekille çökmüştü; oranlar zaten dakikalar içinde değişir
+  return checked<HtStrategyResponse>(
+    await request<unknown>(`/api/ht-strategy?${params}`, { cache: "no-store" }), validHtStrategy);
 }
 
 
@@ -603,7 +628,8 @@ export async function getCouponMatches(date: string): Promise<CouponMatch[]> {
 }
 
 export async function getMatchOdds(matchId: string): Promise<MatchOdds> {
-  return request<MatchOdds>(`/api/odds/${encodeURIComponent(matchId)}`, { cache: "no-store" });
+  return checked<MatchOdds>(
+    await request<unknown>(`/api/odds/${encodeURIComponent(matchId)}`, { cache: "no-store" }), validMatchOdds);
 }
 
 export async function getCoupons(scope: "all" | "mine"): Promise<{ coupons: CouponView[] }> {

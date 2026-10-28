@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtNum } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCoupon, getCouponMatches, getCoupons, getMatchOdds } from "@/lib/api";
 import type { CouponMatch, CouponOddsChange, CouponView, MatchOdds } from "@/lib/api";
@@ -37,7 +38,7 @@ function CouponCard({ coupon, t, locale }: { coupon: CouponView; t: Dict; locale
         <span style={{ color: "var(--nv-text-tertiary)" }}>#{coupon.id} · {new Date(coupon.created_at).toLocaleString(locale === "en" ? "en-GB" : "tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
         <span className="flex-1" />
         <span className="font-semibold" style={{ color: STATUS_COLOR[coupon.status] }}>{c.status[coupon.status]}</span>
-        <span className="font-extrabold" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>{coupon.total_odds.toFixed(2)}</span>
+        <span className="font-extrabold" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>{fmtNum(coupon.total_odds, 2)}</span>
       </header>
       {coupon.note && <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>{coupon.note}</p>}
       <ul className="space-y-1">
@@ -50,7 +51,7 @@ function CouponCard({ coupon, t, locale }: { coupon: CouponView; t: Dict; locale
               {leg.live_minute && <span style={{ color: "var(--nv-live)" }}>{c.live.replace("{minute}", leg.live_minute).replace("{score}", leg.live_score ?? "")}</span>}
               <span className="flex-1" />
               {leg.score && <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-tertiary)" }}>{leg.score}</span>}
-              <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>{leg.odds.toFixed(2)}</span>
+              <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>{fmtNum(leg.odds, 2)}</span>
               {out && leg.outcome && (
                 <span className="font-semibold" style={{ color: out.color }} title={c.outcome[leg.outcome]}>
                   <span aria-hidden="true">{out.icon}</span> {c.outcome[leg.outcome]}
@@ -253,7 +254,7 @@ export default function KupondasPage() {
                       <span style={{ color: "var(--nv-text-secondary)" }}>{pickLabel(d.period, d.market, d.selection, d.line, t, locale)}</span>
                       {d.unavailable && <span style={{ color: "var(--nv-accent-amber)" }}>{c.unavailable}</span>}
                       <span className="flex-1" />
-                      <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)" }}>{d.odds.toFixed(2)}</span>
+                      <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)" }}>{fmtNum(d.odds, 2)}</span>
                       <button type="button" onClick={() => toggle(d)} aria-label={c.remove} style={{ color: "var(--nv-text-tertiary)" }}>✕</button>
                     </li>
                   ))}
@@ -262,7 +263,7 @@ export default function KupondasPage() {
               {draft.length > 0 && (
                 <>
                   <p className="font-semibold" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>
-                    {c.totalOdds}: <span style={{ fontFamily: "var(--nv-font-mono)" }}>{total.toFixed(2)}</span>
+                    {c.totalOdds}: <span style={{ fontFamily: "var(--nv-font-mono)" }}>{fmtNum(total, 2)}</span>
                   </p>
                   <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={c.note} className="w-full px-2 py-1.5"
                     style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)", backgroundColor: "var(--nv-bg-elevated)", border: "1px solid var(--nv-border)", borderRadius: "var(--nv-radius-md)" }} />
@@ -280,7 +281,7 @@ export default function KupondasPage() {
                     {changes.map((ch) => (
                       <li key={`${ch.match_id}:${ch.period}:${ch.market}:${ch.selection}`} style={{ color: "var(--nv-text-secondary)" }}>
                         {ch.home_team} - {ch.away_team} · {pickLabel(ch.period, ch.market, ch.selection, ch.new_line ?? ch.old_line, t, locale)}:{" "}
-                        <span style={{ fontFamily: "var(--nv-font-mono)" }}>{ch.old_odds != null ? ch.old_odds.toFixed(2) : "—"} → {ch.new_odds.toFixed(2)}</span>
+                        <span style={{ fontFamily: "var(--nv-font-mono)" }}>{ch.old_odds != null ? fmtNum(ch.old_odds, 2) : "—"} → {fmtNum(ch.new_odds, 2)}</span>
                         {ch.old_line != null && ch.new_line != null && ch.old_line !== ch.new_line && ` (${c.lineChanged.replace("{old}", String(ch.old_line)).replace("{new}", String(ch.new_line))})`}
                       </li>
                     ))}

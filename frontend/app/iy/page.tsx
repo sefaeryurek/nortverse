@@ -1,3 +1,4 @@
+import { fmtNum } from "@/lib/format";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -21,7 +22,7 @@ interface Props {
 }
 
 function pct(value: number, locale: Locale): string {
-  const v = value.toFixed(1);
+  const v = fmtNum(value, 1);
   return locale === "en" ? `${v}%` : `%${v.replace(".", ",")}`;
 }
 
@@ -65,7 +66,7 @@ function OptionCell({ o, label, strongest, t, locale }: { o: HtOption; label: st
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-semibold truncate" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>{label}</span>
         <span className="font-extrabold" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)" }}>
-          {o.odds.toFixed(2)}
+          {fmtNum(o.odds, 2)}
         </span>
       </div>
       <div className="flex items-baseline justify-between gap-2" style={{ fontSize: "var(--nv-text-2xs)", fontVariantNumeric: "tabular-nums" }}>
@@ -78,7 +79,7 @@ function OptionCell({ o, label, strongest, t, locale }: { o: HtOption; label: st
           </span>
         ) : o.model_pct != null ? (
           <span title={t.ht.modelTip} style={{ color: "var(--nv-text-tertiary)" }}>
-            {t.ht.model.replace("{pct}", locale === "en" ? o.model_pct.toFixed(1) : o.model_pct.toFixed(1).replace(".", ","))}
+            {t.ht.model.replace("{pct}", locale === "en" ? fmtNum(o.model_pct, 1) : fmtNum(o.model_pct, 1).replace(".", ","))}
           </span>
         ) : null}
       </div>
@@ -122,7 +123,7 @@ function MatchCard({ match, t, locale }: { match: HtMatch; t: Dictionary; locale
         </Link>
         <span style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)" }}>
           {t.ht.strongest}: <b style={{ color: "var(--nv-accent-green)" }}>{optionLabel(strongest, t, locale)}</b>{" "}
-          <span style={{ fontFamily: "var(--nv-font-mono)" }}>{pct(strongest.pct, locale)} · {strongest.odds.toFixed(2)}</span>
+          <span style={{ fontFamily: "var(--nv-font-mono)" }}>{pct(strongest.pct, locale)} · {fmtNum(strongest.odds, 2)}</span>
         </span>
       </div>
 
@@ -145,10 +146,10 @@ function MatchCard({ match, t, locale }: { match: HtMatch; t: Dictionary; locale
         </div>
       )}
       <div className="flex flex-wrap gap-x-3 gap-y-0.5" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
-        {margin != null && <span>{t.ht.margin.replace("{pct}", locale === "en" ? margin.toFixed(1) : margin.toFixed(1).replace(".", ","))}</span>}
+        {margin != null && <span>{t.ht.margin.replace("{pct}", locale === "en" ? fmtNum(margin, 1) : fmtNum(margin, 1).replace(".", ","))}</span>}
         {match.odds_at && <span>{t.ht.oddsTime.replace("{time}", formatTime(new Date(match.odds_at * 1000).toISOString()))}</span>}
         {match.expected_goals && (
-          <span>{t.ht.expectedGoals}: <span style={{ fontFamily: "var(--nv-font-mono)" }}>{match.expected_goals.home.toFixed(2)} – {match.expected_goals.away.toFixed(2)}</span></span>
+          <span>{t.ht.expectedGoals}: <span style={{ fontFamily: "var(--nv-font-mono)" }}>{fmtNum(match.expected_goals.home, 2)} – {fmtNum(match.expected_goals.away, 2)}</span></span>
         )}
       </div>
     </article>

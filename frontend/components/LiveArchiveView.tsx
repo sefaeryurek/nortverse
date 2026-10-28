@@ -1,6 +1,6 @@
 "use client";
 
-import { fairOdds } from "@/lib/format";
+import { fairOdds, fmtNum } from "@/lib/format";
 import Link from "next/link";
 import type { LiveArchiveMatch, LiveArchiveSource, LiveArchiveView, LiveHighlight, LiveOutcome, LivePoissonDecision } from "@/lib/api";
 import { liveMarketLabel, liveSelectionLabel } from "@/lib/live-labels";
@@ -13,7 +13,7 @@ const OUTCOME_COLORS: Record<LiveOutcome, string> = {
 };
 
 function fmtPct(value: number): string {
-  return `%${value % 1 === 0 ? value.toFixed(0) : value.toFixed(1)}`;
+  return Number.isFinite(value) ? `%${value % 1 === 0 ? value.toFixed(0) : value.toFixed(1)}` : "—";
 }
 
 /** "≈ adil oran 1/p" — yüksek olasılıklı canlı işaretlerin piyasada ~1,05 oran olduğu görünsün (Sprint 94 H2). */
@@ -105,7 +105,7 @@ function DecisionRow({ h }: { h: LiveHighlight }) {
             title={a.historicalTooltip.replace("{bucket}", h.historical.bucket).replace("{n}", String(h.historical.n))
               + (h.historical.pooled ? ` ${a.historicalPooled}` : "")}
           >
-            {a.historical.replace("{pct}", h.historical.pct.toFixed(0))}
+            {a.historical.replace("{pct}", fmtNum(h.historical.pct, 0))}
           </span>
         )}
       </span>
@@ -151,7 +151,7 @@ export function PoissonDecisionList({ decisions }: { decisions: LivePoissonDecis
               <span className="inline-flex flex-wrap items-center gap-1.5" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-secondary)", fontVariantNumeric: "tabular-nums" }}>
                 {d.cond_pct != null && (
                   <span style={{ color: "var(--nv-text-tertiary)" }} title={a.condTooltip.replace("{n}", String(d.cond_n ?? "?"))}>
-                    {a.condShort.replace("{pct}", d.cond_pct.toFixed(0)).replace("{n}", String(d.cond_n ?? "?"))}
+                    {a.condShort.replace("{pct}", fmtNum(d.cond_pct, 0)).replace("{n}", String(d.cond_n ?? "?"))}
                   </span>
                 )}
                 {d.confirmed && (
@@ -165,7 +165,7 @@ export function PoissonDecisionList({ decisions }: { decisions: LivePoissonDecis
                     style={{ borderRadius: "var(--nv-radius-sm)", backgroundColor: "var(--nv-bg-surface)", color: "var(--nv-text-primary)", fontFamily: "var(--nv-font-mono)" }}
                     title={a.historicalMarketTooltip.replace("{n}", String(d.historical.n))}
                   >
-                    {a.historicalMarket.replace("{pct}", d.historical.pct.toFixed(0))}
+                    {a.historicalMarket.replace("{pct}", fmtNum(d.historical.pct, 0))}
                   </span>
                 )}
               </span>
@@ -245,7 +245,7 @@ export function HighlightList({ view, secondary = false }: { view: LiveArchiveVi
                         .replace("{n}", String(h.historical.n))
                         + (h.historical.pooled ? ` ${t.live.archive.historicalPooled}` : "")}
                     >
-                      {t.live.archive.historical.replace("{pct}", h.historical.pct.toFixed(0))}
+                      {t.live.archive.historical.replace("{pct}", fmtNum(h.historical.pct, 0))}
                     </span>
                   )}
                   {h.risky && <RiskyBadge n={h.n} min={view.risky_below_n} />}
@@ -353,7 +353,7 @@ export function ArchiveMatchList({ matches }: { matches: LiveArchiveMatch[] }) {
                 {m.result}
               </span>
               {m.similarity != null && (
-                <span style={{ color: "var(--nv-text-tertiary)" }} title={p.similarity}>%{(m.similarity * 100).toFixed(1)}</span>
+                <span style={{ color: "var(--nv-text-tertiary)" }} title={p.similarity}>%{fmtNum(m.similarity * 100, 1)}</span>
               )}
             </span>
           </Link>

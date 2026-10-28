@@ -1,3 +1,4 @@
+import { fmtNum } from "@/lib/format";
 import Link from "next/link";
 import { getBacktestRuns, getBacktestSummary, getLiveMatchEvaluations, getPerformancePredictions, getPerformanceSummary } from "@/lib/api";
 import { liveMarketLabel, liveSelectionLabel } from "@/lib/live-labels";
@@ -14,7 +15,7 @@ type Perf = Dictionary["evaluation"]["perf"];
 
 /** Dile göre yüzde: Türkçe "%92,6", İngilizce "92.6%" (uygulamanın geri kalanıyla aynı). */
 function fmtPct(value: number | null | undefined, p: Perf): string {
-  return value == null ? "—" : p.pctFormat.replace("{v}", value.toFixed(1).replace(".", p.decimalSep));
+  return value == null ? "—" : p.pctFormat.replace("{v}", fmtNum(value, 1).replace(".", p.decimalSep));
 }
 
 function rateColor(stats: PerformanceStats): string {
@@ -93,7 +94,7 @@ function StatsTable({ title, rows, labelOf, p }: {
                 <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{row.resolved}</td>
                 <td style={{ padding: "6px", fontWeight: 700, color: rateColor(row) }}>{fmtPct(row.hit_pct, p)}</td>
                 <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{fmtPct(row.avg_prob_pct, p)}</td>
-                <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{row.lift_pct == null ? "—" : `${row.lift_pct > 0 ? "+" : ""}${row.lift_pct.toFixed(1)}`}</td>
+                <td style={{ padding: "6px", color: "var(--nv-text-secondary)" }}>{row.lift_pct == null ? "—" : `${row.lift_pct > 0 ? "+" : ""}${fmtNum(row.lift_pct, 1)}`}</td>
                 <td style={{ padding: "6px" }}><VerdictBadge verdict={row.verdict} resolved={row.resolved} p={p} /></td>
               </tr>
             ))}
@@ -148,7 +149,7 @@ function CalibrationChart({ buckets, p }: { buckets: PerformanceSummary["calibra
         <g key={pt.lower}>
           <title>
             {p.chartPoint.replace("{low}", String(pt.lower)).replace("{high}", String(pt.upper))
-              .replace("{avg}", pt.avg_prob_pct.toFixed(1)).replace("{hit}", pt.hit_pct.toFixed(1)).replace("{n}", String(pt.n))}
+              .replace("{avg}", fmtNum(pt.avg_prob_pct, 1)).replace("{hit}", fmtNum(pt.hit_pct, 1)).replace("{n}", String(pt.n))}
           </title>
           <circle cx={pt.cx} cy={pt.cy} r={12} fill="transparent" />
           {pt.solid ? (
@@ -181,7 +182,7 @@ function CalibrationList({ buckets, p }: { buckets: PerformanceSummary["calibrat
               <div style={{ position: "absolute", top: -2, bottom: -2, left: `${b.avg_prob_pct}%`, width: 2, backgroundColor: "var(--nv-text-primary)" }} />
             </div>
             <span className="text-right" style={{ color: "var(--nv-text-secondary)" }}>
-              {b.hit_pct.toFixed(0)}% · n={b.n}
+              {fmtNum(b.hit_pct, 0)}% · n={b.n}
             </span>
           </div>
         ))}
@@ -256,7 +257,7 @@ function SummaryBody({ summary, t, headline, groups }: {
           <VerdictBadge verdict={o.verdict} resolved={o.resolved} p={p} />
           {o.expected_hits != null && o.resolved > 0 && (
             <span style={{ color: "var(--nv-text-tertiary)" }}>
-              · {p.expectedVsActual.replace("{expected}", o.expected_hits.toFixed(0)).replace("{actual}", String(o.hits)).replace("{n}", String(o.resolved))}
+              · {p.expectedVsActual.replace("{expected}", fmtNum(o.expected_hits, 0)).replace("{actual}", String(o.hits)).replace("{n}", String(o.resolved))}
             </span>
           )}
         </div>
@@ -265,17 +266,17 @@ function SummaryBody({ summary, t, headline, groups }: {
         <Card
           label={p.winRate}
           value={fmtPct(o.hit_pct, p)}
-          sub={`${p.hitsOf.replace("{hits}", String(o.hits)).replace("{n}", String(o.resolved))}${o.ci_low != null ? ` · ${p.ci.replace("{low}", o.ci_low.toFixed(0)).replace("{high}", String(o.ci_high?.toFixed(0)))}` : ""}`}
+          sub={`${p.hitsOf.replace("{hits}", String(o.hits)).replace("{n}", String(o.resolved))}${o.ci_low != null ? ` · ${p.ci.replace("{low}", fmtNum(o.ci_low, 0)).replace("{high}", fmtNum(o.ci_high, 0))}` : ""}`}
           color={rateColor(o)}
         />
         <Card
           label={p.lift}
-          value={o.lift_pct == null ? "—" : `${o.lift_pct > 0 ? "+" : ""}${o.lift_pct.toFixed(1)}`}
-          sub={o.baseline_hit_pct == null ? undefined : `${p.baseline}: ${o.baseline_hit_pct.toFixed(1)}%`}
+          value={o.lift_pct == null ? "—" : `${o.lift_pct > 0 ? "+" : ""}${fmtNum(o.lift_pct, 1)}`}
+          sub={o.baseline_hit_pct == null ? undefined : `${p.baseline}: ${fmtNum(o.baseline_hit_pct, 1)}%`}
           hint={p.liftHint}
         />
         <Card label={p.calibration} value={`${fmtPct(o.avg_prob_pct, p)} / ${fmtPct(o.hit_pct, p)}`} hint={p.calibrationHint} />
-        <Card label={p.brier} value={o.brier == null ? "—" : o.brier.toFixed(3)} sub={p.brierHint} />
+        <Card label={p.brier} value={o.brier == null ? "—" : fmtNum(o.brier, 3)} sub={p.brierHint} />
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
         {groups.map((g) => (
@@ -415,7 +416,7 @@ export async function BacktestOverview({ runId, t }: { runId: number | null; t: 
           <p className="mb-2" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>{p.informationalHint}</p>
           <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-secondary)", fontVariantNumeric: "tabular-nums" }}>
             {p.winRate}: <strong>{fmtPct(info.hit_pct, p)}</strong> · {p.baseline}: {fmtPct(info.baseline_hit_pct, p)} ·{" "}
-            {p.lift}: {info.lift_pct == null ? "—" : `${info.lift_pct > 0 ? "+" : ""}${info.lift_pct.toFixed(1)}`} · n={info.resolved}
+            {p.lift}: {info.lift_pct == null ? "—" : `${info.lift_pct > 0 ? "+" : ""}${fmtNum(info.lift_pct, 1)}`} · n={info.resolved}
           </p>
         </div>
       )}
@@ -534,7 +535,7 @@ export async function LiveDayList({ day, t, scope = "main" }: { day: string; t: 
                   >
                     <span style={{ color: "var(--nv-text-tertiary)" }}>{liveMarketLabel(pick.period, pick.market, t)}</span>
                     <span className="font-bold" style={{ color: "var(--nv-text-primary)" }}>{liveSelectionLabel(pick.selection, t)}</span>
-                    <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)" }}>%{pick.pct.toFixed(0)}</span>
+                    <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)" }}>%{fmtNum(pick.pct, 0)}</span>
                     <span style={{ color: "var(--nv-text-tertiary)" }}>
                       {(pick.labels ?? [pick.label]).map((l) => (l.toLowerCase() === "genel" ? p.archive_genel : l)).join(" + ")} ({pick.n})
                     </span>

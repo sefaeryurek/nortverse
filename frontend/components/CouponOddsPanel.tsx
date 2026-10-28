@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtNum } from "@/lib/format";
 import type { CouponMarket, CouponPeriod, MatchOdds } from "@/lib/api";
 import type { useLocale } from "@/lib/locale-context";
 
@@ -25,7 +26,7 @@ export function priceFor(odds: MatchOdds, d: Draft): { odds: number; line: numbe
 }
 
 export function num(value: number, digits: number, locale: string): string {
-  const v = value.toFixed(digits);
+  const v = fmtNum(value, digits);
   return locale === "en" ? v : v.replace(".", ",");
 }
 
@@ -51,7 +52,7 @@ function OddsButton({ label, odds, active, onClick }: { label: string; odds: num
       }}
     >
       <span style={{ fontSize: "var(--nv-text-2xs)", opacity: 0.8 }}>{label}</span>
-      <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)" }}>{odds.toFixed(2)}</span>
+      <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)" }}>{fmtNum(odds, 2)}</span>
     </button>
   );
 }

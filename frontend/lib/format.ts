@@ -1,6 +1,14 @@
 /** Sayı biçimleri (Sprint 94 H2; L4'te diğer yüzde/oran yardımcıları da buraya toplanacak). */
 
 /**
+ * API'den gelen sayıyı güvenle yazar: null / eksik / NaN → "—" (Sprint 94 L2). Yanıt şekli değişince
+ * `undefined.toFixed()` sayfayı çökertiyordu (/iy olayı).
+ */
+export function fmtNum(value: number | null | undefined, digits: number): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
+}
+
+/**
  * Olasılığa karşılık gelen "adil" bahis oranı (1/p, bahisçi payı yok). %92 → 1,09.
  * Değer iddiası değil: gerçek oran bunun altındaysa (çoğu yüksek olasılıklı seçimde öyle) seçimin bahis değeri yoktur.
  */
