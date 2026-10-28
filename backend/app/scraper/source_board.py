@@ -12,10 +12,11 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.config import SCRAPER
+from app.scraper import status as st
 from app.scraper.fixture_scores import FixtureScore
 
 _ROW_RE = re.compile(r"A\[\d+\]=(\[[^\r\n]*\]);")
-_PHASES = {1: "1h", 2: "ht", 3: "2h"}
+_PHASES = {1: "1h", 2: "ht", 3: "2h", 4: "et", 5: "et"}
 _URL = SCRAPER.base_url + "/ajax/SoccerAjax"
 
 
@@ -26,6 +27,7 @@ def parse_source_board(payload: bytes) -> dict[str, FixtureScore]:
     if data.get("ErrCode") != 0 or not isinstance(data.get("Data"), str):
         raise ValueError("Invalid fixture score response")
     scores: dict[str, FixtureScore] = {}
+    unknown = st.UnknownTally("Kaynak pano")
     for raw in _ROW_RE.findall(data["Data"]):
         normalized = raw
         while ",," in normalized:
@@ -37,15 +39,9 @@ def parse_source_board(payload: bytes) -> dict[str, FixtureScore]:
         if len(fields) < 10 or not isinstance(fields[0], int) or not isinstance(fields[7], int):
             continue
         match_id, code = str(fields[0]), fields[7]
-        if code == -1:
-            status = "finished"
-        elif code in (1, 2, 3):
-            status = "live"
-        elif code == 0:
-            status = "scheduled"
-        elif code in (-11, -14):
-            status = "postponed"
-        else:
+        status = st.board_status(code)
+        if status is None:
+            unknown.add(code)
             continue
         home, away = fields[8:10]
         if status in ("finished", "live"):
@@ -58,7 +54,7 @@ def parse_source_board(payload: bytes) -> dict[str, FixtureScore]:
             ht_h, ht_a = fields[10], fields[11]
             if isinstance(ht_h, int) and isinstance(ht_a, int) and 0 <= ht_h <= 30 and 0 <= ht_a <= 30:
                 ht_home, ht_away = ht_h, ht_a
-        # Durum kodu: 1 = 1. yarı, 2 = devre arası, 3 = 2. yarı.
+        # Durum kodu: 1 = 1. yarı, 2 = devre arası, 3 = 2. yarı, 4/5 = uzatma/penaltı.
         phase = _PHASES.get(code)
         minute = None
         if phase == "ht":
@@ -66,6 +62,7 @@ def parse_source_board(payload: bytes) -> dict[str, FixtureScore]:
             if ht_home is None:
                 ht_home, ht_away = home, away
         scores[match_id] = FixtureScore(match_id, status, home, away, ht_home, ht_away, minute, phase)
+    unknown.report()
     if not scores:
         raise ValueError("Empty fixture score response")
     return scores

@@ -684,7 +684,8 @@ async def update_results(target_date: Optional[date] = None) -> dict:
     day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=ISTANBUL_TZ)
     day_end = day_start + timedelta(days=1)
 
-    stats = {"updated": 0, "unchanged": 0, "not_finished": 0, "errors": 0, "skipped": 0, "source_empty": False}
+    stats = {"updated": 0, "unchanged": 0, "not_finished": 0, "errors": 0, "skipped": 0, "source_empty": False,
+             "extra_time": 0}
     async with get_session() as session:
         fixture_row = await session.get(FixtureCache, d.isoformat())
         match_rows = (await session.execute(
@@ -731,6 +732,11 @@ async def update_results(target_date: Optional[date] = None) -> dict:
         return stats
     checked_at = datetime.now(timezone.utc)
     finished = sum(score.status == "finished" for score in snapshots.values())
+    extra = [mid for mid, score in snapshots.items() if score.status == "finished_extra" and mid in match_by_id]
+    if extra:
+        # Uzatma/penaltı: kaynaktaki skor 90. dakika mı belli değil → sonuç yazılmaz (Sprint 94 B2)
+        stats["extra_time"] = len(extra)
+        log.warning("Uzatmalı/penaltılı maç skoru yazılmadı, elle kontrol edin: %s", ", ".join(extra))
     stats["not_finished"] = len(wanted_ids) - finished
     old_fixture = {item["match_id"]: item for item in fixtures if isinstance(item, dict) and "match_id" in item}
     counts = {"changed": 0, "unchanged": 0}

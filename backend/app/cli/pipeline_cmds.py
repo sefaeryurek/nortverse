@@ -543,6 +543,7 @@ def _print_resolution(stats: dict[str, int]) -> None:
     console.print(
         f"[bold green]Tahmin defteri çözümü:[/bold green] "
         f"[green]{stats['resolved']} çözüldü[/green] · {stats['void']} geçersiz (silinmiş maç) · "
+        f"{stats.get('invalidated', 0)} geçersiz (ertelenen / iptal / taşınan maç) · "
         f"[yellow]{stats['unresolvable']} çözülemedi[/yellow]"
     )
 

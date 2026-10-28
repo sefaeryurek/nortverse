@@ -8,7 +8,7 @@ Kupon getirisi = maçların geri dönüş katsayılarının çarpımı (kayıp 0
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.analysis.ht_value import total_return
 
@@ -62,31 +62,61 @@ def coupon_status(legs: list[dict]) -> dict:
             "return": None if realized is None else round(realized, 3)}
 
 
+VOID_AFTER = timedelta(hours=48)  # dondurulmuş başlama saatinden 48 saat sonra skor yoksa bacak iade
+
+
+def leg_void_reason(*, deleted: bool, status: str | None, has_score: bool, kickoff: datetime | None,
+                    now: datetime) -> str | None:
+    """Oynanmayan maçın bacağı iade (katsayı 1,0) sayılır: silinmiş / iptal / 48 saat skor yok (Sprint 94 B2)."""
+    if deleted:
+        return "deleted"
+    if has_score:
+        return None
+    if status == "abandoned":
+        return "abandoned"
+    if kickoff is not None and now - kickoff > VOID_AFTER:
+        return "no_result_48h"
+    return None
+
+
 async def settle_pending(session) -> int:
-    """Skoru belli olan sonuçsuz kupon maçlarını sonuçlandırır (her maç bir kez). Yazılan sonuç sayısı."""
+    """Skoru belli olan sonuçsuz kupon maçlarını sonuçlandırır (her maç bir kez); oynanmayan maç iade.
+
+    Yazılan sonuç sayısı.
+    """
     from sqlalchemy import select
     from sqlalchemy.dialects.postgresql import insert
 
+    from app.analysis.match_status import fixture_statuses
     from app.db.models import CouponLeg, CouponLegResult, Match
 
     rows = (await session.execute(
-        select(CouponLeg.id, CouponLeg.period, CouponLeg.market, CouponLeg.selection, CouponLeg.line, CouponLeg.odds,
-               Match.actual_ht_home, Match.actual_ht_away, Match.actual_ft_home, Match.actual_ft_away)
+        select(CouponLeg.id, CouponLeg.match_id, CouponLeg.period, CouponLeg.market, CouponLeg.selection,
+               CouponLeg.line, CouponLeg.odds, CouponLeg.kickoff_time,
+               Match.actual_ht_home, Match.actual_ht_away, Match.actual_ft_home, Match.actual_ft_away,
+               Match.deleted_at)
         .join(Match, Match.match_id == CouponLeg.match_id)
         .outerjoin(CouponLegResult, CouponLegResult.leg_id == CouponLeg.id)
         .where(CouponLegResult.leg_id.is_(None))
     )).all()
+    now = datetime.now(timezone.utc)
+    statuses = await fixture_statuses(session, sorted({r.match_id for r in rows}), now) if rows else {}
     written = 0
     for r in rows:
         ht = (r.actual_ht_home, r.actual_ht_away) if r.actual_ht_home is not None else None
         ft = (r.actual_ft_home, r.actual_ft_away) if r.actual_ft_home is not None else None
-        result = leg_return(r.period, r.market, r.selection, r.line, r.odds, ht, ft)
-        if result is None:
-            continue
         score = ht if r.period == "ht" else ft
+        void = leg_void_reason(deleted=r.deleted_at is not None, status=statuses.get(r.match_id),
+                               has_score=score is not None, kickoff=r.kickoff_time, now=now)
+        if void is not None:
+            values = {"outcome": "void", "return_factor": 1.0, "score": None}
+        else:
+            result = leg_return(r.period, r.market, r.selection, r.line, r.odds, ht, ft)
+            if result is None:
+                continue
+            values = {"outcome": result[0], "return_factor": result[1], "score": f"{score[0]}-{score[1]}"}
         res = await session.execute(insert(CouponLegResult).values(
-            leg_id=r.id, outcome=result[0], return_factor=result[1], score=f"{score[0]}-{score[1]}",
-            resolved_at=datetime.now(timezone.utc),
+            leg_id=r.id, resolved_at=now, **values,
         ).on_conflict_do_nothing(index_elements=["leg_id"]))
         written += res.rowcount or 0
     return written

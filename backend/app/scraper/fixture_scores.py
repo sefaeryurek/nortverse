@@ -8,11 +8,11 @@ from datetime import date
 
 from bs4 import BeautifulSoup
 
+from app.scraper import status as st
 from app.scraper.browser import browser_context
 from app.scraper.fixture import _build_fixture_url, _fetch_fixture_with_ctx, _MATCH_ROW_RE
 
 _SCORE_RE = re.compile(r"^\s*(\d{1,2})\s*[-:]\s*(\d{1,2})\s*$")
-_LIVE_STATUSES = {"1st Half", "2nd Half", "HT"}
 _MINUTE_RE = re.compile(r"^(?:[1-9]|[1-9]\d|1[01]\d)(?:\+[1-9]\d?)?$", re.ASCII)
 
 
@@ -50,24 +50,30 @@ def _score(value: str) -> tuple[int, int] | None:
 
 
 def parse_fixture_scores(html: str) -> dict[str, FixtureScore]:
-    """Only an explicit FT status is accepted as a final result."""
+    """Durumlar `scraper.status` haritasından. Sonuç olarak sadece açık FT kabul edilir; uzatmalı maç
+    `finished_extra` döner (skor 90. dakika mı belli değil, yazılmaz); ertelenen/iptal skorsuz döner."""
     soup = BeautifulSoup(html, "lxml")
     scores: dict[str, FixtureScore] = {}
+    unknown = st.UnknownTally("Fikstür sayfası")
     for row in soup.find_all("tr", id=_MATCH_ROW_RE):
         match_id = row["id"][4:]
         status_cell = row.select_one("td.status")
         source_status = status_cell.get_text(" ", strip=True) if status_cell else ""
-        if source_status == "Postp.":
-            scores[match_id] = FixtureScore(match_id, "postponed")
+        state = st.LIVE if _MINUTE_RE.fullmatch(source_status) else st.fixture_status(source_status)
+        if state is None:
+            unknown.add(source_status)
             continue
-        if source_status != "FT" and source_status not in _LIVE_STATUSES and not _MINUTE_RE.fullmatch(source_status):
+        if state in st.UNPLAYED:
+            scores[match_id] = FixtureScore(match_id, state)
+            continue
+        if state == st.SCHEDULED:
             continue
         score_cell = row.select_one("td.handpoint")
         pair = _score(score_cell.get_text(" ", strip=True)) if score_cell else None
         if pair is None:
             continue
         half_pair = None
-        if source_status == "FT":
+        if state in (st.FINISHED, st.FINISHED_EXTRA):
             tool = row.select_one("td.toolimg")
             half_cell = tool.find_previous_sibling("td") if tool else None
             half_pair = _score(half_cell.get_text(" ", strip=True)) if half_cell else None
@@ -75,12 +81,13 @@ def parse_fixture_scores(html: str) -> dict[str, FixtureScore]:
                 half_pair = None
         scores[match_id] = FixtureScore(
             match_id=match_id,
-            status="finished" if source_status == "FT" else "live",
+            status=state,
             home=pair[0], away=pair[1],
             ht_home=half_pair[0] if half_pair else None,
             ht_away=half_pair[1] if half_pair else None,
             minute=source_status if _MINUTE_RE.fullmatch(source_status) else None,
         )
+    unknown.report()
     return scores
 
 

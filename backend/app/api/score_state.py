@@ -48,7 +48,8 @@ def resolve_match_state(
     if item.get("score_status") == "finished" and item.get("score_home") is not None and item.get("score_away") is not None:
         return MatchState("finished", item["score_home"], item["score_away"], score_checked_at=checked_at)
 
-    if observed and observed.status == "postponed":
+    if observed and observed.status in ("postponed", "abandoned"):
+        # İptal / yarıda kalan maç ekranda ertelenmiş gibi (skor yok, canlı değil)
         return MatchState("postponed", score_checked_at=checked_at)
     if observed and observed.status == "scheduled":
         return MatchState("scheduled", score_checked_at=checked_at)
@@ -59,7 +60,7 @@ def resolve_match_state(
             return MatchState("live", live_home=observed.home, live_away=observed.away,
                               live_minute=observed.minute, score_checked_at=checked_at)
 
-    if item.get("score_status") == "postponed":
+    if item.get("score_status") in ("postponed", "abandoned"):
         return MatchState("postponed", score_checked_at=checked_at)
     old_time = _utc(item.get("score_checked_at"))
     if item.get("score_status") == "live" and old_time and item.get("score_home") is not None and item.get("score_away") is not None:

@@ -8,6 +8,7 @@ Sonuçlar `prediction_resolutions`'a eklenir; skor düzeltilirse yeni satır gel
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
@@ -85,9 +86,92 @@ def _outcome_row(row) -> dict | None:
     }
 
 
+# ─── Oynanmayan / taşınan maçlar (Sprint 94 B2) ─────────────────────────────────────────────
+RESCHEDULE_SHIFT = timedelta(hours=6)     # kayıttaki başlama saatinden bu kadar kayan maç = başka bir maç
+POSTPONED_GRACE = timedelta(days=3)       # kaynak "ertelendi" dedi ve 3 gün geçti
+NO_RESULT_GRACE = timedelta(days=7)       # kaynaktan hiç durum yok, 7 gün geçti (PC kapalı günler için pay)
+_PREMATCH_SOURCES = ("top_pick", "market_summary")
+
+_UNPLAYABLE_SQL = text("""
+    SELECT l.id, l.match_id, l.source, l.kickoff_time AS frozen_kickoff, l.recorded_at,
+           m.kickoff_time AS kickoff, m.actual_ft_home
+    FROM prediction_ledger l
+    JOIN matches m ON m.match_id = l.match_id
+    LEFT JOIN LATERAL (
+        SELECT pr.resolver_version FROM prediction_resolutions pr
+        WHERE pr.ledger_id = l.id ORDER BY pr.id DESC LIMIT 1
+    ) r ON true
+    WHERE r.resolver_version IS DISTINCT FROM 'invalidated'
+      AND m.deleted_at IS NULL
+      AND (
+        abs(extract(epoch FROM m.kickoff_time - l.kickoff_time)) > :shift_s
+        OR (l.source = ANY(:prematch) AND l.recorded_at < m.kickoff_time - make_interval(secs => :horizon_s))
+        OR (m.actual_ft_home IS NULL AND l.kickoff_time < :started_before)
+      )
+""")
+
+
+def unplayable_reason(row, status: str | None, now: datetime, horizon: timedelta) -> str | None:
+    """Bu defter satırı neden geçersiz sayılmalı? (None = geçerli / henüz bekle)
+
+    - rescheduled: maç kayıttaki başlama saatinden 6+ saat kaydı (ertelendi, başka gün oynandı ya da tekrar)
+    - capture_horizon: maç öncesi karar gerçek başlamadan 48 saatten önce yazılmış (yer tutucu saat yüzünden)
+    - abandoned: kaynak iptal / yarıda kaldı diyor
+    - postponed: kaynak ertelendi diyor ve 3 gün geçti
+    - no_result: 7 gün geçti, ne sonuç ne durum var
+    """
+    if row.kickoff is not None and row.frozen_kickoff is not None \
+            and abs(row.kickoff - row.frozen_kickoff) > RESCHEDULE_SHIFT:
+        return "rescheduled"
+    if row.source in _PREMATCH_SOURCES and row.kickoff is not None and row.kickoff - row.recorded_at > horizon:
+        return "capture_horizon"
+    if row.actual_ft_home is not None:
+        return None
+    if status == "abandoned":
+        return "abandoned"
+    if status == "postponed" and row.frozen_kickoff < now - POSTPONED_GRACE:
+        return "postponed"
+    if row.frozen_kickoff < now - NO_RESULT_GRACE:
+        return "no_result"
+    return None
+
+
+async def void_unplayable(now: datetime | None = None) -> dict[str, int]:
+    """Oynanmayan, taşınan ya da ufuk dışında kaydedilmiş maçların defter satırlarını kalıcı geçersiz sayar.
+
+    Eskiden ertelenen maçın kayıtları sonsuza dek bekliyordu (3003600: 38 satır), taşınan maçın eski
+    kararları yeni tarihteki sonuçla çözülüyordu (3026759). Döner: {sebep: satır sayısı}.
+    """
+    from app.analysis.match_status import fixture_statuses
+    from app.analysis.prematch_v4 import CAPTURE_HORIZON
+
+    now = now or datetime.now(timezone.utc)
+    async with get_session() as session:
+        rows = (await session.execute(_UNPLAYABLE_SQL, {
+            "shift_s": RESCHEDULE_SHIFT.total_seconds(), "prematch": list(_PREMATCH_SOURCES),
+            "horizon_s": CAPTURE_HORIZON.total_seconds(), "started_before": now - timedelta(hours=3),
+        })).all()
+        statuses = await fixture_statuses(session, sorted({r.match_id for r in rows}), now)
+    by_reason: dict[str, list[int]] = {}
+    for row in rows:
+        reason = unplayable_reason(row, statuses.get(row.match_id), now, CAPTURE_HORIZON)
+        if reason is not None:
+            by_reason.setdefault(reason, []).append(row.id)
+    for reason, ids in by_reason.items():
+        await invalidate_predictions(ids, reason=reason, actor="resolve_pending")
+    return {reason: len(ids) for reason, ids in by_reason.items()}
+
+
 async def resolve_pending(batch_size: int = 2000) -> dict[str, int]:
-    """Skoru gelen defter satırlarını çözer. {'resolved', 'void', 'unresolvable'} döner."""
-    stats = {"resolved": 0, "void": 0, "unresolvable": 0}
+    """Skoru gelen defter satırlarını çözer; önce oynanmayan/taşınan maçların satırlarını geçersiz sayar.
+
+    {'resolved', 'void', 'unresolvable', 'invalidated'} döner.
+    """
+    stats = {"resolved": 0, "void": 0, "unresolvable": 0, "invalidated": 0}
+    try:
+        stats["invalidated"] = sum((await void_unplayable()).values())
+    except Exception:  # geçersiz sayma hatası normal çözümü engellemez
+        log.warning("Oynanmayan maç kuralları uygulanamadı", exc_info=True)
     after = 0
     while True:
         async with get_session() as session:

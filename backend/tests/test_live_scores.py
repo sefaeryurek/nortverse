@@ -58,7 +58,7 @@ class TestParseLiveScores:
     def test_cancelled(self):
         html = _wrap(_row("777", "Canc."))
         result = parse_live_scores(html)
-        assert result["777"].status == "postponed"
+        assert result["777"].status == "abandoned"  # Sprint 94 B2: iptal artık "ertelendi" sayılmıyor
 
     def test_scheduled(self):
         html = _wrap(_row("888", "19:00"))
