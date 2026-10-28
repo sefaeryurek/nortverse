@@ -335,7 +335,11 @@
       "historicalMarket": "past {pct}%",
       "historicalMarketTooltip": "Actual hit rate of this market's decisions in the historical test (2023-07 → today, leak-free) ({n} decisions).",
       "condShort": "league history {pct}% · {n} matches",
-      "archiveRuleTitle": "Archive + league history rule ({pct}%+)"
+      "archiveRuleTitle": "Archive + league history rule ({pct}%+)",
+      "trivialTag": "HT score already says it",
+      "trivialTooltip": "At least 80% of past matches in this league with the same HT score ended this way; the model adds no information and the market usually prices it around 1.01–1.10.",
+      "valuableTag": "model adds",
+      "valuableTooltip": "League history shows this pick below 80%; the team-strength model adds information."
     },
     "staleData": "stale",
     "staleTooltip": "Live data has not updated for {s}s; the source may be delayed."

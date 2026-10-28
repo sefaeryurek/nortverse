@@ -142,6 +142,16 @@ export function PoissonDecisionList({ decisions }: { decisions: LivePoissonDecis
                 {fmtPct(d.pct)}
               </span>
               <FairOdds pct={d.pct} />
+              {d.valuable === false && (
+                <span className="px-1.5" title={a.trivialTooltip} style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-bg-surface)", color: "var(--nv-text-tertiary)" }}>
+                  {a.trivialTag}
+                </span>
+              )}
+              {d.valuable === true && (
+                <span className="px-1.5 font-semibold" title={a.valuableTooltip} style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", border: "1px solid var(--nv-accent-blue)", color: "var(--nv-accent-blue)" }}>
+                  {a.valuableTag}
+                </span>
+              )}
               {d.best && (
                 <span className="px-1.5 font-semibold" style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-accent-green)", color: "var(--nv-text-on-accent)" }}>
                   {a.bestPick}

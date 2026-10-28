@@ -454,6 +454,8 @@ export interface LivePoissonDecision {
   confirmed: boolean;
   /** Bu pazarda geçmiş testteki isabet */
   historical: { pct: number; n: number } | null;
+  /** Sprint 94 H3: false = İY skoru zaten söylüyor (lig geçmişi ≥%80); true = model katkısı */
+  valuable?: boolean;
 }
 
 export interface LiveArchiveDetail {

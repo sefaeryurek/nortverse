@@ -327,3 +327,13 @@ async def test_market_price_failure_does_not_block_freeze(monkeypatch):
     monkeypatch.setattr("app.scraper.odds.current_odds", AsyncMock(return_value={"ft": {}, "live": None}))
     assert await live_ledger.market_snapshot("900", datetime.now(timezone.utc)) is None  # boş pazar kaydedilmez
     assert live_ledger.attach_market([{"period": "ft", "details": {}}], None) == [{"period": "ft", "details": {}}]
+
+
+def test_valuable_flag_from_details_or_cond():
+    """Sprint 94 H3: defterde işaret varsa o, eski kayıtta COND oranından (<%80 → model katkısı)."""
+    from app.api.routes_live_ht import _valuable
+
+    assert _valuable({"valuable": False, "cond_pct": 50}) is False
+    assert _valuable({"cond_pct": 92.0}) is False
+    assert _valuable({"cond_pct": 70.0}) is True
+    assert _valuable({}) is True

@@ -83,3 +83,20 @@ describe("HighlightList (live-arch-v2)", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
   });
 });
+
+describe("PoissonDecisionList (Sprint 94 H3)", () => {
+  it("İY skorundan belli kararı gri, model katkısını ayrı etiketler", async () => {
+    const { PoissonDecisionList } = await import("@/components/LiveArchiveView");
+    const base = { period: "ft", market: "ou_15", pct: 96, cond_n: 300, best: false, rule_version: "live-poisson-v1.1", confirmed: false, historical: null };
+    render(
+      <LocaleProvider initial="tr">
+        <PoissonDecisionList decisions={[
+          { ...base, selection: "over", cond_pct: 94, valuable: false },
+          { ...base, market: "result", selection: "1", cond_pct: 72, valuable: true },
+        ]} />
+      </LocaleProvider>,
+    );
+    expect(screen.getByText("İY skoru zaten söylüyor")).toBeTruthy();
+    expect(screen.getByText("model katkısı")).toBeTruthy();
+  });
+});

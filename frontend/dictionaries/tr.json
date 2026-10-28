@@ -335,7 +335,11 @@
       "historicalMarket": "geçmiş %{pct}",
       "historicalMarketTooltip": "Geçmiş testte (2023-07 → bugün, sızıntısız) bu pazardaki kararların gerçek tutma oranı ({n} karar).",
       "condShort": "lig geçmişi %{pct} · {n} maç",
-      "archiveRuleTitle": "Arşiv + lig geçmişi kuralı (%{pct}+)"
+      "archiveRuleTitle": "Arşiv + lig geçmişi kuralı (%{pct}+)",
+      "trivialTag": "İY skoru zaten söylüyor",
+      "trivialTooltip": "Aynı lig + aynı İY skorlu geçmiş maçların en az %80'i bu sonuçla bitti; model ek bilgi katmıyor, piyasa da genelde ~1,01–1,10 oran verir.",
+      "valuableTag": "model katkısı",
+      "valuableTooltip": "Lig geçmişi bu seçimi %80'in altında gösteriyor; takım gücü modeli ek bilgi katıyor."
     },
     "staleData": "veri eski",
     "staleTooltip": "Canlı veri {s} sn'dir güncellenmedi; kaynak gecikiyor olabilir."

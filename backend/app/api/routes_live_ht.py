@@ -31,6 +31,14 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _valuable(details: dict) -> bool:
+    """Sprint 94 H3: karar İY skorundan zaten belli mi? Defterdeki işaret; eski kayıtta COND oranından."""
+    if "valuable" in details:
+        return bool(details["valuable"])
+    cond = details.get("cond_pct")
+    return cond is None or cond < live_poisson.VALUABLE_COND_BELOW
+
+
 class LiveHTMatch(BaseModel):
     match_id: str
     home_team: str | None = None
@@ -109,6 +117,7 @@ async def _frozen_info(session, ids: list[str]) -> dict[str, dict]:
                 "period": r.period, "market": r.market, "selection": r.selection, "pct": r.prob_shown_bp / 100,
                 "cond_pct": details.get("cond_pct"), "cond_n": details.get("cond_n"),
                 "best": bool(details.get("best")), "rule_version": r.rule_version,
+                "valuable": _valuable(details),
             })
             continue
         if r.rule_version not in live_archive.LIVE_ARCHIVE_RULE_VERSIONS:
@@ -157,7 +166,7 @@ async def _poisson_decisions(match: Match, ht: tuple[int, int], frozen: dict | N
             picks = [{
                 "period": p["period"], "market": p["market"], "selection": p["selection"], "pct": p["pct"],
                 "cond_pct": p["cond_pct"], "cond_n": p["cond_n"], "best": p["best"],
-                "rule_version": live_poisson.LIVE_POISSON_RULE_VERSION,
+                "rule_version": live_poisson.LIVE_POISSON_RULE_VERSION, "valuable": p["valuable"],
             } for p in live_poisson.decisions(prediction, live_poisson.cond_lookup(await get_cond_table(), league, ht))]
         except Exception:
             log.warning("Canlı Poisson kararları hesaplanamadı [%s]", match.match_id, exc_info=True)
