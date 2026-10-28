@@ -1,5 +1,6 @@
 """Giriş zorunluluğu ve şifre saklama (Sprint 93)."""
 
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -17,12 +18,65 @@ def test_password_hash_roundtrip_and_salt():
     assert not auth.verify_password("x", "bozuk-kayit")
 
 
-def test_failure_limit():
+def test_failure_limit_per_user_and_global():
+    """Sprint 94 E3: kullanıcı adı başına 8, toplamda 40 hata / 15 dk; IP anahtarı yok."""
     auth._failures.clear()
     for _ in range(auth._FAIL_LIMIT):
-        auth.record_failure("u:deneme")
-    assert auth.too_many_failures("u:deneme", "ip:1.2.3.4")
-    assert not auth.too_many_failures("u:baska")
+        auth.record_login_failure("deneme")
+    assert auth.login_blocked("deneme")
+    assert not auth.login_blocked("baska")  # arkadaşın hataları sahibi kilitlemez
+    auth._failures.clear()
+    for i in range(auth._GLOBAL_FAIL_LIMIT):
+        auth.record_login_failure(f"uydurma{i}")  # her denemede farklı ad: kullanıcı sınırı atlanır
+    assert auth.login_blocked("sefa")  # genel sınır devrede
+    assert not auth.login_blocked("sefa", now=time.time() + auth._FAIL_WINDOW + 1)  # 15 dk sonra açılır
+    auth._failures.clear()
+
+
+def test_failures_dict_bounded(monkeypatch):
+    auth._failures.clear()
+    monkeypatch.setattr(auth, "_FAILURES_MAX", 50)
+    for i in range(200):
+        auth.record_login_failure(f"ad{i}")
+    assert len(auth._failures) <= 51 and auth._GLOBAL_KEY in auth._failures
+    auth._failures.clear()
+
+
+def test_forget_failures_unlocks():
+    auth._failures.clear()
+    t0 = time.time()
+    for _ in range(auth._FAIL_LIMIT):
+        auth.record_login_failure("deneme", now=t0)
+    auth.forget_failures("deneme", before=t0 + 1)
+    assert not auth.login_blocked("deneme")
+    for i in range(auth._GLOBAL_FAIL_LIMIT):
+        auth.record_login_failure(f"x{i}", now=t0)
+    auth.forget_failures(auth._GLOBAL_KEY, before=t0 + 1)  # unlock --all
+    assert auth._failures == {}
+
+
+def test_login_lockout_and_unlock(client, monkeypatch):
+    """8 hatalı denemede 429; `unlock` kaydı görülünce açılır."""
+    auth._failures.clear()
+
+    async def wrong(*_a, **_k):
+        return None
+
+    unlocked = {"at": None}
+
+    async def fake_last_unlock(_session, _username):
+        return unlocked["at"]
+
+    monkeypatch.setattr("app.api.routes_auth.login", wrong)
+    monkeypatch.setattr("app.api.routes_auth.last_unlock", fake_last_unlock)
+    monkeypatch.setattr("app.api.routes_auth.get_session", _no_db_ok)
+    body = {"username": "Sefa", "password": "yanlis"}
+    for _ in range(auth._FAIL_LIMIT):
+        assert client.post("/api/auth/login", json=body,
+                           headers={"x-forwarded-for": "203.0.113.9"}).status_code == 401
+    assert client.post("/api/auth/login", json=body).status_code == 429
+    unlocked["at"] = time.time() + 1
+    assert client.post("/api/auth/login", json=body).status_code == 401  # kilit açıldı, şifre yine yanlış
     auth._failures.clear()
 
 
@@ -117,3 +171,15 @@ class _NoDb:
 
 def _no_db():
     return _NoDb()
+
+
+class _OkDb:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _no_db_ok():
+    return _OkDb()

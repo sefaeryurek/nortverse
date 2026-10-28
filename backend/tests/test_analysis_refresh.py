@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import HTTPException
 
+from app.api import ratelimit, routes_analysis
 from app.api import services as svc
-from app.api import routes_analysis
 
 
 def _fake_request(host: str = "127.0.0.1", headers: dict | None = None) -> SimpleNamespace:
@@ -19,7 +19,7 @@ def isolated_cache(monkeypatch):
     monkeypatch.setattr(svc, "analysis_cache", OrderedDict())
     monkeypatch.setattr(svc, "_analysis_cached_at", {})
     monkeypatch.setattr(routes_analysis, "ANALYSIS_TIMEOUT", 0.02)
-    routes_analysis._rate_buckets.clear()
+    ratelimit.reset()
     monkeypatch.setattr(routes_analysis, "_kickoff_of", AsyncMock(return_value=None))
 
 
@@ -77,8 +77,21 @@ async def test_refresh_after_kickoff_is_rejected_and_keeps_prematch_analysis(mon
     scrape.assert_not_called()
 
 
-def test_forwarded_ip_only_from_trusted_proxy(monkeypatch):
-    monkeypatch.setattr(routes_analysis, "_TRUSTED_PROXIES", {"10.0.0.1"})
-    headers = {"x-forwarded-for": "203.0.113.7, 10.0.0.1"}
-    assert routes_analysis._client_ip(_fake_request("10.0.0.1", headers)) == "203.0.113.7"
-    assert routes_analysis._client_ip(_fake_request("198.51.100.2", headers)) == "198.51.100.2"
+def test_rate_limit_keys_by_user_not_forwarded_header():
+    """Sprint 94 E3: X-Forwarded-For taklit edilebilir, tüm trafik 127.0.0.1 — sınır kullanıcıya göre."""
+    from app.auth import AuthUser
+
+    def req(user, forwarded):
+        r = _fake_request("127.0.0.1", {"x-forwarded-for": forwarded})
+        r.state = SimpleNamespace(user=user)
+        return r
+
+    alice, bob = AuthUser(1, "a", False), AuthUser(2, "b", False)
+    assert ratelimit.client_key(req(alice, "203.0.113.7")) == ratelimit.client_key(req(alice, "198.51.100.2"))
+    assert ratelimit.client_key(req(alice, "x")) != ratelimit.client_key(req(bob, "x"))
+    for i in range(3):
+        ratelimit.check_rate(req(alice, f"10.0.0.{i}"), "t", 3)  # başlığı değiştirmek sayacı sıfırlamaz
+    with pytest.raises(HTTPException) as error:
+        ratelimit.check_rate(req(alice, "10.9.9.9"), "t", 3)
+    assert error.value.status_code == 429
+    ratelimit.check_rate(req(bob, "10.0.0.1"), "t", 3)  # başka kullanıcı etkilenmez

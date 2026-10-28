@@ -23,7 +23,7 @@ from app.cli.archive_cmds import (
 )
 from app.cli.events_cmds import backfill_goal_events_cmd
 from app.cli.odds_cmds import backfill_odds_cmd, backtest_ht_value_cmd
-from app.cli.users_cmds import create_user_cmd, list_users_cmd, set_password_cmd
+from app.cli.users_cmds import create_user_cmd, list_users_cmd, set_password_cmd, unlock_cmd
 from app.cli.audit_cmds import (
     audit_db_cmd,
     audit_patterns_cmd,
@@ -76,6 +76,7 @@ app.command("backtest-ht-value")(backtest_ht_value_cmd)
 app.command("create-user")(create_user_cmd)
 app.command("set-password")(set_password_cmd)
 app.command("list-users")(list_users_cmd)
+app.command("unlock")(unlock_cmd)
 app.command("list-leagues")(list_leagues_cmd)
 app.command("repair-archive")(repair_archive_cmd)
 app.command("normalize-leagues")(normalize_leagues_cmd)

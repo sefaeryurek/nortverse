@@ -25,10 +25,15 @@ _SCRYPT = {"n": 2**14, "r": 8, "p": 1}
 _CACHE_TTL = 60.0  # çözülmüş oturum bellekte (her istekte DB'ye gitmesin)
 _cache: dict[str, tuple[float, "AuthUser | None"]] = {}
 
-# Kaba kuvvet koruması: kullanıcı adı veya IP başına 15 dk'da 8 hatalı deneme
+# Kaba kuvvet koruması (Sprint 94 E3): kullanıcı adı başına 15 dk'da 8, toplamda 40 hatalı deneme.
+# IP anahtarı yok: tüm trafik Next / Tailscale üzerinden 127.0.0.1'den gelir, başlıktaki adres de taklit edilebilir.
 _FAIL_WINDOW = 15 * 60
 _FAIL_LIMIT = 8
+_GLOBAL_FAIL_LIMIT = 40
+_GLOBAL_KEY = "*"
+_FAILURES_MAX = 1000  # uydurma kullanıcı adlarıyla sözlük sınırsız büyümesin
 _failures: dict[str, list[float]] = {}
+UNLOCK_OPERATION = "login_unlock"
 
 
 @dataclass(frozen=True)
@@ -69,20 +74,58 @@ def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def too_many_failures(*keys: str) -> bool:
-    now = time.monotonic()
-    for key in keys:
-        recent = [t for t in _failures.get(key, []) if now - t < _FAIL_WINDOW]
+def _recent(key: str, now: float) -> list[float]:
+    recent = [t for t in _failures.get(key, []) if now - t < _FAIL_WINDOW]
+    if recent:
         _failures[key] = recent
-        if len(recent) >= _FAIL_LIMIT:
-            return True
-    return False
+    else:
+        _failures.pop(key, None)
+    return recent
 
 
-def record_failure(*keys: str) -> None:
-    now = time.monotonic()
-    for key in keys:
+def login_blocked(username: str, now: float | None = None) -> bool:
+    """Bu kullanıcı adı (8) ya da tüm site (40) son 15 dakikada çok fazla hatalı deneme aldıysa True."""
+    now = time.time() if now is None else now
+    return (len(_recent(f"u:{username}", now)) >= _FAIL_LIMIT
+            or len(_recent(_GLOBAL_KEY, now)) >= _GLOBAL_FAIL_LIMIT)
+
+
+def record_login_failure(username: str, now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    if len(_failures) >= _FAILURES_MAX:
+        for key in list(_failures):
+            _recent(key, now)
+        while len(_failures) >= _FAILURES_MAX:  # hâlâ doluysa en eski kullanıcı anahtarı düşer (genel sayaç kalır)
+            oldest = next(k for k in _failures if k != _GLOBAL_KEY)
+            del _failures[oldest]
+    for key in (f"u:{username}", _GLOBAL_KEY):
         _failures.setdefault(key, []).append(now)
+
+
+def forget_failures(username: str, before: float) -> None:
+    """`unlock` komutu: o andan önceki hatalar (kullanıcının ve genel sayacın) unutulur."""
+    keys = [_GLOBAL_KEY] + ([f"u:{username}"] if username != _GLOBAL_KEY else [k for k in _failures if k != _GLOBAL_KEY])
+    for key in keys:
+        kept = [t for t in _failures.get(key, []) if t >= before]
+        if kept:
+            _failures[key] = kept
+        else:
+            _failures.pop(key, None)
+
+
+async def last_unlock(session, username: str) -> float | None:
+    """CLI ayrı süreçte çalışır, belleğe dokunamaz: `unlock` audit_log'a yazar, backend burada okur."""
+    from sqlalchemy import func, select
+
+    from app.db.models import AuditLog
+
+    since = datetime.now(timezone.utc) - timedelta(seconds=_FAIL_WINDOW)
+    stamp = (await session.execute(
+        select(func.max(AuditLog.timestamp)).where(
+            AuditLog.operation == UNLOCK_OPERATION, AuditLog.timestamp >= since,
+            AuditLog.details["username"].astext.in_([username, _GLOBAL_KEY]))
+    )).scalar_one_or_none()
+    return stamp.timestamp() if stamp else None
 
 
 async def login(session, username: str, password: str, user_agent: str | None) -> tuple[str, AuthUser] | None:

@@ -578,4 +578,7 @@ def serve(
         port=port,
         reload=reload,
         loop="none",
+        # Next rewrite istemcinin X-Forwarded-For başlığını aynen iletiyor; açık kalırsa backend'in gördüğü
+        # adres istemcinin istediği değer olur (Sprint 94 E3). Tüm trafik zaten 127.0.0.1'den gelir.
+        proxy_headers=False,
     )

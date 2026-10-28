@@ -100,3 +100,29 @@ def list_users_cmd() -> None:
     for name, is_admin, disabled, created, sessions in asyncio.run(run()):
         flags = ", ".join(f for f, on in (("yönetici", is_admin), ("kapalı", disabled)) if on)
         console.print(f"{name:20s} {created:%Y-%m-%d}  açık oturum: {sessions}  {flags}")
+
+
+def unlock_cmd(
+    username: str = typer.Argument(None, help="Kilidi açılacak kullanıcı adı"),
+    all_users: bool = typer.Option(False, "--all", help="Genel kilit dahil tüm giriş kilitlerini aç"),
+) -> None:
+    """Çok fazla hatalı denemeyle kilitlenen girişi açar (Sprint 94 E3).
+
+    Sayaçlar backend'in belleğindedir; bu komut audit_log'a kayıt düşer, backend bir sonraki giriş
+    denemesinde kaydı görüp o ana kadarki hataları unutur. Backend'i yeniden başlatmaya gerek yok.
+    """
+    if not username and not all_users:
+        raise typer.BadParameter("Kullanıcı adı ya da --all verin")
+    from app.auth import UNLOCK_OPERATION, _GLOBAL_KEY
+
+    target = _GLOBAL_KEY if all_users else username.strip().lower()
+
+    async def run() -> None:
+        from app.db.connection import get_session
+        from app.db.models import AuditLog
+
+        async with get_session() as session:
+            session.add(AuditLog(operation=UNLOCK_OPERATION, actor="cli", details={"username": target}))
+
+    asyncio.run(run())
+    console.print(f"[green]Giriş kilidi açıldı:[/green] {'tüm hesaplar' if all_users else target}")

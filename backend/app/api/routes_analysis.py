@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import collections
 import logging
-import os
-import time
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -15,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from app.auth import is_admin_request
 from sqlalchemy import select
 
+from app.api.ratelimit import check_rate
 from app.api.schemas import AnalyzeResponse, MatchSummary
 from app.api.services import (
     ANALYSIS_TIMEOUT,
@@ -29,50 +27,10 @@ from app.db.models import Match
 log = logging.getLogger(__name__)
 router = APIRouter()
 
-# ─── Basit IP-bazlı rate limiter (yeni bağımlılık gerektirmez) ───────────────
-_rate_buckets: dict[str, collections.deque] = {}
-_RATE_WINDOW = 60.0
+# Hız sınırı kullanıcı kimliğine göre (Sprint 94 E3) — app/api/ratelimit.py
 _RATE_LIMIT_GET = 30
 _RATE_LIMIT_POST = 5
-_RATE_BUCKETS_MAX = 2000
 
-
-_rate_sweep_counter = 0
-_RATE_SWEEP_INTERVAL = 100
-
-# Proxy arkasında gerçek istemci IP'si: X-Forwarded-For sadece güvenilen proxy'den kabul edilir.
-_TRUSTED_PROXIES = {ip.strip() for ip in os.environ.get("TRUSTED_PROXIES", "").split(",") if ip.strip()}
-
-
-def _client_ip(request: Request) -> str:
-    host = request.client.host if request.client else "unknown"
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded and host in _TRUSTED_PROXIES:
-        return forwarded.split(",")[0].strip() or host
-    return host
-
-
-def _check_rate(ip: str, limit: int) -> None:
-    global _rate_sweep_counter
-    now = time.monotonic()
-    bucket = _rate_buckets.get(ip)
-    if bucket is None:
-        bucket = collections.deque()
-        _rate_buckets[ip] = bucket
-        if len(_rate_buckets) > _RATE_BUCKETS_MAX:
-            oldest_key = next(iter(_rate_buckets))
-            del _rate_buckets[oldest_key]
-    while bucket and bucket[0] < now - _RATE_WINDOW:
-        bucket.popleft()
-    if len(bucket) >= limit:
-        raise HTTPException(429, "Çok fazla istek — lütfen biraz bekleyin")
-    bucket.append(now)
-    _rate_sweep_counter += 1
-    if _rate_sweep_counter >= _RATE_SWEEP_INTERVAL:
-        _rate_sweep_counter = 0
-        stale_keys = [k for k, v in _rate_buckets.items() if not v or v[-1] < now - _RATE_WINDOW]
-        for k in stale_keys:
-            del _rate_buckets[k]
 
 async def _kickoff_of(match_id: str) -> datetime | None:
     async with get_session() as session:
@@ -87,7 +45,7 @@ async def get_analyze(
     match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
 ) -> AnalyzeResponse:
     """Maçı analiz eder. Cache'te varsa anında döner, yoksa scrape eder."""
-    _check_rate(_client_ip(request), _RATE_LIMIT_GET)
+    check_rate(request, "analyze", _RATE_LIMIT_GET)
     try:
         return await asyncio.wait_for(analyze_and_cache(match_id, allow_scrape=is_admin_request(request)),
                                       timeout=ANALYSIS_TIMEOUT)
@@ -105,7 +63,7 @@ async def post_analyze(
     Başlamış/bitmiş maçta yeniden analiz maç öncesi analizi ezip maçı "arşiv" sınıfına
     taşırdı (değerlendirme bozulur); bu yüzden 409 döner.
     """
-    _check_rate(_client_ip(request), _RATE_LIMIT_POST)
+    check_rate(request, "analyze-post", _RATE_LIMIT_POST)
     if not is_admin_request(request):
         raise HTTPException(403, "Yeniden analiz sadece yönetici hesabıyla yapılabilir")
     kickoff = await _kickoff_of(match_id)
@@ -130,7 +88,7 @@ async def get_match(
     match_id: str = Path(pattern=r"^[0-9]{1,12}$"),
 ) -> MatchSummary:
     """Maçın özet bilgisi. DB'de yoksa Playwright ile çek + DB'ye kaydet, sonra dön."""
-    _check_rate(_client_ip(request), _RATE_LIMIT_GET)
+    check_rate(request, "analyze", _RATE_LIMIT_GET)
     async with get_session() as session:
         row = (
             await session.execute(

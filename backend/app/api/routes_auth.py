@@ -5,7 +5,17 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from app.auth import COOKIE_NAME, SESSION_DAYS, auth_required, login, logout, record_failure, too_many_failures
+from app.auth import (
+    COOKIE_NAME,
+    SESSION_DAYS,
+    auth_required,
+    forget_failures,
+    last_unlock,
+    login,
+    login_blocked,
+    logout,
+    record_login_failure,
+)
 from app.db.connection import get_session
 
 router = APIRouter()
@@ -16,20 +26,20 @@ class LoginBody(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
-def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "?"
-
-
 @router.post("/api/auth/login")
 async def post_login(body: LoginBody, request: Request, response: Response) -> dict:
     username = body.username.strip().lower()
-    keys = (f"u:{username}", f"ip:{_client_ip(request)}")
-    if too_many_failures(*keys):
-        raise HTTPException(429, "Çok fazla hatalı deneme. 15 dakika sonra tekrar deneyin.")
+    if login_blocked(username):
+        async with get_session() as session:
+            unlocked_at = await last_unlock(session, username)
+        if unlocked_at is not None:
+            forget_failures(username, unlocked_at)
+        if login_blocked(username):
+            raise HTTPException(429, "Çok fazla hatalı deneme. 15 dakika sonra tekrar deneyin.")
     async with get_session() as session:
         result = await login(session, username, body.password, request.headers.get("user-agent"))
     if result is None:
-        record_failure(*keys)
+        record_login_failure(username)
         raise HTTPException(401, "Kullanıcı adı veya şifre hatalı")
     token, user = result
     response.set_cookie(COOKIE_NAME, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/")
