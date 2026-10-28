@@ -1,6 +1,6 @@
 @echo off
 REM Nortverse - Skor guncelleme + tahmin defteri cozumu (pencere acmadan)
-REM Gorev Zamanlayici: 18:00-23:00 saat basi ve 00:30.
+REM Gorev Zamanlayici: 18:00-23:00 saat basi ve 00:30 (tek gorev - iki kopya paralel calismaz).
 REM --pending-days 3: son 3 gunde sonucu eksik kalan gunleri de yakalar; sonunda defter cozulur.
 
 set PYTHONIOENCODING=utf-8
@@ -12,6 +12,13 @@ call "%~dp0ensure-docker.bat" "%LOGFILE%"
 if errorlevel 1 (
     echo [%date% %time%] HATA: Docker/PostgreSQL hazir degil, skor guncellenmedi >> "%ERRORLOG%"
     call "%~dp0notify-error.bat" "Skor guncellenmedi - Docker/PostgreSQL hazir degil"
+    exit /b 1
+)
+
+call "%~dp0wait-network.bat" "%LOGFILE%"
+if errorlevel 1 (
+    echo [%date% %time%] HATA: Ag hazir degil, skor guncellenmedi >> "%ERRORLOG%"
+    call "%~dp0notify-error.bat" "Skor guncellenmedi - veri kaynagina baglanilamadi"
     exit /b 1
 )
 
