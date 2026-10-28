@@ -71,8 +71,24 @@ python -m app.cli.main recompute-patterns --stale-only            # Sadece ayar�
 python -m app.cli.main recompute-patterns --stale-only --family d # Sadece A3 (Pattern D)
 python -m app.cli.main recompute-patterns --stale-only --include-finished  # Bitmiş maçları da yenile (varsayılan: korunur, audit_log'a düşer)
 
+# Hesaplar ve paylaşım (Sprint 93–94) — kayıt sayfası yok, hesapları site sahibi açar
+python -m app.cli.main create-user arkadas              # yeni hesap (şifre verilmezse rastgele üretilir)
+python -m app.cli.main create-user sefa --admin         # yönetici: yeni maç çekimi gibi ağır işleri tetikleyebilir
+python -m app.cli.main set-password arkadas             # şifre değiştir
+python -m app.cli.main list-users                       # hesaplar
+python -m app.cli.main unlock arkadas                   # çok hatalı denemeyle kilitlenen girişi aç (backend yeniden başlamaz)
+python -m app.cli.main health-report                    # DB sağlık kontrolleri (scripts/health-check.ps1 --json ile kullanır)
+
+# Ön hazırlık / doldurma (kesilirse kaldığı yerden devam eder)
+python -m app.cli.main refresh-fixture-cache            # yarının maç listesini analizsiz önbelleğe al
+python -m app.cli.main capture-recommendations          # hazır analizlerin maç öncesi seçimlerini dondur (v4 gölge + v5)
+python -m app.cli.main backfill-team-lambdas            # A3 için maç öncesi takım gücü λ'ları (sızıntısız)
+python -m app.cli.main backfill-goal-events --delay 12  # gol dakikaları (anlık maç modeli için)
+python -m app.cli.main backfill-odds --days 2 --scope both  # son 2 günün MS + İY oran geçmişi (günlük kayıt)
+python -m app.cli.main backtest-ht-value                # İY değer kuralının geçmiş testi
+
 # Tahmin defteri (Sprint 88)
-python -m app.cli.main update-scores --pending-days 3   # skorlar + son 3 günün eksik sonuçları + defteri çöz
+python -m app.cli.main update-scores --pending-days 3   # skorlar + son 3 günün eksik sonuçları + defteri ve kuponları çöz
 python -m app.cli.main resolve-predictions              # sadece bekleyen tahminleri tuttu/tutmadı olarak çöz
 python -m app.cli.main live-freeze                      # canlı dondurma denemesi: izleyici şu an ne yapardı (yazmaz)
 python -m app.cli.main live-freeze --apply              # bir turu gerçekten çalıştır (backend kapalıyken kaçan devre arası)
@@ -172,18 +188,20 @@ oran(hg, ag, periyot) = (
 - **Tam aynı set** → eşleşme. En az 5 eşleşme varsa istatistik üretilir
 - `app/analysis/pattern_b.py` → `find_pattern_b_matches(period, s1, sx, s2)`
 
+> **Sprint 91 Faz 4'ten beri arşivler (A1/A2/A3) karar vermez, ekranda bilgi olarak durur.** Maç öncesi karar
+> `prematch_v5` (Dixon-Coles takım gücü), canlı karar `live-poisson-v1.1` (onay rozeti live-arch-v2).
+
 **Katman C — Tam Oran Pattern Matching / Arşiv-2 (TAMAMLANDI ✅)**
-- Bülten maçının FT oranlarını DB'deki geçmiş maçlarla ±0.5 aralığında karşılaştırır
+- Bülten maçının FT oranlarını DB'deki geçmiş maçlarla **±1,0** aralığında karşılaştırır (sabit tolerans, algoritma c4 — Sprint 91 Faz 4; eskiden ±0,5 + adaptif)
 - **Kritik tasarım kararı:** FT oranlarıyla tek sorgu yapılır, aynı eşleşme seti İY/2Y/MS için kullanılır
   - Sebep: Bir maçın İY oran benzerliği varsa 2Y ve MS için de vardır. Periyot başına ayrı sorgu yapılsaydı "İY var, MS yok" gibi tutarsız sonuçlar çıkardı
 - `app/analysis/pattern_c.py` → `find_pattern_c_all_periods(ft_ratios)` → `(ht_result, h2_result, ft_result)`
 
-**Katman D — Cosine Similarity / Arşiv-3 (TAMAMLANDI ✅)**
-- Bülten maçının 35 boyutlu FT oran vektörünü tüm arşiv maçlarıyla cosine similarity ile karşılaştırır
-- Top-N en benzer maçları seçer (default N=20, min_similarity=0.85)
-- Her zaman sonuç döner (Pattern C'nin 0-eşleşme sorunu yok)
-- Pure Python, numpy gerekmez (<15ms 9,300+ vektör)
-- `app/analysis/pattern_d.py` → `find_pattern_d_all_periods(ft_ratios, top_n, min_similarity)`
+**Katman D — Takım Gücü Komşuları / Arşiv-3 (algoritma d4 — Sprint 91 Faz 4)**
+- Eskiden 35 boyutlu oran vektöründe kosinüs benzerliğiydi (Sprint 46–90). Artık maç öncesi takım gücü beklentisi
+  (λ ev, λ dep; `matches.team_lambda_home/away`) log uzayında **aynı ligden en yakın 200 maç** (`PATTERN_D_TOP_K`);
+  benzerlik = exp(−uzaklık). MS çoğunluk isabeti %54,5 (eski kosinüs %44,7)
+- `app/analysis/pattern_d.py`; λ'lar `backfill-team-lambdas` ile başlama haftasının modelinden (sızıntısız)
 
 ### 35 Skor Listesi (Sıra Sabit)
 
@@ -209,10 +227,12 @@ Maç atlanır eğer:
 ```
 nortverse/
 ├── .github/workflows/
-│   ├── quality.yml                # CI: push/PR → ruff + pytest (backend) + vitest + tsc + build (frontend)
-│   ├── daily_pipeline.yml         # Cron: 7 entry (2× run-pipeline + 5× update-scores)
-│   ├── recompute_patterns.yml     # Cron: Pazar 03:00 İstanbul — haftalık pattern recompute
+│   ├── quality.yml                # CI: push/PR → ruff + pytest (backend) + vitest + tsc + build (frontend) + E2E (PostgreSQL + backend, Sprint 94 M1)
+│   ├── daily_pipeline.yml         # SADECE manuel — cron'lar kapalı (Sprint 27); günlük işler Windows Task Scheduler'da (scripts/)
+│   ├── recompute_patterns.yml     # SADECE manuel — cron kapalı
 │   └── repair_archive.yml         # Manuel: repair-archive + normalize-leagues + audit-db (Sprint 20)
+├── scripts/                       # Windows görevleri (install-tasks.ps1 kurar): pipeline, skor, yedek, backend/frontend denetleyicileri,
+│                                  # health-check (15 dk, Sprint 94 D4), long-jobs (gece uzun işler, D5), paylasim-ac/kapat (Tailscale)
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py             # __version__ = "0.2.0" — tek versiyon kaynağı
@@ -228,6 +248,9 @@ nortverse/
 │   │   │   ├── live_scores.py     # Canlı skor scraper
 │   │   │   ├── match_detail.py    # H2H sayfası parse + gerçek skor çıkarımı
 │   │   │   ├── source_board.py    # Kaynak pano scraper
+│   │   │   ├── status.py          # Kaynak durum etiketi → finished / finished_extra / live / postponed / abandoned (Sprint 94 B2)
+│   │   │   ├── goal_events.py     # Gol dakikaları + kırmızı kartlar (live-{id} sayfası, Playwright yok — Sprint 93)
+│   │   │   ├── odds.py            # Bet365 oranları (nowgoal SoccerAjax): geçmiş, güncel, açılış; kalıcı bağlantı + istek kapısı (Sprint 93–94)
 │   │   │   └── league.py          # Lig sayfasından maç ID listesi (arşiv için)
 │   │   ├── analysis/
 │   │   │   ├── scores.py          # ALL_SCORES sabiti
@@ -236,8 +259,8 @@ nortverse/
 │   │   │   ├── history.py         # select_history — merkezi veri seçimi (Sprint 12 denetim)
 │   │   │   ├── league_filter.py   # is_supported_league + canonical_league_name (Sprint 8.9)
 │   │   │   ├── pattern_b.py       # find_pattern_b_matches — JSONB equality
-│   │   │   ├── pattern_c.py       # find_pattern_c_all_periods — FT oranları, TEK sorgu
-│   │   │   ├── pattern_d.py       # find_pattern_d_all_periods — cosine similarity Top-N (Sprint 46)
+│   │   │   ├── pattern_c.py       # A2 — FT oranları ±1,0 sabit tolerans, TEK sorgu (algoritma c4, Sprint 91 Faz 4)
+│   │   │   ├── pattern_d.py       # A3 — takım gücü λ'sına en yakın 200 maç (algoritma d4, Sprint 91 Faz 4; eskiden kosinüs)
 │   │   │   ├── pattern_stats.py   # PatternResult model + compute_stats — ~130 istatistik alanı
 │   │   │   ├── persist.py         # compute_all_patterns + update_match_patterns (Sprint 8)
 │   │   │   ├── correlation.py      # Poisson korelasyon faktörleri — pazar çiftleri arası (Sprint 19)
@@ -253,7 +276,21 @@ nortverse/
 │   │   │   ├── market_resolver.py # Tek sonuç çözücü (Sprint 88)
 │   │   │   ├── backtest.py        # Sızıntısız backtest: canlı + maç öncesi (Sprint 88)
 │   │   │   ├── performance.py     # Kazanma %, güven aralığı, kalibrasyon özetleri (Sprint 88)
-│   │   │   ├── stats_utils.py     # wilson_ci, örneklem kademesi (Sprint 88)
+│   │   │   ├── stats_utils.py     # wilson_ci, örneklem kademesi, verdict karnesi (Sprint 88, 91)
+│   │   │   ├── league_priors.py   # Lig ortalamaları — tüm modellerin tek kaynağı (Sprint 89)
+│   │   │   ├── outcomes.py        # Skor → pazar sonucu ilkeleri, tek kaynak (Sprint 89)
+│   │   │   ├── freshness.py       # Yeni sonuç geldi mi? — A3 havuzu / COND tablosu yenileme sinyali (Sprint 89)
+│   │   │   ├── live_archive.py    # Canlı İY arşiv görünümü + live-arch-v2 kararları (COND kapısı) (Sprint 90–91)
+│   │   │   ├── live_poisson.py    # Takım gücü Poisson/Dixon-Coles — canlı ana karar live-poisson-v1.1 + maç öncesi λ (Sprint 91–93)
+│   │   │   ├── live_2h.py         # Canlı 2. yarı işaretleri live-2h-v1.1 — GÖLGE (Sprint 92)
+│   │   │   ├── prematch_v5.py     # Maç öncesi ekrandaki strateji ft-display-v5 (Dixon-Coles) + dondurma (Sprint 91 Faz 3)
+│   │   │   ├── prematch_ht.py     # Maç öncesi İY tahmini ht-display-v1.1 — sadece deftere (Sprint 93)
+│   │   │   ├── ht_value.py        # İY değer kuralı + Asya Ü/A getiri hesabı (total_return) (Sprint 93)
+│   │   │   ├── market_summary_v3.py # Ana Pazar Özeti v3 — GÖLGE (Sprint 94 H1)
+│   │   │   ├── rule_registry.py   # Kural sürümleri tek listede: ekranda / gölge / emekli (Sprint 94)
+│   │   │   ├── match_status.py    # Maçın bültendeki son durumu (bitti/ertelendi/iptal) — defter + kupon geçersizliği (Sprint 94 B2)
+│   │   │   ├── match_ref.py       # Kupon maçı: önce matches, yoksa bülten önbelleği (bülten tabanlı bacak, Sprint 94 J6)
+│   │   │   ├── coupons.py         # Kupondaş: bacak getirisi, kupon durumu, iade kuralları, canlı durum, puan tablosu (Sprint 93–94)
 │   │   │   └── trends.py          # compute_trends — form & H2H trend verileri (Sprint 8.8)
 │   │   ├── api/
 │   │   │   ├── main.py            # FastAPI hub — router include, lifespan, CORS, middleware (Sprint 22)
@@ -268,19 +305,30 @@ nortverse/
 │   │   │   ├── score_state.py     # Skor durumu yönetimi
 │   │   │   ├── live_snapshot.py   # Canlı snapshot endpoint
 │   │   │   ├── live_ledger.py     # Devre arasında canlı tahmin dondurma izleyicisi (Sprint 88)
-│   │   │   └── routes_performance.py # /api/performance/* — defter + backtest özetleri (Sprint 88)
+│   │   │   ├── routes_performance.py # /api/performance/* — defter + backtest özetleri (Sprint 88)
+│   │   │   ├── routes_ht.py       # /api/ht-strategy — İY oran panosu, sadece DB'den okur (Sprint 93, 94 K-1)
+│   │   │   ├── routes_coupons.py  # /api/coupon-matches, /api/odds/{id}, /api/coupons(+/stats) — Kupondaş (Sprint 93–94)
+│   │   │   ├── routes_auth.py     # /api/auth/* — giriş / çıkış / oturum (Sprint 93)
+│   │   │   └── ratelimit.py       # Kullanıcı başına kayan pencere hız sınırı (Sprint 94 E3/E9)
+│   │   ├── auth.py                # Kullanıcı + oturum: scrypt, nv_session httpOnly çerez, DB'de SHA-256 özeti (Sprint 93)
 │   │   ├── pipeline/
 │   │   │   └── runner.py          # run_pipeline + update_results: fetch → analiz → upsert
 │   │   └── cli/
 │   │       ├── main.py            # Hub — import + app.command() kayıtları (Sprint 21)
 │   │       ├── _helpers.py        # Ortak yardımcılar: console, logging, render (Sprint 21)
-│   │       ├── pipeline_cmds.py   # analyze, fetch-fixture, run-pipeline, serve (Sprint 21)
+│   │       ├── _long_jobs.py      # Uzun işler canlı operasyonla yarışmasın — maç saatinde yavaşla (Sprint 94 D5)
+│   │       ├── pipeline_cmds.py   # analyze, fetch-fixture, run-pipeline, update-scores, resolve-predictions,
+│   │       │                      #   capture-recommendations, refresh-fixture-cache, serve (Sprint 21+)
 │   │       ├── archive_cmds.py    # build-archive, repair-archive, normalize-leagues (Sprint 21)
 │   │       ├── audit_cmds.py      # audit-db, self-test, prune-non-league, recompute-patterns (Sprint 21)
-│       ├── model_cmds.py      # backtest (pattern), train-ensemble (Sprint 76+81)
-│       └── ledger_cmds.py     # live-freeze, backtest-ledger — tahmin defteri (Sprint 88)
-│   ├── alembic/                   # DB migration (15 migration)
-│   ├── tests/                     # 936 test
+│   │       ├── model_cmds.py      # backtest (pattern), train-ensemble, backfill-team-lambdas (Sprint 76+81+91)
+│   │       ├── ledger_cmds.py     # live-freeze, backtest-ledger — tahmin defteri (Sprint 88)
+│   │       ├── events_cmds.py     # backfill-goal-events — gol dakikaları (Sprint 93)
+│   │       ├── odds_cmds.py       # backfill-odds, backtest-ht-value (Sprint 93–94)
+│   │       ├── health_cmds.py     # health-report — health-check.ps1'in DB kontrolleri (Sprint 94 D4)
+│   │       └── users_cmds.py      # create-user, set-password, list-users, unlock (Sprint 93–94)
+│   ├── alembic/                   # DB migration (28 migration, head b2o5k0l6g774)
+│   ├── tests/                     # 1277 test (88 dosya)
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -333,8 +381,11 @@ nortverse/
 │   │   │   ├── page.tsx           # Server component — günlük tahmin isabeti değerlendirmesi (Sprint 37)
 │   │   │   └── loading.tsx        # Skeleton fallback (Sprint 37)
 │   │   ├── canli/
-│   │   │   ├── page.tsx           # Client component — canlı devre arası maçlar + İY istatistikleri (Sprint 48)
+│   │   │   ├── page.tsx           # Client component — canlı devre arası maçlar + kararlar (Sprint 48, 90–93)
 │   │   │   └── loading.tsx        # Skeleton fallback (Sprint 48)
+│   │   ├── iy/page.tsx            # İY oran panosu — süzgeçler URL'de, kompakt satır (Sprint 93, 94 K-2)
+│   │   ├── kupondas/page.tsx      # Kupondaş — aramalı maç seçici, taslak, kupon akışı, canlı durum, puan tablosu (Sprint 93–94)
+│   │   ├── giris/page.tsx         # Giriş sayfası (Sprint 93)
 │   │   └── analyze/[match_id]/
 │   │       ├── page.tsx           # Client component — maç analiz sayfası
 │   │       ├── AnalyzeClient.tsx  # Analiz client component (Sprint 28)
@@ -355,7 +406,14 @@ nortverse/
 │   │   ├── PowerScoreGauge.tsx    # Maç güç skoru gauge component (Sprint 33)
 │   │   ├── MatchedMatchesList.tsx # Eşleşen arşiv maçları accordion — İY/2Y/MS skorları (Sprint 36)
 │   │   ├── AutoRefresh.tsx        # Otomatik yenileme component
-│   │   └── LiveMatchBadge.tsx     # Canlı maç rozeti
+│   │   ├── LiveMatchBadge.tsx     # Canlı maç rozeti
+│   │   ├── LiveArchiveView.tsx    # Canlı sayfa arşiv tablosu + kararlar (Sprint 90–91)
+│   │   ├── PerformancePanel.tsx   # Değerlendirme sekmeleri — karne, kırılımlar, kalibrasyon (Sprint 88–91)
+│   │   ├── HtBoard.tsx            # İY panosu: süzgeç çubuğu, kompakt satır, kart, oran hareketi rozeti (Sprint 94 K-2)
+│   │   ├── HtMinSlider.tsx        # İY panosu asgari olasılık kaydırıcısı (client)
+│   │   ├── CouponOddsPanel.tsx    # Kupondaş oran paneli + seçim etiketleri (Sprint 93)
+│   │   ├── CouponMatchPicker.tsx  # Aramalı, lige göre gruplu maç seçici (Sprint 94 J10)
+│   │   └── CouponLeaderboard.tsx  # Kupondaş puan tablosu (Sprint 94 J9)
 │   ├── lib/
 │   │   ├── analysis-validation.ts # Analiz verisi doğrulama (Sprint 12 denetim)
 │   │   ├── api.ts                 # Backend API çağrıları
@@ -371,11 +429,20 @@ nortverse/
 │   │   ├── match-context.tsx      # MatchProvider — match metadata paylaşımı (Sprint 8.7)
 │   │   ├── pattern-fields.ts      # Pattern alan isimleri (Sprint 12 denetim)
 │   │   ├── types.ts               # TypeScript type'ları (PatternResult ~130 alan)
-│   │   └── use-live-ws.ts         # useLiveWs hook — WebSocket canlı maç + REST fallback (Sprint 82)
+│   │   ├── use-live-ws.ts         # useLiveWs hook — WebSocket canlı maç + REST fallback (Sprint 82)
+│   │   ├── response-validation.ts # Uç bazlı yanıt doğrulayıcıları — şekil değişince sayfa çökmez (Sprint 94 L2)
+│   │   ├── format.ts              # fmtNum ve sayı biçimleri (Sprint 94)
+│   │   ├── label-i18n.ts          # Pazar/seçim etiketlerinin İngilizcesi (Sprint 88)
+│   │   ├── live-labels.ts / live-order.ts # Canlı pazar etiketleri / maç sıralaması
+│   │   ├── match-visibility.ts / score-freshness.ts # Sonuçlar sayfası görünürlük ve skor tazeliği
+│   │   ├── shadow.ts              # Gölge ligler çerezi (Sprint 92)
+│   │   ├── safe-next.ts           # Girişten sonraki dönüş adresi — başka siteye kaçmaz (Sprint 94 E4)
+│   │   ├── ht-filters.ts          # İY panosu süzgeçleri: URL ↔ süzgeç, zaman/pazar/lig/asgari olasılık (Sprint 94 K-2)
+│   │   └── coupon-picker.ts       # Kupondaş seçici: Türkçe duyarsız arama + lig grupları (Sprint 94 J10)
 │   ├── dictionaries/              # i18n dil dosyaları (Sprint 84)
 │   │   ├── tr.json                # Türkçe sözlük — 300+ anahtar
 │   │   └── en.json                # İngilizce sözlük — tam çeviri
-│   ├── __tests__/                 # 288 vitest test
+│   ├── __tests__/                 # 386 vitest test (49 dosya)
 │   │   ├── fixtures.ts            # Test factory'leri
 │   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
 │   │   ├── cart.test.ts           # Sepet helper'ları (~14 test)
@@ -388,7 +455,6 @@ nortverse/
 │   │   ├── market-regressions.test.ts     # Pazar regresyon
 │   │   ├── cart-display.test.tsx           # Sepet görüntüleme
 │   │   ├── score-list.test.tsx            # ScoreList component (4 test)
-│   │   ├── stat-badge.test.tsx            # StatBadge component (7 test)
 │   │   ├── bulten-row.test.tsx            # BultenRow component (8 test)
 │   │   ├── top-picks.test.tsx             # TopPicks component (9 test)
 │   │   ├── market-summary.test.tsx        # MarketSummary component (7 test)
@@ -404,13 +470,16 @@ nortverse/
 │   │   ├── score-freshness.test.tsx      # Skor tazeliği testleri
 │   │   ├── match-visibility.test.ts      # Maç görünürlük testleri
 │   │   └── labels.test.ts               # Periyot etiketleri testleri (Sprint 18)
-│   ├── e2e/                       # 14 Playwright E2E test (×2 viewport = 28)
+│   ├── e2e/                       # 17 Playwright E2E test (desktop + mobil = 34); CI'da PostgreSQL + backend + giriş (Sprint 94 M1)
+│   │   ├── auth.setup.ts          # Test kullanıcısıyla giriş, oturum dosyası
+│   │   ├── auth.spec.ts           # Giriş zorunluluğu, yönlendirme (3 test)
 │   │   ├── navigation.spec.ts     # Sayfa yükleme, redirect, DayTabs (6 test)
 │   │   ├── analyze.spec.ts        # Analiz sayfası, periyot sekmeleri (4 test)
 │   │   └── mobile.spec.ts         # Mobil görünüm, sidebar, scroll (4 test)
 │   ├── AGENTS.md                  # ⚠️ Next.js özel sürüm uyarısı — kod yazmadan önce oku
 │   ├── playwright.config.ts       # Playwright E2E yapılandırması (Sprint 18)
 │   ├── vitest.config.mts          # Vitest yapılandırması (Sprint 10)
+│   ├── proxy.ts                   # Giriş kapısı: oturumsuz ziyaretçi /giris'e; hata durumunda kapı kapalı (Sprint 93, 94 E5)
 │   └── next.config.ts             # Rewrite proxy: /api/* + /ws/* → localhost:8000 (Sprint 82)
 └── CLAUDE.md
 ```
@@ -453,12 +522,12 @@ python -m app.cli.main run-pipeline
 
 Bu komut sabah çalıştırıldığında bugünün tüm maçlarını scrape edip DB'ye yazar. Gün içinde kullanıcılar maçlara tıkladığında **Playwright hiç açılmaz**, DB'den 1-3sn'de gelir.
 
-**GitHub Actions otomatik çalışır** (`.github/workflows/daily_pipeline.yml`):
-- `0 5 * * *` → 08:00 İstanbul → `run-pipeline` (sabah analiz)
-- `0 19 * * *` → 22:00 İstanbul → `update-scores` (akşam skor güncelleme)
-- `30 21 * * *` → 00:30 İstanbul → `update-scores` (gece geç maçlar)
+**Bugün Windows Task Scheduler çalıştırır** (`scripts/install-tasks.ps1` kurar; GitHub Actions cron'ları Sprint 27'den
+beri kapalı): yedek 07:00, `run-pipeline` 08:00 (+ akşam yarının maçları, Sprint 94 F), `update-scores` 18:00–23:00
+saat başı + 00:30 (sonunda günün oran geçmişi, Sprint 94 I2), backend/frontend denetleyicileri oturum açılışında,
+sağlık kontrolü 15 dk'da bir (Sprint 94 D4), uzun işler gece (Sprint 94 D5). PC kapalıyken hiçbir şey çalışmaz.
 
-**Not:** `_score_updater` task'i Sprint 7 sırasında kaldırıldı (Playwright fırtınası sebebiyle). Skor güncelleme tek başına gece cron'una bırakıldı.
+**Not:** `_score_updater` task'i Sprint 7 sırasında kaldırıldı (Playwright fırtınası sebebiyle).
 
 ---
 
@@ -474,20 +543,17 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - Yetersiz örnek (<3) → ilgili blok gizlenir
 
 ### Katman 1 — Top Picks (Önerilen Bahisler)
-`components/TopPicks.tsx` — confidence sıralı en güçlü 5-8 tahmin:
-- Confidence formülü: `(pct/100) × volume × market_weight × dual_bonus`
-- **Dinamik eşik (Sprint 8.6):** 5 maç %74, 50 maç %66 — örneklem küçükse daha sıkı
-- Arşiv 1+2 ortak doğrularsa `1+2` rozeti, dual_bonus 1.15
+`components/TopPicks.tsx` — **bugün sunucunun dondurduğu `ft-display-v5` seçimini** gösterir (Dixon-Coles takım gücü,
+MS 1 veya 2, lig ortalamasına göre ≥10 puan avantaj; kademe v4 arşiv havuzu aynı seçimdeyse "high"). Kickoff'tan en
+erken 48 saat önce dondurulur, deftere yazılır. Aşağıdaki confidence formülü (Sprint 8.4–53) tarihçedir.
+- Eski confidence formülü: `(pct/100) × volume × market_weight × dual_bonus`, dinamik eşik (Sprint 8.6)
 
-### Katman 1b — Akıllı Kombolar (Sprint 8.5)
-`components/ComboSuggestion.tsx` — 3 hazır kombo kartı:
-- **Çift** (2 leg ≥%75) / **Üçlü** (3 leg ≥%70) / **Süper** (4-5 leg ≥%75, sadece ≥20 maç eşleşmesinde)
-- Joint olasılık + tahmini decimal oran (≈ ile yaklaşık)
-- Aynı domain'den iki leg yasak (`combos.ts:DOMAIN_OF`)
-- "+ Sepete Ekle (N maç)" butonu tüm leg'leri toplu ekler
+### ~~Katman 1b — Akıllı Kombolar (Sprint 8.5)~~ — Sprint 40'ta silindi
+`ComboSuggestion.tsx`, `combos.ts`, `correlations.ts` kaldırıldı; aşağıdaki sprint notlarındaki anlatım tarihçedir.
 
 ### Katman 2 — Ana Pazar Özeti
-`components/MarketSummary.tsx` — sadece ana pazarların kazananları (Arşiv 1 vs Arşiv 2 yan yana). Çelişen seçimler yok, her pazarın tek kazananı.
+`components/MarketSummary.tsx` — ana pazarlarda A1/A2/A3 arşiv sıklığı (kazanan değil, "arşivde en sık"), pazar
+karnesi ve adil oran (Sprint 94 H1/H2). Defterde `market-summary-v2` (beklentinin altında) ve `market-summary-v3` gölge.
 
 ### Katman 3 — Detaylı Analiz (varsayılan kapalı, accordion)
 `components/DetailedStats.tsx` — tüm 137 alan; localStorage ile son state hatırlanır.
@@ -495,7 +561,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 ### Bahis Sepeti (Sprint 8.7)
 `components/BetCart.tsx` — floating panel (desktop) / mobile sheet:
 - localStorage tabanlı çok-maç sepet (`nortverse_bet_cart`)
-- TopPicks/MarketSummary/ComboSuggestion'da "+" butonları
+- TopPicks/MarketSummary'de "+" butonları
 - Toplam joint olasılık + tahmini kombi oran
 - `lib/cart.ts:useCart` hook + `lib/match-context.tsx` ile match metadata
 
@@ -515,7 +581,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 ---
 
-## Mevcut Durum (Sprint 20 — TAMAMLANDI ✅ — Production CANLI + Veri Kalitesi 89.4+)
+## Tarihçe: Sprint 20 itibarıyla durum (o zamanki Render/Vercel üretimi — bugünkü durum için en alttaki "Kaldığımız Yer")
 
 ### Backend
 
@@ -1631,6 +1697,30 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **93.8 Kupondaş:** değişmez `coupons`/`coupon_legs`/`coupon_leg_results` (`a1n4j9k5f663`); oran kayıt anında kaynaktan alınıp dondurulur (istemcinin gördüğü oran kullanılmaz), canlıysa dakika+skor; biten periyoda kupon yazılamaz; Asya çizgide yarım kazanç/iade (`analysis/coupons.py`); `/api/odds/{id}`, `/api/coupons`; `update-scores` kuponları da sonuçlandırır; `/kupondas` sayfası (Herkes/Benim).
 - **Bekleyen:** docker-compose DB portu `127.0.0.1:5433:5432` (arşiv tamamlama bitince — konteyner yeniden kurulur); anlık maçlar (inplay-v1) gol dakikası çekimi bitince.
 
+### Sprint 94 — DEVAM EDİYOR (28 Ekim 11 ajan denetimi → `docs/sprint-94-plan.md`, notlar `docs/audit-2026-10-28/`)
+Kullanıcı kararı: K1–K22 plandaki önerilerle onaylı; küçük/büyük tüm maddeler sırayla uygulanır.
+- **Kupondaş (94.1, 94.10, 94.30–94.32):** sadece maç öncesi (K2) — biten İY'ye kesin kazanan kupon yazılabiliyordu; kapanış
+  pano + defter + bülten + başlama saatinden (`closed_reason`); kısmi kayıp, maç başına tek seçim (K3), oran değişti onayı
+  (409 `odds_changed`), Idempotency-Key, en fazla 10 bacak. **J6 (K4):** bacak artık `matches` satırı istemez
+  (migration `b2o5k0l6g774`, `source` db/fixture); `match_ref.load_match_refs` önce `matches`, yoksa bültenin son kaydı;
+  seçilebilir maç 1 → 273 (kupa dahil). **J10** aramalı lig gruplu seçici; **J8** açık kuponda bacak başına dakika/skor ve
+  "şu an tutuyor/tutmuyor" (45 sn); **J9** puan tablosu `/api/coupons/stats` (1 birim kâr, ROI, bacak isabeti).
+- **Skor ve veri (94.2, 94.4, 94.5, 94.9):** `update-scores` gün başına dayanıklı; günlük sayfada olmayan maç detay
+  sayfasından; ertelenen/iptal/taşınan maçlar (`match_status`, defter + kupon `void`); `repair-archive` lig-sezon kuralları (K20).
+- **Canlı kayıt (94.3, 94.8):** `live-ms-v1` kaydı durdu (K10); COND zaman penceresi + parmak izi açıkları (C1, C2, K9).
+- **Pipeline (94.7):** sadece takip edilen ligler (K14), takip maçları önce, yarının maçları akşamdan, '?' lig adı.
+- **Ekranda dürüstlük (94.11):** Ana Pazar Özeti "arşivde en sık" + karne + adil oran; `market-summary-v3` gölge (K7, K21).
+- **Güvenlik / paylaşım (94.12–94.19):** iç anahtar tek başına yönetici değil; Next 16.4.3 + audit; X-Forwarded-For
+  güvenilmez, kullanıcı başına sınırlar, `unlock`; `/giris?next=` başka siteye kaçmaz; proxy hata durumunda kapalı;
+  `next start` + denetleyici; Tailscale rehberi (funnel yok, arkadaş normal kullanıcı — K1); kaynağa giden isteklerde kapı.
+- **Operasyon (94.6, 94.20, 94.21):** görev ayarları, backend denetleyicisi, D: yedeği + aylık geri yükleme testi;
+  15 dk sağlık kontrolü + ölü adam anahtarı (`health-report`, K12); uzun işler maç saatinde yavaşlar, gece görevi.
+- **Frontend kalite ve testler (94.22–94.26):** oturum düşünce `/giris`; uç doğrulayıcıları (`response-validation.ts`);
+  E2E yeniden çalışıyor (CI'da PostgreSQL); savepoint testleri, tek alembic head testi; eksik uç testleri.
+- **Oranlar (94.27–94.29):** kazıyıcı doğrudan adres + kalıcı bağlantı + istek birleştirme; günlük oran kaydı
+  (`update-scores` sonunda `backfill-odds --days 2 --scope both`), İY oranı 15 dk'da bir ön çekim, devre arası MS fiyatı
+  defter `details.market`'te; İY panosu sadece DB'den okur (K-1), süzgeçler + kompakt satır + açılıştan ≥%8 düşüş rozeti (K-2).
+
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
 - **Kök neden:**
@@ -1692,7 +1782,7 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 
 - **Typer 0.12.5 + Python 3.11 bug (çözüldü):** Eski Typer'da `bool` Option'lar string `'False'` dönebilirdi. Sprint 11'de Typer 0.25.1'e upgrade edildi, Sprint 17'de `_flag()` helper'ı kaldırılıp tüm çağrılar direkt bool'a çevrildi.
 
-- **Next.js proxy & BACKEND_URL:** `next.config.ts`'te `/api/*` → `http://localhost:8000/api/*` rewrite var. `lib/env.ts` `getApiBase()` SSR/CSR ayrımı yapar. Sebep: Vercel SSR (server component) `BACKEND_URL` üzerinden Render'a direkt gider; tarayıcı tarafı (CSR) `BACKEND_URL` görmez → boş string → Next.js proxy üzerinden Render'a ulaşır. Local'de hiç `BACKEND_URL` yoksa proxy yine local backend'e gider.
+- **Next.js proxy & BACKEND_URL:** `next.config.ts`'te `/api/*` ve `/ws/*` → `http://localhost:8000` rewrite var. `lib/env.ts` `getApiBase()` SSR/CSR ayrımı yapar: sunucu tarafı çizim backend'e doğrudan gider (yerelde `BACKEND_URL` yok → `http://127.0.0.1:8000`), tarayıcı Next proxy'si üzerinden. Sunucu çizimi `INTERNAL_API_KEY` + kullanıcının çerezi ile gider (Sprint 94 E1 — anahtar tek başına yönetici sayılmaz). Eski Vercel→Render kullanımında `BACKEND_URL` Render adresiydi.
 
 - **Frontend Next.js — özel sürüm:** `frontend/AGENTS.md` Next.js'in eğitim verisindekinden farklı olabileceğini, `node_modules/next/dist/docs/` okunmadan kod yazılmaması gerektiğini söylüyor. Frontend kodu değiştirmeden önce **mutlaka** `frontend/AGENTS.md` okunacak.
 
@@ -1860,9 +1950,9 @@ Analiz sayfası 5 katman + sepet panelinden oluşur — eski "her bölümü yan 
 - **Playwright** (nowgoal Cloudflare/dinamik JS render — BS4 yetersiz)
 - **PostgreSQL** (Local Docker, port 5433) — 28K+ maç, JSONB şart. Eski cloud: Neon free tier (Sprint 13-25), Supabase (Sprint 2-12)
 - **Next.js App Router + TailwindCSS** frontend
-- **GitHub Actions** cron (günlük `run-pipeline` + gece `update-scores`)
-- **Render.com** backend (Docker, `mcr.microsoft.com/playwright/python:v1.47.0-jammy`, free tier — 15dk uyku + cold start)
-- **Vercel** frontend (Next.js otomatik deploy, `BACKEND_URL=https://nortverse-backend.onrender.com`)
+- **Windows Task Scheduler** günlük işler (pipeline, skor, yedek, sağlık); GitHub Actions sadece CI (cron'lar kapalı)
+- **Yerel çalışma:** backend `127.0.0.1:8000`, frontend `next start 127.0.0.1:3000` (üretim modu, Sprint 94 E6), paylaşım Tailscale (`scripts/paylasim-ac.bat`, `docs/paylasim-tailscale.md`)
+- Eski bulut kurulumu (Render backend, Vercel frontend, Neon DB) yapılandırması duruyor ama kullanılmıyor
 - **Typer + Rich** CLI
 - Tamamen ücretsiz altyapı
 
@@ -1894,54 +1984,46 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 
 ---
 
-## Kaldığımız Yer (2026-10-18 — Sprint 90 TAMAMLANDI, Local Development)
+## Kaldığımız Yer (2026-10-29 — Sprint 94 devam ediyor, yerel çalışma)
 
-### ✅ Mevcut Durum — Local Development
-
-Cloud DB sorunları (Supabase egress, Neon kota) sonrası tamamen local altyapıya geçildi:
+### Mevcut durum
 
 | Katman | Servis | Detay |
 |---|---|---|
-| **Frontend** | Local Next.js dev | `http://localhost:3000` |
-| **Backend** | Local FastAPI | `http://localhost:8000` |
-| **Veritabanı** | Docker PostgreSQL | Port 5433, 33,707+ aktif maç |
-| **Otomasyon** | Windows Task Scheduler | 4 bat script (pipeline + skor + yedekleme) |
-| **CI/CD** | GitHub Actions | `quality.yml` aktif (push/PR), cron'lar devre dışı |
+| **Frontend** | `next start` (üretim modu) | `127.0.0.1:3000`, denetleyici görev (Sprint 94 E6) |
+| **Backend** | FastAPI | `127.0.0.1:8000`, denetleyici görev; tüm `/api` ve `/ws` giriş ister |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 43.812 aktif maç, migration head `b2o5k0l6g774` |
+| **Otomasyon** | Windows Task Scheduler | pipeline, skor (+ oran kaydı), yedek (D: dahil), sağlık kontrolü, gece uzun işleri |
+| **Paylaşım** | Tailscale | `scripts/paylasim-ac.bat`; link Faz A3 (DB portu) bitmeden verilmez |
+| **CI** | GitHub Actions | `quality.yml` (ruff, pytest, vitest, tsc, build, E2E); cron'lar kapalı |
 
-**Eski cloud deployment (Render + Vercel + Neon):** Konfigürasyon korunuyor ama aktif değil.
+Eski bulut kurulumu (Render + Vercel + Neon): yapılandırma duruyor, kullanılmıyor.
 
-### Test Durumu (Sprint 89 sonrası)
+### Test durumu (29 Ekim)
 
-| Katman | Araç | Test Sayısı | Durum |
-|---|---|---|---|
-| **Backend** | pytest | 1068 | ✅ Yeşil (v3/kalibratör testleri kodla birlikte silindi) |
-| **Frontend birim** | vitest | 304 | ✅ Yeşil |
-| **Frontend E2E** | Playwright | 28 | ✅ Yapı doğrulanmış (backend gerektirir) |
-| **Toplam** | — | 1400 | — |
+| Katman | Araç | Test sayısı |
+|---|---|---|
+| Backend | pytest | 1277 |
+| Frontend birim | vitest | 386 |
+| Frontend E2E | Playwright | 17 × 2 görünüm (CI'da PostgreSQL + backend ile) |
 
-### Son Tamamlanan Sprint'ler
+### Ekrandaki kurallar (sürümler `rule_registry.py`)
 
-- ✅ **Sprint 82:** Canlı maç WebSocket — 45sn polling → 15sn WebSocket broadcast, REST fallback, `useLiveWs` hook
-- ✅ **Sprint 83:** Isotonic regression confidence kalibrasyonu — shrunk yüzdeler gerçek olasılığa dönüştürülüyor
-- ✅ **Sprint 84:** i18n çoklu dil desteği — Türkçe + İngilizce cookie-bazlı dil seçimi, 27 component/sayfa güncellendi, 0 yeni npm bağımlılığı
-- ✅ **Sprint 87:** Arşiv havuzu + sadece aynı lig + tek kaynak eşleşme listesi + ayar parmak izi
-- ✅ **Sprint 88:** Canlı İY→MS modeli + değişmez tahmin defteri + performans paneli (Canlı / Maç Öncesi / Backtest) + maç öncesi strateji v4
+- **Maç öncesi:** `ft-display-v5` (Dixon-Coles); v4 ve `market-summary-v3` gölgede; İY `ht-display-v1.1` sadece defterde
+- **Canlı:** `live-poisson-v1.1` ana karar, `live-arch-v2` onay rozeti; `live-2h-v1.1` gölge; `live-ms-v1` kaydı durduruldu (K10)
+- **İY sayfası:** oran panosu (Bet365, pay çıkarılmış olasılık) — "değer" iddiası yok
+- **Kupondaş:** sadece maç öncesi; günün tüm bülteni (kupa dahil); canlı durum; puan tablosu
 
-### Bekleyen Konular
+### Bekleyen
 
-- **Deploy kararı:** Tamamen local mi kalacak, Cloudflare Tunnel mi, VPS ($4-5/ay) mi, yoksa Render+Vercel'e dönüş mü?
-- **Auth + Premium:** Monetizasyon için kullanıcı sistemi (büyük mimari değişiklik — onay gerekir)
-- **Oran/ROI:** Defterdeki tahminlerin bahis oranlarıyla karşılaştırılması (kullanıcı kararı: sonraki sprint)
+- **Sprint 94 planı** (`docs/sprint-94-plan.md`, kararlar K1–K22 onaylı): sıra 17 Faz N (`inplay-v1`) gol dakikası çekimi
+  bitince (29 Ekim: 3.201 / 42.468 maç); sonra Faz O/P (K15–K17) ve kalan Orta/Düşük maddeler
+- **Faz A3 — DB portu:** `docker-compose.yml` hâlâ `5433:5432` (tüm arayüzler) → `127.0.0.1:5433:5432` + şifre değişimi;
+  arşiv tamamlama ve gol çekimi bitince, maç saati dışında (konteyner yeniden kurulur). Paylaşım linki bundan sonra
+- **Premium:** yok (giriş var). **Oran/ROI:** oran altyapısı var; ölçümlerde hiçbir model piyasayı yenmiyor (kârlılık iddiası yok)
 
-### Bilinen Açık Konular
+### Bilinen açık konular
 
-- **Zamanlanmış görevler (Sprint 90.6 + 91 Faz 6):** `scripts/install-tasks.ps1` (yönetici PowerShell ile bir kez) → BackupDB 07:00, RunPipeline 08:00, UpdateScores1 18:00–23:00 saat başı, UpdateScores2 00:30, **Backend oturum açılışında**. Hata olursa ekranda uyarı + masaüstünde `NORTVERSE-HATA.txt`. Görevler `run-hidden.vbs` ile **pencere açmadan** çalışır (eskiden açılan cmd kapatılınca iş yarıda kalıyordu: 13 Ekim `^C`, 17 Ekim 0xC000013A), kaçırılan çalışma PC açılınca yapılır, `ensure-docker.bat` Docker Desktop'ı gerekirse başlatıp DB'yi bekler. PC kapalıyken hiçbir şey çalışmaz (bulut kararı bekliyor).
-- **Yedekler 27 Eylül'den beri hiç alınmamıştı:** `wmic` Windows 11'de yok (dosya adı bozuluyordu) + konteyner adı yanlıştı (`nortverse-db-1` ≠ `nortverse-codex-db-1`). `backup-db.bat` düzeltildi (`docker compose exec -T db`, 10 MB altı yedek başarısız sayılır); 18 Ekim yedeği alındı ve `pg_restore --list` ile doğrulandı.
-- **Docker Desktop otostart:** Docker Desktop Windows ile otomatik başlatılmalı — aksi takdirde pipeline/skor cron'ları çalışmaz (28-30 Eylül 3 günlük veri kaybı yaşandı)
-- **Task Scheduler "missed run":** Kaçırılan görevlerin yeniden çalıştırılması ayarı etkinleştirilmeli
-- **V3 stale snapshot'lar:** 8 adet 0-pick snapshot DB'de kilitli (append-only trigger). Kullanıcının manuel SQL çalıştırması gerekiyor (trigger disable → delete → enable)
-- **Eski cloud deployment:** Render/Vercel/Neon yapılandırması korunuyor ama aktif değil; deploy kararından sonra temizlenecek veya yeniden aktifleştirilecek
-- **Pattern eksik:** Recompute sırasında eklenen yeni arşiv maçları — `recompute-patterns --only-missing` pası ile tamamlanabilir
-- **Canlı dondurma maç günü doğrulanmalı:** İzleyici kodu ve DB kısıtları test edildi, ama gerçek bir devre arasında (backend açıkken) `live_ht` kaydının düştüğü henüz görülmedi. Backend kapalıyken devre arası olan maçlar kaydedilmez.
-- **Sonuçsuz maçlar:** 9–10 Ekim'den 6 maçın skoru yok (muhtemelen ertelendi)
-- **Tuhaf kayıt:** 3026975'in kickoff'u 2027 görünüyor (veri kaynağı tuhaflığı, kod hatası değil)
+- **PC kapalıyken / uykudayken hiçbir şey çalışmaz:** devre arası kaçabilir (28 Ekim ölçümü: 59 devre arasının 8'i kaçtı)
+- **V3 stale snapshot'lar:** 8 adet 0-pick snapshot kilitli (append-only trigger); elle SQL gerekir
+- **Tuhaf kayıt:** 3026975'in kickoff'u 2027 görünüyor (kaynak tuhaflığı)
