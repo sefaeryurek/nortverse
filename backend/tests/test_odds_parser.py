@@ -123,37 +123,80 @@ def test_empty_or_older_history_does_not_replace_stored():
     assert should_replace_history(None, old) is True
 
 
-def test_get_unzips_and_remembers_redirected_host(monkeypatch):
-    """Kaynak istemese de gzip gönderiyor ve live.nowgoal.life'a yönlendiriyor (Sprint 94 M3)."""
-    import gzip
-
+def _responses(monkeypatch, replies):
+    """`_request_once` taklidi: sıradaki (durum, başlıklar, gövde) yanıtı verir, istenen adresleri kaydeder."""
     from app.scraper import odds
 
     seen = []
 
-    class Response:
-        def __init__(self, url):
-            self.url = url
+    def fake(url, headers):
+        seen.append(url)
+        status, hdrs, body = replies.pop(0)
+        return status, hdrs, body, "OK"
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def geturl(self):
-            return "https://live.nowgoal.life/ajax/x"
-
-        def read(self):
-            return gzip.compress(b'{"ok": 1}')
-
-    def fake_urlopen(request, timeout):
-        seen.append(request.full_url)
-        return Response(request.full_url)
-
-    monkeypatch.setattr(odds, "urlopen", fake_urlopen)
+    monkeypatch.setattr(odds, "_request_once", fake)
     monkeypatch.setattr(odds, "_resolved_base", None)
+    return seen
+
+
+def test_get_follows_redirect_unzips_and_remembers_host(monkeypatch):
+    """Kaynak gzip gönderiyor ve başka adrese yönlendiriyor; yönlendirilen adres hatırlanır (Sprint 94 I3)."""
+    import gzip
+
+    from app.scraper import odds
+
+    seen = _responses(monkeypatch, [
+        (302, {"Location": "https://live9.example/ajax/x"}, b""),
+        (200, {}, gzip.compress(b'{"ok": 1}')),
+        (200, {}, b'{"ok": 2}'),
+    ])
     assert odds._get("/ajax/x", "1") == b'{"ok": 1}'
-    assert odds._get("/ajax/y", "1") == b'{"ok": 1}'
-    assert seen[0].startswith(odds.SCRAPER.base_url)
-    assert seen[1] == "https://live.nowgoal.life/ajax/y"  # ikinci istek doğrudan yönlendirilen adrese
+    assert odds._get("/ajax/y", "1") == b'{"ok": 2}'
+    assert seen[0].startswith(odds.SCRAPER.odds_base_url)
+    assert seen[1:] == ["https://live9.example/ajax/x", "https://live9.example/ajax/y"]
+
+
+def test_get_rejects_challenge_page_and_resets_host(monkeypatch):
+    import pytest
+
+    from app.scraper import odds
+
+    _responses(monkeypatch, [(200, {}, b'{"ok": 1}'), (200, {}, b"<html>Just a moment...</html>")])
+    odds._get("/ajax/x", "1")
+    assert odds._resolved_base == odds.SCRAPER.odds_base_url
+    with pytest.raises(odds.SourceUnavailable):
+        odds._get("/ajax/y", "1")
+    assert odds._resolved_base is None  # bir dahaki istek ana adresten
+
+
+def test_get_raises_http_error_for_throttling(monkeypatch):
+    import pytest
+    from urllib.error import HTTPError
+
+    from app.scraper import odds
+
+    _responses(monkeypatch, [(429, {}, b"")])
+    with pytest.raises(HTTPError) as error:
+        odds._get("/ajax/x", "1")
+    assert error.value.code == 429  # E9 bekleme kademesi bunu yakalar
+
+
+def test_concurrent_same_request_is_fetched_once(monkeypatch):
+    import asyncio
+
+    from app.scraper import odds
+
+    calls = []
+
+    async def slow(path, referer):
+        calls.append(path)
+        await asyncio.sleep(0.05)
+        return b"{}"
+
+    monkeypatch.setattr(odds, "_fetch_gated", slow)
+
+    async def run():
+        return await asyncio.gather(*(odds._fetch("/ajax/x", "1") for _ in range(3)), odds._fetch("/ajax/z", "1"))
+
+    assert asyncio.run(run()) == [b"{}"] * 4
+    assert sorted(calls) == ["/ajax/x", "/ajax/z"]

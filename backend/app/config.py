@@ -45,6 +45,8 @@ class ScraperConfig:
     page_timeout: float = field(default_factory=lambda: _env_float("SCRAPER_TIMEOUT", 30.0))
     # Sprint 94 E9: aynı anda en fazla bu kadar Chromium (her biri ~300 MB) — tek kullanıcı / hata belleği bitirmesin
     playwright_max_concurrency: int = field(default_factory=lambda: _env_int("PLAYWRIGHT_MAX_CONCURRENCY", 2))
+    # Oran uçları doğrudan yönlendirilen adrese (Sprint 94 I3: ana adres her isteği buraya yönlendiriyordu, ~4 sn)
+    odds_base_url: str = field(default_factory=lambda: os.environ.get("ODDS_BASE_URL", "https://live.nowgoal.life"))
     # Oran uçları (düz HTTP): eşzamanlı istek ve saniyedeki istek sınırı — evin IP'si kaynakta engellenmesin
     odds_max_concurrency: int = field(default_factory=lambda: _env_int("ODDS_MAX_CONCURRENCY", 4))
     odds_requests_per_second: float = field(default_factory=lambda: _env_float("ODDS_REQUESTS_PER_SECOND", 1.0))

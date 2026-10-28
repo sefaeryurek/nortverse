@@ -93,8 +93,12 @@ async def test_odds_requests_are_paced(odds_gate, monkeypatch):
 
     monkeypatch.setattr(odds, "_get", record)
     await asyncio.gather(*(odds._fetch(f"/{i}", "1") for i in range(4)))
-    gaps = [b - a for a, b in zip(sorted(stamps), sorted(stamps)[1:])]
-    assert all(g >= 0.04 for g in gaps), gaps  # 20/sn → en az ~0,05 sn arayla
+    ordered = sorted(stamps)
+    gaps = [b - a for a, b in zip(ordered, ordered[1:])]
+    # 20/sn → başlangıçlar 0,05 sn arayla planlanır; iş parçacığı başlama gecikmesi ve Windows saat çözünürlüğü
+    # (~15 ms) tek tek aralıkları oynatır → toplam süre ve en küçük aralık için toleranslı alt sınır
+    assert ordered[-1] - ordered[0] >= 0.12, gaps
+    assert min(gaps) >= 0.02, gaps
 
 
 @pytest.mark.asyncio

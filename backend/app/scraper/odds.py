@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import asyncio
 import gzip
+import http.client
 import json
+import threading
 import time
 from datetime import datetime, timezone
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
 
 from app.config import SCRAPER
 
@@ -127,18 +128,80 @@ def market_options(odds: dict) -> list[dict]:
     return out
 
 
+class SourceUnavailable(RuntimeError):
+    """Kaynak JSON yerine boş yanıt ya da koruma (challenge) sayfası döndü — kaydedilmez, hata sayılır."""
+
+
+# Sprint 94 I3: iş parçacığı başına kalıcı HTTPS bağlantısı (her istekte DNS + TLS el sıkışması yok).
+# `_get` asyncio.to_thread içinde çalışır; http.client bağlantısı iş parçacıkları arasında paylaşılamaz.
+_local = threading.local()
+_TIMEOUT = 20
+_MAX_REDIRECTS = 3
+
+
+def _connection(scheme: str, host: str) -> http.client.HTTPConnection:
+    conns: dict = getattr(_local, "conns", None) or {}
+    _local.conns = conns
+    conn = conns.get((scheme, host))
+    if conn is None:
+        cls = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
+        conn = conns[(scheme, host)] = cls(host, timeout=_TIMEOUT)
+    return conn
+
+
+def _drop_connection(scheme: str, host: str) -> None:
+    conn = (getattr(_local, "conns", None) or {}).pop((scheme, host), None)
+    if conn is not None:
+        conn.close()
+
+
+def _request_once(url: str, headers: dict) -> tuple[int, dict, bytes, str]:
+    """Tek istek, kalıcı bağlantıyla; kopmuş bağlantı bir kez yeniden kurulur."""
+    parts = urlsplit(url)
+    target = parts.path + (f"?{parts.query}" if parts.query else "")
+    for attempt in (1, 2):
+        conn = _connection(parts.scheme, parts.netloc)
+        try:
+            conn.request("GET", target, headers=headers)
+            response = conn.getresponse()
+            body = response.read()
+            return response.status, dict(response.getheaders()), body, response.reason
+        except (http.client.HTTPException, ConnectionError, OSError):
+            _drop_connection(parts.scheme, parts.netloc)
+            if attempt == 2:
+                raise
+    raise RuntimeError("unreachable")
+
+
 def _get(path: str, referer_id: str) -> bytes:
-    """Kaynaktan ham yanıt (yönlendirilen adres hatırlanır; gzip açılır)."""
+    """Kaynaktan ham JSON yanıtı: yönlendirme izlenip hatırlanır, gzip açılır, JSON olmayan yanıt hata sayılır."""
     global _resolved_base
-    base = _resolved_base or SCRAPER.base_url
-    request = Request(f"{base}{path}", headers={"User-Agent": SCRAPER.user_agent,
-                                                 "Referer": f"{base}/oddscomp/{referer_id}"})
-    with urlopen(request, timeout=20) as response:
-        final = urlsplit(response.geturl())
-        _resolved_base = f"{final.scheme}://{final.netloc}"
-        body = response.read()
+    base = _resolved_base or SCRAPER.odds_base_url
+    url = f"{base}{path}"
+    for _ in range(_MAX_REDIRECTS + 1):
+        headers = {"User-Agent": SCRAPER.user_agent, "Referer": f"{base}/oddscomp/{referer_id}",
+                   "Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip"}
+        status, resp_headers, body, reason = _request_once(url, headers)
+        location = {k.lower(): v for k, v in resp_headers.items()}.get("location")
+        if status in (301, 302, 303, 307, 308) and location:
+            parts = urlsplit(location if "://" in location else f"{base}{location}")
+            base = f"{parts.scheme}://{parts.netloc}"
+            url = f"{base}{parts.path}" + (f"?{parts.query}" if parts.query else "")
+            continue
+        if status >= 400:
+            raise HTTPError(url, status, reason, resp_headers, None)
+        break
+    else:
+        raise SourceUnavailable("Kaynak çok fazla yönlendirme yaptı")
     # Kaynak istemese de gzip gönderiyor
-    return gzip.decompress(body) if body[:2] == bytes((0x1F, 0x8B)) else body
+    if body[:2] == bytes((0x1F, 0x8B)):
+        body = gzip.decompress(body)
+    if body.lstrip()[:1] not in (b"{", b"["):
+        # Boş yanıt ya da koruma sayfası: bir dahaki istek ana adresten başlasın (adres değişmiş olabilir)
+        _resolved_base = None
+        raise SourceUnavailable(f"Kaynak JSON döndürmedi ({len(body)} bayt)")
+    _resolved_base = base
+    return body
 
 
 class SourceThrottled(RuntimeError):
@@ -176,7 +239,20 @@ def _register_throttle() -> None:
     _stats["throttled"] += 1
 
 
+_inflight: dict[str, asyncio.Future] = {}
+
+
 async def _fetch(path: str, referer_id: str) -> bytes:
+    """Aynı adrese eşzamanlı istekler tek çekimde birleşir (Sprint 94 I3); asıl iş `_fetch_gated`."""
+    task = _inflight.get(path)
+    if task is None:
+        task = asyncio.ensure_future(_fetch_gated(path, referer_id))
+        _inflight[path] = task
+        task.add_done_callback(lambda _t, p=path: _inflight.pop(p, None))
+    return await asyncio.shield(task)
+
+
+async def _fetch_gated(path: str, referer_id: str) -> bytes:
     """`_get`'in kapılı hali: sıra + hız sınırı + engel sonrası bekleme. Tüm oran istekleri buradan geçer."""
     global _next_slot, _backoff
     if time.monotonic() < _blocked_until:
