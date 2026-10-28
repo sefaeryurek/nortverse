@@ -507,6 +507,8 @@ export interface HtOption {
   margin_pct: number;
   /** Takım gücü modelinin olasılığı (sadece İY 1/X/2) */
   model_pct: number | null;
+  /** Aynı çizgideki açılış oranı (Sprint 94 K-2 oran hareketi rozeti); karşılaştırılamıyorsa null */
+  open_odds?: number | null;
   outcome?: "hit" | "miss" | "push" | "half";
 }
 
@@ -523,6 +525,8 @@ export interface HtMatch {
   /** Oranın kaynakta güncellendiği an (epoch sn) */
   odds_at: number | null;
   expected_goals: { home: number; away: number } | null;
+  /** Oran henüz çekilmedi (arka planda geliyor) — yer tutucu kart (Sprint 94 K-1) */
+  odds_pending?: boolean;
 }
 
 export interface HtStrategyResponse {

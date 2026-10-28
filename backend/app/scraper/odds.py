@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import gzip
 import http.client
+from concurrent.futures import ThreadPoolExecutor
 import json
 import threading
 import time
@@ -93,16 +94,39 @@ def latest_prematch(history: dict | None, before: datetime | None = None) -> dic
     for market in MARKETS:
         row = next((r for r in history.get(market) or []
                     if r["pre"] and not r.get("closed") and (limit is None or r["mt"] < limit)), None)
-        if row is None:
-            continue
-        if market == "op":
-            out["op"] = {"1": row["u"], "X": row["g"], "2": row["d"], "mt": row["mt"]}
-        elif market == "ou":
-            out["ou"] = {"line": row["g"], "over": round(1 + row["u"], 3), "under": round(1 + row["d"], 3),
-                         "mt": row["mt"]}
-        else:
-            out["ah"] = {"line": row["g"], "home": round(1 + row["u"], 3), "away": round(1 + row["d"], 3),
-                         "mt": row["mt"]}
+        if row is not None:
+            out[market] = _decimal_row(market, row)
+    return out
+
+
+def _decimal_row(market: str, row: dict) -> dict:
+    if market == "op":
+        return {"1": row["u"], "X": row["g"], "2": row["d"], "mt": row["mt"]}
+    if market == "ou":
+        return {"line": row["g"], "over": round(1 + row["u"], 3), "under": round(1 + row["d"], 3), "mt": row["mt"]}
+    return {"line": row["g"], "home": round(1 + row["u"], 3), "away": round(1 + row["d"], 3), "mt": row["mt"]}
+
+
+def opening_prematch(history: dict | None) -> dict[str, dict]:
+    """Her pazarın maç öncesi İLK (açılış) oranı — İY panosunda oran hareketi rozeti için (Sprint 94 K-2)."""
+    out: dict[str, dict] = {}
+    for market in MARKETS:
+        rows = [r for r in (history or {}).get(market) or [] if r["pre"] and not r.get("closed")]
+        if rows:
+            out[market] = _decimal_row(market, rows[-1])  # geçmiş en yeniden eskiye sıralı
+    return out
+
+
+def with_opening(options: list[dict], opening: dict[str, dict]) -> list[dict]:
+    """Seçeneklere açılış oranı (`open_odds`); Ü/A çizgisi değiştiyse karşılaştırma anlamsız → None."""
+    out = []
+    for o in options:
+        open_odds = None
+        if o["market"] == "result" and "op" in opening:
+            open_odds = opening["op"].get(o["selection"])
+        elif o["market"] == "ou" and "ou" in opening and opening["ou"]["line"] == o["line"]:
+            open_odds = opening["ou"].get(o["selection"])
+        out.append({**o, "open_odds": open_odds})
     return out
 
 
@@ -240,6 +264,9 @@ def _register_throttle() -> None:
 
 
 _inflight: dict[str, asyncio.Future] = {}
+# Sprint 94 K-1: oran HTTP'si ayrı, sınırlı havuzda — wait_for zaman aşımı iş parçacığını durduramaz; takılan
+# istekler genel havuzu (DB, diğer to_thread işleri) tıkamasın
+_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="odds-http")
 
 
 async def _fetch(path: str, referer_id: str) -> bytes:
@@ -268,7 +295,7 @@ async def _fetch_gated(path: str, referer_id: str) -> bytes:
             await asyncio.sleep(wait)
         _stats["requests"] += 1
         try:
-            body = await asyncio.to_thread(_get, path, referer_id)
+            body = await asyncio.get_running_loop().run_in_executor(_EXECUTOR, _get, path, referer_id)
         except HTTPError as exc:
             _stats["errors"] += 1
             if exc.code in (403, 429):
@@ -398,7 +425,6 @@ def should_replace_history(old: dict | None, new: dict | None) -> bool:
 
 async def load_or_fetch(session, match_id: str, *, half: bool, max_age_s: int) -> dict | None:
     """DB'deki oran geçmişi yeterince tazeyse onu, değilse kaynaktan çekip DB'ye yazar."""
-    from sqlalchemy.dialects.postgresql import insert
 
     from app.db.models import MatchOdds
 
@@ -408,11 +434,25 @@ async def load_or_fetch(session, match_id: str, *, half: bool, max_age_s: int) -
     if row is not None and (now - row.fetched_at).total_seconds() < max_age_s:
         return row.history
     history = await fetch_odds(match_id, half=half)
+    return await store_history(session, match_id, scope, history, now, current=row)
+
+
+async def store_history(session, match_id: str, scope: str, history: dict | None, now: datetime,
+                        current=None) -> dict | None:
+    """Çekilmiş oran geçmişini yazar; boş / daha eski yanıt saklı geçmişi ezmez (Sprint 94 B7).
+
+    Ağ isteği bu fonksiyonun dışında yapılır → DB oturumu kaynak beklenirken açık kalmaz (Sprint 94 K-1).
+    """
+    from sqlalchemy.dialects.postgresql import insert
+
+    from app.db.models import MatchOdds
+
+    if current is None:
+        current = await session.get(MatchOdds, (match_id, scope))
     if history is None:
-        return row.history if row is not None else None
-    if row is not None and not should_replace_history(row.history, history):
-        # Boş / daha eski yanıt saklı geçmişi ezmez (Sprint 94 B7); ilk kayıt boş da olsa yazılır (tekrar denenmez)
-        return row.history
+        return current.history if current is not None else None
+    if current is not None and not should_replace_history(current.history, history):
+        return current.history  # ilk kayıt boş da olsa yazılır (tekrar denenmez)
     await session.execute(
         insert(MatchOdds).values(match_id=match_id, scope=scope, fetched_at=now, history=history)
         .on_conflict_do_update(index_elements=["match_id", "scope"],

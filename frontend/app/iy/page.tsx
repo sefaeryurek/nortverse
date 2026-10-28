@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import { HtMatchList } from "@/components/HtBoard";
+import { parseHtFilters } from "@/lib/ht-filters";
 import { resolvePageDate } from "@/lib/dates";
 import { type Locale, COOKIE_NAME, defaultLocale, getDictionary, isLocale } from "@/lib/i18n";
 import { SHADOW_COOKIE, shadowFromCookie } from "@/lib/shadow";
@@ -14,12 +15,13 @@ export const metadata: Metadata = {
 };
 
 interface Props {
-  searchParams: Promise<{ date?: string | string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function IyPage({ searchParams }: Props) {
   const params = await searchParams;
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+  const nowDate = new Date();
+  const today = nowDate.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   const date = resolvePageDate(params.date, today, true);
   if (date === null) redirect("/iy");
   const cookieStore = await cookies();
@@ -40,7 +42,7 @@ export default async function IyPage({ searchParams }: Props) {
       <DayTabs referenceDate={today} activeDate={date} basePath="/iy" locale={locale} />
       <div className="flex-1 overflow-y-auto">
         <Suspense fallback={<p className="p-6" style={{ color: "var(--nv-text-tertiary)" }}>…</p>}>
-          <HtMatchList date={date} locale={locale} shadow={shadow} />
+          <HtMatchList date={date} locale={locale} shadow={shadow} filters={parseHtFilters(params)} now={nowDate.getTime()} />
         </Suspense>
       </div>
     </div>

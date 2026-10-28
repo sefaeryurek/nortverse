@@ -24,39 +24,43 @@ from app.analysis.prematch_ht import HT_RULE_VERSIONS, match_ht
 from app.config import ISTANBUL_TZ
 from app.db.connection import get_session
 from app.db.models import AnalysisSnapshot, Match
-from app.scraper.odds import latest_prematch, load_or_fetch, market_options
+from app.scraper.odds import latest_prematch, market_options, opening_prematch, with_opening
 
 log = logging.getLogger(__name__)
 router = APIRouter()
 
 ODDS_MAX_AGE_S = 15 * 60   # yaklaşan maçta oran 15 dk'da bir arka planda tazelenir
-WAIT_BUDGET_S = 8.0         # hiç kaydı olmayan oranlar için sayfanın en fazla bekleyeceği süre
-_FETCH_LIMIT = asyncio.Semaphore(4)
-_refreshing: set[str] = set()
-_background: set[asyncio.Task] = set()  # arka plan görevlerine referans (çöp toplayıcı yarıda kesmesin)
+FETCH_TIMEOUT_S = 15.0
+# Sprint 94 K-1: sayfa artık kaynağı beklemez (eskiden kaydı olmayan maç için 8 sn bekliyor, hafta sonu 36 maçın
+# 12–14'ü yükleniyordu). Oranlar ön çekimle hazır; eksik olan arka planda çekilir, sayfada "oran yükleniyor".
+_inflight: dict[str, asyncio.Task] = {}
 
 
 def _spawn(match_id: str) -> asyncio.Task:
-    task = asyncio.create_task(_refresh(match_id))
-    _background.add(task)
-    task.add_done_callback(_background.discard)
+    """Aynı maç için tek paylaşılan yenileme görevi (eskiden ikinci istek None alıp maçı listeden düşürüyordu)."""
+    task = _inflight.get(match_id)
+    if task is None or task.done():
+        task = asyncio.create_task(_do_refresh(match_id))
+        _inflight[match_id] = task
+        task.add_done_callback(lambda _t, m=match_id: _inflight.pop(m, None) if _inflight.get(m) is _t else None)
     return task
 
 
 async def _refresh(match_id: str) -> dict | None:
-    """Kaynaktan çekip DB'ye yazar (aynı maç için aynı anda tek istek)."""
-    if match_id in _refreshing:
-        return None
-    _refreshing.add(match_id)
+    return await asyncio.shield(_spawn(match_id))
+
+
+async def _do_refresh(match_id: str) -> dict | None:
+    """Kaynaktan çeker (DB oturumu kapalıyken), sonra kısa bir oturumla yazar."""
+    from app.scraper.odds import fetch_odds, store_history
+
     try:
-        async with _FETCH_LIMIT:
-            async with get_session() as session:
-                return await asyncio.wait_for(load_or_fetch(session, match_id, half=True, max_age_s=0), timeout=15)
+        history = await asyncio.wait_for(fetch_odds(match_id, half=True), timeout=FETCH_TIMEOUT_S)
     except Exception as exc:  # ağ / kaynak
         log.info("İY oranı alınamadı [%s]: %s", match_id, exc)
         return None
-    finally:
-        _refreshing.discard(match_id)
+    async with get_session() as session:
+        return await store_history(session, match_id, "ht", history, datetime.now(timezone.utc))
 
 
 async def _stored_odds(match_ids: list[str]) -> dict[str, tuple[datetime, dict]]:
@@ -72,12 +76,15 @@ async def _stored_odds(match_ids: list[str]) -> dict[str, tuple[datetime, dict]]
     return {r.match_id: (r.fetched_at, r.history) for r in rows}
 
 
-async def _odds_by_match(rows) -> dict[str, dict]:
-    """Kayıtlı oran hemen kullanılır (eskiyse arka planda tazelenir); kaydı olmayanlar için kısa bekleme."""
+async def _odds_by_match(rows) -> tuple[dict[str, dict], dict[str, dict], set[str]]:
+    """Sadece DB: (maç → maç öncesi son oranlar, maç → ham geçmiş, henüz oranı gelmemiş maçlar).
+
+    Eski ya da hiç olmayan oran arka planda tazelenir; sayfa beklemez.
+    """
     now = datetime.now(timezone.utc)
     stored = await _stored_odds([r.match_id for r in rows])
     history: dict[str, dict] = {}
-    missing = []
+    pending: set[str] = set()
     for r in rows:
         finished = r.actual_ht_home is not None
         if r.match_id in stored:
@@ -87,19 +94,14 @@ async def _odds_by_match(rows) -> dict[str, dict]:
             # biten maçta kapanış yeter; başlamış/yaklaşan maçta eskiyse arka planda tazele
             if stale and not (finished and fetched_at > r.kickoff_time):
                 _spawn(r.match_id)
-        else:
-            missing.append(r.match_id)
-    if missing:
-        tasks = {_spawn(m): m for m in missing}
-        done, _pending = await asyncio.wait(tasks, timeout=WAIT_BUDGET_S)  # yetişmeyenler arka planda sürer
-        for task in done:
-            if task.result():
-                history[tasks[task]] = task.result()
+        elif not finished:
+            pending.add(r.match_id)
+            _spawn(r.match_id)
     out = {}
     for r in rows:
         started = r.kickoff_time is not None and r.kickoff_time <= now
         out[r.match_id] = latest_prematch(history.get(r.match_id), before=r.kickoff_time if started else None)
-    return out
+    return out, history, pending
 
 
 # Sprint 94 I2: yaklaşan maçların İY oranları önceden çekilir — sayfa açılınca beklemesin (kaydı olmayan maç için
@@ -188,12 +190,20 @@ async def ht_strategy(
                                            AnalysisSnapshot.match_id.in_([r.match_id for r in rows]))
         )).scalars().all(), key=lambda s: HT_RULE_VERSIONS.index(s.rule_version))} if rows else {}
     model = await get_poisson_model() if rows else None
-    odds_by_match = await _odds_by_match(rows)
+    odds_by_match, histories, pending = await _odds_by_match(rows)
     matches = []
     for r in rows:
         odds = odds_by_match.get(r.match_id) or {}
         options = market_options(odds)
         if not options:
+            if r.match_id in pending:  # oran arka planda çekiliyor → yer tutucu kart
+                matches.append({
+                    "match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
+                    "league_name": r.league_name,
+                    "kickoff_time": r.kickoff_time.isoformat() if r.kickoff_time else None,
+                    "shadow": is_shadow_league(r.league_name, r.league_code), "final_ht": None,
+                    "options": [], "odds_at": None, "expected_goals": None, "odds_pending": True,
+                })
             continue  # site bu maçta İY oranı açmamış
         snap = snapshots.get(r.match_id)
         if snap is not None and isinstance(snap.picks, list) and snap.picks:
@@ -201,7 +211,8 @@ async def ht_strategy(
         else:
             live = match_ht(model, r.league_name or "", r.home_team, r.away_team)
             probs = live["probs"] if live else None
-        options = sorted(_with_model(options, probs), key=lambda o: -o["pct"])
+        options = sorted(with_opening(_with_model(options, probs), opening_prematch(histories.get(r.match_id))),
+                         key=lambda o: -o["pct"])
         final = None if r.actual_ht_home is None else (r.actual_ht_home, r.actual_ht_away)
         if final is not None:
             for o in options:
@@ -215,5 +226,5 @@ async def ht_strategy(
             "options": options, "odds_at": (odds.get("op") or odds.get("ou") or {}).get("mt"),
             "expected_goals": (probs or {}).get("lambda"), "top_scores": (probs or {}).get("top_scores"),
         })
-    matches.sort(key=lambda m: -m["options"][0]["pct"])
+    matches.sort(key=lambda m: -(m["options"][0]["pct"] if m["options"] else 0))
     return {"date": day.isoformat(), "matches": matches}

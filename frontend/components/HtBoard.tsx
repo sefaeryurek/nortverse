@@ -5,10 +5,14 @@ import type { HtMatch, HtOption } from "@/lib/api";
 import { formatTime } from "@/lib/dates";
 import { type Dictionary, type Locale, getDictionary } from "@/lib/i18n";
 import { leagueDisplay } from "@/lib/leagues";
+import { applyHtFilters, DEFAULT_FILTERS, filterHref, marketOptions, ODDS_DROP_MIN, oddsDrop, strongestOption } from "@/lib/ht-filters";
+import type { HtFilters } from "@/lib/ht-filters";
+import HtMinSlider from "@/components/HtMinSlider";
 
 /**
  * İY oran panosu: maç kartları ve liste (Sprint 94 M3 — /iy sayfasından ayrıldı, test edilebilsin diye).
- * Sunucu bileşeni; liste sunucudan en güçlü seçeneğe göre sıralı gelir.
+ * Sunucu bileşeni. Sprint 94 K-2: varsayılan sıra başlama saati, süzgeçler (zaman, pazar, lig, asgari olasılık),
+ * kompakt satır (tıklayınca kart), başlamış/bitmiş maçlar altta katlı, açılıştan ≥%8 düşüş rozeti.
  */
 
 function pct(value: number, locale: Locale): string {
@@ -61,7 +65,7 @@ function OptionCell({ o, label, strongest, t, locale }: { o: HtOption; label: st
       </div>
       <div className="flex items-baseline justify-between gap-2" style={{ fontSize: "var(--nv-text-2xs)", fontVariantNumeric: "tabular-nums" }}>
         <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", color: strongest ? "var(--nv-accent-green)" : "var(--nv-text-primary)" }}>
-          {pct(o.pct, locale)}
+          {pct(o.pct, locale)} <DropBadge o={o} t={t} locale={locale} />
         </span>
         {out ? (
           <span className="font-semibold" style={{ color: out.color }}>
@@ -75,6 +79,22 @@ function OptionCell({ o, label, strongest, t, locale }: { o: HtOption; label: st
       </div>
     </div>
   );
+}
+
+function DropBadge({ o, t, locale }: { o: HtOption; t: Dictionary; locale: Locale }) {
+  const drop = oddsDrop(o);
+  if (drop == null || drop < ODDS_DROP_MIN) return null;
+  return (
+    <span className="font-semibold" style={{ color: "var(--nv-accent-amber)" }}
+      title={t.ht.oddsDropTip.replace("{open}", fmtNum(o.open_odds, 2)).replace("{now}", fmtNum(o.odds, 2))}>
+      <span aria-hidden="true">↓</span>{t.ht.oddsDrop.replace("{pct}", fmtPct(drop * 100, locale))}
+    </span>
+  );
+}
+
+function fmtPct(value: number, locale: Locale): string {
+  const v = fmtNum(value, 0);
+  return locale === "en" ? v : v.replace(".", ",");
 }
 
 export function HtMatchCard({ match, t, locale }: { match: HtMatch; t: Dictionary; locale: Locale }) {
@@ -146,22 +166,131 @@ export function HtMatchCard({ match, t, locale }: { match: HtMatch; t: Dictionar
   );
 }
 
-export async function HtMatchList({ date, locale, shadow }: { date: string; locale: Locale; shadow: boolean }) {
+function Chip({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
+  return (
+    <Link href={href} scroll={false} aria-current={active ? "true" : undefined} className="px-2.5 py-1 whitespace-nowrap"
+      style={{
+        fontSize: "var(--nv-text-xs)", borderRadius: "var(--nv-radius-full)",
+        border: `1px solid ${active ? "var(--nv-accent-green)" : "var(--nv-border-subtle)"}`,
+        color: active ? "var(--nv-accent-green)" : "var(--nv-text-secondary)",
+        backgroundColor: active ? "var(--nv-accent-green-dim)" : "transparent",
+      }}>
+      {children}
+    </Link>
+  );
+}
+
+function FilterBar({ date, f, leagues, t }: { date: string; f: HtFilters; leagues: { name: string; count: number }[]; t: Dictionary }) {
+  const h = t.ht;
+  const sliderBase = filterHref(date, f, { min: 0 });
+  return (
+    <div className="space-y-2" aria-label={h.filters}>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Chip href={filterHref(date, f, { sort: "time" })} active={f.sort === "time"}>{h.sortTime}</Chip>
+        <Chip href={filterHref(date, f, { sort: "prob" })} active={f.sort === "prob"}>{h.sortProb}</Chip>
+        <span className="w-2" />
+        <Chip href={filterHref(date, f, { win: "all" })} active={f.win === "all"}>{h.winAll}</Chip>
+        <Chip href={filterHref(date, f, { win: "3h" })} active={f.win === "3h"}>{h.win3h}</Chip>
+        <Chip href={filterHref(date, f, { win: "rest" })} active={f.win === "rest"}>{h.winRest}</Chip>
+        <span className="w-2" />
+        <Chip href={filterHref(date, f, { mkt: "all" })} active={f.mkt === "all"}>{h.mktAll}</Chip>
+        <Chip href={filterHref(date, f, { mkt: "result" })} active={f.mkt === "result"}>{h.mktResult}</Chip>
+        <Chip href={filterHref(date, f, { mkt: "ou" })} active={f.mkt === "ou"}>{h.mktOu}</Chip>
+      </div>
+      {leagues.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          <Chip href={filterHref(date, f, { league: null })} active={f.league == null}>{h.allLeagues}</Chip>
+          {leagues.map((l) => {
+            const { flag, short } = leagueDisplay(null, l.name);
+            return (
+              <Chip key={l.name} href={filterHref(date, f, { league: l.name })} active={f.league === l.name}>
+                <span aria-hidden="true">{flag}</span> {short} · {l.count}
+              </Chip>
+            );
+          })}
+        </div>
+      )}
+      <HtMinSlider key={f.min} value={f.min} baseHref={sliderBase} label={h.minProb} />
+    </div>
+  );
+}
+
+/** Kompakt satır: maç · en güçlü seçenek · oran · olasılık; tıklayınca tam kart (Sprint 94 K-2). */
+function MatchRow({ match, f, t, locale }: { match: HtMatch; f: HtFilters; t: Dictionary; locale: Locale }) {
+  const { flag, short } = leagueDisplay(null, match.league_name);
+  const best = strongestOption(match, f.mkt);
+  const outcome = best?.outcome ? OUTCOME[best.outcome] : null;
+  const shown = { ...match, options: [...marketOptions(match, f.mkt)].sort((a, b) => b.pct - a.pct) };
+  return (
+    <details className="nv-card min-w-0 group">
+      <summary className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 cursor-pointer" style={{ fontSize: "var(--nv-text-sm)" }}>
+        <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-tertiary)", fontSize: "var(--nv-text-xs)" }}>
+          {match.kickoff_time ? formatTime(match.kickoff_time) : "—"}
+        </span>
+        <span aria-hidden="true">{flag}</span>
+        <span className="min-w-0 truncate font-semibold" style={{ color: "var(--nv-text-primary)" }}>
+          {match.home_team} - {match.away_team}
+        </span>
+        <span className="sr-only">{short}</span>
+        <span className="flex-1" />
+        {match.final_ht && (
+          <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)", fontSize: "var(--nv-text-xs)" }}>
+            {t.ht.finalHt} {match.final_ht}
+          </span>
+        )}
+        {match.odds_pending || !best ? (
+          <span style={{ color: "var(--nv-text-tertiary)", fontSize: "var(--nv-text-xs)" }}>{t.ht.oddsPending}</span>
+        ) : (
+          <span className="flex items-center gap-2" style={{ fontSize: "var(--nv-text-xs)" }}>
+            <b style={{ color: "var(--nv-accent-green)" }}>{optionLabel(best, t, locale)}</b>
+            <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-primary)" }}>{fmtNum(best.odds, 2)}</span>
+            <span style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-secondary)" }}>{pct(best.pct, locale)}</span>
+            <DropBadge o={best} t={t} locale={locale} />
+            {outcome && <span style={{ color: outcome.color }} title={t.ht[outcome.key]}><span aria-hidden="true">{outcome.icon}</span><span className="sr-only">{t.ht[outcome.key]}</span></span>}
+          </span>
+        )}
+      </summary>
+      {!match.odds_pending && shown.options.length > 0 && (
+        <div className="px-1 pb-1"><HtMatchCard match={shown} t={t} locale={locale} /></div>
+      )}
+    </details>
+  );
+}
+
+export async function HtMatchList({ date, locale, shadow, now, filters = DEFAULT_FILTERS }: {
+  date: string; locale: Locale; shadow: boolean; /** epoch ms — sayfadan (süzgeçler "şimdi"ye göre) */ now: number;
+  filters?: HtFilters;
+}) {
   const t = getDictionary(locale);
   let matches: HtMatch[] = [];
   try {
-    // Önbellekte eski biçimli yanıt kalmış olabilir → seçeneği olmayan maç gösterilmez
-    matches = ((await getHtStrategy(date, shadow)).matches ?? []).filter((m) => Array.isArray(m.options) && m.options.length > 0);
+    // Önbellekte eski biçimli yanıt kalmış olabilir → seçeneği olmayan maç gösterilmez (oranı gelmekte olan hariç)
+    matches = ((await getHtStrategy(date, shadow)).matches ?? [])
+      .filter((m) => Array.isArray(m.options) && (m.options.length > 0 || m.odds_pending === true));
   } catch {
     return <p className="nv-card p-4 m-4" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-red)" }}>{t.common.loadError}</p>;
   }
   if (matches.length === 0) {
     return <p className="nv-card p-6 m-4 text-center" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-tertiary)" }}>{t.ht.empty}</p>;
   }
-  // Sunucu en güçlü seçeneğe göre sıralı gönderir
+  const view = applyHtFilters(matches, filters, now);
   return (
     <div className="grid gap-3 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
-      {matches.map((m) => <HtMatchCard key={m.match_id} match={m} t={t} locale={locale} />)}
+      <FilterBar date={date} f={filters} leagues={view.leagues} t={t} />
+      {view.upcoming.length === 0 && view.finished.length === 0 && (
+        <p className="nv-card p-4 text-center" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-tertiary)" }}>{t.ht.noMatchFilter}</p>
+      )}
+      {view.upcoming.map((m) => <MatchRow key={m.match_id} match={m} f={filters} t={t} locale={locale} />)}
+      {view.finished.length > 0 && (
+        <details className="space-y-2">
+          <summary className="cursor-pointer py-1" style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-secondary)" }}>
+            {t.ht.finishedSection.replace("{n}", String(view.finished.length))}
+          </summary>
+          <div className="grid gap-2 pt-2">
+            {view.finished.map((m) => <MatchRow key={m.match_id} match={m} f={filters} t={t} locale={locale} />)}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

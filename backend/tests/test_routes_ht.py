@@ -37,7 +37,7 @@ def board(monkeypatch):
     }
     monkeypatch.setattr(routes_ht, "get_session", fake_session)
     monkeypatch.setattr(routes_ht, "get_poisson_model", AsyncMock(return_value=None))
-    monkeypatch.setattr(routes_ht, "_odds_by_match", AsyncMock(return_value=odds))
+    monkeypatch.setattr(routes_ht, "_odds_by_match", AsyncMock(return_value=(odds, {}, set())))
     monkeypatch.setattr(routes_ht, "match_ht", lambda *_a: {"probs": {"result": {"1": 40.0, "X": 45.0, "2": 15.0},
                                                                       "lambda": {"home": 0.7, "away": 0.4}}})
     return rows
@@ -77,26 +77,52 @@ async def test_bad_date_is_400():
 
 
 @pytest.mark.asyncio
-async def test_refresh_dedupes_same_match(monkeypatch):
-    calls = []
+async def test_refresh_shared_for_same_match_and_fetch_outside_session(monkeypatch):
+    """Sprint 94 K-1: aynı maça eşzamanlı istekler tek çekimi paylaşır (eskiden ikincisi None alıp maç düşüyordu);
+    kaynak beklenirken DB oturumu açık değil."""
+    from app.scraper import odds as odds_mod
 
-    async def slow_fetch(_session, match_id, **_k):
+    calls, session_open = [], []
+
+    async def slow_fetch(match_id, half):
         calls.append(match_id)
+        session_open.append(bool(opened))
         await asyncio.sleep(0.05)
-        return {"op": {}}
+        return {"op": [{"mt": 1}]}
+
+    opened = []
 
     @asynccontextmanager
     async def fake_session():
-        yield None
+        opened.append(1)
+        try:
+            yield "oturum"
+        finally:
+            opened.pop()
 
-    monkeypatch.setattr(routes_ht, "load_or_fetch", slow_fetch)
+    async def store(session, match_id, scope, history, now, current=None):
+        assert session == "oturum" and scope == "ht"
+        return history
+
+    monkeypatch.setattr(odds_mod, "fetch_odds", slow_fetch)
+    monkeypatch.setattr(odds_mod, "store_history", store)
     monkeypatch.setattr(routes_ht, "get_session", fake_session)
     results = await asyncio.gather(*(routes_ht._refresh("9") for _ in range(4)))
-    assert calls == ["9"]                                # aynı anda tek kaynak isteği
-    assert results.count(None) == 3
-    assert routes_ht._refreshing == set()
-    await routes_ht._refresh("9")                        # bittikten sonra yeniden çekilebilir
+    assert calls == ["9"] and session_open == [False]
+    assert results == [{"op": [{"mt": 1}]}] * 4      # hepsi aynı sonucu alır
+    assert routes_ht._inflight == {}
+    await routes_ht._refresh("9")                    # bittikten sonra yeniden çekilebilir
     assert calls == ["9", "9"]
+
+
+@pytest.mark.asyncio
+async def test_pending_odds_shown_as_placeholder(monkeypatch, board):
+    monkeypatch.setattr(routes_ht, "_odds_by_match",
+                        AsyncMock(return_value=({"1": {"op": {"1": 2.6, "X": 2.0, "2": 4.6}}}, {}, {"2"})))
+    out = await routes_ht.ht_strategy(target_date="2026-10-28", shadow=False)
+    pending = next(m for m in out["matches"] if m["match_id"] == "2")
+    assert pending["odds_pending"] is True and pending["options"] == []
+    assert out["matches"][0]["match_id"] == "1"      # oranı olan önde
 
 
 def test_stale_odds_refreshed_but_finished_closing_kept(monkeypatch):
@@ -108,8 +134,9 @@ def test_stale_odds_refreshed_but_finished_closing_kept(monkeypatch):
     stored = {"1": (now - timedelta(hours=1), {}), "2": (now - timedelta(hours=1), {})}  # ikisi de 15 dk'dan eski
     monkeypatch.setattr(routes_ht, "_stored_odds", AsyncMock(return_value=stored))
     monkeypatch.setattr(routes_ht, "_spawn", lambda mid: spawned.append(mid))
-    asyncio.run(routes_ht._odds_by_match(rows))
+    _odds, _hist, pending = asyncio.run(routes_ht._odds_by_match(rows))
     assert spawned == ["1"]  # biten maçın kapanış oranı yeterli, kaynağa gidilmez
+    assert pending == set()
 
 
 @pytest.mark.asyncio

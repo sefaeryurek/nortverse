@@ -200,3 +200,25 @@ def test_concurrent_same_request_is_fetched_once(monkeypatch):
 
     assert asyncio.run(run()) == [b"{}"] * 4
     assert sorted(calls) == ["/ajax/x", "/ajax/z"]
+
+
+def test_opening_prematch_and_movement_on_same_line_only():
+    """Sprint 94 K-2: açılış oranı (en eski maç öncesi satır); Ü/A çizgisi değiştiyse karşılaştırma yok."""
+    from app.scraper.odds import opening_prematch, with_opening
+
+    history = {
+        "op": [{"mt": 3, "pre": True, "u": 1.8, "g": 3.4, "d": 4.5},       # en yeni
+               {"mt": 2, "pre": True, "closed": True},
+               {"mt": 1, "pre": True, "u": 2.1, "g": 3.2, "d": 3.6}],      # açılış
+        "ou": [{"mt": 3, "pre": True, "u": 0.9, "g": 1.25, "d": 0.95},
+               {"mt": 1, "pre": True, "u": 0.85, "g": 1.0, "d": 1.0}],     # açılış çizgisi farklı
+    }
+    opening = opening_prematch(history)
+    assert opening["op"]["1"] == 2.1 and opening["ou"]["line"] == 1.0
+    options = with_opening([
+        {"market": "result", "selection": "1", "line": None},
+        {"market": "ou", "selection": "over", "line": 1.25},
+        {"market": "ou", "selection": "over", "line": 1.0},
+    ], opening)
+    assert [o["open_odds"] for o in options] == [2.1, None, 1.85]
+    assert opening_prematch(None) == {}

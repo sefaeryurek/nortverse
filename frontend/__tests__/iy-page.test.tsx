@@ -8,6 +8,7 @@ vi.mock("@/lib/api", () => api);
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 
 import { HtMatchList } from "@/components/HtBoard";
 
@@ -26,7 +27,7 @@ const match = (id: string, home: string, opts: Partial<HtMatch> = {}): HtMatch =
 });
 
 async function renderList() {
-  render(await HtMatchList({ date: "2026-10-28", locale: "tr", shadow: false }));
+  render(await HtMatchList({ date: "2026-10-28", locale: "tr", shadow: false, now: Date.parse("2026-10-28T12:00:00Z") }));
 }
 
 it("renders match cards in server order with odds", async () => {
@@ -52,6 +53,29 @@ it("survives missing expected goals and model probability", async () => {
   ] });
   await renderList();
   expect(screen.getAllByText(/Chelsea/).length).toBeGreaterThan(0);
+});
+
+it("sorts by kickoff by default, folds started matches and shows pending odds placeholder (Sprint 94 K-1/K-2)", async () => {
+  api.getHtStrategy.mockResolvedValue({ date: "2026-10-28", matches: [
+    match("1", "Arsenal", { kickoff_time: "2026-10-28T20:00:00+00:00" }),
+    match("2", "Chelsea", { kickoff_time: "2026-10-28T15:00:00+00:00" }),
+    match("3", "Bitti", { kickoff_time: "2026-10-28T10:00:00+00:00", final_ht: "1-0" }),
+    match("4", "Bekleyen", { options: [], odds_pending: true }),
+  ] });
+  await renderList();
+  const text = document.body.textContent ?? "";
+  expect(text.indexOf("Chelsea")).toBeLessThan(text.indexOf("Arsenal"));
+  expect(text).toContain("Başlamış / bitmiş maçlar (1)");
+  expect(text.indexOf("Arsenal")).toBeLessThan(text.indexOf("Bitti"));
+  expect(text).toContain("Oran yükleniyor");
+});
+
+it("shows the odds-drop badge when the price fell at least 8% since opening", async () => {
+  api.getHtStrategy.mockResolvedValue({ date: "2026-10-28", matches: [match("1", "Arsenal", { options: [
+    { market: "result", selection: "X", line: null, odds: 2.0, pct: 46.2, margin_pct: 5.4, model_pct: null, open_odds: 2.5 },
+  ] })] });
+  await renderList();
+  expect(document.body.textContent).toContain("%20");
 });
 
 it("shows an error card on failure and an empty message when there are no matches", async () => {
