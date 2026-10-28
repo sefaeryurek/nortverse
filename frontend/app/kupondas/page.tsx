@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCoupon, getCouponMatches, getCoupons, getMatchOdds } from "@/lib/api";
-import type { CouponMatch, CouponView, MatchOdds } from "@/lib/api";
+import type { CouponMatch, CouponOddsChange, CouponView, MatchOdds } from "@/lib/api";
 import { formatTime } from "@/lib/dates";
 import { useLocale } from "@/lib/locale-context";
-import { hasStarted, num, OddsPanel, pickLabel } from "@/components/CouponOddsPanel";
+import { hasStarted, num, OddsPanel, pickLabel, priceFor } from "@/components/CouponOddsPanel";
 import type { Dict, Draft } from "@/components/CouponOddsPanel";
 
 function istanbulDate(offsetDays: number): string {
@@ -15,7 +15,13 @@ function istanbulDate(offsetDays: number): string {
 
 const STATUS_COLOR: Record<CouponView["status"], string> = {
   pending: "var(--nv-text-tertiary)", won: "var(--nv-accent-green)", lost: "var(--nv-accent-red)", refund: "var(--nv-text-secondary)",
+  partial_loss: "var(--nv-accent-amber)",
 };
+const DRAFT_REFRESH_MS = 30_000;
+
+function newKey(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+}
 const OUTCOME_ICON: Record<string, { icon: string; color: string }> = {
   hit: { icon: "✓", color: "var(--nv-accent-green)" }, half_win: { icon: "½✓", color: "var(--nv-accent-green)" },
   miss: { icon: "✕", color: "var(--nv-accent-red)" }, half_loss: { icon: "½✕", color: "var(--nv-accent-amber)" },
@@ -75,6 +81,9 @@ export default function KupondasPage() {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [scope, setScope] = useState<"all" | "mine">("all");
   const [coupons, setCoupons] = useState<CouponView[] | null>(null);
+  const [changes, setChanges] = useState<CouponOddsChange[] | null>(null);
+  // Aynı gönderim için aynı anahtar (çift tıklama / ağ tekrarı ikinci kupon yazmaz); başarı ya da onaydan sonra yenilenir
+  const idemKey = useRef<string>("");
   // Başlama saati geçen maç seçilemesin diye saat 30 sn'de bir yenilenir
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -108,27 +117,69 @@ export default function KupondasPage() {
   }, [scope]);
   useEffect(() => { loadCoupons(); }, [loadCoupons]);
 
+  // Maç başına tek seçim (K3): aynı maçtan başka bir seçim öncekinin yerine geçer
   const toggle = (d: Draft) => setDraft((prev) => {
-    const same = (x: Draft) => x.match_id === d.match_id && x.period === d.period && x.market === d.market;
-    const existing = prev.find(same);
-    if (existing && existing.selection === d.selection) return prev.filter((x) => !same(x));
-    return [...prev.filter((x) => !same(x)), d];
+    const existing = prev.find((x) => x.match_id === d.match_id);
+    const same = existing && existing.period === d.period && existing.market === d.market && existing.selection === d.selection;
+    const rest = prev.filter((x) => x.match_id !== d.match_id);
+    return same ? rest : [...rest, d];
   });
   const total = useMemo(() => draft.reduce((acc, d) => acc * d.odds, 1), [draft]);
 
-  async function save() {
+  // Taslaktaki oranlar 30 sn'de bir tazelenir (kayıt anındaki oran gösterilenden çok farklı olmasın)
+  const draftIds = useMemo(() => [...new Set(draft.map((d) => d.match_id))].sort().join(","), [draft]);
+  useEffect(() => {
+    if (!draftIds) return;
+    let cancelled = false;
+    const refresh = async () => {
+      const ids = draftIds.split(",");
+      const fresh = await Promise.all(ids.map((id) => getMatchOdds(id).catch(() => null)));
+      if (cancelled) return;
+      const byId = new Map(ids.map((id, i) => [id, fresh[i]]));
+      setDraft((prev) => prev.map((d) => {
+        const o = byId.get(d.match_id);
+        if (!o) return d;
+        const p = priceFor(o, d);
+        return p ? { ...d, odds: p.odds, line: p.line, unavailable: false } : { ...d, unavailable: true };
+      }));
+    };
+    const id = setInterval(refresh, DRAFT_REFRESH_MS);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [draftIds]);
+
+  async function save(current: Draft[] = draft) {
     setSaving(true);
     setMessage(null);
-    const res = await createCoupon(draft.map(({ match_id, period, market, selection }) => ({ match_id, period, market, selection })), note || null);
+    setChanges(null);
+    if (!idemKey.current) idemKey.current = newKey();
+    const res = await createCoupon(
+      current.map(({ match_id, period, market, selection, line, odds: seen }) => ({ match_id, period, market, selection, line, seen_odds: seen })),
+      note || null, idemKey.current,
+    );
     setSaving(false);
     if (res.ok) {
+      idemKey.current = "";
       setDraft([]);
       setNote("");
       setMessage({ ok: true, text: c.saved });
       loadCoupons();
+    } else if (res.changes && res.changes.length) {
+      idemKey.current = "";
+      setChanges(res.changes);
     } else {
       setMessage({ ok: false, text: res.message });
     }
+  }
+
+  // Kullanıcı yeni oranları onayladı: taslak güncellenir ve yeni oranlarla tekrar gönderilir
+  function acceptChanges() {
+    if (!changes) return;
+    const updated = draft.map((d) => {
+      const ch = changes.find((x) => x.match_id === d.match_id && x.period === d.period && x.market === d.market && x.selection === d.selection);
+      return ch ? { ...d, odds: ch.new_odds, line: ch.new_line ?? d.line } : d;
+    });
+    setDraft(updated);
+    void save(updated);
   }
 
   const tabStyle = (active: boolean) => ({
@@ -189,9 +240,10 @@ export default function KupondasPage() {
               ) : (
                 <ul className="space-y-1">
                   {draft.map((d) => (
-                    <li key={`${d.match_id}:${d.period}:${d.market}`} className="flex items-baseline gap-2" style={{ fontSize: "var(--nv-text-xs)" }}>
+                    <li key={`${d.match_id}:${d.period}:${d.market}`} className="flex items-baseline gap-2" style={{ fontSize: "var(--nv-text-xs)", opacity: d.unavailable ? 0.5 : 1 }}>
                       <span className="min-w-0 truncate" style={{ color: "var(--nv-text-primary)" }}>{d.home} - {d.away}</span>
                       <span style={{ color: "var(--nv-text-secondary)" }}>{pickLabel(d.period, d.market, d.selection, d.line, t, locale)}</span>
+                      {d.unavailable && <span style={{ color: "var(--nv-accent-amber)" }}>{c.unavailable}</span>}
                       <span className="flex-1" />
                       <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)" }}>{d.odds.toFixed(2)}</span>
                       <button type="button" onClick={() => toggle(d)} aria-label={c.remove} style={{ color: "var(--nv-text-tertiary)" }}>✕</button>
@@ -206,12 +258,32 @@ export default function KupondasPage() {
                   </p>
                   <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={c.note} className="w-full px-2 py-1.5"
                     style={{ fontSize: "var(--nv-text-sm)", color: "var(--nv-text-primary)", backgroundColor: "var(--nv-bg-elevated)", border: "1px solid var(--nv-border)", borderRadius: "var(--nv-radius-md)" }} />
-                  <button type="button" disabled={saving} onClick={save} className="w-full py-2 font-semibold disabled:opacity-60"
+                  <button type="button" disabled={saving || draft.some((d) => d.unavailable)} onClick={() => void save()} className="w-full py-2 font-semibold disabled:opacity-60"
                     style={{ fontSize: "var(--nv-text-sm)", backgroundColor: "var(--nv-accent-blue)", color: "var(--nv-text-on-accent)", borderRadius: "var(--nv-radius-md)" }}>
                     {saving ? c.saving : c.save}
                   </button>
                   <p style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>{c.frozenNote}</p>
                 </>
+              )}
+              {changes && (
+                <div role="alert" className="space-y-1.5 p-2" style={{ fontSize: "var(--nv-text-xs)", border: "1px solid var(--nv-accent-amber)", borderRadius: "var(--nv-radius-md)" }}>
+                  <p className="font-semibold" style={{ color: "var(--nv-accent-amber)" }}>{c.oddsChanged}</p>
+                  <ul className="space-y-0.5">
+                    {changes.map((ch) => (
+                      <li key={`${ch.match_id}:${ch.period}:${ch.market}:${ch.selection}`} style={{ color: "var(--nv-text-secondary)" }}>
+                        {ch.home_team} - {ch.away_team} · {pickLabel(ch.period, ch.market, ch.selection, ch.new_line ?? ch.old_line, t, locale)}:{" "}
+                        <span style={{ fontFamily: "var(--nv-font-mono)" }}>{ch.old_odds != null ? ch.old_odds.toFixed(2) : "—"} → {ch.new_odds.toFixed(2)}</span>
+                        {ch.old_line != null && ch.new_line != null && ch.old_line !== ch.new_line && ` (${c.lineChanged.replace("{old}", String(ch.old_line)).replace("{new}", String(ch.new_line))})`}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex gap-2">
+                    <button type="button" disabled={saving} onClick={acceptChanges} className="px-3 py-1 font-semibold"
+                      style={{ backgroundColor: "var(--nv-accent-blue)", color: "var(--nv-text-on-accent)", borderRadius: "var(--nv-radius-md)" }}>{c.acceptNewOdds}</button>
+                    <button type="button" onClick={() => setChanges(null)} className="px-3 py-1"
+                      style={{ color: "var(--nv-text-secondary)", border: "1px solid var(--nv-border)", borderRadius: "var(--nv-radius-md)" }}>{c.cancel}</button>
+                  </div>
+                </div>
               )}
               {message && (
                 <p role="status" style={{ fontSize: "var(--nv-text-xs)", color: message.ok ? "var(--nv-accent-green)" : "var(--nv-accent-red)" }}>{message.text}</p>

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { hasStarted, OddsPanel } from "@/components/CouponOddsPanel";
+import { hasStarted, OddsPanel, priceFor } from "@/components/CouponOddsPanel";
 import type { MatchOdds } from "@/lib/api";
 import { LocaleProvider, useLocale } from "@/lib/locale-context";
 
@@ -44,5 +44,23 @@ describe("Kupondaş oran paneli (sadece maç öncesi)", () => {
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     expect(screen.queryByText(/canlı/)).toBeNull();
     expect(screen.getByText(/kupon sadece maç öncesi/)).toBeTruthy();
+  });
+});
+
+describe("Taslak oran tazeleme (priceFor)", () => {
+  const draft = { match_id: "1", home: "A", away: "B", period: "ft" as const, market: "result" as const, selection: "1", line: null, odds: 2.2 };
+
+  it("açık pazarda güncel oranı verir", () => {
+    expect(priceFor(ODDS, draft)).toEqual({ odds: 2.1, line: null });
+  });
+
+  it("kapanmış periyotta null döner", () => {
+    const closed: MatchOdds = { ...ODDS, markets: { ...ODDS.markets, ft: { closed: "Maç başladı" } } };
+    expect(priceFor(closed, draft)).toBeNull();
+  });
+
+  it("Ü/A çizgisini de döner", () => {
+    const withOu: MatchOdds = { ...ODDS, markets: { ...ODDS.markets, ft: { closed: null, ou: { line: 2.75, over: 1.95, under: 1.85 } } } };
+    expect(priceFor(withOu, { ...draft, market: "ou", selection: "over", line: 2.5 })).toEqual({ odds: 1.95, line: 2.75 });
   });
 });

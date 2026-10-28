@@ -4,7 +4,25 @@ import type { CouponMarket, CouponPeriod, MatchOdds } from "@/lib/api";
 import type { useLocale } from "@/lib/locale-context";
 
 export type Dict = ReturnType<typeof useLocale>["t"];
-export type Draft = { match_id: string; home: string; away: string; period: CouponPeriod; market: CouponMarket; selection: string; line: number | null; odds: number };
+export type Draft = {
+  match_id: string; home: string; away: string; period: CouponPeriod; market: CouponMarket; selection: string;
+  line: number | null; odds: number;
+  /** Taslak yenilenirken bu seçim artık açık değilse (maç başladı / pazar kapandı) */
+  unavailable?: boolean;
+};
+
+/** Güncel oranlardan taslak seçiminin oranı ve çizgisi; pazar kapalıysa null. */
+export function priceFor(odds: MatchOdds, d: Draft): { odds: number; line: number | null } | null {
+  const m = odds.markets[d.period];
+  if (!m || m.closed) return null;
+  if (d.market === "ou") {
+    const price = m.ou?.[d.selection as "over" | "under"];
+    return m.ou && price ? { odds: price, line: m.ou.line } : null;
+  }
+  const table = d.market === "dc" ? m.dc : m.result;
+  const price = table ? (table as Record<string, number>)[d.selection] : undefined;
+  return price ? { odds: price, line: null } : null;
+}
 
 export function num(value: number, digits: number, locale: string): string {
   const v = value.toFixed(digits);

@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.analysis.coupons import MARKETS, MAX_LEGS, coupon_status, settle_pending
+from app.analysis.coupons import MARKETS, MAX_LEGS, coupon_status
 from app.db.connection import get_session
 from app.db.models import Coupon, CouponLeg, CouponLegResult, Match, User
 from app.scraper.odds import current_odds
@@ -163,6 +163,9 @@ class LegIn(BaseModel):
     period: str = Field(pattern=r"^(ft|ht)$")
     market: str = Field(pattern=r"^(result|dc|ou)$")
     selection: str = Field(max_length=10)
+    # Kullanıcının ekranda gördüğü çizgi ve oran (J2): kayıt anındaki oran bundan kötüyse onay istenir
+    line: float | None = None
+    seen_odds: float | None = Field(default=None, gt=1.0, lt=1000.0)
 
 
 class CouponIn(BaseModel):
@@ -170,21 +173,64 @@ class CouponIn(BaseModel):
     note: str | None = Field(default=None, max_length=200)
 
 
+ODDS_TOLERANCE = 0.03          # oran %3'ten fazla kötüleştiyse kullanıcı onayı (409 odds_changed)
+_FETCH_LIMIT = asyncio.Semaphore(3)  # kayıt anında kaynağa en fazla 3 eşzamanlı istek
+_IDEMPOTENCY_TTL = 600.0
+_idempotency: dict[tuple[int, str], tuple[float, dict]] = {}
+
+
+def odds_change(leg: LegIn, market: dict, price: float) -> dict | None:
+    """Kullanıcının gördüğü çizgi/oranla kayıt anındaki arasında kabul edilemez fark var mı?"""
+    line = market.get("line") if leg.market == "ou" else None
+    line_moved = leg.market == "ou" and leg.line is not None and line is not None and abs(line - leg.line) > 1e-9
+    worse = leg.seen_odds is not None and price < leg.seen_odds * (1 - ODDS_TOLERANCE)
+    if not (line_moved or worse):
+        return None
+    return {"match_id": leg.match_id, "period": leg.period, "market": leg.market, "selection": leg.selection,
+            "old_odds": leg.seen_odds, "new_odds": price, "old_line": leg.line, "new_line": line}
+
+
+def _remember(user_id: int, key: str | None, response: dict) -> dict:
+    if key:
+        now = time.monotonic()
+        for k in [k for k, (t, _) in _idempotency.items() if now - t > _IDEMPOTENCY_TTL]:
+            _idempotency.pop(k, None)
+        _idempotency[(user_id, key)] = (now, response)
+    return response
+
+
+async def _odds_for_save(match: Match) -> dict:
+    async with _FETCH_LIMIT:
+        try:
+            return await _odds(match.match_id, max_age=_SAVE_MAX_AGE)
+        except HTTPException:
+            # Hangi maçta olduğu söylensin (eskiden tüm kupon genel 503 dönüyordu)
+            raise HTTPException(503, f"{match.home_team} - {match.away_team}: oranlar şu an alınamadı, "
+                                     "bu maçı çıkarıp tekrar deneyin")
+
+
 @router.post("/api/coupons")
 async def create_coupon(body: CouponIn, request: Request) -> dict:
-    """Kuponu o anki oranlarla kaydeder (oran kaynaktan yeniden alınır; istemcinin gördüğü oran kullanılmaz)."""
+    """Kuponu o anki oranlarla kaydeder (oran kaynaktan yeniden alınır; istemcinin gördüğü oran sadece kıyas için).
+
+    - Maç başına tek seçim (K3): aynı maçtan iki bacak korelasyonlu (MS1 + ÇŞ 1X getiriyi şişirir).
+    - `Idempotency-Key` başlığı: çift tıklama / ağ tekrarı aynı kuponu ikinci kez yazmaz (10 dk).
+    - Çizgi değiştiyse ya da oran %3'ten fazla kötüleştiyse 409 `odds_changed` + yeni değerler (kullanıcı onaylar).
+    """
     user = getattr(request.state, "user", None)
     if user is None or user.id <= 0:
         raise HTTPException(401, "Kupon için giriş gerekli")
+    idem_key = (request.headers.get("idempotency-key") or "").strip()[:80] or None
+    if idem_key and (user.id, idem_key) in _idempotency:
+        return _idempotency[(user.id, idem_key)][1]
     seen = set()
     for leg in body.legs:
         if leg.selection not in MARKETS.get((leg.period, leg.market), ()):
             raise HTTPException(400, f"Geçersiz seçim: {leg.period}/{leg.market}/{leg.selection}")
-        key = (leg.match_id, leg.period, leg.market)
-        if key in seen:
-            raise HTTPException(400, "Aynı maçta aynı pazar iki kez seçilemez")
-        seen.add(key)
-    match_ids = sorted({leg.match_id for leg in body.legs})
+        if leg.match_id in seen:
+            raise HTTPException(400, "Bir maçtan kupona tek seçim eklenebilir")
+        seen.add(leg.match_id)
+    match_ids = sorted(seen)
     now = datetime.now(timezone.utc)
     async with get_session() as session:
         matches = {m.match_id: m for m in (await session.execute(
@@ -199,9 +245,10 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
         if closed:
             match = matches[leg.match_id]
             raise HTTPException(409, f"{match.home_team} - {match.away_team}: {closed}")
-    odds_by_match = dict(zip(match_ids, await asyncio.gather(*(_odds(m, max_age=_SAVE_MAX_AGE) for m in match_ids))))
+    odds_by_match = dict(zip(match_ids, await asyncio.gather(*(_odds_for_save(matches[m]) for m in match_ids))))
     now = datetime.now(timezone.utc)
     legs = []
+    changes = []
     for leg in body.legs:
         match, odds = matches[leg.match_id], odds_by_match[leg.match_id]
         closed = closed_reason(period=leg.period, now=now, odds=odds, **states[leg.match_id])
@@ -211,6 +258,9 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
         price = market.get(leg.selection)
         if not price or price <= 1.0:
             raise HTTPException(409, f"{match.home_team} - {match.away_team}: bu seçim için oran yok")
+        change = odds_change(leg, market, float(price))
+        if change:
+            changes.append({**change, "home_team": match.home_team, "away_team": match.away_team})
         live = odds.get("live") or {}
         legs.append(CouponLeg(
             match_id=match.match_id, home_team=match.home_team, away_team=match.away_team,
@@ -218,6 +268,9 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
             selection=leg.selection, line=market.get("line") if leg.market == "ou" else None, odds=float(price),
             odds_at=now, live_minute=live.get("minute"), live_score=live.get("score"),
         ))
+    if changes:
+        raise HTTPException(409, {"code": "odds_changed", "message": "Oranlar değişti, yeni oranları onaylayın",
+                                  "changes": changes})
     async with get_session() as session:
         coupon = Coupon(user_id=user.id, note=(body.note or "").strip() or None)
         session.add(coupon)
@@ -226,7 +279,9 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
             leg.coupon_id = coupon.id
             session.add(leg)
         coupon_id = coupon.id
-    return {"id": coupon_id}
+    saved = [{"match_id": leg.match_id, "period": leg.period, "market": leg.market, "selection": leg.selection,
+              "line": leg.line, "odds": leg.odds} for leg in legs]
+    return _remember(user.id, idem_key, {"id": coupon_id, "legs": saved})
 
 
 @router.get("/api/coupons")
@@ -238,7 +293,6 @@ async def list_coupons(
 ) -> dict:
     user = getattr(request.state, "user", None)
     async with get_session() as session:
-        await settle_pending(session)
         stmt = (select(Coupon.id, Coupon.created_at, Coupon.note, Coupon.user_id, User.username)
                 .join(User, User.id == Coupon.user_id).order_by(Coupon.id.desc()).limit(limit))
         if scope == "mine":

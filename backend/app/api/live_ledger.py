@@ -346,8 +346,32 @@ async def run_tick(*, dry_run: bool = False, snapshot=None) -> list[dict]:
     return report
 
 
+_SETTLE_EVERY = 300.0
+_last_settle = 0.0
+
+
+async def _settle_coupons() -> None:
+    """Kuponlar sayfa açılınca değil, izleyici turunda (5 dk'da bir) sonuçlanır (Sprint 94 J5)."""
+    global _last_settle
+    import time
+
+    if time.monotonic() - _last_settle < _SETTLE_EVERY:
+        return
+    _last_settle = time.monotonic()
+    from app.analysis.coupons import settle_pending
+
+    try:
+        async with get_session() as session:
+            written = await settle_pending(session)
+        if written:
+            log.info("Kupondaş: %d kupon maçı sonuçlandı", written)
+    except Exception:
+        log.warning("Kupon sonuçlandırma başarısız", exc_info=True)
+
+
 async def _tick() -> None:
     await run_tick()
+    await _settle_coupons()
 
 
 async def _watch_loop() -> None:

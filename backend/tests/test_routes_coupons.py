@@ -96,7 +96,101 @@ def test_create_coupon_409_after_kickoff(monkeypatch):
              "board_status": None, "board_phase": None, "board_minute": None}
     _patch_db(monkeypatch, match, state)
     body = rc.CouponIn(legs=[rc.LegIn(match_id="123", period="ft", market="result", selection="1")])
-    request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)))
+    request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)), headers={})
     with pytest.raises(HTTPException) as exc:
         asyncio.run(rc.create_coupon(body, request))
     assert exc.value.status_code == 409 and "Maç başladı" in exc.value.detail
+
+
+
+# ─── Sprint 94 J2 / J3 / J4 ───────────────────────────────────────────────────────────────────────
+
+def _open_state(kickoff):
+    return {"kickoff": kickoff, "actual_ft": False, "actual_ht": False, "started_reason": None,
+            "board_status": None, "board_phase": None, "board_minute": None}
+
+
+def _request(user_id=1, key=None):
+    headers = {"idempotency-key": key} if key else {}
+    return SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=user_id)), headers=headers)
+
+
+def _patch_prematch(monkeypatch, odds):
+    kickoff = datetime.now(timezone.utc) + timedelta(hours=3)
+    match = SimpleNamespace(match_id="123", home_team="A", away_team="B", league_name="L", kickoff_time=kickoff)
+    added: list = []
+
+    class _Session:
+        async def execute(self, *_a, **_k):
+            return _Result([match])
+
+        def add(self, obj):
+            added.append(obj)
+
+        async def flush(self):
+            for obj in added:
+                if obj.__class__.__name__ == "Coupon":
+                    obj.id = 77
+
+    @asynccontextmanager
+    async def fake_session():
+        yield _Session()
+
+    async def fake_state(_session, _match, _now):
+        return _open_state(kickoff)
+
+    calls = []
+
+    async def fake_odds(match_id, *, max_age):
+        calls.append(match_id)
+        return odds
+
+    monkeypatch.setattr(rc, "get_session", fake_session)
+    monkeypatch.setattr(rc, "_match_state", fake_state)
+    monkeypatch.setattr(rc, "_odds", fake_odds)
+    rc._idempotency.clear()
+    return calls
+
+
+ODDS = {"started": False, "live": None, "ft": {"result": {"1": 2.0, "X": 3.2, "2": 3.6},
+                                               "ou": {"line": 2.5, "over": 1.9, "under": 1.9}}, "ht": {}}
+
+
+def test_one_leg_per_match(monkeypatch):
+    _patch_prematch(monkeypatch, ODDS)
+    body = rc.CouponIn(legs=[rc.LegIn(match_id="123", period="ft", market="result", selection="1"),
+                             rc.LegIn(match_id="123", period="ft", market="ou", selection="over")])
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(rc.create_coupon(body, _request()))
+    assert exc.value.status_code == 400
+
+
+def test_max_legs_is_ten():
+    assert rc.MAX_LEGS == 10
+
+
+def test_odds_worse_than_seen_needs_confirmation(monkeypatch):
+    _patch_prematch(monkeypatch, ODDS)
+    body = rc.CouponIn(legs=[rc.LegIn(match_id="123", period="ft", market="result", selection="1", seen_odds=2.2)])
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(rc.create_coupon(body, _request()))
+    assert exc.value.status_code == 409 and exc.value.detail["code"] == "odds_changed"
+    assert exc.value.detail["changes"][0]["new_odds"] == 2.0
+
+
+def test_line_change_needs_confirmation_and_small_drift_is_accepted(monkeypatch):
+    _patch_prematch(monkeypatch, ODDS)
+    moved = rc.CouponIn(legs=[rc.LegIn(match_id="123", period="ft", market="ou", selection="over", line=2.75)])
+    with pytest.raises(HTTPException):
+        asyncio.run(rc.create_coupon(moved, _request()))
+    ok = rc.CouponIn(legs=[rc.LegIn(match_id="123", period="ft", market="result", selection="1", seen_odds=2.04)])
+    out = asyncio.run(rc.create_coupon(ok, _request()))
+    assert out["id"] == 77 and out["legs"][0]["odds"] == 2.0
+
+
+def test_idempotency_key_returns_first_response(monkeypatch):
+    calls = _patch_prematch(monkeypatch, ODDS)
+    body = rc.CouponIn(legs=[rc.LegIn(match_id="123", period="ft", market="result", selection="1")])
+    first = asyncio.run(rc.create_coupon(body, _request(key="abc")))
+    second = asyncio.run(rc.create_coupon(body, _request(key="abc")))
+    assert first == second and len(calls) == 1

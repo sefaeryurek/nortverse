@@ -534,8 +534,31 @@ export interface CouponView {
   mine: boolean;
   legs: CouponLegView[];
   total_odds: number;
-  status: "pending" | "won" | "lost" | "refund";
+  status: "pending" | "won" | "lost" | "refund" | "partial_loss";
   return: number | null;
+}
+
+/** Kayıt anında oran/çizgi kullanıcının gördüğünden kötüleştiyse sunucunun döndürdüğü fark (409 odds_changed). */
+export interface CouponOddsChange {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  period: CouponPeriod;
+  market: CouponMarket;
+  selection: string;
+  old_odds: number | null;
+  new_odds: number;
+  old_line: number | null;
+  new_line: number | null;
+}
+
+export interface CouponLegIn {
+  match_id: string;
+  period: CouponPeriod;
+  market: CouponMarket;
+  selection: string;
+  line: number | null;
+  seen_odds: number;
 }
 
 export interface CouponMatch {
@@ -560,20 +583,29 @@ export async function getCoupons(scope: "all" | "mine"): Promise<{ coupons: Coup
   return request<{ coupons: CouponView[] }>(`/api/coupons?scope=${scope}`, { cache: "no-store" });
 }
 
-/** Kuponu kaydeder; hata olursa sunucunun açıklamasını döndürür (ör. "İlk yarı bitti"). */
+/** Kuponu kaydeder; hata olursa sunucunun açıklamasını döndürür (ör. "İlk yarı bitti").
+ *  `idempotencyKey`: çift tıklama / ağ tekrarı aynı kuponu iki kez yazmasın (sunucu 10 dk hatırlar).
+ *  Oran/çizgi kötüleştiyse `changes` döner; kullanıcı onaylarsa yeni oranlarla tekrar gönderilir. */
 export async function createCoupon(
-  legs: { match_id: string; period: CouponPeriod; market: CouponMarket; selection: string }[],
+  legs: CouponLegIn[],
   note: string | null,
-): Promise<{ ok: true; id: number } | { ok: false; message: string }> {
+  idempotencyKey?: string,
+): Promise<{ ok: true; id: number } | { ok: false; message: string; changes?: CouponOddsChange[] }> {
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
     const res = await fetch(`${getApiBase()}/api/coupons`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ legs, note }),
     });
     const body = await res.json().catch(() => ({}));
     if (res.ok) return { ok: true, id: body.id };
-    return { ok: false, message: typeof body.detail === "string" ? body.detail : errorMessages().generic };
+    const detail = body.detail;
+    if (detail && typeof detail === "object" && detail.code === "odds_changed" && Array.isArray(detail.changes)) {
+      return { ok: false, message: String(detail.message ?? ""), changes: detail.changes as CouponOddsChange[] };
+    }
+    return { ok: false, message: typeof detail === "string" ? detail : errorMessages().generic };
   } catch {
     return { ok: false, message: errorMessages().network };
   }

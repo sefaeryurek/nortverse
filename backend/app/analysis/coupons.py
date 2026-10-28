@@ -8,6 +8,7 @@ Kupon getirisi = maçların geri dönüş katsayılarının çarpımı (kayıp 0
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta, timezone
 
 from app.analysis.ht_value import total_return
@@ -19,7 +20,7 @@ MARKETS = {
     ("ht", "result"): ("1", "X", "2"),
     ("ht", "ou"): ("over", "under"),
 }
-MAX_LEGS = 20
+MAX_LEGS = 10  # Sprint 94 J3 (20 fazlaydı)
 
 
 def leg_return(period: str, market: str, selection: str, line: float | None, odds: float,
@@ -55,7 +56,11 @@ def coupon_status(legs: list[dict]) -> dict:
         realized = 1.0
         for f in factors:
             realized *= f
-        status = "won" if realized > 1 else "refund"
+        # Yarım kayıp toplamı 1'in altına düşürür: "iade" değil "kısmi kayıp" (J1; eskiden 0,5 getiri "iade" yazıyordu)
+        if math.isclose(realized, 1.0, abs_tol=1e-6):
+            status = "refund"
+        else:
+            status = "won" if realized > 1 else "partial_loss"
     else:
         status, realized = "pending", None
     return {"total_odds": round(total, 2), "status": status,
@@ -63,20 +68,37 @@ def coupon_status(legs: list[dict]) -> dict:
 
 
 VOID_AFTER = timedelta(hours=48)  # dondurulmuş başlama saatinden 48 saat sonra skor yoksa bacak iade
+HT_VOID_AFTER = timedelta(hours=24)  # maç bitti ama İY skoru 24 saat gelmediyse İY bacağı iade
 
 
 def leg_void_reason(*, deleted: bool, status: str | None, has_score: bool, kickoff: datetime | None,
-                    now: datetime) -> str | None:
-    """Oynanmayan maçın bacağı iade (katsayı 1,0) sayılır: silinmiş / iptal / 48 saat skor yok (Sprint 94 B2)."""
+                    now: datetime, ft_known: bool = False, period: str = "ft") -> str | None:
+    """Oynanmayan maçın bacağı iade (katsayı 1,0) sayılır: silinmiş / iptal / 48 saat skor yok (Sprint 94 B2);
+    İY bacağında maç sonucu var ama İY skoru 24 saattir yoksa (J5)."""
     if deleted:
         return "deleted"
     if has_score:
         return None
     if status == "abandoned":
         return "abandoned"
+    if period == "ht" and ft_known and kickoff is not None and now - kickoff > HT_VOID_AFTER:
+        return "no_ht_24h"
     if kickoff is not None and now - kickoff > VOID_AFTER:
         return "no_result_48h"
     return None
+
+
+async def _ht_observations(session, match_ids: list[str]) -> dict[str, tuple[int, int]]:
+    """Değişmez İY gözlemleri (devre arası / 2. yarı / maç sonu); her maç için en son gözlem."""
+    from sqlalchemy import select
+
+    from app.db.models import MatchHtObservation
+
+    rows = (await session.execute(
+        select(MatchHtObservation.match_id, MatchHtObservation.ht_home, MatchHtObservation.ht_away)
+        .where(MatchHtObservation.match_id.in_(match_ids)).order_by(MatchHtObservation.id)
+    )).all()
+    return {r[0]: (r[1], r[2]) for r in rows}
 
 
 async def settle_pending(session) -> int:
@@ -100,14 +122,18 @@ async def settle_pending(session) -> int:
         .where(CouponLegResult.leg_id.is_(None))
     )).all()
     now = datetime.now(timezone.utc)
-    statuses = await fixture_statuses(session, sorted({r.match_id for r in rows}), now) if rows else {}
+    ids = sorted({r.match_id for r in rows})
+    statuses = await fixture_statuses(session, ids, now) if rows else {}
+    ht_obs = await _ht_observations(session, ids) if rows else {}
     written = 0
     for r in rows:
-        ht = (r.actual_ht_home, r.actual_ht_away) if r.actual_ht_home is not None else None
+        # İY bacağı devre arasında gözlenen İY skoruyla sonuçlanır (DB'ye sonuç saatler sonra geliyordu)
+        ht = ((r.actual_ht_home, r.actual_ht_away) if r.actual_ht_home is not None else ht_obs.get(r.match_id))
         ft = (r.actual_ft_home, r.actual_ft_away) if r.actual_ft_home is not None else None
         score = ht if r.period == "ht" else ft
         void = leg_void_reason(deleted=r.deleted_at is not None, status=statuses.get(r.match_id),
-                               has_score=score is not None, kickoff=r.kickoff_time, now=now)
+                               has_score=score is not None, kickoff=r.kickoff_time, now=now,
+                               ft_known=ft is not None, period=r.period)
         if void is not None:
             values = {"outcome": "void", "return_factor": 1.0, "score": None}
         else:

@@ -636,7 +636,8 @@
       "pending": "Bekliyor",
       "won": "Kazandı",
       "lost": "Kaybetti",
-      "refund": "İade"
+      "refund": "İade",
+      "partial_loss": "Kısmi kayıp"
     },
     "outcome": {
       "hit": "Tuttu",
@@ -647,6 +648,11 @@
       "void": "Geçersiz"
     },
     "startedTag": "başladı",
-    "prematchOnly": "Maç başladı — kupon sadece maç öncesi yazılabilir."
+    "prematchOnly": "Maç başladı — kupon sadece maç öncesi yazılabilir.",
+    "oddsChanged": "Kaydederken oranlar değişti. Yeni oranlarla kaydedilsin mi?",
+    "lineChanged": "çizgi {old} → {new}",
+    "acceptNewOdds": "Yeni oranlarla kaydet",
+    "cancel": "Vazgeç",
+    "unavailable": "kapandı"
   }
 }

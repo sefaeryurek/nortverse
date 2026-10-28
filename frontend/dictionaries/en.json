@@ -636,7 +636,8 @@
       "pending": "Pending",
       "won": "Won",
       "lost": "Lost",
-      "refund": "Refund"
+      "refund": "Refund",
+      "partial_loss": "Partial loss"
     },
     "outcome": {
       "hit": "Won",
@@ -647,6 +648,11 @@
       "void": "Void"
     },
     "startedTag": "started",
-    "prematchOnly": "The match has started — coupons can only be written before kick-off."
+    "prematchOnly": "The match has started — coupons can only be written before kick-off.",
+    "oddsChanged": "Odds changed while saving. Save with the new odds?",
+    "lineChanged": "line {old} → {new}",
+    "acceptNewOdds": "Save with new odds",
+    "cancel": "Cancel",
+    "unavailable": "closed"
   }
 }
