@@ -561,19 +561,24 @@ async def pending_result_days(days: int) -> list[date]:
     return sorted({k.astimezone(ISTANBUL_TZ).date() for k in kickoffs})
 
 
+def default_result_day(now: datetime | None = None) -> date:
+    """`update-scores` tarih verilmezse hangi günü günceller: bugün; gece 00:00–04:00 İstanbul'da dün."""
+    now_ist = (now or datetime.now(timezone.utc)).astimezone(ISTANBUL_TZ)
+    return (now_ist - timedelta(days=1)).date() if now_ist.hour < 4 else now_ist.date()
+
+
 async def update_results(target_date: Optional[date] = None) -> dict:
-    """Refresh scores from the source calendar pages and update analyzed matches."""
-    if target_date:
-        d = target_date
-    else:
-        now_ist = datetime.now(ISTANBUL_TZ)
-        # Gece 00:00–04:00 İstanbul'da çalışırsa önceki günün maçlarını güncelle
-        d = (now_ist - timedelta(days=1)).date() if now_ist.hour < 4 else now_ist.date()
+    """Refresh scores from the source calendar pages and update analyzed matches.
+
+    Döner: updated (DB'de / bültende skoru gerçekten değişen maç), unchanged (zaten aynı skorla kayıtlı),
+    not_finished, skipped, errors; kaynak sayfa boş geldiyse `source_empty=True` ve errors'a 1 eklenir.
+    """
+    d = target_date or default_result_day()
 
     day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=ISTANBUL_TZ)
     day_end = day_start + timedelta(days=1)
 
-    stats = {"updated": 0, "not_finished": 0, "errors": 0, "skipped": 0}
+    stats = {"updated": 0, "unchanged": 0, "not_finished": 0, "errors": 0, "skipped": 0, "source_empty": False}
     async with get_session() as session:
         fixture_row = await session.get(FixtureCache, d.isoformat())
         match_rows = (await session.execute(
@@ -611,15 +616,29 @@ async def update_results(target_date: Optional[date] = None) -> dict:
         snapshots.update({mid: score for mid, score in (await fetch_fixture_scores(d + timedelta(days=1))).items()
                           if mid in missing_ids})
     if not snapshots:
-        log.warning("Kaynak bültende %s için kayıtlı maç bulunamadı — atlanıyor", d)
+        # Beklenen maç varken kaynağın boş dönmesi başarı değildir (27 Ekim: "331 atlandı · 0 hata" sayılmıştı).
+        log.warning("Kaynak bültende %s için kayıtlı maç bulunamadı — hata sayıldı", d)
         stats["skipped"] = len(wanted_ids)
+        stats["errors"] += 1
+        stats["source_empty"] = True
         return stats
     checked_at = datetime.now(timezone.utc)
-    stats["updated"] = sum(score.status == "finished" for score in snapshots.values())
-    stats["not_finished"] = len(wanted_ids) - stats["updated"]
+    finished = sum(score.status == "finished" for score in snapshots.values())
+    stats["not_finished"] = len(wanted_ids) - finished
+    old_fixture = {item["match_id"]: item for item in fixtures if isinstance(item, dict) and "match_id" in item}
+    counts = {"changed": 0, "unchanged": 0}
 
     async def _save():
         bad_scores.clear()
+        counts.update(changed=0, unchanged=0)
+        for match_id, snapshot in snapshots.items():
+            if match_id in match_by_id or snapshot.status != "finished":
+                continue
+            # Sadece bültende olan maç: önbellekte aynı son skor zaten varsa "değişmedi"
+            item = old_fixture.get(match_id) or {}
+            same = (item.get("score_status") == "finished"
+                    and (item.get("score_home"), item.get("score_away")) == (snapshot.home, snapshot.away))
+            counts["unchanged" if same else "changed"] += 1
         async with get_session() as session:
             new_observations: list[dict] = []
             ht_observations: list[dict] = []
@@ -660,14 +679,19 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                     log.warning("Tutarsız skor atlandı [%s]: %s (kaynak %s-%s, İY %s-%s)", match_id, exc,
                                 snapshot.home, snapshot.away, snapshot.ht_home, snapshot.ht_away)
                     continue
-                await session.execute(
-                    sa_update(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
-                    .values(
-                        **scores,
-                        result_first_fetched_at=func.coalesce(Match.result_first_fetched_at, checked_at),
-                        result_fetched_at=checked_at,
+                if all(getattr(existing, key) == value for key, value in scores.items()):
+                    # Skor aynı: satıra dokunulmaz (result_fetched_at sadece skor değişince ilerler)
+                    counts["unchanged"] += 1
+                else:
+                    counts["changed"] += 1
+                    await session.execute(
+                        sa_update(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                        .values(
+                            **scores,
+                            result_first_fetched_at=func.coalesce(Match.result_first_fetched_at, checked_at),
+                            result_fetched_at=checked_at,
+                        )
                     )
-                )
                 if (
                     scores["actual_ht_home"] is not None
                     and existing.kickoff_time is not None
@@ -721,10 +745,11 @@ async def update_results(target_date: Optional[date] = None) -> dict:
     bad_scores: list[str] = []
     await _with_retry(_save, label=f"update_results[{d}]")
     stats["errors"] += len(bad_scores)
-    stats["updated"] -= len(bad_scores)
+    stats["updated"] = counts["changed"]
+    stats["unchanged"] = counts["unchanged"]
 
     log.info(
-        "Sonuç güncellemesi tamamlandı: %d güncellendi, %d bitmemiş, %d atlandı, %d hata",
-        stats["updated"], stats["not_finished"], stats["skipped"], stats["errors"],
+        "Sonuç güncellemesi tamamlandı: %d güncellendi, %d değişmedi, %d bitmemiş, %d atlandı, %d hata",
+        stats["updated"], stats["unchanged"], stats["not_finished"], stats["skipped"], stats["errors"],
     )
     return stats

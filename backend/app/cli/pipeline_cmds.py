@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -26,6 +27,8 @@ from app.cli._helpers import (
     console,
 )
 from app.scraper import fetch_fixture, fetch_match_detail
+
+log = logging.getLogger(__name__)
 
 
 def analyze(
@@ -457,33 +460,72 @@ def update_scores_cmd(
 
     from app.analysis.ledger import resolve_pending
     from app.pipeline import update_results
-    from app.pipeline.runner import pending_result_days
+    from app.pipeline.runner import default_result_day, pending_result_days
 
     def _print_stats(label: str, stats: dict) -> None:
         console.print(
             f"[bold green]{label}:[/bold green] "
             f"[green]{stats['updated']} güncellendi[/green] · "
+            f"{stats.get('unchanged', 0)} değişmedi · "
             f"[yellow]{stats['not_finished']} bitmemiş[/yellow] · "
             f"{stats['skipped']} atlandı · "
             f"[red]{stats['errors']} hata[/red]"
+            + (" [red](kaynak sayfa boş)[/red]" if stats.get("source_empty") else "")
         )
 
-    async def _run() -> None:
-        _print_stats("\nSonuç güncellemesi", await update_results(target_date=dt))
-        if pending_days > 0:
-            for day in await pending_result_days(pending_days):
-                if day == dt:
-                    continue
-                _print_stats(f"Eksik gün {day.isoformat()}", await update_results(target_date=day))
-        _print_resolution(await resolve_pending())
-        from app.analysis.coupons import settle_pending
-        from app.db.connection import get_session
+    async def _run() -> list[str]:
+        """Her gün ayrı ayrı; biri düşse de diğerleri, defter çözümü ve kuponlar yine çalışır. Döner: hatalı günler."""
+        failed: list[str] = []
+        target = dt or default_result_day()
 
-        async with get_session() as session:
-            settled = await settle_pending(session)
-        console.print(f"[bold green]Kupondaş:[/bold green] {settled} kupon maçı sonuçlandı")
+        async def _one(label: str, day: date) -> None:
+            try:
+                stats = await update_results(target_date=day)
+            except Exception as exc:  # ağ / kaynak / DB — o gün atlanır, sıradaki güne geçilir
+                failed.append(day.isoformat())
+                log.exception("Skor güncellemesi başarısız [%s]", day)
+                console.print(f"[red]{label}: başarısız — {type(exc).__name__}: {exc}[/red]")
+                return
+            _print_stats(label, stats)
+            if stats.get("source_empty"):
+                failed.append(day.isoformat())
 
-    asyncio.run(_run())
+        try:
+            await _one("\nSonuç güncellemesi", target)
+            if pending_days > 0:
+                try:
+                    days = await pending_result_days(pending_days)
+                except Exception:
+                    log.exception("Eksik günler okunamadı")
+                    failed.append("eksik-gunler")
+                    days = []
+                for day in days:
+                    if day == target:
+                        continue
+                    await _one(f"Eksik gün {day.isoformat()}", day)
+        finally:
+            try:
+                _print_resolution(await resolve_pending())
+            except Exception:
+                log.exception("Tahmin defteri çözümü başarısız")
+                failed.append("defter")
+            try:
+                from app.analysis.coupons import settle_pending
+                from app.db.connection import get_session
+
+                async with get_session() as session:
+                    settled = await settle_pending(session)
+                console.print(f"[bold green]Kupondaş:[/bold green] {settled} kupon maçı sonuçlandı")
+            except Exception:
+                log.exception("Kupon sonuçlandırma başarısız")
+                failed.append("kupon")
+        return failed
+
+    failed = asyncio.run(_run())
+    if failed:
+        # Kod 2: görev "başarısız" sayılır, notify-error uyarısı çıkar (eskiden tek günün hatası her şeyi durduruyordu)
+        console.print(f"[red]Hatalı adımlar: {', '.join(failed)}[/red]")
+        raise typer.Exit(code=2)
 
 
 def _print_resolution(stats: dict[str, int]) -> None:

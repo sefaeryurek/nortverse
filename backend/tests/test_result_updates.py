@@ -193,23 +193,27 @@ async def test_final_score_observations_are_append_only_and_revision_idempotent(
 
     observation_statements = []
     ht_statements = []
+    # Sprint 94 B1: maç satırı sadece skor değişince yazılır — 1. ve 4. turda kaynak skoru kayıtla aynı
+    match_updates = [0, 1, 1, 0]
     for index, session in enumerate(write_sessions):
         statements = [
             call.args[0] for call in session.execute.await_args_list
         ]
-        latest_select, match_update = statements[:2]
+        latest_select = statements[0]
         latest_sql = str(latest_select.compile(dialect=postgresql.dialect()))
         assert "DISTINCT ON" in latest_sql
         assert "ORDER BY" in latest_sql
-        assert match_update.table.name == "matches"
-        ht_insert = statements[2]
+        updates = [st for st in statements[1:] if st.table.name == "matches"]
+        assert len(updates) == match_updates[index]
+        rest = [st for st in statements[1:] if st.table.name != "matches"]
+        ht_insert = rest[0]
         assert ht_insert.table.name == "match_ht_observations"
         ht_statements.append(ht_insert)
         if index == 1:
             assert session.execute.await_count == 3
         else:
-            assert session.execute.await_count == 4
-            observation_insert = statements[3]
+            assert session.execute.await_count == 3 + match_updates[index]
+            observation_insert = rest[1]
             assert observation_insert.table.name == "match_final_result_observations"
             observation_statements.append(observation_insert)
 
