@@ -76,6 +76,10 @@ async def _with_retry(
 log = logging.getLogger(__name__)
 
 FINAL_RESULT_SOURCE = "fixture-score-v1"
+DETAIL_RESULT_SOURCE = "match-detail-v1"
+# Günlük sayfa eski tarihleri artık vermiyor (9–10 Ekim boş döndü) → sonucu eksik maç tek tek detay sayfasından
+DETAIL_FALLBACK_LIMIT = 15        # bir çalışmada en fazla bu kadar maç (Playwright, maç başı ~5 sn)
+DETAIL_FALLBACK_AFTER = timedelta(hours=3)
 
 
 def _result_to_row(
@@ -545,6 +549,40 @@ def _fixture_score_revision(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+async def _detail_fallback(match_by_id: dict, snapshots: dict) -> set[str]:
+    """Günlük sayfada bitmiş skoru olmayan, başlaması 3 saati geçmiş analizli maçları detay sayfasından okur.
+
+    Bulunan skorlar `snapshots`'a "finished" olarak eklenir. Döner: detaydan gelen maç kimlikleri.
+    """
+    now = datetime.now(timezone.utc)
+    targets = [
+        mid for mid, m in match_by_id.items()
+        if m.actual_ft_home is None and m.kickoff_time is not None and m.kickoff_time < now - DETAIL_FALLBACK_AFTER
+        and (mid not in snapshots or snapshots[mid].status != "finished")
+    ][:DETAIL_FALLBACK_LIMIT]
+    if not targets:
+        return set()
+    found: set[str] = set()
+    try:
+        async with browser_context() as ctx:
+            for mid in targets:
+                try:
+                    raw = await fetch_match_detail(mid, ctx=ctx)
+                except Exception as exc:  # tek maçın hatası diğerlerini durdurmaz
+                    log.warning("Detaydan skor okunamadı [%s]: %s", mid, exc)
+                    continue
+                if raw.actual_ft_home is None or raw.actual_ft_away is None:
+                    continue  # ertelenmiş / hâlâ oynanıyor olabilir
+                snapshots[mid] = FixtureScore(mid, "finished", raw.actual_ft_home, raw.actual_ft_away,
+                                              raw.actual_ht_home, raw.actual_ht_away)
+                found.add(mid)
+    except Exception:
+        log.warning("Detay yedeği açılamadı", exc_info=True)
+    if found:
+        log.info("Günlük sayfada olmayan %d maçın skoru detay sayfasından alındı", len(found))
+    return found
+
+
 async def pending_result_days(days: int) -> list[date]:
     """Son `days` günde başlama saati 3 saatten eski ama sonucu olmayan maçların İstanbul günleri."""
     now = datetime.now(timezone.utc)
@@ -615,6 +653,7 @@ async def update_results(target_date: Optional[date] = None) -> dict:
         # UTC+8 calendar flips at 19:00 Istanbul; late fixtures live on the next page.
         snapshots.update({mid: score for mid, score in (await fetch_fixture_scores(d + timedelta(days=1))).items()
                           if mid in missing_ids})
+    detail_ids = await _detail_fallback(match_by_id, snapshots)
     if not snapshots:
         # Beklenen maç varken kaynağın boş dönmesi başarı değildir (27 Ekim: "331 atlandı · 0 hata" sayılmıştı).
         log.warning("Kaynak bültende %s için kayıtlı maç bulunamadı — hata sayıldı", d)
@@ -721,7 +760,7 @@ async def update_results(target_date: Optional[date] = None) -> dict:
                             "ft_home": snapshot.home,
                             "ft_away": snapshot.away,
                             "observed_at": checked_at,
-                            "source": FINAL_RESULT_SOURCE,
+                            "source": DETAIL_RESULT_SOURCE if match_id in detail_ids else FINAL_RESULT_SOURCE,
                             "source_revision": _fixture_score_revision(
                                 match_id,
                                 snapshot,

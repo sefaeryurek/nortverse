@@ -139,3 +139,49 @@ async def test_unchanged_fixture_score_is_not_counted_as_updated(monkeypatch):
                         AsyncMock(return_value={"123": FixtureScore("123", "finished", 2, 1, 1, 0)}))
     stats = await runner.update_results(TODAY)
     assert stats["updated"] == 0 and stats["unchanged"] == 1
+
+
+@pytest.mark.asyncio
+async def test_detail_page_fills_scores_when_daily_page_is_empty(monkeypatch):
+    """Günlük sayfa eski tarihi vermezse (9–10 Ekim) sonucu eksik maç detay sayfasından okunur."""
+    from app.db.models import Match
+    from app.models import MatchRawData
+
+    kickoff = datetime(2026, 10, 9, 17, 0, tzinfo=timezone.utc)
+    match = Match(match_id="3026745", home_team="Galatasaray", away_team="Kasimpasa", league_code="TUR D1",
+                  kickoff_time=kickoff)
+    read_session = AsyncMock()
+    read_session.get.return_value = None
+    selected = MagicMock()
+    selected.scalars.return_value.all.return_value = [match]
+    read_session.execute.return_value = selected
+    write_session = AsyncMock()
+    latest = MagicMock()
+    latest.scalars.return_value.all.return_value = []
+    write_session.execute.side_effect = [latest, MagicMock(), MagicMock(), MagicMock()]
+    sessions = [read_session, write_session]
+
+    @asynccontextmanager
+    async def get_session():
+        yield sessions.pop(0)
+
+    @asynccontextmanager
+    async def fake_browser():
+        yield object()
+
+    async def fake_detail(mid, ctx=None):
+        return MatchRawData(match_id=mid, home_team="Galatasaray", away_team="Kasimpasa", league_code="TUR D1",
+                            actual_ft_home=3, actual_ft_away=1, actual_ht_home=1, actual_ht_away=0)
+
+    monkeypatch.setattr(runner, "get_session", get_session)
+    monkeypatch.setattr(runner, "fetch_fixture_scores", AsyncMock(return_value={}))
+    monkeypatch.setattr(runner, "browser_context", fake_browser)
+    monkeypatch.setattr(runner, "fetch_match_detail", fake_detail)
+    stats = await runner.update_results(date(2026, 10, 9))
+    assert stats["updated"] == 1 and stats["source_empty"] is False
+    statements = [c.args[0] for c in write_session.execute.await_args_list]
+    observation = next(st for st in statements
+                       if getattr(getattr(st, "table", None), "name", None) == "match_final_result_observations")
+    from sqlalchemy.dialects import postgresql
+
+    assert observation.compile(dialect=postgresql.dialect()).params["source_m0"] == runner.DETAIL_RESULT_SOURCE
