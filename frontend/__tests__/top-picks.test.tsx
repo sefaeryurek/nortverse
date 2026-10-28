@@ -37,7 +37,7 @@ describe("TopPicks", () => {
     renderWithContext(<TopPicks recommendations={[v4]} period="ft" />);
     expect(screen.getAllByText("%48").length).toBeGreaterThan(0);
     expect(screen.getByText("Güçlü sinyal")).toBeDefined();
-    expect(screen.getByText(/Lig ortalaması %30.6 · avantaj \+17.6 puan/)).toBeDefined();
+    expect(screen.getByText(/Lig ortalaması %30.6 · lig ortalamasının \+17.6 puan üstü/)).toBeDefined();
     expect(screen.getByText(/ft-display-v4/)).toBeDefined();
   });
 

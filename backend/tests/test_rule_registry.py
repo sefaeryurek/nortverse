@@ -22,6 +22,7 @@ PINNED = {
     "ft-display-v5": "60715673e89e",
     "ft-display-v4.1": "6eb9a5a2aca8",
     "market-summary-v2": "538550936f14",
+    "market-summary-v3": "acc785206c00",
     "ht-display-v1.1": "39fe438b9d24",
     "ht-value-v1": "87ceb4435a90",
     "score-list-v1": "2ccc0ba35378",

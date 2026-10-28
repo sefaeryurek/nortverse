@@ -43,23 +43,31 @@ def _pmf(lam: float, n: int) -> list[float]:
     return [math.exp(-lam) * lam ** k / math.factorial(k) for k in range(n + 1)]
 
 
-def match_probabilities(model: PoissonModel, league: str, home: str, away: str) -> dict | None:
-    """MS 1/X/2, Üst 2.5 ve KG Var olasılıkları (Dixon-Coles düzeltmeli skor ızgarası)."""
+def score_grid(model: PoissonModel, league: str, home: str, away: str) -> list[tuple[int, int, float]] | None:
+    """Dixon-Coles düzeltmeli maç sonu skor ızgarası [(ev, dep, olasılık)] (normalize edilmemiş)."""
     lm = model.leagues.get(league)
     if lm is None:
         return None
     lam_h, lam_a = lm.expected_goals(home, away)
     n = RULE_PARAMS["max_goals"]
     ph, pa = _pmf(lam_h, n), _pmf(lam_a, n)
+    return [(x, y, ph[x] * pa[y] * dc_tau(x, y, lam_h, lam_a, lm.rho)) for x in range(n + 1) for y in range(n + 1)]
+
+
+def match_probabilities(model: PoissonModel, league: str, home: str, away: str) -> dict | None:
+    """MS 1/X/2, Üst 2.5 ve KG Var olasılıkları (Dixon-Coles düzeltmeli skor ızgarası)."""
+    lm = model.leagues.get(league)
+    grid = score_grid(model, league, home, away)
+    if lm is None or grid is None:
+        return None
+    lam_h, lam_a = lm.expected_goals(home, away)
     probs = {"1": 0.0, "X": 0.0, "2": 0.0}
     over25 = btts = total = 0.0
-    for x in range(n + 1):
-        for y in range(n + 1):
-            p = ph[x] * pa[y] * dc_tau(x, y, lam_h, lam_a, lm.rho)
-            total += p
-            probs["1" if x > y else "X" if x == y else "2"] += p
-            over25 += p if x + y >= 3 else 0.0
-            btts += p if x > 0 and y > 0 else 0.0
+    for x, y, p in grid:
+        total += p
+        probs["1" if x > y else "X" if x == y else "2"] += p
+        over25 += p if x + y >= 3 else 0.0
+        btts += p if x > 0 and y > 0 else 0.0
     return {
         "result": {k: v / total for k, v in probs.items()},
         "over25": over25 / total, "btts": btts / total,
@@ -216,8 +224,8 @@ async def capture_recommendations(
     prior = table.league_prior(league)
     v4 = decide_result(patterns or {}, prior)
     v4_selection = v4["selection"] if v4 and not v4.get("abstain_reason") else None
-    probabilities = match_probabilities(await get_poisson_model(), teams.league_name or league,
-                                        teams.home_team, teams.away_team)
+    model = await get_poisson_model()
+    probabilities = match_probabilities(model, teams.league_name or league, teams.home_team, teams.away_team)
     phash = pattern_hash or hash_string(pattern_hashes())
     picks = [{**pick, "pattern_hash": phash}
              for pick in build_v5_recommendations(probabilities, prior, v4_selection, patterns)]
@@ -234,4 +242,13 @@ async def capture_recommendations(
               "as_of": captured_at, "pattern_hash": phash}
     await record_predictions(session, ledger_rows_v5(
         probabilities, prior, table.league_goal_prior(league), v4_selection, common))
+    try:
+        # Gölge: Ana Pazar Özeti v3 (model olasılığıyla kazanan) — hata maç öncesi kararı engellemez
+        from app.analysis import market_summary_v3
+
+        async with session.begin_nested():
+            grid = score_grid(model, teams.league_name or league, teams.home_team, teams.away_team)
+            await record_predictions(session, market_summary_v3.ledger_rows(grid, patterns, common))
+    except Exception:
+        log.warning("Ana Pazar v3 gölge kaydı yazılamadı [%s]", match_id, exc_info=True)
     return picks, True

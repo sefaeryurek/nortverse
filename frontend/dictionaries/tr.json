@@ -36,7 +36,9 @@
     "search": "Ara",
     "timeLocale": "tr-TR",
     "shadowBadge": "Deneme",
-    "shadowBadgeHint": "Gölgedeki lig: tahminler deneme aşamasında, henüz yeterli karne yok"
+    "shadowBadgeHint": "Gölgedeki lig: tahminler deneme aşamasında, henüz yeterli karne yok",
+    "fairOdds": "≈ adil oran {odds}",
+    "fairOddsTooltip": "1/olasılık: bu olasılığın bahisçi payı olmadan karşılığı olan oran. Piyasadaki oran bunun altındaysa seçimin bahis değeri yoktur — yüksek olasılıklı seçimler genelde ~1,05 oranla açılır."
   },
   "days": [
     "Pzt",
@@ -329,7 +331,7 @@
       "poissonNone": "Bu maçta modelin %85+ kararı yok",
       "confirmed": "Arşiv + lig geçmişi de onaylıyor",
       "confirmedTooltip": "Arşiv + lig geçmişi kuralı (live-arch-v2) aynı seçimi yaptı. Geçmişte iki kuralın uyuştuğu kararlar %93,5 tuttu.",
-      "bestPick": "En iyi",
+      "bestPick": "En yüksek olasılık",
       "historicalMarket": "geçmiş %{pct}",
       "historicalMarketTooltip": "Geçmiş testte (2023-07 → bugün, sızıntısız) bu pazardaki kararların gerçek tutma oranı ({n} karar).",
       "condShort": "lig geçmişi %{pct} · {n} maç",
@@ -389,7 +391,7 @@
     "signalHigh": "Güçlü sinyal",
     "signalMedium": "Orta sinyal",
     "signalLow": "Hafif sinyal",
-    "priorLine": "Lig ortalaması %{prior} · avantaj +{edge} puan",
+    "priorLine": "Lig ortalaması %{prior} · lig ortalamasının +{edge} puan üstü",
     "settingsChanged": "Bu seçim maç öncesi farklı bir arşiv ayarıyla donduruldu; aşağıdaki arşiv yüzdeleri güncel ayardan hesaplanıyor, bu yüzden birebir örtüşmeyebilir."
   },
   "analyze": {
@@ -449,11 +451,14 @@
   },
   "marketSummary": {
     "title": "Ana Pazar Özeti",
-    "subtitle": "arşivde en sık görülen seçim",
+    "subtitle": "arşiv sıklığı — olasılık değil",
     "market": "Pazar",
     "agreementTooltip": "{n} arşiv aynı seçimde uyuşuyor",
     "footer": "aynı seçimde uyuşan arşiv sayısı (✦2 / ✦3). Yüzdeler arşivde görülme sıklığıdır, olasılık değildir.",
-    "informational": "bilgi amaçlı — geçmiş testte beceri yok"
+    "informational": "bilgi amaçlı — geçmiş testte beceri yok",
+    "record": "geçmişte gösterilen %{shown} → gerçekleşen %{actual} ({n} karar)",
+    "recordTooltip": "Bu bölümün kaydedilmiş seçimlerinin gerçek sonucu (tahmin defteri). Sıklık, gerçekleşme olasılığından yüksek çıkıyor.",
+    "frequencyCaption": "Arşiv sıklığı: benzer geçmiş maçlardan kaçında bu seçim gerçekleşti (sayı/örneklem)."
   },
   "iddaa": {
     "noData": "Bu periyot için yeterli arşiv verisi bulunamadı.",

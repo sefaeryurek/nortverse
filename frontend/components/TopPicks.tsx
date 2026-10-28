@@ -1,5 +1,6 @@
 "use client";
 
+import { fairOdds } from "@/lib/format";
 import { memo } from "react";
 import type { FTRecommendation } from "@/lib/types";
 import type { Period } from "@/lib/labels";
@@ -65,12 +66,13 @@ function archiveBadgeClass(archive: string) {
 
 const RecommendationRow = memo(function RecommendationRow({ recommendation }: { recommendation: FTRecommendation }) {
   const match = useMatchInfo();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const calPct = recommendation.calibrated_pct != null ? Math.round(recommendation.calibrated_pct) : null;
   // v5 (takım gücü modeli): "ham %" ana yüzdeyle aynı, `match_count` ligin eğitim maçı sayısı
   // (eşleşen arşiv maçı değil) → ikisi de yanıltıcı olduğundan gösterilmez.
   const isModel = recommendation.archive === "model";
   const pct = calPct ?? Math.round(recommendation.frequency_pct);
+  const odds = fairOdds(pct, locale);
   const tier = recommendation.confidence_tier ?? null;
   const color = tier ? TIER_COLOR[tier] ?? pctColor(pct) : pctColor(pct);
   const archive = archiveLabel(recommendation.archive, t);
@@ -176,6 +178,12 @@ const RecommendationRow = memo(function RecommendationRow({ recommendation }: { 
           >
             %{pct}
           </div>
+          {odds && (
+            <div className="mt-0.5 text-[9px]" style={{ fontFamily: "var(--nv-font-mono)", color: "var(--nv-text-tertiary)" }}
+              title={t.common.fairOddsTooltip}>
+              {t.common.fairOdds.replace("{odds}", odds)}
+            </div>
+          )}
           {calPct != null && !isModel && (
             <div
               className="mt-0.5 text-[9px]"

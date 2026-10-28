@@ -386,12 +386,20 @@ function isMarketActive(market: MarketSpec, period: Period, sample: PatternResul
   return true;
 }
 
+/** Bir arşivin en sık seçimi: yüzde + kaç maçta görüldüğü / örneklem (sıklık, olasılık değil). */
+export interface MarketSummaryWinner {
+  selectionLabel: string;
+  pct: number;
+  count: number;
+  n: number;
+}
+
 export interface MarketSummaryRow {
   marketKey: string;
   marketLabel: string;
-  winnerA1: { selectionLabel: string; pct: number } | null;
-  winnerA2: { selectionLabel: string; pct: number } | null;
-  winnerA3: { selectionLabel: string; pct: number } | null;
+  winnerA1: MarketSummaryWinner | null;
+  winnerA2: MarketSummaryWinner | null;
+  winnerA3: MarketSummaryWinner | null;
   /** Aynı seçimde uyuşan arşiv sayısı (0, 2 veya 3). */
   agreementCount: number;
   agreement: boolean;
@@ -399,7 +407,9 @@ export interface MarketSummaryRow {
   informational: boolean;
 }
 
-const INFORMATIONAL_MARKETS = new Set(["ou_25", "kg"]);
+// Bilgi amaçlı (soluk): geçmiş testte beceri yok (Ü/A, KG) ya da gerçek isabet gösterilenin açıkça altında
+// (Sprint 94 H1: fark %31,5 / gös 38,0; İY/MS %29,4 / 34,1; MS+2.5 %29,8 / 36,1; handikap 0:1 %50,9 / 58,9)
+const INFORMATIONAL_MARKETS = new Set(["ou_25", "kg", "fark", "iy_ms", "ms_25_combo", "hnd_a10"]);
 
 const SUMMARY_MARKET_KEYS = [
   "result",
@@ -439,7 +449,9 @@ export function getMarketSummary(
           best = { selectionLabel: f.selection, pct };
         }
       }
-      return best;
+      if (!best) return null;
+      const n = Math.round(result.match_count ?? 0);
+      return { ...best, n, count: Math.round((best.pct / 100) * n) };
     };
 
     const winnerA1 = pickWinner(archiveB);

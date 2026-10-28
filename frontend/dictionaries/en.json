@@ -36,7 +36,9 @@
     "search": "Search",
     "timeLocale": "en-GB",
     "shadowBadge": "Trial",
-    "shadowBadgeHint": "Trial league: predictions are being tested, not enough track record yet"
+    "shadowBadgeHint": "Trial league: predictions are being tested, not enough track record yet",
+    "fairOdds": "≈ fair odds {odds}",
+    "fairOddsTooltip": "1/probability: the odds this probability is worth with no bookmaker margin. If the market offers less, the pick has no betting value — high-probability picks usually trade near 1.05."
   },
   "days": [
     "Mon",
@@ -329,7 +331,7 @@
       "poissonNone": "The model has no 85%+ decision for this match",
       "confirmed": "Archive + league history agree",
       "confirmedTooltip": "The archive + league history rule (live-arch-v2) made the same pick. In the past, decisions where both rules agreed hit 93.5% of the time.",
-      "bestPick": "Best",
+      "bestPick": "Highest probability",
       "historicalMarket": "past {pct}%",
       "historicalMarketTooltip": "Actual hit rate of this market's decisions in the historical test (2023-07 → today, leak-free) ({n} decisions).",
       "condShort": "league history {pct}% · {n} matches",
@@ -389,7 +391,7 @@
     "signalHigh": "Strong signal",
     "signalMedium": "Medium signal",
     "signalLow": "Mild signal",
-    "priorLine": "League average {prior}% · edge +{edge} pts",
+    "priorLine": "League average {prior}% · {edge} pts above league average",
     "settingsChanged": "This pick was frozen before kickoff with different archive settings; the archive percentages below use the current settings, so they may not match exactly."
   },
   "analyze": {
@@ -449,11 +451,14 @@
   },
   "marketSummary": {
     "title": "Market Summary",
-    "subtitle": "most frequent selection in archive",
+    "subtitle": "archive frequency — not a probability",
     "market": "Market",
     "agreementTooltip": "{n} archives agree on the same pick",
     "footer": "number of archives agreeing on the same pick (✦2 / ✦3). Percentages are archive frequencies, not probabilities.",
-    "informational": "informational — no skill in backtests"
+    "informational": "informational — no skill in backtests",
+    "record": "shown {shown}% in the past → actual {actual}% ({n} picks)",
+    "recordTooltip": "Real outcome of this section's recorded picks (prediction ledger). Frequency runs higher than the real hit rate.",
+    "frequencyCaption": "Archive frequency: in how many similar past matches this pick happened (count/sample)."
   },
   "iddaa": {
     "noData": "Insufficient archive data found for this period.",

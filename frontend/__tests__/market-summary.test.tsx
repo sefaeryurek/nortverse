@@ -1,10 +1,19 @@
 import { expect, it, describe, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import MarketSummary from "@/components/MarketSummary";
 import { MatchProvider } from "@/lib/match-context";
 import { makePatternResult } from "./fixtures";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("@/lib/api", () => ({
+  getPerformanceSummary: vi.fn(() => Promise.resolve({
+    overall: { resolved: 1460, avg_prob_pct: 54.5, hit_pct: 48.1 },
+  })),
+}));
+
+function expand() {
+  fireEvent.click(screen.getByRole("button", { expanded: false }));
+}
 
 beforeEach(() => { window.localStorage.clear(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -45,8 +54,17 @@ describe("MarketSummary", () => {
     });
     renderWithContext(<MarketSummary patternB={b} patternC={null} patternD={null} period="ft" />);
     expect(screen.getByText("Ana Pazar Özeti")).toBeDefined();
+    expect(screen.queryByText("A1 · 30")).toBeNull(); // varsayılan kapalı (Sprint 94 H1)
+    expand();
     expect(screen.getByText("A1 · 30")).toBeDefined();
     expect(screen.getByText("A2 · —")).toBeDefined();
+    expect(screen.getAllByText("18/30").length).toBeGreaterThan(0); // %60 → 18/30: sıklık sayı/örneklem
+  });
+
+  it("shows the real track record in the header", async () => {
+    const b = makePatternResult({ match_count: 30, result_1_pct: 60, result_x_pct: 25, result_2_pct: 15 });
+    renderWithContext(<MarketSummary patternB={b} patternC={null} patternD={null} period="ft" />);
+    expect(await screen.findByText(/gösterilen %54,5 → gerçekleşen %48,1/)).toBeDefined();
   });
 
   it("shows agreement marker when archives match", () => {
@@ -63,6 +81,7 @@ describe("MarketSummary", () => {
       result_2_pct: 10,
     });
     renderWithContext(<MarketSummary patternB={b} patternC={c} patternD={null} period="ft" />);
+    expand();
     expect(screen.getAllByText("✦").length).toBeGreaterThan(0);
   });
 
@@ -74,6 +93,7 @@ describe("MarketSummary", () => {
       result_2_pct: 0,
     });
     renderWithContext(<MarketSummary patternB={b} patternC={null} patternD={null} period="ft" />);
+    expand();
     expect(screen.getByText("A1 · 1")).toBeDefined();
     expect(screen.queryAllByLabelText("Sepete ekle")).toHaveLength(0);
   });

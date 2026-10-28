@@ -1,5 +1,6 @@
 "use client";
 
+import { fairOdds } from "@/lib/format";
 import Link from "next/link";
 import type { LiveArchiveMatch, LiveArchiveSource, LiveArchiveView, LiveHighlight, LiveOutcome, LivePoissonDecision } from "@/lib/api";
 import { liveMarketLabel, liveSelectionLabel } from "@/lib/live-labels";
@@ -13,6 +14,19 @@ const OUTCOME_COLORS: Record<LiveOutcome, string> = {
 
 function fmtPct(value: number): string {
   return `%${value % 1 === 0 ? value.toFixed(0) : value.toFixed(1)}`;
+}
+
+/** "≈ adil oran 1/p" — yüksek olasılıklı canlı işaretlerin piyasada ~1,05 oran olduğu görünsün (Sprint 94 H2). */
+function FairOdds({ pct }: { pct: number }) {
+  const { t, locale } = useLocale();
+  const odds = fairOdds(pct, locale);
+  if (!odds) return null;
+  return (
+    <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)", fontFamily: "var(--nv-font-mono)" }}
+      title={t.common.fairOddsTooltip}>
+      {t.common.fairOdds.replace("{odds}", odds)}
+    </span>
+  );
 }
 
 /** Riskli işaret: ikon + metin (renk tek başına anlam taşımaz). */
@@ -69,6 +83,7 @@ function DecisionRow({ h }: { h: LiveHighlight }) {
       >
         {fmtPct(h.pct)}
       </span>
+      <FairOdds pct={h.pct} />
       <span style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-tertiary)" }}>
         {(h.cond_level === "global" ? a.condGlobal : a.condLeague).replace("{n}", String(h.cond_n ?? "?"))}
       </span>
@@ -126,6 +141,7 @@ export function PoissonDecisionList({ decisions }: { decisions: LivePoissonDecis
               <span className="font-extrabold" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)", color: "var(--nv-accent-green)" }}>
                 {fmtPct(d.pct)}
               </span>
+              <FairOdds pct={d.pct} />
               {d.best && (
                 <span className="px-1.5 font-semibold" style={{ fontSize: "var(--nv-text-2xs)", borderRadius: "var(--nv-radius-full)", backgroundColor: "var(--nv-accent-green)", color: "var(--nv-text-on-accent)" }}>
                   {a.bestPick}
@@ -213,6 +229,7 @@ export function HighlightList({ view, secondary = false }: { view: LiveArchiveVi
               <span className="font-extrabold" style={{ fontFamily: "var(--nv-font-mono)", fontSize: "var(--nv-text-sm)", color: g.risky ? "var(--nv-text-primary)" : "var(--nv-accent-green)" }}>
                 {fmtPct(g.pct)}
               </span>
+              <FairOdds pct={g.pct} />
               <span className="flex-1" />
               {g.items.map((h) => (
                 <span key={h.archive} className="inline-flex items-center gap-1" style={{ fontSize: "var(--nv-text-2xs)", color: "var(--nv-text-secondary)", fontVariantNumeric: "tabular-nums" }}>
