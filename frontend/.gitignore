@@ -20,6 +20,10 @@
 /.next-prod-a/
 /.next-prod-b/
 /.prod-slot
+# uctan uca test oturumu (Sprint 94 M1)
+/e2e/.auth/
+/playwright-report/
+/test-results/
 
 # production
 /build

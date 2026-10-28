@@ -6,8 +6,9 @@ test.describe("Mobil görünüm", () => {
   test("bülten sayfası mobilde yükleniyor", async ({ page }) => {
     await page.goto("/bulten");
     await expect(page.locator("body")).toBeVisible();
-    const dayButtons = page.locator("button").filter({ hasText: /Pzt|Sal|Çar|Per|Cum|Cmt|Paz/ });
-    await expect(dayButtons.first()).toBeVisible({ timeout: 10_000 });
+    // Gün sekmeleri bağlantı (a[href*="?date="]) ya da etkin gün (aria-current)
+    const dayTabs = page.locator('a[href*="?date="], [aria-current="date"]');
+    await expect(dayTabs.first()).toBeVisible({ timeout: 10_000 });
   });
 
   test("sidebar desktop'ta gizli (mobil viewport)", async ({ page }) => {

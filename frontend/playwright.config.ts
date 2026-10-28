@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Sprint 94 M1: önce "setup" projesi giriş yapıp oturumu dosyaya yazar, diğer projeler onu kullanır
+const AUTH_FILE = "e2e/.auth/user.json";
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
@@ -14,13 +17,16 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [
+    { name: "setup", testMatch: /auth\.setup\.ts/ },
     {
       name: "desktop",
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], storageState: AUTH_FILE },
+      dependencies: ["setup"],
     },
     {
       name: "mobile",
-      use: { ...devices["Pixel 5"] },
+      use: { ...devices["Pixel 5"], storageState: AUTH_FILE },
+      dependencies: ["setup"],
     },
   ],
   webServer: {

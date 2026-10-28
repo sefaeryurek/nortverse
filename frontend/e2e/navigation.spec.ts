@@ -20,7 +20,8 @@ test.describe("Sayfa yüklenme ve navigasyon", () => {
     await expect(dayTabs.first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test("sidebar navigasyon linkleri mevcut (desktop)", async ({ page }) => {
+  test("sidebar navigasyon linkleri mevcut (desktop)", async ({ page, isMobile }) => {
+    test.skip(isMobile, "Mobilde kenar çubuğu tasarım gereği gizli (alt menü var)");
     await page.goto("/bulten");
     const sidebar = page.locator("nav, aside").first();
     await expect(sidebar).toBeVisible({ timeout: 10_000 });

@@ -7,7 +7,7 @@ describe("API URL resolution", () => {
   it("uses an absolute local URL during SSR", () => {
     vi.stubGlobal("window", undefined);
     vi.stubEnv("BACKEND_URL", ""); vi.stubEnv("NEXT_PUBLIC_API_URL", "");
-    expect(getApiBase()).toBe("http://localhost:8000");
+    expect(getApiBase()).toBe("http://127.0.0.1:8000");
   });
   it("uses same-origin proxy in browser and keeps private URL private", () => {
     vi.stubEnv("BACKEND_URL", "https://private.example"); vi.stubEnv("NEXT_PUBLIC_API_URL", "");

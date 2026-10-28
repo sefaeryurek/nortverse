@@ -46,22 +46,62 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run build
 
+  # Sprint 94 M1: gerçek backend + PostgreSQL + giriş. Eskiden backend yoktu ve proxy.ts her sayfayı
+  # /giris'e attığı için iş kesin kırıktı. Arka plan işleri kapalı (BACKGROUND_JOBS=0) → kaynağa istek gitmez.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch'
-    defaults:
-      run:
-        working-directory: frontend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nortverse
+          POSTGRES_PASSWORD: nortverse
+          POSTGRES_DB: nortverse
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nortverse" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://nortverse:nortverse@127.0.0.1:5432/nortverse
+      AUTH_REQUIRED: '1'
+      BACKGROUND_JOBS: '0'
+      INTERNAL_API_KEY: ci-e2e-internal-key
+      E2E_USER: e2e
+      E2E_PASSWORD: e2e-ci-password-1
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Backend kurulum + veritabanı
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          alembic upgrade head
+          python -m app.cli.main create-user "$E2E_USER" --password "$E2E_PASSWORD"
+      - name: Backend başlat
+        working-directory: backend
+        run: |
+          nohup python -m app.cli.main serve > ../backend-e2e.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8000/api/health && exit 0; sleep 2; done
+          cat ../backend-e2e.log; exit 1
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npx playwright test
+      - name: Uçtan uca testler
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
         env:
           CI: true
+      - name: Backend günlüğü
+        if: failure()
+        run: cat backend-e2e.log

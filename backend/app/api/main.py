@@ -61,12 +61,21 @@ from app.api.services import bg_worker, init_bg_queue, shutdown_bg_queue
 
 # ─── Lifespan ────────────────────────────────────────────────────────────────
 
+def background_jobs_enabled() -> bool:
+    """`BACKGROUND_JOBS=0`: canlı izleyici ve WebSocket yayıncısı başlamaz — kaynağa (nowgoal) hiç istek gitmez.
+    CI'daki uçtan uca testler ve yerel denemeler için (Sprint 94 M1). Varsayılan açık."""
+    return os.environ.get("BACKGROUND_JOBS", "1").strip().lower() not in ("0", "false", "no")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_bg_queue()
     worker = asyncio.create_task(bg_worker())
-    start_ws_broadcaster()
-    start_live_watcher()
+    if background_jobs_enabled():
+        start_ws_broadcaster()
+        start_live_watcher()
+    else:
+        logging.getLogger(__name__).info("BACKGROUND_JOBS=0 — canlı izleyici ve WebSocket yayıncısı kapalı")
     try:
         yield
     finally:
