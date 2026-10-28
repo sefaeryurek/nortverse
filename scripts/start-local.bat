@@ -1,6 +1,7 @@
 @echo off
 REM Nortverse - Localhost'u tek tikla baslat (masaustu kisayolu bunu calistirir).
-REM Docker + veritabani -> backend (port 8000) -> frontend (port 3000) -> tarayicida bulten.
+REM Docker + veritabani -> backend (port 8000) -> frontend uretim sunucusu (port 3000) -> tarayicida bulten.
+REM Gelistirme sunucusu ayri: frontend klasorunde "npm run dev" (port 3001).
 REM Zaten calisan parca tekrar acilmaz.
 
 title Nortverse baslatiliyor
@@ -28,20 +29,22 @@ if errorlevel 1 (
 echo [3/4] Frontend kontrol ediliyor - port 3000...
 netstat -ano | findstr /r /c:":3000 .*LISTENING" >nul
 if errorlevel 1 (
-    start "Nortverse Frontend - bu pencereyi kapatmayin" /min cmd /c "cd /d "%ROOT%\frontend" && npm run dev"
+    REM Uretim sunucusu denetleyiciyle, penceresiz; ilk acilista derleme birkac dakika surebilir
+    schtasks /run /tn "\Nortverse\Frontend" >nul 2>&1
+    if errorlevel 1 start "Nortverse Frontend" /min cmd /c "%ROOT%\scripts\frontend-supervisor.bat"
 ) else (
     echo       Frontend zaten calisiyor.
 )
 
-echo [4/4] Sayfa hazirlaniyor, en fazla 2 dakika bekleniyor...
-for /l %%i in (1,1,60) do (
-    powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing http://localhost:3000/bulten -TimeoutSec 5 | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1 && goto ready
-    timeout /t 2 /nobreak >nul
+echo [4/4] Sayfa hazirlaniyor, en fazla 5 dakika bekleniyor - ilk acilista derleme yapilir...
+for /l %%i in (1,1,150) do (
+    powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:3000/giris -TimeoutSec 5 | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1 && goto ready
+    ping -n 3 127.0.0.1 >nul
 )
-echo Frontend 2 dakikada acilmadi; tarayici yine de aciliyor.
+echo Frontend 5 dakikada acilmadi; tarayici yine de aciliyor. Ayrinti: scripts\logs\frontend.log
 
 :ready
-start "" "http://localhost:3000/bulten"
+start "" "http://127.0.0.1:3000/bulten"
 echo Hazir. Bu pencere 5 saniye sonra kapanacak.
 timeout /t 5 >nul
 exit /b 0

@@ -6,6 +6,7 @@
 # - Ayni gorev zaten calisiyorsa ikincisi baslamaz (IgnoreNew).
 # - BackupDB ve RunPipeline uykudaki bilgisayari uyandirir (WakeToRun); ag yoksa zamanlanmis isler baslamaz.
 # - Backend denetleyicisi oturum acilisinda, uyanista, kilit acilisinda ve 15 dk'da bir tetiklenir; tek kopya calisir.
+# - Frontend denetleyicisi (uretim sunucusu, 127.0.0.1:3000) ayni tetikleyicilerle (Sprint 94 E6).
 #
 # Sprint 94 D1: UpdateScores2 (00:30) UpdateScores1'e birlestirildi - uyaninca ikisi paralel calisiyordu;
 # pipeline sure siniri 2 -> 4 saat (72/87/70 dk surdu); gorev gecmisi acildi; aylik geri yukleme testi.
@@ -79,5 +80,7 @@ $unlock.UserId = $env:USERNAME
 $safety = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 15)
 New-NortverseTask "Backend" "backend-supervisor.bat" @($logon, $wake, $unlock, $safety) `
     "Backend denetleyicisi (oturum acilisi, uyanis, kilit acma, 15 dk; tek kopya; coksa yeniden baslatir)" $backendSettings
+New-NortverseTask "Frontend" "frontend-supervisor.bat" @($logon, $wake, $unlock, $safety) `
+    "Frontend uretim sunucusu denetleyicisi (127.0.0.1:3000; derleme yoksa derler; coksa yeniden baslatir)" $backendSettings
 
 Get-ScheduledTask -TaskPath $path | Select-Object TaskName, State | Format-Table

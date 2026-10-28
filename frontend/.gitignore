@@ -16,6 +16,10 @@
 # next.js
 /.next/
 /out/
+# uretim derleme yuvalari (Sprint 94 E6, scripts\frontend-build.ps1)
+/.next-prod-a/
+/.next-prod-b/
+/.prod-slot
 
 # production
 /build

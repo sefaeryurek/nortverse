@@ -3,9 +3,10 @@ import { getProxyTarget } from "./lib/env";
 
 const nextConfig: NextConfig = {
   turbopack: { root: __dirname },
-  // Arkadaş siteye Tailscale serve üzerinden (https://<bilgisayar>.<ağ>.ts.net) gelir; geliştirme modu
-  // başka adresten gelen istekleri varsayılan olarak engeller.
-  allowedDevOrigins: ["*.ts.net"],
+  // Üretim sunucusu iki yuvadan birini kullanır (.next-prod-a / .next-prod-b, Sprint 94 E6): derleme boştaki
+  // yuvaya yapılır, başarısızsa çalışan sürüm etkilenmez. Geliştirme modu varsayılan .next'te kalır.
+  // Arkadaş artık üretim sunucusuna gelir; geliştirme sunucusu sadece bu bilgisayardan (allowedDevOrigins yok).
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   async rewrites() {
     return [
       {
