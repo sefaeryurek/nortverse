@@ -121,3 +121,39 @@ def test_empty_or_older_history_does_not_replace_stored():
     assert should_replace_history(old, older) is False
     assert should_replace_history(old, old) is True
     assert should_replace_history(None, old) is True
+
+
+def test_get_unzips_and_remembers_redirected_host(monkeypatch):
+    """Kaynak istemese de gzip gönderiyor ve live.nowgoal.life'a yönlendiriyor (Sprint 94 M3)."""
+    import gzip
+
+    from app.scraper import odds
+
+    seen = []
+
+    class Response:
+        def __init__(self, url):
+            self.url = url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def geturl(self):
+            return "https://live.nowgoal.life/ajax/x"
+
+        def read(self):
+            return gzip.compress(b'{"ok": 1}')
+
+    def fake_urlopen(request, timeout):
+        seen.append(request.full_url)
+        return Response(request.full_url)
+
+    monkeypatch.setattr(odds, "urlopen", fake_urlopen)
+    monkeypatch.setattr(odds, "_resolved_base", None)
+    assert odds._get("/ajax/x", "1") == b'{"ok": 1}'
+    assert odds._get("/ajax/y", "1") == b'{"ok": 1}'
+    assert seen[0].startswith(odds.SCRAPER.base_url)
+    assert seen[1] == "https://live.nowgoal.life/ajax/y"  # ikinci istek doğrudan yönlendirilen adrese

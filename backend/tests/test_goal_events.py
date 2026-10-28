@@ -54,3 +54,14 @@ def test_own_goal_side_taken_from_running_score_and_red_cards_kept():
 def test_missing_table_returns_none():
     assert parse_goal_events("<html><body>yok</body></html>") is None
     assert events_match_score(None, (1, 0)) is False
+
+
+def test_first_half_stoppage_sorts_before_second_half():
+    """45+2 ilk yarının uzatması: 46'dan önce gelir (Sprint 94 M3)."""
+    html = _page([
+        _row("46'", home_tip="Goal", home_score=_score(2, 0)),
+        _row("45+2'", home_tip="Goal", home_score=_score(1, 0)),
+    ])
+    events = parse_goal_events(html)
+    assert [(e["minute"], e["extra"]) for e in events] == [(45, 2), (46, 0)]
+    assert [e["score"] for e in events] == [[1, 0], [2, 0]]
