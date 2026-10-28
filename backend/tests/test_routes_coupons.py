@@ -272,3 +272,26 @@ def test_list_coupons_attaches_live_state(monkeypatch):
     c = out["coupons"][0]
     assert c["legs"][0]["live"]["state"] == "losing" and c["legs"][0]["live"]["minute"] == "31"
     assert c["status"] == "pending" and c["live_state"] == "losing"
+
+
+def test_coupon_stats_endpoint(monkeypatch):
+    coupons = [SimpleNamespace(id=1, username="ali"), SimpleNamespace(id=2, username="veli")]
+    legs = [SimpleNamespace(coupon_id=1, odds=2.0, outcome="hit", return_factor=2.0),
+            SimpleNamespace(coupon_id=2, odds=3.0, outcome="miss", return_factor=0.0)]
+    results = [coupons, legs]
+    seen = []
+
+    class _Session:
+        async def execute(self, stmt, *_a, **_k):
+            seen.append(str(stmt))
+            return _Result(results.pop(0))
+
+    @asynccontextmanager
+    async def fake_session():
+        yield _Session()
+
+    monkeypatch.setattr(rc, "get_session", fake_session)
+    out = asyncio.run(rc.coupon_stats(period="week"))
+    assert out["range"] == "week" and "created_at >=" in seen[0]
+    assert [u["username"] for u in out["users"]] == ["ali", "veli"]
+    assert out["users"][0]["profit"] == 1.0 and out["users"][1]["profit"] == -1.0

@@ -655,6 +655,29 @@ export async function getMatchOdds(matchId: string): Promise<MatchOdds> {
     await request<unknown>(`/api/odds/${encodeURIComponent(matchId)}`, { cache: "no-store" }), validMatchOdds);
 }
 
+/** Kullanıcı karnesi / puan tablosu satırı (Sprint 94 J9) — her kupona 1 birim */
+export interface CouponUserStats {
+  username: string;
+  coupons: number;
+  settled: number;
+  pending: number;
+  won: number;
+  lost: number;
+  partial_loss: number;
+  refund: number;
+  /** Birim kâr (sonuçlanan kuponlar) */
+  profit: number;
+  roi_pct: number | null;
+  leg_hit_pct: number | null;
+  legs_decided: number;
+  avg_odds: number;
+  best_won_odds: number | null;
+}
+
+export async function getCouponStats(range: "week" | "all"): Promise<{ range: string; users: CouponUserStats[] }> {
+  return request<{ range: string; users: CouponUserStats[] }>(`/api/coupons/stats?range=${range}`, { cache: "no-store" });
+}
+
 export async function getCoupons(scope: "all" | "mine"): Promise<{ coupons: CouponView[] }> {
   return request<{ coupons: CouponView[] }>(`/api/coupons?scope=${scope}`, { cache: "no-store" });
 }

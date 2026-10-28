@@ -694,6 +694,20 @@
     },
     "periodOver": "sonuç kaydı bekleniyor",
     "liveMinute": "{minute}'",
-    "halftime": "İY"
+    "halftime": "İY",
+    "leaderboard": "Puan tablosu",
+    "week": "Son 7 gün",
+    "allTime": "Tüm zamanlar",
+    "statsUser": "Kullanıcı",
+    "statsCoupons": "Kupon",
+    "statsWon": "Kazanan",
+    "statsLegHit": "Bacak isabeti",
+    "statsProfit": "Kâr (birim)",
+    "statsRoi": "ROI",
+    "statsAvgOdds": "Ort. oran",
+    "statsBest": "En yüksek kazanılan",
+    "statsNote": "Her kupona 1 birim yatırılmış sayılır; kâr ve ROI sadece sonuçlanan kuponlardan. Bacak isabetinde iade ve geçersizler sayılmaz.",
+    "statsEmpty": "Bu aralıkta kupon yok",
+    "statsPending": "{n} bekliyor"
   }
 }

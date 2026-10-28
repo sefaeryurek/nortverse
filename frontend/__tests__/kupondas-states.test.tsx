@@ -6,6 +6,7 @@ import { LocaleProvider } from "@/lib/locale-context";
 const api = vi.hoisted(() => ({
   getCoupons: vi.fn(),
   getCouponMatches: vi.fn(),
+  getCouponStats: vi.fn(),
   getMatchOdds: vi.fn(),
   createCoupon: vi.fn(),
 }));
@@ -76,4 +77,25 @@ it("shows live score and 'losing now' on a pending coupon (Sprint 94 J8)", async
   expect(screen.getByText("şu an tutmuyor")).toBeTruthy();
   expect(screen.getByText("31'")).toBeTruthy();
   expect(screen.getByText("0-1")).toBeTruthy();
+});
+
+it("shows the leaderboard tab with profit and ROI (Sprint 94 J9)", async () => {
+  api.getCouponMatches.mockResolvedValue([]);
+  api.getCoupons.mockResolvedValue({ coupons: [] });
+  api.getCouponStats.mockResolvedValue({ range: "week", users: [
+    { username: "ali", coupons: 3, settled: 2, pending: 1, won: 1, lost: 1, partial_loss: 0, refund: 0, profit: 2,
+      roi_pct: 100, leg_hit_pct: 66.7, legs_decided: 3, avg_odds: 3.33, best_won_odds: 4 },
+    { username: "veli", coupons: 1, settled: 1, pending: 0, won: 0, lost: 1, partial_loss: 0, refund: 0, profit: -1,
+      roi_pct: -100, leg_hit_pct: 0, legs_decided: 1, avg_odds: 2, best_won_odds: null },
+  ] });
+  renderPage();
+  fireEvent.click(await screen.findByRole("tab", { name: "Puan tablosu" }));
+  expect(await screen.findByText("ali")).toBeTruthy();
+  expect(api.getCouponStats).toHaveBeenCalledWith("week");
+  expect(screen.getByText("+2,00")).toBeTruthy();
+  expect(screen.getByText("-1,00")).toBeTruthy();
+  expect(screen.getByText("%66,7")).toBeTruthy();
+  expect(screen.getByText("1 bekliyor")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Tüm zamanlar" }));
+  expect(api.getCouponStats).toHaveBeenLastCalledWith("all");
 });

@@ -106,3 +106,36 @@ def test_live_summary():
     assert live_summary([win, lose]) == "losing"
     assert live_summary([win, {"live": None}]) is None  # bir bacak henüz başlamadı
     assert live_summary([settled]) is None
+
+
+# ─── Sprint 94 J9: kullanıcı karnesi ────────────────────────────────────────────────────────────
+
+def test_user_stats_profit_roi_and_leg_hits():
+    from app.analysis.coupons import user_stats
+
+    def coupon(user, factors, outcomes):
+        legs = [{"odds": 2.0, "return_factor": f, "outcome": o} for f, o in zip(factors, outcomes)]
+        return {"username": user, "legs": legs, **coupon_status(legs)}
+
+    rows = [
+        coupon("ali", [2.0, 2.0], ["hit", "hit"]),          # kazandı 4,0 → +3
+        coupon("ali", [0.0, None], ["miss", None]),         # kaybetti → −1
+        coupon("ali", [None], [None]),                      # bekliyor
+        coupon("veli", [1.0], ["void"]),                    # iade → 0
+        coupon("veli", [1.5], ["half_win"]),                # kazandı 1,5 → +0,5
+    ]
+    ali, veli = user_stats(rows)
+    assert ali["username"] == "ali" and ali["coupons"] == 3 and ali["settled"] == 2 and ali["pending"] == 1
+    assert ali["profit"] == 2.0 and ali["roi_pct"] == 100.0
+    assert ali["leg_hit_pct"] == 66.7 and ali["legs_decided"] == 3
+    assert ali["best_won_odds"] == 4.0 and ali["avg_odds"] == 3.33  # (4 + 4 + 2) / 3
+    assert veli["profit"] == 0.5 and veli["refund"] == 1 and veli["won"] == 1
+    assert veli["leg_hit_pct"] == 100.0 and veli["legs_decided"] == 1  # iade bacak isabete sayılmaz
+
+
+def test_user_stats_without_settled_coupons():
+    from app.analysis.coupons import user_stats
+
+    legs = [{"odds": 1.8, "return_factor": None, "outcome": None}]
+    (row,) = user_stats([{"username": "a", "legs": legs, **coupon_status(legs)}])
+    assert row["roi_pct"] is None and row["leg_hit_pct"] is None and row["profit"] == 0

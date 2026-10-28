@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.ratelimit import check_rate
-from app.analysis.coupons import MARKETS, MAX_LEGS, coupon_status, live_leg_state, live_summary
+from app.analysis.coupons import MARKETS, MAX_LEGS, coupon_status, live_leg_state, live_summary, user_stats
 from app.analysis.match_ref import MatchRef, load_match_refs, ref_from_fixture
 from app.db.connection import get_session
 from app.db.models import Coupon, CouponLeg, CouponLegResult, Match, User
@@ -331,6 +331,30 @@ async def create_coupon(body: CouponIn, request: Request) -> dict:
     saved = [{"match_id": leg.match_id, "period": leg.period, "market": leg.market, "selection": leg.selection,
               "line": leg.line, "odds": leg.odds} for leg in legs]
     return _remember(user.id, idem_key, {"id": coupon_id, "legs": saved})
+
+
+@router.get("/api/coupons/stats")
+async def coupon_stats(period: str = Query("all", alias="range", pattern=r"^(week|all)$")) -> dict:
+    """Kullanıcı karnesi / puan tablosu (Sprint 94 J9): son 7 günde yazılan ya da tüm kuponlar."""
+    since = datetime.now(timezone.utc) - timedelta(days=7) if period == "week" else None
+    async with get_session() as session:
+        stmt = select(Coupon.id, User.username).join(User, User.id == Coupon.user_id)
+        if since is not None:
+            stmt = stmt.where(Coupon.created_at >= since)
+        coupons = (await session.execute(stmt)).all()
+        ids = [c.id for c in coupons]
+        legs = (await session.execute(
+            select(CouponLeg.coupon_id, CouponLeg.odds, CouponLegResult.outcome, CouponLegResult.return_factor)
+            .outerjoin(CouponLegResult, CouponLegResult.leg_id == CouponLeg.id)
+            .where(CouponLeg.coupon_id.in_(ids))
+        )).all() if ids else []
+    by_coupon: dict[int, list[dict]] = {}
+    for leg in legs:
+        by_coupon.setdefault(leg.coupon_id, []).append(
+            {"odds": leg.odds, "outcome": leg.outcome, "return_factor": leg.return_factor})
+    rows = [{"username": c.username, "legs": by_coupon.get(c.id, []), **coupon_status(by_coupon.get(c.id, []))}
+            for c in coupons if by_coupon.get(c.id)]
+    return {"range": period, "users": user_stats(rows)}
 
 
 @router.get("/api/coupons")

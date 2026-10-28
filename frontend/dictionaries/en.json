@@ -694,6 +694,20 @@
     },
     "periodOver": "awaiting settlement",
     "liveMinute": "{minute}'",
-    "halftime": "HT"
+    "halftime": "HT",
+    "leaderboard": "Leaderboard",
+    "week": "Last 7 days",
+    "allTime": "All time",
+    "statsUser": "User",
+    "statsCoupons": "Coupons",
+    "statsWon": "Won",
+    "statsLegHit": "Leg hit rate",
+    "statsProfit": "Profit (units)",
+    "statsRoi": "ROI",
+    "statsAvgOdds": "Avg. odds",
+    "statsBest": "Best winning odds",
+    "statsNote": "Each coupon counts as a 1-unit stake; profit and ROI use settled coupons only. Pushes and voids are excluded from the leg hit rate.",
+    "statsEmpty": "No coupons in this range",
+    "statsPending": "{n} pending"
   }
 }

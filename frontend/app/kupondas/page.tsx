@@ -7,6 +7,7 @@ import type { CouponLegLive, CouponMatch, CouponOddsChange, CouponView, MatchOdd
 import { useLocale } from "@/lib/locale-context";
 import { hasStarted, num, OddsPanel, pickLabel, priceFor } from "@/components/CouponOddsPanel";
 import CouponMatchPicker from "@/components/CouponMatchPicker";
+import CouponLeaderboard from "@/components/CouponLeaderboard";
 import type { Dict, Draft } from "@/components/CouponOddsPanel";
 
 function istanbulDate(offsetDays: number): string {
@@ -102,7 +103,7 @@ export default function KupondasPage() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const [scope, setScope] = useState<"all" | "mine">("all");
+  const [scope, setScope] = useState<"all" | "mine" | "stats">("all");
   const [coupons, setCoupons] = useState<CouponView[] | null>(null);
   // Hata ve boş durum ayrı (Sprint 94 L1): eskiden yükleme hatası "Henüz kupon yok" gibi görünüyordu
   const [couponsError, setCouponsError] = useState<string | null>(null);
@@ -140,6 +141,7 @@ export default function KupondasPage() {
   const oddsState: "idle" | "loading" | "error" = !selected ? "idle" : !oddsReady ? "loading" : odds ? "idle" : "error";
 
   const loadCoupons = useCallback(() => {
+    if (scope === "stats") return;
     getCoupons(scope)
       .then((r) => { setCoupons(r.coupons); setCouponsError(null); })
       .catch((err: unknown) => { setCoupons([]); setCouponsError(err instanceof Error ? err.message : ""); });
@@ -318,13 +320,15 @@ export default function KupondasPage() {
 
           <section className="space-y-3 min-w-0" aria-label={c.title}>
             <div className="flex gap-1.5" role="tablist">
-              {(["all", "mine"] as const).map((s) => (
+              {(["all", "mine", "stats"] as const).map((s) => (
                 <button key={s} role="tab" aria-selected={scope === s} className="px-3 py-1" style={tabStyle(scope === s)} onClick={() => setScope(s)}>
-                  {s === "all" ? c.all : c.mine}
+                  {s === "all" ? c.all : s === "mine" ? c.mine : c.leaderboard}
                 </button>
               ))}
             </div>
-            {coupons === null ? (
+            {scope === "stats" ? (
+              <CouponLeaderboard t={t} locale={locale} />
+            ) : coupons === null ? (
               <p style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>…</p>
             ) : couponsError !== null ? (
               <div className="nv-card p-4 flex flex-wrap items-center gap-3" role="alert">

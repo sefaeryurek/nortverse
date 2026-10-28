@@ -113,6 +113,48 @@ def live_summary(legs: list[dict]) -> str | None:
     return None
 
 
+def user_stats(coupons: list[dict]) -> list[dict]:
+    """Kullanıcı karnesi / puan tablosu (Sprint 94 J9). `coupons`: her biri `username`, `legs` (outcome dahil) ve
+    `coupon_status` alanları olan kuponlar.
+
+    - Kâr: her kupona 1 birim; sonuçlanan kuponların geri dönüşleri toplamı − sonuçlanan kupon sayısı.
+    - Bacak isabeti: tutan (hit + yarım kazanç) / sonuçlanan bacak (iade ve geçersiz hariç).
+    Sıralama: kâr, sonra sonuçlanan kupon sayısı.
+    """
+    by_user: dict[str, dict] = {}
+    for c in coupons:
+        u = by_user.setdefault(c["username"], {
+            "username": c["username"], "coupons": 0, "settled": 0, "won": 0, "lost": 0, "partial_loss": 0,
+            "refund": 0, "pending": 0, "returned": 0.0, "legs_won": 0, "legs_decided": 0, "odds_sum": 0.0,
+            "best_won_odds": None,
+        })
+        u["coupons"] += 1
+        u["odds_sum"] += c["total_odds"]
+        u[c["status"]] += 1
+        if c["status"] != "pending":
+            u["settled"] += 1
+            u["returned"] += c["return"] or 0.0
+        if c["status"] == "won" and (u["best_won_odds"] is None or c["total_odds"] > u["best_won_odds"]):
+            u["best_won_odds"] = c["total_odds"]
+        for leg in c["legs"]:
+            if leg.get("outcome") in ("hit", "half_win", "miss", "half_loss"):
+                u["legs_decided"] += 1
+                u["legs_won"] += leg["outcome"] in ("hit", "half_win")
+    out = []
+    for u in by_user.values():
+        profit = round(u["returned"] - u["settled"], 2)
+        out.append({
+            "username": u["username"], "coupons": u["coupons"], "settled": u["settled"], "pending": u["pending"],
+            "won": u["won"], "lost": u["lost"], "partial_loss": u["partial_loss"], "refund": u["refund"],
+            "profit": profit, "roi_pct": round(profit / u["settled"] * 100, 1) if u["settled"] else None,
+            "leg_hit_pct": round(u["legs_won"] / u["legs_decided"] * 100, 1) if u["legs_decided"] else None,
+            "legs_decided": u["legs_decided"],
+            "avg_odds": round(u["odds_sum"] / u["coupons"], 2), "best_won_odds": u["best_won_odds"],
+        })
+    out.sort(key=lambda r: (-r["profit"], -r["settled"], r["username"]))
+    return out
+
+
 VOID_AFTER = timedelta(hours=48)  # dondurulmuş başlama saatinden 48 saat sonra skor yoksa bacak iade
 HT_VOID_AFTER = timedelta(hours=24)  # maç bitti ama İY skoru 24 saat gelmediyse İY bacağı iade
 
