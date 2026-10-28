@@ -142,16 +142,24 @@ async def logout(token: str | None) -> None:
 
 
 INTERNAL_HEADER = "x-internal-key"
-_SERVER_USER = AuthUser(0, "sunucu", True)
+# Çerezsiz sunucu çizimi (ör. istek dışı ön çizim): yönetici DEĞİL — Playwright gibi ağır işleri tetikleyemez
+# (Sprint 94 E1; eskiden her sayfa çizimi yönetici sayılıyordu, normal kullanıcı kazıma başlatabiliyordu).
+_SERVER_USER = AuthUser(0, "sunucu", False)
 
 
 def internal_user(header_value: str | None) -> AuthUser | None:
     """Next sunucu tarafı istekleri (sayfa çizimi): `INTERNAL_API_KEY` eşleşirse. Sayfaların kendisini Next
-    `proxy.ts` oturum kontrolüyle korur; anahtar tarayıcıya hiç gitmez."""
+    `proxy.ts` oturum kontrolüyle korur; anahtar tarayıcıya hiç gitmez. Next kullanıcının çerezini de iletir;
+    çerez geçerliyse `request_user` gerçek kullanıcıyı (ve yetkisini) kullanır, bu sadece çerezsiz yedektir."""
     expected = os.environ.get("INTERNAL_API_KEY", "")
     if not expected or not header_value:
         return None
     return _SERVER_USER if hmac.compare_digest(header_value.encode(), expected.encode()) else None
+
+
+async def request_user(cookie_token: str | None, internal_header: str | None) -> AuthUser | None:
+    """İsteğin kullanıcısı: önce çerezdeki gerçek oturum, yoksa iç anahtarlı sunucu çizimi (yönetici değil)."""
+    return await resolve(cookie_token) or internal_user(internal_header)
 
 
 def forget_user_sessions_cache() -> None:

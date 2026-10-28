@@ -11,15 +11,26 @@ export class ApiError extends Error {
   }
 }
 
+const SESSION_COOKIE = "nv_session";
+
 /**
  * Sunucu tarafı istekler (sayfa çizimi) backend'e iç anahtarla gider; sayfanın kendisini `proxy.ts` oturum
- * kontrolüyle korur. Tarayıcıda `INTERNAL_API_KEY` tanımsızdır → istek kullanıcının çereziyle gider.
+ * kontrolüyle korur. Kullanıcının oturum çerezi de iletilir → backend gerçek kullanıcının yetkisini kullanır
+ * (Sprint 94 E1: iç anahtar tek başına yönetici sayılmaz, normal kullanıcı sayfa açarak kazıma başlatamaz).
+ * Tarayıcıda `INTERNAL_API_KEY` tanımsızdır → istek kullanıcının kendi çereziyle gider.
  */
-function withServerAuth(headers: HeadersInit | undefined): HeadersInit | undefined {
+async function withServerAuth(headers: HeadersInit | undefined): Promise<HeadersInit | undefined> {
   const key = typeof window === "undefined" ? process.env.INTERNAL_API_KEY : undefined;
   if (!key) return headers;
   const merged = new Headers(headers);
   merged.set("x-internal-key", key);
+  try {
+    const { cookies } = await import("next/headers");
+    const session = (await cookies()).get(SESSION_COOKIE)?.value;
+    if (session) merged.set("cookie", `${SESSION_COOKIE}=${session}`);
+  } catch {
+    // İstek kapsamı dışında (ön çizim): çerez yok → backend yönetici olmayan sunucu kullanıcısı kullanır.
+  }
   return merged;
 }
 
@@ -29,7 +40,7 @@ async function request<T>(path: string, options: RequestInit & { next?: { revali
   const msg = errorMessages();
   let response: Response;
   try {
-    response = await fetch(`${getApiBase()}${path}`, { ...options, headers: withServerAuth(options.headers), signal });
+    response = await fetch(`${getApiBase()}${path}`, { ...options, headers: await withServerAuth(options.headers), signal });
   } catch (error) {
     if (options.signal?.aborted) throw error;
     throw new ApiError(timeout.aborted ? msg.timeout : msg.network, 0);

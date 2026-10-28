@@ -175,13 +175,13 @@ _PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/logout", "/api/aut
 async def require_session(request, call_next):
     from fastapi.responses import JSONResponse
 
-    from app.auth import COOKIE_NAME, INTERNAL_HEADER, auth_required, internal_user, resolve
+    from app.auth import COOKIE_NAME, INTERNAL_HEADER, auth_required, request_user
 
     path = request.url.path
     request.state.user = None
     if path.startswith("/api/"):
-        request.state.user = (internal_user(request.headers.get(INTERNAL_HEADER))
-                              or await resolve(request.cookies.get(COOKIE_NAME)))
+        request.state.user = await request_user(request.cookies.get(COOKIE_NAME),
+                                                request.headers.get(INTERNAL_HEADER))
     if (path.startswith("/api/") and path not in _PUBLIC_PATHS and request.method != "OPTIONS"
             and request.state.user is None and auth_required()):
         return JSONResponse({"detail": "Giriş gerekli"}, status_code=401, headers={"Cache-Control": "no-store"})
