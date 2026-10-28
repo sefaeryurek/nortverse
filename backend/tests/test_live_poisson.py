@@ -148,3 +148,42 @@ def test_v11_excludes_full_time_under_25():
     assert [(p["market"], p["selection"]) for p in picks] == [("dc", "1X"), ("ou_35", "under")]
     rows = lp.ledger_rows({"lambda_2h": {}, "lambda_ft": {}}, picks, {"match_id": "1"})
     assert all(r["rule_version"] == "live-poisson-v1.1" and r["details"]["shadow"] is False for r in rows)
+
+
+def test_hit_table_counts_only_main_leagues(monkeypatch):
+    """Sprint 94 C3: geçmiş isabet çipi gölge lig kararlarını saymaz."""
+    import asyncio
+    from contextlib import asynccontextmanager
+
+    from app.analysis import live_poisson
+    from app.analysis.league_filter import MAIN_LEAGUES
+    from app.db import connection
+
+    seen = []
+
+    class _R:
+        def __init__(self, v):
+            self.v = v
+
+        def scalar(self):
+            return self.v
+
+        def all(self):
+            return self.v
+
+    class _S:
+        async def execute(self, stmt, params):
+            seen.append((str(stmt), params))
+            return _R(15) if len(seen) == 1 else _R([("ft", "dc", 90, 100)])
+
+    @asynccontextmanager
+    async def fake_session():
+        yield _S()
+
+    monkeypatch.setattr(connection, "get_session", fake_session)
+    monkeypatch.setattr(live_poisson, "_hit_cache", None)
+    table = asyncio.run(live_poisson.load_hit_table())
+    assert table == {("ft", "dc"): {"pct": 90.0, "n": 100}}
+    sql, params = seen[1]
+    assert "league_name = ANY(:leagues)" in sql and set(params["leagues"]) == set(MAIN_LEAGUES)
+    monkeypatch.setattr(live_poisson, "_hit_cache", None)

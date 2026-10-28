@@ -574,9 +574,11 @@ async def load_hit_table() -> dict:
     """Bugünkü kural sürümü + parmak iziyle üretilmiş en son backtest koşusundan pazar başına geçmiş isabet.
 
     Döner: {(periyot, pazar): {"pct": isabet %, "n": karar sayısı}} — 1 saat önbellek.
+    Sadece ana ligler (Sprint 94 C3): çip ana lig maçlarında görünüyor, #15'in kararlarının %38'i gölge ligdendi.
     """
     from sqlalchemy import text
 
+    from app.analysis.league_filter import MAIN_LEAGUES
     from app.db.connection import get_session
 
     global _hit_cache
@@ -590,8 +592,9 @@ async def load_hit_table() -> dict:
         rows = [] if run_id is None else (await session.execute(text("""
             SELECT period, market, count(*) FILTER (WHERE outcome = 'hit'), count(*)
             FROM prediction_backtest WHERE run_id = :run AND outcome IN ('hit', 'miss')
+              AND league_name = ANY(:leagues)
             GROUP BY period, market
-        """), {"run": run_id})).all()
+        """), {"run": run_id, "leagues": sorted(MAIN_LEAGUES)})).all()
     table = {(period, market): {"pct": round(100 * hits / total, 1), "n": total}
              for period, market, hits, total in rows if total >= 30}
     _hit_cache = (time.monotonic(), table)
