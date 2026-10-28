@@ -8,4 +8,6 @@ set "NV_NOTE=%USERPROFILE%\Desktop\NORTVERSE-HATA.txt"
 echo [%date% %time%] %NV_MSG% >> "%NV_NOTE%"
 REM 12 saat ekranda kalir; oturum kilitliyse acilinca gorunur
 msg "%USERNAME%" /TIME:43200 "Nortverse uyari: %NV_MSG% - ayrinti: Masaustu\NORTVERSE-HATA.txt" >nul 2>&1
+REM Ayarliysa telefona da (ntfy) - bilgisayar basinda degilken de haberin olsun
+call "%~dp0notify-push.bat" "%NV_MSG%"
 exit /b 0

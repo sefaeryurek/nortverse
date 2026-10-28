@@ -23,6 +23,7 @@ from app.cli.archive_cmds import (
 )
 from app.cli.events_cmds import backfill_goal_events_cmd
 from app.cli.odds_cmds import backfill_odds_cmd, backtest_ht_value_cmd
+from app.cli.health_cmds import health_report_cmd
 from app.cli.users_cmds import create_user_cmd, list_users_cmd, set_password_cmd, unlock_cmd
 from app.cli.audit_cmds import (
     audit_db_cmd,
@@ -85,6 +86,7 @@ app.command("normalize-leagues")(normalize_leagues_cmd)
 app.command("prune-non-league")(prune_non_league_cmd)
 app.command("restore-deleted")(restore_deleted_cmd)
 app.command("audit-db")(audit_db_cmd)
+app.command("health-report")(health_report_cmd)
 app.command("audit-patterns")(audit_patterns_cmd)
 app.command("recompute-patterns")(recompute_patterns_cmd)
 app.command("self-test")(self_test_cmd)

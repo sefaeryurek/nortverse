@@ -40,8 +40,12 @@ if %EXITCODE% equ 0 goto ok
 echo [%date% %time%] HATA: Pipeline basarisiz - exit code %EXITCODE% >> "%LOGFILE%"
 echo [%date% %time%] HATA: Pipeline basarisiz - exit code %EXITCODE% >> "%ERRORLOG%"
 call "%~dp0notify-error.bat" "Pipeline %PIPELINE_ARGS% iki denemede de basarisiz - kod %EXITCODE%, scripts\logs\pipeline.log"
+if "%PIPELINE_ARGS%"=="" call "%~dp0hc-ping.bat" nortverse-pipeline fail
 exit /b %EXITCODE%
 
 :ok
 echo [%date% %time%] Pipeline basarili tamamlandi >> "%LOGFILE%"
+REM Saglik kontrolu icin basari isareti (sadece sabah pipeline'i) + olu adam ping'i
+if "%PIPELINE_ARGS%"=="" type nul > "%ROOT%\scripts\logs\pipeline.ok"
+if "%PIPELINE_ARGS%"=="" call "%~dp0hc-ping.bat" nortverse-pipeline
 exit /b 0

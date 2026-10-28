@@ -29,9 +29,13 @@ set EXITCODE=%errorlevel%
 
 if %EXITCODE% equ 0 (
     echo [%date% %time%] Skor guncelleme basarili >> "%LOGFILE%"
+    REM Saglik kontrolu icin basari isareti + olu adam ping'i
+    type nul > "%ROOT%\scripts\logs\scores.ok"
+    call "%~dp0hc-ping.bat" nortverse-skor
 ) else (
     echo [%date% %time%] HATA: Skor guncelleme basarisiz - exit code %EXITCODE% >> "%LOGFILE%"
     echo [%date% %time%] HATA: Skor guncelleme basarisiz - exit code %EXITCODE% >> "%ERRORLOG%"
     call "%~dp0notify-error.bat" "Skor guncelleme basarisiz - kod %EXITCODE%, scripts\logs\scores.log"
+    call "%~dp0hc-ping.bat" nortverse-skor fail
 )
 exit /b %EXITCODE%

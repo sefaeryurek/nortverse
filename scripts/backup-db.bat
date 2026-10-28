@@ -50,6 +50,7 @@ copy /y "%ROOT%\backend\.env" "%MIRROR%\env\backend.env" >nul 2>&1
 copy /y "%ROOT%\frontend\.env.local" "%MIRROR%\env\frontend.env.local" >nul 2>&1
 forfiles /p "%MIRROR%" /m "nortverse_*.dump" /d -30 /c "cmd /c del @path" 2>nul
 echo [%date% %time%] D: kopyasi tamam: %MIRROR% >> "%LOGFILE%"
+call "%~dp0hc-ping.bat" nortverse-yedek
 exit /b 0
 
 :nomirror
@@ -60,9 +61,11 @@ exit /b 0
 :mirrorfailed
 echo [%date% %time%] HATA: D: kopyasi basarisiz >> "%LOGFILE%"
 call "%~dp0notify-error.bat" "Yedek D: diskine kopyalanamadi - scripts\logs\backup.log"
+call "%~dp0hc-ping.bat" nortverse-yedek fail
 exit /b 1
 
 :failed
 echo [%date% %time%] HATA: Yedekleme basarisiz (kod %DUMPCODE%, %FSIZE% byte) >> "%LOGFILE%"
 call "%~dp0notify-error.bat" "Veritabani yedegi alinamadi - kod %DUMPCODE%"
+call "%~dp0hc-ping.bat" nortverse-yedek fail
 exit /b 1

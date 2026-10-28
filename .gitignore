@@ -58,3 +58,6 @@ backups/
 # ML model dosyaları
 backend/models/
 *.joblib
+
+# Dis uyari ayarlari (ntfy konusu, healthchecks anahtari) - Sprint 94 D4
+scripts/alerts.local.env

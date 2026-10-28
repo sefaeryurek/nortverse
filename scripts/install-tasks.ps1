@@ -57,6 +57,13 @@ if (Get-ScheduledTask -TaskPath $path -TaskName "UpdateScores2" -ErrorAction Sil
     Write-Host "Kaldirildi: ${path}UpdateScores2 (UpdateScores1'e birlestirildi)"
 }
 
+# Saglik kontrolu (Sprint 94 D4): 11:00-01:30 arasi 15 dk'da bir - sorun varsa uyari, ayarliysa healthchecks ping'i
+$health = New-ScheduledTaskTrigger -Daily -At "11:00"
+$health.Repetition = (New-ScheduledTaskTrigger -Once -At "11:00" -RepetitionInterval (New-TimeSpan -Minutes 15) `
+    -RepetitionDuration (New-TimeSpan -Hours 14 -Minutes 30)).Repetition
+New-NortverseTask "HealthCheck" "health-check.bat" $health `
+    "Saglik kontrolu: DB, backend/frontend, pipeline, canli kayit, skor, yedek, disk (15 dk'da bir)" (New-NortverseSettings 1)
+
 # Aylik yedek geri yukleme testi (gecici konteyner 127.0.0.1:5544; canli DB'ye dokunmaz)
 New-NortverseTask "RestoreTest" "restore-test.bat" (New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek Sunday -At "10:00") `
     "Yedegin gercekten geri yuklenebildigini 4 haftada bir dener" (New-NortverseSettings 2)
