@@ -11,11 +11,8 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 
 ## Kullanıcının yapması gereken (yönetici izni)
 
-- **`scripts/install-tasks.ps1`'i yönetici PowerShell ile yeniden çalıştır.** 29 Ekim tespiti: Windows'ta sadece
-  Backend, BackupDB, RunPipeline, UpdateScores1/2 var — Sprint 94'te eklenen **Frontend**, **HealthCheck**,
-  **LongJobs** görevleri hiç kurulmamış, D1'de silinecek UpdateScores2 duruyor. Sonuç: 29 Ekim 02:41'de oturum
-  kapanınca site (3000) durdu ve bilgisayar açılınca kendiliğinden başlamadı (11:59'da elle başlatıldı);
-  sağlık kontrolü ve uyarılar da çalışmıyor.
+- [x] `install-tasks.ps1` yönetici olarak çalıştırıldı (29 Ekim öğlen): Frontend, HealthCheck, LongJobs, RestoreTest,
+  RunPipelineAll, RunPipelineTomorrow kuruldu; UpdateScores2 kaldırıldı.
 - `backend/.env`'ye `ADMIN_API_KEY` (isteğe bağlı; yoksa admin uçları sadece yönetici hesabıyla).
 
 ## Bekleyen — dış koşula bağlı
