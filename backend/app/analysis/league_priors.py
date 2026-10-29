@@ -81,10 +81,10 @@ def book_from_counts(as_of: datetime | None, rows: list[tuple]) -> PriorBook:
         acc = merged.setdefault(canonical_league_name(league), [0, 0, 0, 0, 0])
         for i, value in enumerate(counts):
             acc[i] += int(value or 0)
-    # Genel değer (ligde veri yoksa yedek) sadece ana liglerden: gölgedeki yeni ligler bunu kaydırmasın.
-    from app.analysis.league_filter import is_main_league
+    # Genel değer (ligde veri yoksa yedek) sadece ortak havuz liglerinden (P3): gölge/terfi ligler bunu kaydırmasın.
+    from app.analysis.league_filter import is_pool_league
 
-    reference = [c for league, c in merged.items() if is_main_league(league)] or list(merged.values())
+    reference = [c for league, c in merged.items() if is_pool_league(league)] or list(merged.values())
     totals = [sum(c[i] for c in reference) for i in range(5)]
     return PriorBook(
         as_of=as_of,

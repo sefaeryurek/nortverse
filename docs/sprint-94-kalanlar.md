@@ -44,7 +44,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
   ölçüm gölge karneyle (`group_by=model_only`).
 - [x] F7 lig alias'ları — 94.49: 7 ligin kısa kod/bülten adı birleşti, kaynaktan örneklenen 20 (kod, ad) çifti testte, `normalize-leagues --apply` 65 satır; frontend bayrakları (German 2. Bundesliga, Eerste Divisie, League One/Two, TUR 1. Lig)
 - [ ] P2 lig partisi (K16) — 94.50: `scripts/lig-partisi-cek.bat` hazır (lig no 35/137/17/32/6, 5 sezon, kaynaktan doğrulandı); KULLANICI ÇEKİYOR. Bitince: SHADOW_LEAGUES'e ekle (P3 ile), audit-db, gölge karne
-- [ ] P3 DISPLAY_LEAGUES / POOL_LEAGUES ayrımı + terfi süreci
+- [x] P3 DISPLAY_LEAGUES / POOL_LEAGUES ayrımı + tarihli terfi (`PROMOTED_LEAGUES`) + `league-promotion-report` — 94.51. İlk rapor: Championship 5 ölçütte eksik (H2H %53, maç öncesi backtest yok, gölge karne <100)
 - [ ] P4 Avrupa kupaları seçenek B (K17): arşiv + canlı COND gölge
 
 ### 20 — Kalan Orta/Düşük

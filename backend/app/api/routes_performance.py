@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import text
 
-from app.analysis.league_filter import is_main_league, is_shadow_league
+from app.analysis.league_filter import is_display_league, is_shadow_league
 from app.analysis.market_resolver import resolve
 from app.analysis.performance import (
     GROUP_FIELDS,
@@ -32,8 +32,11 @@ Informational = Literal["all", "main", "info"]
 Scope = Literal["main", "shadow"]
 
 
-def _in_scope(league_name: str | None, scope: str) -> bool:
-    return is_shadow_league(league_name) if scope == "shadow" else is_main_league(league_name)
+def _in_scope(league_name: str | None, scope: str, at: datetime | None = None) -> bool:
+    """`at` = kaydın yazıldığı an: terfi edilen ligin terfiden önceki kayıtları gölge karnede kalır (P3)."""
+    if scope == "shadow":
+        return is_shadow_league(league_name, at=at)
+    return is_display_league(league_name, at=at)
 
 _LEDGER_SQL = """
     SELECT l.id, l.source, l.rule_version, l.match_id, l.league_name, m.kickoff_time, l.recorded_at,
@@ -96,7 +99,7 @@ async def _load(source: str, rule_version: str | None, date_from: date | None, d
         rows = (await session.execute(text(_LEDGER_SQL.format(filters=" ".join(filters))), params)).all()
     # Ekranda olmayan küçük lig / silinmiş lig kayıtları (eski v3 kopyaları dahil) panelde sayılmaz;
     # gölgedeki ligler sadece scope=shadow ile.
-    return [_with_baseline(r) for r in rows if _in_scope(r.league_name, scope)]
+    return [_with_baseline(r) for r in rows if _in_scope(r.league_name, scope, r.recorded_at)]
 
 
 @router.get("/api/performance/summary")
@@ -282,7 +285,7 @@ async def live_matches(day: date = Query(..., description="İstanbul günü (ma�
     matches: dict[str, dict] = {}
     model_picks: dict[str, list[dict]] = {}
     for r in rows:
-        if not _in_scope(r.league_name, scope):
+        if not _in_scope(r.league_name, scope, r.recorded_at):
             continue  # canlı sayfada olmayan küçük lig kayıtları değerlendirmede de gösterilmez
         entry = matches.setdefault(r.match_id, {
             "match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
@@ -336,7 +339,7 @@ _COVERAGE_SQL = """
 def coverage_summary(rows, scope: str) -> dict:
     """Devre arasına ulaşan izlenen maçlar ve kaçı canlı kaydedildi (Sprint 94 C4). Karneler sadece kapsanan
     maçları anlatır; düşük kapsama (PC uykuda, backend kapalı) karneyi seçici yapabilir."""
-    kept = [r for r in rows if _in_scope(r.league_name, scope)]
+    kept = [r for r in rows if _in_scope(r.league_name, scope, r.kickoff_time)]
     frozen = sum(1 for r in kept if r.frozen)
     missed = [{"match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
                "league_name": r.league_name, "kickoff_time": r.kickoff_time.isoformat()}

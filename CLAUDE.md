@@ -51,6 +51,7 @@ python -m app.cli.main build-archive 36 2024-2025   # ENG PR 2024-2025 sezonu
 python -m app.cli.main build-archive 36              # güncel sezon
 python -m app.cli.main build-multi-archive 36 39 78  # birden fazla lig — sırayla
 python -m app.cli.main list-leagues                  # mevcut tüm lig ID'leri ve isimleri
+python -m app.cli.main league-promotion-report "English Championship"  # gölge lig ekrana alınabilir mi (P3 ölçütleri)
 
 # FastAPI sunucusu
 python -m app.cli.main serve                         # http://localhost:8000
@@ -329,9 +330,10 @@ nortverse/
 │   │       ├── events_cmds.py     # backfill-goal-events — gol dakikaları (Sprint 93)
 │   │       ├── odds_cmds.py       # backfill-odds, backtest-ht-value (Sprint 93–94)
 │   │       ├── health_cmds.py     # health-report — health-check.ps1'in DB kontrolleri (Sprint 94 D4)
+│       ├── league_cmds.py     # league-promotion-report — gölge → ekran terfi ölçütleri (Sprint 94 P3)
 │   │       └── users_cmds.py      # create-user, set-password, list-users, unlock (Sprint 93–94)
 │   ├── alembic/                   # DB migration (29 migration, head c3p6l1m7h885)
-│   ├── tests/                     # 1358 test (89 dosya)
+│   ├── tests/                     # 1366 test (90 dosya)
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -1737,6 +1739,11 @@ Kullanıcı kararı: K1–K22 plandaki önerilerle onaylı; küçük/büyük tü
   League Two (35), Çekya (137), Eerste Divisie (17), Yunanistan (32), Polonya (6) × 2022-23…2026-27, eskiden yeniye;
   sonra λ + `recompute-patterns --league …`. Bitince bu ligler gölge listesine eklenecek (P3). Bekleyen gol dakikası +
   MS oran geçmişi çekimi için `scripts/arka-plan-cek.bat` (gece görevinin aynısı, 00:45'te durur).
+- **Ekran / havuz ayrımı (94.51, P3):** `league_filter.DISPLAY_LEAGUES` (ekran) ve `POOL_LEAGUES` (COND "tüm ligler",
+  lig ortalaması genel değeri, Poisson 2Y payı) ayrı; ikisi de bugün 7 ana lig. Terfi = `PROMOTED_LEAGUES[lig] = tarih`
+  (sadece ekran değişir; değerlendirmede o tarihten önceki kayıtlar gölge karnede). Ölçütler `league-promotion-report`:
+  ≥5 sezon, son 3 sezon λ/A3 ≥%95, H2H geçişi ≥%60, skor p90 <6 sa, alias, oran ≥%80, backtest ≥300 karar ±2 puan,
+  gölge havuzu ≥100 karar yolunda + lig ≥30 karar altında değil; karar sahibin (`--kaydet` audit_log'a yazar).
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -2020,7 +2027,7 @@ Eski bulut kurulumu (Render + Vercel + Neon): yapılandırma duruyor, kullanılm
 
 | Katman | Araç | Test sayısı |
 |---|---|---|
-| Backend | pytest | 1358 |
+| Backend | pytest | 1366 |
 | Frontend birim | vitest | 394 |
 | Frontend E2E | Playwright | 17 × 2 görünüm (CI'da PostgreSQL + backend ile) |
 

@@ -254,10 +254,10 @@ def _finish_shares(leagues: dict[str, LeagueModel]) -> None:
 
     Ortak pay sadece 7 ana ligden (Sprint 92): gölgedeki yeni ligler ana liglerin payını kaydırmasın.
     """
-    from app.analysis.league_filter import is_main_league
+    from app.analysis.league_filter import is_pool_league
 
     total = {s: [0.0, 0.0, 0.0, 0.0] for s in STATES}
-    reference = [lm for name, lm in leagues.items() if is_main_league(name)] or list(leagues.values())
+    reference = [lm for name, lm in leagues.items() if is_pool_league(name)] or list(leagues.values())
     for lm in reference:
         for s, acc in lm._share_sums.items():
             for i in range(4):
@@ -578,7 +578,7 @@ async def load_hit_table() -> dict:
     """
     from sqlalchemy import text
 
-    from app.analysis.league_filter import MAIN_LEAGUES
+    from app.analysis.league_filter import DISPLAY_LEAGUES
     from app.db.connection import get_session
 
     global _hit_cache
@@ -594,7 +594,7 @@ async def load_hit_table() -> dict:
             FROM prediction_backtest WHERE run_id = :run AND outcome IN ('hit', 'miss')
               AND league_name = ANY(:leagues)
             GROUP BY period, market
-        """), {"run": run_id, "leagues": sorted(MAIN_LEAGUES)})).all()
+        """), {"run": run_id, "leagues": sorted(DISPLAY_LEAGUES)})).all()
     table = {(period, market): {"pct": round(100 * hits / total, 1), "n": total}
              for period, market, hits, total in rows if total >= 30}
     _hit_cache = (time.monotonic(), table)

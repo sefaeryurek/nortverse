@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 
 from app.analysis.freshness import ResultsWatch, results_marker
-from app.analysis.league_filter import is_main_league
+from app.analysis.league_filter import is_pool_league
 from app.analysis.league_priors import PRIOR_SEASON_DAYS, prior_from_counts
 from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 from app.db.connection import get_session
@@ -91,8 +91,8 @@ def _diff_key(h: int, a: int) -> int:
 
 @lru_cache(maxsize=512)
 def _in_reference_pool(league: str) -> bool:
-    """Ortak "tüm ligler" havuzuna giren lig mi? (sadece 7 ana lig — Sprint 92)"""
-    return is_main_league(league)
+    """Ortak "tüm ligler" havuzuna giren lig mi? (POOL_LEAGUES — Sprint 92, P3: terfi bunu değiştirmez)"""
+    return is_pool_league(league)
 
 
 # Sprint 94 C1 (K9): COND tablosuna zaman penceresi. Pencere yokken arşiv tamamlama (NED +1.513, GER +1.048

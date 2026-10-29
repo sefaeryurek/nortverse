@@ -166,3 +166,47 @@ def test_tracked_leagues_recognised_from_bulletin_name():
 
     for _code, title in SOURCE_LEAGUE_PAIRS[:12]:
         assert is_tracked_league(title), title
+
+
+# Sprint 94 P3: ekran / ortak havuz ayrımı ve tarihli terfi
+def test_display_and_pool_start_as_the_main_leagues():
+    from app.analysis.league_filter import (
+        DISPLAY_LEAGUES, MAIN_LEAGUES, POOL_LEAGUES, is_display_league, is_pool_league, is_shadow_league,
+    )
+
+    assert POOL_LEAGUES == MAIN_LEAGUES and DISPLAY_LEAGUES >= MAIN_LEAGUES
+    assert is_display_league("ENG PR") and is_pool_league("Turkey Super Lig")
+    assert is_shadow_league("England Championship") and not is_display_league("England Championship")
+    assert not is_pool_league("English Championship")
+
+
+def test_promotion_changes_screen_only_and_respects_date(monkeypatch):
+    from datetime import date, datetime, timezone
+
+    from app.analysis import league_filter as lf
+
+    monkeypatch.setitem(lf.PROMOTED_LEAGUES, "English Championship", date(2026, 11, 1))
+    before = datetime(2026, 10, 31, 20, 0, tzinfo=timezone.utc)   # İstanbul 31 Ekim 23:00
+    after = datetime(2026, 10, 31, 22, 0, tzinfo=timezone.utc)    # İstanbul 1 Kasım 01:00
+    assert lf.is_display_league("England Championship")            # bugün ekranda
+    assert not lf.is_display_league("England Championship", at=before)
+    assert lf.is_shadow_league("England Championship", at=before)  # terfi öncesi kayıt gölge karnede
+    assert lf.is_display_league("ENG LCH", at=after) and not lf.is_shadow_league("ENG LCH", at=after)
+    assert not lf.is_pool_league("English Championship")           # ortak havuz ayrı karar
+    assert lf.is_tracked_league("English Championship")
+
+
+def test_pool_users_do_not_follow_display(monkeypatch):
+    """COND "tüm ligler" havuzu ve lig ortalaması terfiyle değişmez."""
+    from datetime import date
+
+    from app.analysis import league_filter as lf
+    from app.analysis import live_model
+
+    monkeypatch.setitem(lf.PROMOTED_LEAGUES, "English Championship", date(2026, 1, 1))
+    live_model._in_reference_pool.cache_clear()
+    try:
+        assert not live_model._in_reference_pool("English Championship")
+        assert live_model._in_reference_pool("English Premier League")
+    finally:
+        live_model._in_reference_pool.cache_clear()

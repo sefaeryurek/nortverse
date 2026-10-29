@@ -12,6 +12,7 @@ Hibrit yaklaşım: kara liste keyword (geniş kapsama) + opsiyonel kanonik form.
 from __future__ import annotations
 
 import re
+from datetime import date, datetime, timezone
 
 # Lig adında bu keyword'lerden biri geçiyorsa → kupa/turnuva → işleme.
 # Keyword bazlı pragmatik filtre; yanlış pozitif çıkarsa bilinen liglere whitelist
@@ -254,26 +255,72 @@ SHADOW_LEAGUES: frozenset[str] = frozenset({
 })
 
 
-def is_shadow_league(*names: str | None) -> bool:
-    return any(n and (n.strip() in SHADOW_LEAGUES or canonical_league_name(n) in SHADOW_LEAGUES) for n in names)
+# Sprint 94 P3: ekran ve ortak havuz ayrı listeler.
+# - POOL_LEAGUES: ortak havuzlara (COND "tüm ligler", lig ortalamasının genel değeri, Poisson 2. yarı payı) giren
+#   ligler. Buraya lig eklemek ana liglerin yüzdelerini kaydırır → ayrı karar + yeni kural sürümleri (gölge).
+# - DISPLAY_LEAGUES: ekranda (bülten, sonuçlar, canlı, İY panosu, değerlendirme ana karnesi) görünen ligler.
+#   Gölgedeki bir lig ekrana alınınca (terfi) SADECE bu liste değişir.
+# Terfi: kanonik ad → ekrana alındığı İstanbul günü. O günden önceki defter kayıtları gölge karnede kalır, sonrası
+# ana karneye girer. Ölçütler `league-promotion-report <lig>` ile; karar sahibindir (audit_log + CLAUDE.md).
+POOL_LEAGUES: frozenset[str] = MAIN_LEAGUES
+PROMOTED_LEAGUES: dict[str, date] = {}
+DISPLAY_LEAGUES: frozenset[str] = MAIN_LEAGUES | frozenset(PROMOTED_LEAGUES)
 
 
-def is_tracked_league(*names: str | None) -> bool:
-    """Tahmin üretilip deftere yazılan ligler: 7 ana lig + gölgedeki ligler."""
-    return is_main_league(*names) or is_shadow_league(*names)
-
-
-def is_main_league(*names: str | None) -> bool:
-    """Bülten için beyaz liste: sadece 7 ana lig."""
+def _canonical_in(names: tuple[str | None, ...], pool) -> str | None:
+    """Adlardan biri listedeyse listedeki adı döner (önce olduğu gibi, sonra kanonik form)."""
     for n in names:
         if not n:
             continue
-        if n.strip() in MAIN_LEAGUES:
-            return True
+        if n.strip() in pool:
+            return n.strip()
         canonical = canonical_league_name(n)
-        if canonical in MAIN_LEAGUES:
-            return True
-    return False
+        if canonical in pool:
+            return canonical
+    return None
+
+
+def _promoted_by(league: str, at: datetime | None) -> bool:
+    """Terfi edilen lig `at` anında ekranda mıydı? `at` verilmezse bugün."""
+    since = PROMOTED_LEAGUES.get(league)
+    if since is None:
+        return False
+    if at is None:
+        return True
+    from app.config import ISTANBUL_TZ
+
+    day = (at if at.tzinfo else at.replace(tzinfo=timezone.utc)).astimezone(ISTANBUL_TZ).date()
+    return day >= since
+
+
+def is_display_league(*names: str | None, at: datetime | None = None) -> bool:
+    """Ekranda görünen lig mi (7 ana lig + terfi edilenler). `at`: o anki durum (değerlendirme kayıt tarihi)."""
+    if _canonical_in(names, MAIN_LEAGUES):
+        return True
+    promoted = _canonical_in(names, PROMOTED_LEAGUES)
+    return promoted is not None and _promoted_by(promoted, at)
+
+
+def is_pool_league(*names: str | None) -> bool:
+    """Ortak havuzlara giren lig mi? (bugün sadece 7 ana lig)."""
+    return _canonical_in(names, POOL_LEAGUES) is not None
+
+
+def is_shadow_league(*names: str | None, at: datetime | None = None) -> bool:
+    """Gölgede: takip edilir, deftere yazılır, ekranda görünmez (terfi tarihinden önce terfi edilen lig de)."""
+    if is_display_league(*names, at=at):
+        return False
+    return _canonical_in(names, SHADOW_LEAGUES | frozenset(PROMOTED_LEAGUES)) is not None
+
+
+def is_tracked_league(*names: str | None) -> bool:
+    """Tahmin üretilip deftere yazılan ligler: ekrandaki ligler + gölgedeki ligler."""
+    return is_display_league(*names) or is_shadow_league(*names)
+
+
+def is_main_league(*names: str | None) -> bool:
+    """Bugün ekranda görünen lig mi — `is_display_league` ile aynı (eski ad, çağıranlar ekran anlamında kullanır)."""
+    return is_display_league(*names)
 
 
 def match_league_name(league_code: str | None, league_name: str | None) -> str:
