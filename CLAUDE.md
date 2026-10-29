@@ -329,8 +329,8 @@ nortverse/
 │   │       ├── odds_cmds.py       # backfill-odds, backtest-ht-value (Sprint 93–94)
 │   │       ├── health_cmds.py     # health-report — health-check.ps1'in DB kontrolleri (Sprint 94 D4)
 │   │       └── users_cmds.py      # create-user, set-password, list-users, unlock (Sprint 93–94)
-│   ├── alembic/                   # DB migration (28 migration, head b2o5k0l6g774)
-│   ├── tests/                     # 1277 test (88 dosya)
+│   ├── alembic/                   # DB migration (29 migration, head c3p6l1m7h885)
+│   ├── tests/                     # 1337 test (89 dosya)
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -1722,6 +1722,13 @@ Kullanıcı kararı: K1–K22 plandaki önerilerle onaylı; küçük/büyük tü
 - **Oranlar (94.27–94.29):** kazıyıcı doğrudan adres + kalıcı bağlantı + istek birleştirme; günlük oran kaydı
   (`update-scores` sonunda `backfill-odds --days 2 --scope both`), İY oranı 15 dk'da bir ön çekim, devre arası MS fiyatı
   defter `details.market`'te; İY panosu sadece DB'den okur (K-1), süzgeçler + kompakt satır + açılıştan ≥%8 düşüş rozeti (K-2).
+- **Yalnız model maçları (94.48, P1, K15):** H2H'ta <5 lig maçı olan takip maçı artık atlanmıyor — `matches.model_only`
+  (migration `c3p6l1m7h885`) satırı: takım, lig, saat, skor, λ; Katman A ve A1/A2/A3 boş (`runner.upsert_model_only`).
+  Maç öncesi sadece gölge `ft-display-v5.1` (`prematch_v5.capture_model_only`: 48 saat, başlamış maç, takip ligi);
+  canlıda sadece gölge sürümler (pencereli Poisson, COND uyarısı, 2Y, geri dönüş), `details.model_only=true`.
+  Ana liglerin oranları değişmesin diye bu satırlar COND, lig ortalaması, takım gücü eğitimi, A3/A1/A2 adayları,
+  backtest ve ekran listelerinden (bülten, sonuçlar, analiz, canlı, İY, kalite) `Match.model_only.is_(False)` ile
+  süzülür; skor güncelleme, defter çözümü ve canlı izleyici görür. Değerlendirmede `group_by=model_only` kırılımı.
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -1994,7 +2001,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 |---|---|---|
 | **Frontend** | `next start` (üretim modu) | `127.0.0.1:3000`, denetleyici görev (Sprint 94 E6) |
 | **Backend** | FastAPI | `127.0.0.1:8000`, denetleyici görev; tüm `/api` ve `/ws` giriş ister |
-| **Veritabanı** | Docker PostgreSQL | Port 5433, 43.812 aktif maç, migration head `b2o5k0l6g774` |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 43.812 aktif maç, migration head `c3p6l1m7h885` |
 | **Otomasyon** | Windows Task Scheduler | pipeline, skor (+ oran kaydı), yedek (D: dahil), sağlık kontrolü, gece uzun işleri |
 | **Paylaşım** | Tailscale | `scripts/paylasim-ac.bat`; link Faz A3 (DB portu) bitmeden verilmez |
 | **CI** | GitHub Actions | `quality.yml` (ruff, pytest, vitest, tsc, build, E2E); cron'lar kapalı |
@@ -2005,7 +2012,7 @@ Eski bulut kurulumu (Render + Vercel + Neon): yapılandırma duruyor, kullanılm
 
 | Katman | Araç | Test sayısı |
 |---|---|---|
-| Backend | pytest | 1277 |
+| Backend | pytest | 1337 |
 | Frontend birim | vitest | 386 |
 | Frontend E2E | Playwright | 17 × 2 görünüm (CI'da PostgreSQL + backend ile) |
 

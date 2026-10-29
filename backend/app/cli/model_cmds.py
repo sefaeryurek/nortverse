@@ -58,7 +58,7 @@ def backtest_cmd(
                     Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
                 )
                 .where(
-                    Match.deleted_at.is_(None),
+                    Match.deleted_at.is_(None), Match.model_only.is_(False),
                     Match.kickoff_time >= start,
                     Match.kickoff_time < end,
                     Match.actual_ft_home.isnot(None),
@@ -255,7 +255,7 @@ def train_ensemble_cmd(
                     Match.pattern_ft_b, Match.pattern_ft_c, Match.pattern_ft_d,
                 )
                 .where(
-                    Match.deleted_at.is_(None),
+                    Match.deleted_at.is_(None), Match.model_only.is_(False),
                     Match.kickoff_time >= start,
                     Match.kickoff_time < end,
                     Match.actual_ft_home.isnot(None),

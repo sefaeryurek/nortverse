@@ -216,7 +216,7 @@ async def get_live_ht_matches() -> list[LiveHTMatch]:
         observations = await _latest_ht_observations(session, ids)
         # Bülten gibi: sadece analiz edilmiş maçlar (kural dışı / analizsiz maçta gösterilecek veri yok).
         db_rows = (await session.execute(select(Match).where(
-            Match.match_id.in_(ids), Match.deleted_at.is_(None), Match.ft_scores_1.isnot(None),
+            Match.match_id.in_(ids), Match.deleted_at.is_(None), Match.model_only.is_(False), Match.ft_scores_1.isnot(None),
         ))).scalars().all()
         by_id = {m.match_id: m for m in db_rows}
         frozen = await _frozen_info(session, list(by_id))
@@ -255,7 +255,7 @@ async def get_live_prediction(
     """Tek maçın canlı arşiv görünümü; detail=1 ile her kaynağın eşleşen maç listesi."""
     async with get_session() as session:
         match = (await session.execute(select(Match).where(
-            Match.match_id == match_id, Match.deleted_at.is_(None),
+            Match.match_id == match_id, Match.deleted_at.is_(None), Match.model_only.is_(False),
         ))).scalar_one_or_none()
         if match is None:
             raise HTTPException(404, "Maç bulunamadı")

@@ -118,7 +118,7 @@ async def prefetch_upcoming(now: datetime | None = None) -> int:
     async with get_session() as session:
         rows = (await session.execute(
             select(Match.match_id, Match.league_name, Match.league_code)
-            .where(Match.deleted_at.is_(None), Match.kickoff_time > now, Match.kickoff_time <= now + PREFETCH_HORIZON)
+            .where(Match.deleted_at.is_(None), Match.model_only.is_(False), Match.kickoff_time > now, Match.kickoff_time <= now + PREFETCH_HORIZON)
             .order_by(Match.kickoff_time)
         )).all()
     ids = [r.match_id for r in rows if is_main_league(r.league_name, r.league_code)]
@@ -178,7 +178,7 @@ async def ht_strategy(
         rows = (await session.execute(
             select(Match.match_id, Match.home_team, Match.away_team, Match.league_name, Match.league_code,
                    Match.kickoff_time, Match.actual_ht_home, Match.actual_ht_away)
-            .where(Match.deleted_at.is_(None), Match.kickoff_time >= start,
+            .where(Match.deleted_at.is_(None), Match.model_only.is_(False), Match.kickoff_time >= start,
                    Match.kickoff_time < start + timedelta(days=1))
             .order_by(Match.kickoff_time)
         )).all()

@@ -92,7 +92,7 @@ async def get_match(
     async with get_session() as session:
         row = (
             await session.execute(
-                select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None), Match.model_only.is_(False))
             )
         ).scalar_one_or_none()
 
@@ -118,7 +118,7 @@ async def get_match(
         async with get_session() as session:
             row = (
                 await session.execute(
-                    select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                    select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None), Match.model_only.is_(False))
                 )
             ).scalar_one_or_none()
         if not row:
@@ -153,7 +153,7 @@ async def get_matched_matches(
     async with get_session() as session:
         target = (
             await session.execute(
-                select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None), Match.model_only.is_(False))
             )
         ).scalar_one_or_none()
         if not target:

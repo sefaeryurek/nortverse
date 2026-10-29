@@ -151,13 +151,13 @@ def audit_db_cmd(
         async with get_session() as session:
             total = (await session.execute(select(func.count(Match.id)))).scalar() or 0
             active = (await session.execute(
-                select(func.count(Match.id)).where(Match.deleted_at.is_(None))
+                select(func.count(Match.id)).where(Match.deleted_at.is_(None), Match.model_only.is_(False))
             )).scalar() or 0
             deleted = total - active
 
             active_rows = (await session.execute(
                 select(Match.match_id, Match.league_code, Match.league_name)
-                .where(Match.deleted_at.is_(None))
+                .where(Match.deleted_at.is_(None), Match.model_only.is_(False))
             )).all()
             non_league_active = [
                 r for r in active_rows
@@ -166,21 +166,21 @@ def audit_db_cmd(
 
             missing_pattern = (await session.execute(
                 select(func.count(Match.id)).where(
-                    Match.deleted_at.is_(None),
+                    Match.deleted_at.is_(None), Match.model_only.is_(False),
                     Match.pattern_computed_at.is_(None),
                 )
             )).scalar() or 0
 
             missing_trends = (await session.execute(
                 select(func.count(Match.id)).where(
-                    Match.deleted_at.is_(None), Match.trends.is_(None)
+                    Match.deleted_at.is_(None), Match.model_only.is_(False), Match.trends.is_(None)
                 )
             )).scalar() or 0
 
             cutoff = datetime.now(timezone.utc) - timedelta(minutes=130)
             missing_actual = (await session.execute(
                 select(func.count(Match.id)).where(
-                    Match.deleted_at.is_(None),
+                    Match.deleted_at.is_(None), Match.model_only.is_(False),
                     Match.kickoff_time < cutoff,
                     or_(Match.actual_ft_home.is_(None), Match.actual_ft_away.is_(None)),
                 )
@@ -189,16 +189,16 @@ def audit_db_cmd(
             now = datetime.now(timezone.utc)
             d24 = (await session.execute(
                 select(func.count(Match.id)).where(
-                    Match.deleted_at.is_(None), Match.created_at >= now - timedelta(days=1)
+                    Match.deleted_at.is_(None), Match.model_only.is_(False), Match.created_at >= now - timedelta(days=1)
                 )
             )).scalar() or 0
             d7 = (await session.execute(
                 select(func.count(Match.id)).where(
-                    Match.deleted_at.is_(None), Match.created_at >= now - timedelta(days=7)
+                    Match.deleted_at.is_(None), Match.model_only.is_(False), Match.created_at >= now - timedelta(days=7)
                 )
             )).scalar() or 0
             last_pipeline = (await session.execute(
-                select(func.max(Match.analyzed_at)).where(Match.deleted_at.is_(None))
+                select(func.max(Match.analyzed_at)).where(Match.deleted_at.is_(None), Match.model_only.is_(False))
             )).scalar()
 
             score_rows = (await session.execute(
@@ -206,7 +206,7 @@ def audit_db_cmd(
                     Match.match_id,
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.actual_ht_home, Match.actual_ht_away,
-                ).where(Match.deleted_at.is_(None))
+                ).where(Match.deleted_at.is_(None), Match.model_only.is_(False))
             )).all()
             from app.analysis.repair import score_issue
 
@@ -222,7 +222,7 @@ def audit_db_cmd(
 
             dup_stmt = (
                 select(Match.match_id, func.count(Match.id).label("cnt"))
-                .where(Match.deleted_at.is_(None))
+                .where(Match.deleted_at.is_(None), Match.model_only.is_(False))
                 .group_by(Match.match_id)
                 .having(func.count(Match.id) > 1)
             )
@@ -235,7 +235,7 @@ def audit_db_cmd(
                     func.count(Match.id).label("cnt"),
                 )
                 .where(
-                    Match.deleted_at.is_(None),
+                    Match.deleted_at.is_(None), Match.model_only.is_(False),
                     Match.home_team.isnot(None),
                     Match.away_team.isnot(None),
                     Match.kickoff_time.isnot(None),
@@ -248,7 +248,7 @@ def audit_db_cmd(
 
             ftb_rows = (await session.execute(
                 select(Match.match_id, Match.pattern_ft_b)
-                .where(Match.deleted_at.is_(None), Match.pattern_ft_b.isnot(None))
+                .where(Match.deleted_at.is_(None), Match.model_only.is_(False), Match.pattern_ft_b.isnot(None))
             )).all()
             pattern_anomalies = []
             for r in ftb_rows:
@@ -468,7 +468,7 @@ def recompute_patterns_cmd(
         current = pattern_hashes()
         hash_cols = {f: getattr(Match, f"pattern_{f}_hash") for f in FAMILIES}
         async with get_session() as session:
-            filters = [Match.deleted_at.is_(None), Match.analyzed_at.is_not(None)]
+            filters = [Match.deleted_at.is_(None), Match.model_only.is_(False), Match.analyzed_at.is_not(None)]
             if not include_finished:
                 filters.append(or_(Match.kickoff_time.is_(None), Match.kickoff_time > func.now()))
             else:

@@ -36,16 +36,12 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [ ] O6 ft-display-v6-mkt (I6) — I1 sonrası
 
 ### 19 — Faz P (kapsam)
-- [ ] P1 "yalnız model" analizi (K15): H2H <5 → model_only, A3 + λ, v5/Poisson; v5.1 gölge (L — temiz oturumda)
-  - Engel: `prediction_ledger.match_id` → `matches` yabancı anahtarı; kayıt için `matches` satırı şart.
-  - Tasarım: migration `matches.model_only boolean default false`; runner H2H_INSUFFICIENT + takip ligi →
-    takım/lig/saat + λ yazan satır (Katman A ve A1/A2 boş), `prematch_v5.ledger_rows_v51(model_only=True)`
-    48 saat ufku + başlamış maç korumasıyla.
-  - Ana liglerin oranları değişmesin diye model_only satırları şunlardan HARİÇ: COND tablosu (`live_model`),
-    lig ortalamaları (`league_priors`), takım gücü eğitimi (`live_poisson.load_training`), A3 aday havuzu,
-    bülten / sonuçlar / analiz listeleri, `_prepared_match_ids`, recompute-patterns, audit-db kalite metrikleri,
-    canlı izleyici ekrandaki kayıtlar (model_only maçta sadece gölge sürümler yazılır), değerlendirme sayımları.
-  - Test: her hariç tutma için bir test; v5.1 satırı `details.model_only=true`.
+- [x] P1 "yalnız model" analizi (K15) — 94.48: `matches.model_only` (migration c3p6l1m7h885), `runner.upsert_model_only`,
+  `prematch_v5.capture_model_only` (sadece gölge v5.1), canlı izleyicide sadece gölge sürümler + `details.model_only`;
+  havuz/ekran sorguları `Match.model_only.is_(False)`; `tests/test_model_only.py` (38 test, her hariç tutma için bir
+  test). İlk gerçek kayıt: 2993838 Frosinone–Lecce (H2H 2; avantaj 4,4 puan → kural gereği yayın yok).
+  Not: "yalnız model" backtest'i (#12 tekrar oynatma bu maçlar için) arşivde bu satırlar olmadığından yapılamıyor;
+  ölçüm gölge karneyle (`group_by=model_only`).
 - [ ] F7 lig alias'ları (P2 ön koşulu)
 - [ ] P2 lig partisi (K16): League Two, Çekya, Eerste Divisie, Yunanistan, Polonya — 5 sezon, gece görevinde
 - [ ] P3 DISPLAY_LEAGUES / POOL_LEAGUES ayrımı + terfi süreci

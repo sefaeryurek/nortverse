@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -96,6 +97,9 @@ class Match(Base):
     # Soft delete (Sprint 8.9) — kupa temizliği geri alınabilir
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deleted_reason: Mapped[str | None] = mapped_column(String(50))
+    # Yalnız model satırı (Sprint 94 P1, K15): H2H yetersiz takip maçı — Katman A ve arşivler boş, sadece takım
+    # gücü + gölge kararlar. Ortak havuzlara ve ekran listelerine girmez (`Match.model_only.is_(False)`).
+    model_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false(), default=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

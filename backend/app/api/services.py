@@ -369,7 +369,7 @@ async def _analyze_db_only_locked(match_id: str) -> bool:
     try:
         async with get_session() as session:
             row = (await session.execute(
-                select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None), Match.model_only.is_(False))
             )).scalar_one_or_none()
         if row is None:
             return False
@@ -414,7 +414,7 @@ async def analyze_and_cache(match_id: str, *, allow_scrape: bool = True) -> Anal
             async with get_session() as session:
                 db_row = (
                     await session.execute(
-                        select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None))
+                        select(Match).where(Match.match_id == match_id, Match.deleted_at.is_(None), Match.model_only.is_(False))
                     )
                 ).scalar_one_or_none()
         except Exception as exc:

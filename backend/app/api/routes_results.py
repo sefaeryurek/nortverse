@@ -34,7 +34,7 @@ async def list_matches(
                 Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
                 Match.analyzed_at,
             )
-            .where(Match.deleted_at.is_(None))
+            .where(Match.deleted_at.is_(None), Match.model_only.is_(False))
             .order_by(Match.analyzed_at.desc())
             .limit(limit)
         )
@@ -88,7 +88,7 @@ async def get_results(target_date: Optional[str] = Query(None, alias="date")) ->
                 )
                 .where(Match.kickoff_time >= day_start)
                 .where(Match.kickoff_time < day_end)
-                .where(Match.deleted_at.is_(None))
+                .where(Match.deleted_at.is_(None), Match.model_only.is_(False))
                 .order_by(Match.kickoff_time)
             )
         ).all()

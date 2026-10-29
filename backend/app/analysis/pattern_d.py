@@ -104,7 +104,7 @@ async def _load_pool() -> _Pool:
         ).where(
             Match.team_lambda_home.isnot(None), Match.team_lambda_away.isnot(None),
             Match.actual_ft_home.isnot(None), Match.actual_ft_away.isnot(None),
-            Match.deleted_at.is_(None), Match.kickoff_time.isnot(None),
+            Match.deleted_at.is_(None), Match.model_only.is_(False), Match.kickoff_time.isnot(None),
             known_at > Match.kickoff_time,
         )
         async with get_session() as session:

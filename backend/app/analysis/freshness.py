@@ -30,7 +30,7 @@ async def results_marker() -> tuple:
     async with get_session() as session:
         row = (await session.execute(
             select(func.count(Match.id), func.max(Match.result_fetched_at)).where(
-                Match.deleted_at.is_(None), Match.actual_ft_home.isnot(None), Match.kickoff_time >= since,
+                Match.deleted_at.is_(None), Match.model_only.is_(False), Match.actual_ft_home.isnot(None), Match.kickoff_time >= since,
             )
         )).one()
     return (int(row[0] or 0), row[1].isoformat() if row[1] else None)

@@ -108,7 +108,7 @@ async def _query_book(as_of: datetime) -> PriorBook:
         func.count().filter((ft_h > 0) & (ft_a > 0)),
     ).where(
         # CondTable ile aynı süzgeç: İY ve MS dolu, İY ≤ MS, sonuç maçtan sonra bilinmiş.
-        Match.deleted_at.is_(None),
+        Match.deleted_at.is_(None), Match.model_only.is_(False),
         ft_h.isnot(None), ft_a.isnot(None),
         Match.actual_ht_home.isnot(None), Match.actual_ht_away.isnot(None),
         Match.actual_ht_home <= ft_h, Match.actual_ht_away <= ft_a,

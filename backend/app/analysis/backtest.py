@@ -126,7 +126,7 @@ def _history_stmt():
         Match.league_name, Match.actual_ht_home, Match.actual_ht_away,
         Match.actual_ft_home, Match.actual_ft_away, Match.kickoff_time,
     ).where(
-        Match.deleted_at.is_(None),
+        Match.deleted_at.is_(None), Match.model_only.is_(False),
         Match.actual_ft_home.isnot(None), Match.actual_ht_home.isnot(None),
         Match.kickoff_time.isnot(None), known_at > Match.kickoff_time,
         Match.league_name.isnot(None),
@@ -137,7 +137,7 @@ async def _start_run(strategy: str, rule_version: str, params: dict, date_from: 
                      date_to: datetime, notes: str | None, replace_run: int | None):
     """Geçmiş maçları + hedef maç id'lerini yükler, backtest_runs satırını açar."""
     target_ids_stmt = select(Match.match_id).where(
-        Match.deleted_at.is_(None),
+        Match.deleted_at.is_(None), Match.model_only.is_(False),
         Match.actual_ft_home.isnot(None), Match.actual_ht_home.isnot(None),
         Match.kickoff_time >= date_from, Match.kickoff_time < date_to,
         Match.league_name.isnot(None),
@@ -308,7 +308,7 @@ async def run_live_archive_backtest(date_from: datetime, date_to: datetime, *, n
     async with get_session() as session:
         results = {r[0]: tuple(r[1:]) for r in (await session.execute(select(
             Match.match_id, Match.actual_ht_home, Match.actual_ht_away, Match.actual_ft_home, Match.actual_ft_away,
-        ).where(Match.deleted_at.is_(None), Match.actual_ft_home.isnot(None), Match.actual_ht_home.isnot(None)))).all()}
+        ).where(Match.deleted_at.is_(None), Match.model_only.is_(False), Match.actual_ft_home.isnot(None), Match.actual_ht_home.isnot(None)))).all()}
     log.info("Canlı arşiv backtest #%d: %d hedef maç", run_id, len(target_ids))
 
     def rows_of(_table, match, as_of):

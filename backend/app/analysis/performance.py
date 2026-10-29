@@ -24,6 +24,8 @@ GROUP_FIELDS = {
     "risk": lambda r: "risky" if r.get("confidence_tier") == "insufficient" else "normal",
     "week": lambda r: _iso_week(r["kickoff_time"]),
     "day": lambda r: r["kickoff_time"].astimezone(ISTANBUL_TZ).date().isoformat(),
+    # Yalnız model maçları (H2H <5, Sprint 94 P1) — gölge karnede tam analizli maçlardan ayrı
+    "model_only": lambda r: "model_only" if (r.get("details") or {}).get("model_only") else "full",
 }
 
 

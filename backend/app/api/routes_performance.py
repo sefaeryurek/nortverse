@@ -327,7 +327,7 @@ _COVERAGE_SQL = """
     SELECT m.match_id, m.home_team, m.away_team, m.league_name, m.kickoff_time,
            EXISTS (SELECT 1 FROM prediction_ledger l WHERE l.match_id = m.match_id AND l.source = 'live_ht') AS frozen
     FROM matches m
-    WHERE m.deleted_at IS NULL AND m.actual_ht_home IS NOT NULL
+    WHERE m.deleted_at IS NULL AND NOT m.model_only AND m.actual_ht_home IS NOT NULL
       AND m.kickoff_time >= :start AND m.kickoff_time < :end
     ORDER BY m.kickoff_time
 """

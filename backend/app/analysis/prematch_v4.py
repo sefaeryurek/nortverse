@@ -337,7 +337,7 @@ async def capture_prepared_recommendations(target_date: date) -> int:
                 Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
                 Match.ft_all_ratios,
             ).where(
-                Match.deleted_at.is_(None), Match.kickoff_time >= day_start,
+                Match.deleted_at.is_(None), Match.model_only.is_(False), Match.kickoff_time >= day_start,
                 Match.kickoff_time < day_end, Match.kickoff_time > started_at,
                 Match.analyzed_at.is_not(None), Match.analyzed_at <= started_at,
                 Match.analyzed_at < Match.kickoff_time, Match.ft_scores_1.is_not(None),

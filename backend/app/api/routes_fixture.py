@@ -71,7 +71,7 @@ async def _enrich_prediction_status(items: list[dict]) -> dict[str, bool]:
             stmt = (
                 select(Match.match_id)
                 .where(Match.match_id.in_(ids))
-                .where(Match.deleted_at.is_(None))
+                .where(Match.deleted_at.is_(None), Match.model_only.is_(False))
                 .where(Match.ft_scores_1.isnot(None))
             )
             rows = (await session.execute(stmt)).scalars().all()
@@ -304,7 +304,7 @@ async def get_pattern_status(
                     Match.pattern_ft_d,
                 )
                 .where(Match.match_id.in_(miss_ids))
-                .where(Match.deleted_at.is_(None))
+                .where(Match.deleted_at.is_(None), Match.model_only.is_(False))
             )
             rows = (await session.execute(stmt)).all()
 

@@ -11,7 +11,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.analysis import live_2h, live_archive, live_comeback, live_cond_filter, live_poisson
@@ -178,8 +178,8 @@ async def _poisson_shadow(match: Match, fs: FixtureScore) -> tuple[dict | None, 
         return None, []
 
 
-async def _windowed_shadows(match: Match, fs: FixtureScore,
-                            prediction: dict | None) -> tuple[dict | None, list[dict], list[dict]]:
+async def _windowed_shadows(match: Match, fs: FixtureScore, prediction: dict | None,
+                            *, with_view: bool = True) -> tuple[dict | None, list[dict], list[dict]]:
     """Pencereli COND'lu gölge sürümler (Sprint 94 C1): live-arch-v2.1 görünümü + live-poisson-v1.2 kararları
     + live-cond-filter-v1 uyarıları (Faz O: lig geçmişi ≥%85 ama model <%85)."""
     ht = observed_ht(fs)
@@ -189,9 +189,10 @@ async def _windowed_shadows(match: Match, fs: FixtureScore,
     warns: list[dict] = []
     try:
         table = await get_cond_table(COND_WINDOW_YEARS)
-        view = await live_archive.load_view(
-            match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
-            ht, league=league, table=table)
+        if with_view:
+            view = await live_archive.load_view(
+                match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
+                ht, league=league, table=table)
         if prediction is not None:
             cond_of = live_poisson.cond_lookup(table, league, ht)
             picks = live_poisson.decisions(prediction, cond_of)
@@ -240,6 +241,13 @@ async def market_snapshot(match_id: str, now: datetime) -> dict | None:
     return {"ft": snap["ft"], "live": snap.get("live"), "fetched_at": now.isoformat()}
 
 
+def mark_model_only(rows: list[dict]) -> list[dict]:
+    """Yalnız model maçının (H2H <5, Sprint 94 P1) kayıtları ayrı sayılabilsin diye `details.model_only`."""
+    for row in rows:
+        row["details"] = {**(row.get("details") or {}), "model_only": True}
+    return rows
+
+
 def attach_market(rows: list[dict], market: dict | None) -> list[dict]:
     """Maç sonu (ve 2. yarı) kararlarına devre arası fiyatını ekler; İY periyodu zaten bitmiş."""
     if market:
@@ -253,8 +261,11 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
                                  report: dict | None = None) -> str:
     """İY gözlemini ve tahmini bir kez kaydeder. Durum kodunu döner (tahmin `report`'a yazılır)."""
     status, prediction = await plan_live_freeze(match, fs)
+    # Yalnız model maçı (P1): arşivi yok; ekrandaki kararlar (live-poisson-v1.1, live-arch-v2) yazılmaz,
+    # sadece gölge sürümler (pencereli Poisson, COND uyarısı, 2. yarı, geri dönüş).
+    model_only = bool(getattr(match, "model_only", False))
     view = None
-    if status == "ready":
+    if status == "ready" and not model_only:
         try:
             view = await live_archive.load_view(
                 match.match_id, {"b": match.pattern_ft_b, "c": match.pattern_ft_c, "d": match.pattern_ft_d},
@@ -264,8 +275,8 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             log.warning("Canlı arşiv görünümü hesaplanamadı [%s]", match.match_id, exc_info=True)
     shadow_pred, shadow_picks = await _poisson_shadow(match, fs) if status == "ready" else (None, [])
     h2_picks, h2_lambdas, comeback = await _live_2h_shadow(match, fs) if status == "ready" else ([], None, [])
-    view_w, poisson_w, cond_warns = (await _windowed_shadows(match, fs, shadow_pred) if status == "ready"
-                                     else (None, [], []))
+    view_w, poisson_w, cond_warns = (await _windowed_shadows(match, fs, shadow_pred, with_view=not model_only)
+                                     if status == "ready" else (None, [], []))
     if report is not None:
         report["prediction"] = prediction
         report["view"] = view
@@ -284,7 +295,7 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
     async with get_session() as session:
         obs_id = await _ht_observation_id(session, match, ht, phase, now)
         rows = (ledger_rows(match, prediction, now, obs_id, late=phase == "2h")
-                if RECORD_LIVE_MS and prediction is not None else [])
+                if RECORD_LIVE_MS and prediction is not None and not model_only else [])
         # Canlı arşiv %85+ işaretleri: ana kayıt ile aynı İY gözlemine bağlı; geç kalındıysa yazılmaz.
         # Arşiv ve gölge işaretleri sadece devre arası / 2. yarının başında; geç kalındıysa yazılmaz.
         window_ok = archive_freeze_allowed(fs, match.kickoff_time, now)
@@ -296,10 +307,10 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
         }
         if archive_ok:
             rows += live_archive.ledger_rows(view, common, late=phase == "2h")
-        if window_ok and shadow_picks:
+        if window_ok and shadow_picks and not model_only:
             # Ekrandaki ana canlı karar (live-poisson-v1.1)
             rows += live_poisson.ledger_rows(shadow_pred, shadow_picks, common, late=phase == "2h")
-        if window_ok and view_w is not None:
+        if window_ok and view_w is not None and not model_only:
             # Gölge: aynı kurallar 10 yıllık COND ile (live-arch-v2.1, live-poisson-v1.2) — K9, 100 karar sonra karne
             rows += live_archive.ledger_rows(view_w, common, late=phase == "2h", shadow=True)
         if window_ok and poisson_w:
@@ -313,13 +324,15 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             rows += live_comeback.ledger_rows(comeback, common, lambdas=h2_lambdas, late=phase == "2h")
         if not window_ok:
             log.info("Arşiv/gölge işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)
-        elif view is None:
+        elif view is None and not model_only:
             log.warning("Arşiv işaretleri yazılmadı (görünüm yok) [%s]", match.match_id)
+        if model_only:
+            rows = mark_model_only(rows)
         written = await record_predictions(session, attach_market(rows, market))
     if written:
         log.info("Canlı kararlar donduruldu [%s] İY %s-%s · %d satır (%d arşiv işareti, %d Poisson)",
                  match.match_id, ht[0], ht[1], written, len(view["highlights"]) if archive_ok else 0,
-                 len(shadow_picks) if window_ok else 0)
+                 len(shadow_picks) if window_ok and not model_only else 0)
         return "frozen"
     # İY gözlemi yazıldı ama kaydedilecek karar yok (ya da geç kalındı) → maç değerlendirilmiş sayılır
     return "evaluated"
@@ -342,7 +355,7 @@ async def run_tick(*, dry_run: bool = False, snapshot=None) -> list[dict]:
         candidates = (await session.execute(
             select(Match).where(
                 Match.deleted_at.is_(None),
-                Match.ft_scores_1.isnot(None),
+                or_(Match.ft_scores_1.isnot(None), Match.model_only.is_(True)),
                 Match.kickoff_time >= now - WINDOW_START,
                 Match.kickoff_time <= now - WINDOW_END,
             ).order_by(Match.kickoff_time)

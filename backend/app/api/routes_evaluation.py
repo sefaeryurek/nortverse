@@ -80,7 +80,7 @@ async def daily_evaluation(
                 Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
             )
             .where(
-                Match.deleted_at.is_(None),
+                Match.deleted_at.is_(None), Match.model_only.is_(False),
                 Match.kickoff_time >= day_start,
                 Match.kickoff_time < day_end,
                 Match.actual_ft_home.isnot(None),

@@ -124,7 +124,7 @@ async def analysis_evidence() -> AnalysisEvidence:
     This reports coverage; it does not claim a calibrated hit rate.
     """
     eligible = (
-        Match.deleted_at.is_(None),
+        Match.deleted_at.is_(None), Match.model_only.is_(False),
         Match.actual_ft_home.is_not(None),
         Match.actual_ft_away.is_not(None),
         func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at).is_not(None),
@@ -192,30 +192,30 @@ async def admin_quality() -> DataQuality:
     async with get_session() as session:
         total = (await session.execute(select(func.count(Match.id)))).scalar() or 0
         active = (await session.execute(
-            select(func.count(Match.id)).where(Match.deleted_at.is_(None))
+            select(func.count(Match.id)).where(Match.deleted_at.is_(None), Match.model_only.is_(False))
         )).scalar() or 0
         soft_deleted = total - active
 
         non_league_q = select(func.count(Match.id)).where(
-            Match.deleted_at.is_(None),
+            Match.deleted_at.is_(None), Match.model_only.is_(False),
             Match.league_name.is_(None),
         )
         non_league = (await session.execute(non_league_q)).scalar() or 0
 
         missing_pattern = (await session.execute(
             select(func.count(Match.id)).where(
-                Match.deleted_at.is_(None), Match.pattern_computed_at.is_(None),
+                Match.deleted_at.is_(None), Match.model_only.is_(False), Match.pattern_computed_at.is_(None),
             )
         )).scalar() or 0
         missing_trends = (await session.execute(
             select(func.count(Match.id)).where(
-                Match.deleted_at.is_(None), Match.trends.is_(None)
+                Match.deleted_at.is_(None), Match.model_only.is_(False), Match.trends.is_(None)
             )
         )).scalar() or 0
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=130)
         missing_actual = (await session.execute(
             select(func.count(Match.id)).where(
-                Match.deleted_at.is_(None),
+                Match.deleted_at.is_(None), Match.model_only.is_(False),
                 Match.kickoff_time < cutoff,
                 or_(Match.actual_ft_home.is_(None), Match.actual_ft_away.is_(None)),
             )

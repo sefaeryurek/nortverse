@@ -33,6 +33,7 @@ def candidate_filters(as_of: datetime) -> list:
     known_at = func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at)
     return [
         Match.deleted_at.is_(None),
+        Match.model_only.is_(False),
         Match.kickoff_time <= as_of - RESULT_KNOWN_DELAY,
         known_at > Match.kickoff_time,
     ]

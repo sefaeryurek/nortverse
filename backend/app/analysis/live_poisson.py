@@ -381,7 +381,7 @@ async def load_training(as_of: datetime | None = None) -> list[TrainMatch]:
         Match.kickoff_time, Match.league_name, Match.home_team, Match.away_team,
         Match.actual_ht_home, Match.actual_ht_away, Match.actual_ft_home, Match.actual_ft_away,
     ).where(
-        Match.deleted_at.is_(None), Match.actual_ft_home.isnot(None), Match.actual_ht_home.isnot(None),
+        Match.deleted_at.is_(None), Match.model_only.is_(False), Match.actual_ft_home.isnot(None), Match.actual_ht_home.isnot(None),
         Match.kickoff_time.isnot(None), known_at > Match.kickoff_time, Match.league_name.isnot(None),
     ).order_by(Match.kickoff_time)
     if as_of is not None:

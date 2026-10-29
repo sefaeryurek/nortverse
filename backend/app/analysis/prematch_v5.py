@@ -77,6 +77,37 @@ def ledger_rows_v51(probabilities: dict | None, prior: dict[str, float], common:
     }]
 
 
+async def capture_model_only(session, *, match_id: str, captured_at, kickoff_time, league: str, home: str,
+                             away: str) -> int:
+    """Yalnız model maçının (H2H <5, K15/P1) maç öncesi kararı: sadece gölge v5.1 satırı yazılır.
+
+    Ekrandaki v5 ve arşiv tabanlı kayıtlar (v4, Ana Pazar) yazılmaz — bu maçın Katman A'sı ve arşivi yok.
+    Normal maçlarla aynı korumalar: en erken 48 saat önce, maç başlamamış, takip edilen lig. İlk kayıt kazanır
+    (defterdeki tekillik kısıtı). Yazılan satır sayısını döner.
+    """
+    from datetime import timezone
+
+    from app.analysis.ledger import record_predictions
+    from app.analysis.league_filter import is_tracked_league
+    from app.analysis.live_model import get_cond_table
+    from app.analysis.live_poisson import get_poisson_model
+    from app.analysis.prematch_v4 import CAPTURE_HORIZON, match_already_started
+
+    if (kickoff_time is None or kickoff_time.tzinfo is None or captured_at.tzinfo is None
+            or captured_at >= kickoff_time or kickoff_time - captured_at > CAPTURE_HORIZON
+            or not is_tracked_league(league)):
+        return 0
+    reason = await match_already_started(session, match_id, captured_at.astimezone(timezone.utc))
+    if reason is not None:
+        log.warning("Yalnız model kaydı atlandı [%s]: maç başlamış görünüyor (%s)", match_id, reason)
+        return 0
+    prior = (await get_cond_table()).league_prior(league)
+    probabilities = match_probabilities(await get_poisson_model(), league, home, away)
+    common = {"match_id": match_id, "league_name": league, "kickoff_time": kickoff_time, "as_of": captured_at,
+              "pattern_hash": None}
+    return await record_predictions(session, ledger_rows_v51(probabilities, prior, common, model_only=True))
+
+
 def _pmf(lam: float, n: int) -> list[float]:
     return pmf(lam, n, tail=False)
 

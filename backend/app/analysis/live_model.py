@@ -260,7 +260,7 @@ async def build_cond_table(as_of: datetime, window_years: int | None = None) -> 
         Match.league_name, Match.actual_ht_home, Match.actual_ht_away,
         Match.actual_ft_home, Match.actual_ft_away, Match.kickoff_time,
     ).where(
-        Match.deleted_at.is_(None),
+        Match.deleted_at.is_(None), Match.model_only.is_(False),
         Match.actual_ft_home.isnot(None), Match.actual_ft_away.isnot(None),
         Match.actual_ht_home.isnot(None), Match.actual_ht_away.isnot(None),
         Match.kickoff_time <= cutoff,

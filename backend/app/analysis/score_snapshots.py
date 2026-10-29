@@ -70,7 +70,7 @@ async def capture_score_snapshot(
             select(final_score, frequency)
             .where(
                 Match.match_id != match_id,
-                Match.deleted_at.is_(None),
+                Match.deleted_at.is_(None), Match.model_only.is_(False),
                 Match.kickoff_time < captured_at,
                 func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at) <= captured_at,
                 func.coalesce(Match.result_first_fetched_at, Match.result_fetched_at) > Match.kickoff_time,
@@ -112,7 +112,7 @@ async def capture_prepared_score_snapshots(target_date: date) -> int:
                 Match.league_name, Match.league_code,
                 Match.ft_scores_1, Match.ft_scores_x, Match.ft_scores_2,
             ).where(
-                Match.deleted_at.is_(None),
+                Match.deleted_at.is_(None), Match.model_only.is_(False),
                 Match.kickoff_time >= day_start,
                 Match.kickoff_time < day_end,
                 Match.kickoff_time > captured_at,
