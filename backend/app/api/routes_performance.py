@@ -321,3 +321,35 @@ async def live_matches(day: date = Query(..., description="İstanbul günü (ma�
         entry["resolved"] = len(resolved)
         entry["picks"].sort(key=lambda p: (p["risky"], -p["pct"]))
     return list(matches.values())
+
+
+_COVERAGE_SQL = """
+    SELECT m.match_id, m.home_team, m.away_team, m.league_name, m.kickoff_time,
+           EXISTS (SELECT 1 FROM prediction_ledger l WHERE l.match_id = m.match_id AND l.source = 'live_ht') AS frozen
+    FROM matches m
+    WHERE m.deleted_at IS NULL AND m.actual_ht_home IS NOT NULL
+      AND m.kickoff_time >= :start AND m.kickoff_time < :end
+    ORDER BY m.kickoff_time
+"""
+
+
+def coverage_summary(rows, scope: str) -> dict:
+    """Devre arasına ulaşan izlenen maçlar ve kaçı canlı kaydedildi (Sprint 94 C4). Karneler sadece kapsanan
+    maçları anlatır; düşük kapsama (PC uykuda, backend kapalı) karneyi seçici yapabilir."""
+    kept = [r for r in rows if _in_scope(r.league_name, scope)]
+    frozen = sum(1 for r in kept if r.frozen)
+    missed = [{"match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
+               "league_name": r.league_name, "kickoff_time": r.kickoff_time.isoformat()}
+              for r in kept if not r.frozen]
+    return {"reached_ht": len(kept), "frozen": frozen,
+            "pct": round(100 * frozen / len(kept), 1) if kept else None, "missed": missed[-30:]}
+
+
+@router.get("/api/performance/coverage")
+async def coverage(days: int = Query(7, ge=1, le=90), scope: Scope = Query("main")) -> dict:
+    """Son N günde devre arasına gelen izlenen maçların yüzde kaçı canlı kaydedildi (kaçanların listesi)."""
+    end = datetime.now(ISTANBUL_TZ)
+    start = end - timedelta(days=days)
+    async with get_session() as session:
+        rows = (await session.execute(text(_COVERAGE_SQL), {"start": start, "end": end})).all()
+    return {"days": days, "scope": scope, **coverage_summary(rows, scope)}

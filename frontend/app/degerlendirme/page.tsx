@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
+import LiveCoverage from "@/components/LiveCoverage";
 import { BacktestOverview, LiveDayList, PerformanceOverview, PredictionDayList } from "@/components/PerformancePanel";
 import RetryButton from "@/components/RetryButton";
 import { getEvaluation } from "@/lib/api";
@@ -743,6 +744,11 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
           <div className="grid gap-4 px-[var(--nv-page-gutter)] py-4" style={{ maxWidth: "var(--nv-max-content)" }}>
             {shadowOn && <ScopeBar active={scope} date={date} tab={tab} range={range} t={t} />}
             <RangeBar active={range} date={date} tab={tab} t={t} scopeQuery={scopeQuery} />
+            {tab === "canli" && (
+              <Suspense fallback={null}>
+                <LiveCoverage t={t} scope={scope} />
+              </Suspense>
+            )}
             <Suspense fallback={<EvalSkeleton />}>
               <PerformanceOverview
                 scope={scope}

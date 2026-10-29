@@ -227,7 +227,11 @@
       "liveV2Title": "Arşiv + lig geçmişi kuralı (live-arch-v2)",
       "liveV2Hint": "19–27 Ekim arası ekrandaki karar; şimdi takım gücü kararının yanında onay olarak duruyor ve ölçülmeye devam ediyor.",
       "livePoissonV1Title": "Takım gücü modeli gölge dönemi (live-poisson-v1)",
-      "livePoissonV1Hint": "19–27 Ekim arası ekranda değildi, arka planda kaydedildi. Bu kayıtlar ekrana alma kararının dayanağı. v1.1'den farkı: MS 2.5 alt da vardı (geçmişte %87,7 gösterip %83,6 tuttuğu için çıkarıldı)."
+      "livePoissonV1Hint": "19–27 Ekim arası ekranda değildi, arka planda kaydedildi. Bu kayıtlar ekrana alma kararının dayanağı. v1.1'den farkı: MS 2.5 alt da vardı (geçmişte %87,7 gösterip %83,6 tuttuğu için çıkarıldı).",
+      "coverageTitle": "Kapsama (son {days} gün)",
+      "coverageLine": "Devre arasına gelen {n} izlenen maçın {k}'inde canlı kayıt var (%{pct}).",
+      "coverageNote": "Karneler sadece kaydedilen maçları anlatır. Kaçanlar genelde bilgisayar uykudayken ya da backend kapalıyken oynanan maçlardır.",
+      "coverageMissed": "Kaydı kaçan maçlar"
     }
   },
   "live": {

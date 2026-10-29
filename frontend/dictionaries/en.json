@@ -227,7 +227,11 @@
       "liveV2Title": "Archive + league history rule (live-arch-v2)",
       "liveV2Hint": "The on-screen decision from 19 to 27 October; now shown next to the team strength decision as confirmation and still measured.",
       "livePoissonV1Title": "Team strength model shadow period (live-poisson-v1)",
-      "livePoissonV1Hint": "Not on screen from 19 to 27 October, recorded in the background. These records are the basis for putting it on screen. Difference from v1.1: it also had FT under 2.5 (removed because it showed 87.7% but hit 83.6% historically)."
+      "livePoissonV1Hint": "Not on screen from 19 to 27 October, recorded in the background. These records are the basis for putting it on screen. Difference from v1.1: it also had FT under 2.5 (removed because it showed 87.7% but hit 83.6% historically).",
+      "coverageTitle": "Coverage (last {days} days)",
+      "coverageLine": "Live record exists for {k} of {n} tracked matches that reached half-time ({pct}%).",
+      "coverageNote": "Scorecards only describe recorded matches. Missed ones were usually played while the computer slept or the backend was off.",
+      "coverageMissed": "Matches without a record"
     }
   },
   "live": {

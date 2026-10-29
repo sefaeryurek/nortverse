@@ -49,7 +49,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [ ] B5 İY arşiv alanları "hep 0" (Optional + sürüm + recompute)
 - [ ] B6 kickoff yer tutucusu 15:59 (aday filtresi + sürüm; Faz G ile)
 - [x] C3 geçmiş isabet çipi sadece ana lig — 94.38
-- [ ] C4 kapsama karnesi (/api/performance/coverage)
+- [x] C4 kapsama karnesi (/api/performance/coverage) — 94.40
 - [ ] E8 paylaşım sonrası sertleştirme (ADMIN_API_KEY + compare_digest, /docs kapalı, disable-user, logout-all, WS oturum kontrolü, sabit zamanlı giriş, Origin kontrolü, çerez secure, çıkışta sepet temizliği)
 - [ ] F6 scrape-canary + gerçek sayfa örnekleri
 - [ ] F8 skor gecikmesi
@@ -57,7 +57,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [ ] F10 canlı Playwright bütçesi
 - [ ] F11 fixture_cache koruması + skipped_analysis budama
 - [ ] H4 piyasa olasılığı (market_prob.py)
-- [ ] H5 v5 kademesi (O5 ile)
+- [x] H5 v5 kademesi (O5 ile) — 94.37
 - [ ] I5 yedek bahisçi
 - [ ] J7 kupon skor düzeltmesi revizyon tablosu
 - [ ] J11 kupon detay sayfası, mobil taslak çubuğu, sessionStorage, aria-pressed, sayfalama

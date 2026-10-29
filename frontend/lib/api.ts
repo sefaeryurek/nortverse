@@ -348,6 +348,21 @@ export async function getLiveMatchEvaluations(day: string, scope: PerformanceSco
   );
 }
 
+/** Devre arasına gelen izlenen maçların kaçı canlı kaydedildi (Sprint 94 C4). */
+export interface LiveCoverage {
+  days: number;
+  reached_ht: number;
+  frozen: number;
+  pct: number | null;
+  missed: { match_id: string; home_team: string; away_team: string; league_name: string | null; kickoff_time: string }[];
+}
+
+export async function getLiveCoverage(days: number, scope: PerformanceScope = "main"): Promise<LiveCoverage> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (scope !== "main") params.set("scope", scope);
+  return request<LiveCoverage>(`/api/performance/coverage?${params}`, { next: { revalidate: 300 } });
+}
+
 export async function getPerformancePredictions(
   source: PredictionSource, day: string, ruleVersion?: string, scope: PerformanceScope = "main",
 ): Promise<LedgerPrediction[]> {

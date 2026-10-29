@@ -164,3 +164,23 @@ def test_summary_defaults_to_on_screen_rule_version():
     from app.api.routes_performance import on_screen_rule_version
     assert on_screen_rule_version("live_ht") == "live-poisson-v1.1"
     assert on_screen_rule_version("top_pick") == "ft-display-v5"
+
+
+def test_coverage_summary_counts_only_scope_and_lists_missed():
+    """Sprint 94 C4: devre arasına gelen izlenen maçların kaçı canlı kaydedildi."""
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from app.api.routes_performance import coverage_summary
+
+    k = datetime(2026, 10, 28, 17, tzinfo=timezone.utc)
+    row = lambda mid, league, frozen: SimpleNamespace(match_id=mid, home_team=f"H{mid}", away_team=f"A{mid}",  # noqa: E731
+                                                      league_name=league, kickoff_time=k, frozen=frozen)
+    rows = [row("1", "English Premier League", True), row("2", "Italy Serie A", False),
+            row("3", "English Championship", True), row("4", "Peru Liga 1", False)]
+    main = coverage_summary(rows, "main")
+    assert (main["reached_ht"], main["frozen"], main["pct"]) == (2, 1, 50.0)
+    assert [m["match_id"] for m in main["missed"]] == ["2"]
+    shadow = coverage_summary(rows, "shadow")
+    assert (shadow["reached_ht"], shadow["frozen"]) == (1, 1)
+    assert coverage_summary([], "main")["pct"] is None
