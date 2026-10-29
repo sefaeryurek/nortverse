@@ -17,7 +17,11 @@
     "shadowHide": "Hide trial leagues",
     "shadowHint": "Championship, 2. Bundesliga, Portugal, Belgium, Scotland — predictions on trial, scored separately",
     "firstHalf": "HT odds",
-    "coupons": "Coupons"
+    "coupons": "Coupons",
+    "more": "More",
+    "moreShort": "More",
+    "firstHalfShort": "HT",
+    "evaluationShort": "Stats"
   },
   "common": {
     "retry": "Retry",

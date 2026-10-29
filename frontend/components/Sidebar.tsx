@@ -82,6 +82,9 @@ function readSidebar(): boolean {
   try { return localStorage.getItem("nv_sidebar") === "1"; } catch { return false; }
 }
 
+// Mobil alt çubukta doğrudan görünen sayfalar (gerisi "Daha fazla" panelinde)
+const MOBILE_PRIMARY = ["/bulten", "/canli", "/iy", "/kupondas"];
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { locale, t, setLocale } = useLocale();
@@ -90,6 +93,7 @@ export default function Sidebar() {
   // Kayıtlı tercih depodan okunur (SSR'da kapalı); kullanıcı değiştirince override + kayıt.
   const savedExpanded = useSyncExternalStore(subscribeSidebar, readSidebar, () => false);
   const [override, setOverride] = useState<boolean | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   const expanded = override ?? savedExpanded;
   const setExpanded = (update: boolean | ((prev: boolean) => boolean)) => {
     const next = typeof update === "function" ? update(expanded) : update;
@@ -101,6 +105,10 @@ export default function Sidebar() {
     ...item,
     label: t.nav[item.key],
   }));
+  const shortLabels: Partial<Record<string, string>> = { firstHalf: t.nav.firstHalfShort, evaluation: t.nav.evaluationShort };
+  const mobileItems = navItems.map((item) => ({ ...item, shortLabel: shortLabels[item.key] ?? item.label }));
+  const mobilePrimary = MOBILE_PRIMARY.map((href) => mobileItems.find((i) => i.href === href)).filter((i) => i !== undefined);
+  const mobileExtra = mobileItems.filter((i) => !MOBILE_PRIMARY.includes(i.href));
 
   return (
     <>
@@ -274,23 +282,59 @@ export default function Sidebar() {
       </aside>
 
       {/* ==================== MOBILE BOTTOM TAB BAR ==================== */}
+      {/* Sprint 94 L3: 4 ana sayfa + "Daha fazla" (Sonuçlar, Değerlendirme, dil, gölge ligler, çıkış — mobilde yoktu) */}
+      {moreOpen && (
+        <div className="md:hidden fixed inset-0" style={{ zIndex: 44, backgroundColor: "var(--nv-bg-overlay)" }}
+          onClick={() => setMoreOpen(false)} aria-hidden="true" />
+      )}
+      {moreOpen && (
+        <div id="nv-mobile-more" role="menu" aria-label={t.nav.more}
+          className="md:hidden fixed left-0 right-0 flex flex-col gap-1 p-2 nv-glass"
+          style={{ bottom: "var(--nv-bottom-bar-h)", zIndex: 46, borderTop: "1px solid var(--nv-border)" }}>
+          {mobileExtra.map(({ href, label, icon }) => (
+            <Link key={href} href={href} role="menuitem" onClick={() => setMoreOpen(false)}
+              aria-current={pathname === href || pathname.startsWith(href + "/") ? "page" : undefined}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ color: "var(--nv-text-secondary)" }}>
+              <span className="flex items-center justify-center" style={{ width: 20, height: 20 }}>{icon}</span>
+              <span className="text-sm font-medium">{label}</span>
+            </Link>
+          ))}
+          <button role="menuitem" onClick={() => setLocale(locale === "tr" ? "en" : "tr")}
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left" style={{ color: "var(--nv-text-secondary)" }}>
+            <span className="flex items-center justify-center text-xs font-bold" style={{ width: 20, height: 20 }}>{locale === "tr" ? "EN" : "TR"}</span>
+            <span className="text-sm font-medium">{locale === "tr" ? "English" : "Türkçe"}</span>
+          </button>
+          <button role="menuitemcheckbox" aria-checked={shadowOn} onClick={() => setShadowEnabled(!shadowOn)}
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left"
+            style={{ color: shadowOn ? "var(--nv-accent-amber)" : "var(--nv-text-secondary)" }}>
+            <span className="flex items-center justify-center text-xs font-bold" style={{ width: 20, height: 20 }} aria-hidden="true">{shadowOn ? "◉" : "○"}</span>
+            <span className="text-sm font-medium">{shadowOn ? t.nav.shadowHide : t.nav.shadowShow}</span>
+          </button>
+          <button role="menuitem" onClick={() => void logoutAndLeave()}
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left" style={{ color: "var(--nv-text-secondary)" }}>
+            <span className="flex items-center justify-center text-xs font-bold" style={{ width: 20, height: 20 }} aria-hidden="true">⎋</span>
+            <span className="text-sm font-medium">{t.auth.logout}</span>
+          </button>
+        </div>
+      )}
       <nav
         aria-label={locale === "tr" ? "Mobil ana menü" : "Mobile main menu"}
         className="md:hidden fixed bottom-0 left-0 right-0 flex items-stretch nv-glass"
         style={{
           height: "var(--nv-bottom-bar-h)",
-          zIndex: 40,
+          zIndex: 47,
           borderTop: "1px solid var(--nv-border)",
         }}
       >
-        {navItems.map(({ href, label, icon }) => {
+        {mobilePrimary.map(({ href, label, shortLabel, icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <Link
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              className="flex-1 flex flex-col items-center justify-center gap-1 transition-colors"
+              aria-label={label}
+              className="flex-1 min-w-0 flex flex-col items-center justify-center gap-1 transition-colors"
               style={{
                 color: active ? "var(--nv-accent-blue)" : "var(--nv-text-tertiary)",
                 transitionDuration: "var(--nv-duration-fast)",
@@ -299,15 +343,24 @@ export default function Sidebar() {
               <span className="flex items-center justify-center" style={{ width: 20, height: 20 }}>
                 {icon}
               </span>
-              <span
-                className="font-medium"
-                style={{ fontSize: "var(--nv-text-xs)" }}
-              >
-                {label}
+              <span className="font-medium truncate max-w-full px-0.5" style={{ fontSize: "var(--nv-text-2xs)" }} aria-hidden="true">
+                {shortLabel}
               </span>
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMoreOpen((v) => !v)}
+          aria-expanded={moreOpen}
+          aria-controls="nv-mobile-more"
+          aria-label={t.nav.more}
+          className="flex-1 min-w-0 flex flex-col items-center justify-center gap-1"
+          style={{ color: moreOpen || mobileExtra.some(({ href }) => pathname.startsWith(href)) ? "var(--nv-accent-blue)" : "var(--nv-text-tertiary)" }}
+        >
+          <span className="flex items-center justify-center text-base font-bold" style={{ width: 20, height: 20 }} aria-hidden="true">⋯</span>
+          <span className="font-medium truncate" style={{ fontSize: "var(--nv-text-2xs)" }} aria-hidden="true">{t.nav.moreShort}</span>
+        </button>
       </nav>
     </>
   );

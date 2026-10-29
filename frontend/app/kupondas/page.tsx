@@ -230,7 +230,7 @@ export default function KupondasPage() {
   });
 
   return (
-    <div className="flex flex-col h-full pb-[60px] md:pb-0">
+    <div className="flex flex-col h-full pb-[var(--nv-mobile-bottom)] md:pb-0">
       <div className="px-[var(--nv-page-gutter)] py-5 flex-shrink-0" style={{ borderBottom: "1px solid var(--nv-border)" }}>
         <h1 className="font-bold" style={{ fontSize: "var(--nv-text-xl)", color: "var(--nv-text-primary)" }}>{c.title}</h1>
         <p className="mt-1" style={{ fontSize: "var(--nv-text-xs)", color: "var(--nv-text-tertiary)" }}>{c.subtitle}</p>

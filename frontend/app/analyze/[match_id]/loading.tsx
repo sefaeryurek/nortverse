@@ -1,6 +1,6 @@
 export default function AnalyzeLoading() {
   return (
-    <div className="flex h-full flex-col pb-[60px] md:pb-0">
+    <div className="flex h-full flex-col pb-[var(--nv-mobile-bottom)] md:pb-0">
       {/* Header skeleton */}
       <div
         className="px-5 py-4 flex items-center gap-3 flex-shrink-0"

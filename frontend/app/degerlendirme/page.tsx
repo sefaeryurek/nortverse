@@ -681,7 +681,7 @@ export default async function DegerlendirmePage({ searchParams }: Props) {
   const scopeQuery = scope === "shadow" ? "&kapsam=golge" : "";
 
   return (
-    <div className="flex flex-col h-full pb-[60px] md:pb-0">
+    <div className="flex flex-col h-full pb-[var(--nv-mobile-bottom)] md:pb-0">
       {/* Baslik */}
       <div
         className="px-[var(--nv-page-gutter)] py-5 flex-shrink-0"

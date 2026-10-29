@@ -64,7 +64,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [ ] J12 bildirimler (yeni altyapı — onay)
 - [x] K-3 İY panosu yarım kazanç/kayıp etiketi, "ima olasılık", power pay çıkarma — 94.41
 - [x] K-4 bitmiş günlerde model_pct sızıntısı — 94.39
-- [ ] L3 mobil menü (çıkış, dil, gölge)
+- [x] L3 mobil menü (4 ana sayfa + "Daha fazla": Sonuçlar, Değerlendirme, dil, gölge, çıkış; sepet çubuğu içeriği örtmüyor) — 94.47
 - [ ] L4 format.ts birleştirme, hata kodu çevirisi, ölü sözlük anahtarları, i18n parite testi
 - [ ] L5 küçük UI düzeltmeleri
 - [ ] L6 degerlendirme/page.tsx bölme

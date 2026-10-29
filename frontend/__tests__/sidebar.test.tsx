@@ -87,3 +87,20 @@ describe("Sidebar", () => {
     expect(navs.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("Sidebar mobile menu (Sprint 94 L3)", () => {
+  afterEach(() => cleanup());
+
+  it("shows 4 primary pages and a More panel with the rest, language, shadow toggle and logout", () => {
+    render(<Sidebar />);
+    const more = screen.getByRole("button", { name: "Daha fazla" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(more);
+    const panel = screen.getByRole("menu", { name: "Daha fazla" });
+    expect(panel.textContent).toContain("Sonuçlar");
+    expect(panel.textContent).toContain("Değerlendirme");
+    expect(panel.textContent).toContain("Çıkış");
+    expect(panel.textContent).toContain("Gölge ligleri göster");
+    expect(panel.textContent).toContain("English");
+  });
+});

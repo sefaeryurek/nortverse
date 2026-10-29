@@ -17,7 +17,11 @@
     "shadowHide": "Gölge ligleri gizle",
     "shadowHint": "Championship, Almanya 2, Portekiz, Belçika, İskoçya — tahminleri deneme aşamasında, karnesi ayrı tutulur",
     "firstHalf": "İY Oranları",
-    "coupons": "Kupondaş"
+    "coupons": "Kupondaş",
+    "more": "Daha fazla",
+    "moreShort": "Diğer",
+    "firstHalfShort": "İY",
+    "evaluationShort": "Karne"
   },
   "common": {
     "retry": "Tekrar dene",

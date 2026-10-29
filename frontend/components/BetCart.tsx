@@ -34,6 +34,13 @@ function PopulatedCart({ cart }: { cart: ReturnType<typeof useCart> }) {
   const mobileTrigger = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
 
+  // Sprint 94 L3: mobil sepet çubuğu görünürken sayfalar altta onun yüksekliği kadar da boşluk bıraksın (içerik örtülmesin)
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--nv-cart-bar-h", "56px");
+    return () => { root.style.removeProperty("--nv-cart-bar-h"); };
+  }, []);
+
   useEffect(() => {
     if (open) {
       dialogRef.current?.showModal();

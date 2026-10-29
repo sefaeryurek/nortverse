@@ -80,7 +80,7 @@ export default function AnalyzeClient({ match_id, initialData, initialError, url
   const scores = data ? scoresFor(data, activePeriod) : null;
 
   return (
-    <div className="flex flex-col h-full pb-[60px] md:pb-0">
+    <div className="flex flex-col h-full pb-[var(--nv-mobile-bottom)] md:pb-0">
       {/* Hero header */}
       <div
         className="px-5 py-5 flex-shrink-0"

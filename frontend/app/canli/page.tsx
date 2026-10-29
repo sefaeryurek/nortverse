@@ -276,7 +276,7 @@ export default function CanliPage() {
   const timeLocale = locale === "en" ? "en-GB" : "tr-TR";
 
   return (
-    <div className="flex flex-col h-full pb-[60px] md:pb-0">
+    <div className="flex flex-col h-full pb-[var(--nv-mobile-bottom)] md:pb-0">
       <div className="px-[var(--nv-page-gutter)] py-5 flex-shrink-0" style={{ borderBottom: "1px solid var(--nv-border)" }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

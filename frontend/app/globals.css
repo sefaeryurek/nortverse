@@ -102,6 +102,8 @@
   --nv-sidebar-expanded: 240px;
   --nv-header-h: 56px;
   --nv-bottom-bar-h: 60px;
+  /* Mobilde alt menü + (varsa) sepet çubuğu — sayfaların alt boşluğu (Sprint 94 L3) */
+  --nv-mobile-bottom: calc(var(--nv-bottom-bar-h) + var(--nv-cart-bar-h, 0px));
   --nv-max-content: 1280px;
 }
 
