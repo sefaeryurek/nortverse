@@ -73,5 +73,36 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [x] M4 engines/.nvmrc, requirements notu, vite-tsconfig-paths kaldırıldı — 94.42
 - [x] M5 tekrar eden kod (poisson_utils, RESULT_KNOWN_DELAY, istanbulDate/ISTANBUL_TZ, audit-db skor kopyası, ölü fonksiyonlar) — 94.43
 
-### Sonra — denetim notlarındaki küçük öneriler
-`docs/audit-2026-10-28/01..11` içinde plana girmemiş her öneri tek tek taranıp buraya eklenecek.
+### 21 — Denetim notlarından plana girmemiş öneriler (29 Ekim taraması, 11 notun tamamı)
+Her aday kodda kontrol edildi; uygulama sırasında zaten düzelmiş olanlar aşağıda "kapandı" olarak ayrı.
+
+- [ ] Q1 `/api/health` `bg_queue_size` hep 0 — `routes_admin` kuyruğu içe aktarma anında kopyalıyor (01 D1). S
+- [ ] Q2 Süresi dolan oturum satırları DB'den hiç silinmiyor (sadece çıkışta) → okurken/periyodik budama (01 D3). S
+- [ ] Q3 `live-freeze` deneme modu `sync_kickoffs` ile DB'ye yazıyor; `--match` bitmiş maçta "sonucu görmüş model" uyarısı yok;
+  ekrandaki `live-poisson-v1.1`'e "Gölge" yazıyor (01 D4). S
+- [ ] Q4 Eski docstring'ler: `live_poisson`, `routes_live_ht`, `auth.py:7`, `routes_coupons:29` (01 D5). S
+- [ ] Q5 `is_admin_request(None)` giriş açıkken AttributeError (`fixture(request=None)` doğrudan çağrıda) (01 D6). S
+- [ ] Q6 `goal_events._fix_sides` skorsuz satırda taraf kayabilir — savunma + test (01 D7; bugün 358/358 uyuşuyor). S
+- [ ] Q7 `routes_performance._load` sabit 50.000 sınırı (~2 ayda "tümü" kesilir) ve `predictions` sınırı süzgeçten önce (01 D8). S
+- [ ] Q8 `create-user --password` kabuk geçmişine düşer → şifre isteme (gizli giriş) seçeneği + uyarı (02 D6). S
+- [ ] Q9 Python bağımlılık güncellemesi (starlette DoS açıkları, fastapi, uvicorn, lxml, playwright) (02 D5) — K6 "ertele"; Faz E sonrası onayla
+- [ ] Q10 `pg_stat_statements` (onay) + Faz G'den 1 hafta sonra indeks kullanım kontrolü (03 B14). S
+- [ ] Q11 Kupondaş'ta oranın yanında payı çıkarılmış olasılık ve bahisçi payı; "value" ipucu yok (05 adım 7, 06 UX) — H4 sonrası. S–M
+- [ ] Q12 Giriş sayfasında 429'da kalan bekleme süresi (06 B10). S
+- [ ] Q13 Kupondaş erişilebilirlik: `aria-live`, küçük ✕ düğmesi, en fazla bacak sayısı gösterimi, boş durumlar (06 B11 — J11'de olmayanlar). S
+- [ ] Q14 Ölü kod: frontend `i18n.locales` ve gereksiz export'lar; backend `correlation.get_correction_factor`,
+  `filtering.select_last_n_league_matches` sadece testlerde (06 B12, 07). S
+- [ ] Q15 Canlı sayfada sekme başlığı sayacı "(1) Canlı" (tarayıcı bildirimi J12'ye bağlı) (06 UX). S
+- [ ] Q16 Mobil 360 px E2E kontrolü (06 B6; L3'te yazılmadı). S
+- [ ] Q17 `pipeline/runner.py` bölme (~930 satır → `pipeline/results.py`) (07). M
+- [ ] Q18 `numpy` requirements'ta sabit değil (bağımlılık satırı → onay) (07). S
+- [ ] Q19 `score-list-v1` parmak izi + sabitlenmiş test (07). S
+- [ ] Q20 Eksik testler: `users_cmds`, `odds_cmds`, `events_cmds`; frontend `live-labels.ts`, `api.createCoupon`/`getHtStrategy` (07). M
+- [ ] Q21 Yıllık "felaket provası" belgesi — yeni PC'ye kurulum adımları (08, D3 planında yazıldı, belge yok). S
+
+Kontrol edilip kapanmış bulunanlar (iş yok): PerformancePanel `ci_high` "undefined" (L2 `fmtNum`), `_FINISHED_STATES` ölü kod (A1),
+canlı sayfa tanınmayan etiket (B2 `status.py`), oran satırlarında maç içi/öncesi ayrımı (A1 `pre`/`closed`), `curl_cffi` (requirements'ta yok),
+live-2h geride takım eşiği 65 (O3 `live-comeback-v1`), gölge liglerde ilk sezon λ/A3 düşük (ölçüldü: sadece ilk sezon, model eğitim
+sezonu — tasarım gereği), SetThreadExecutionState (otomatik uyku zaten kapalı; elle uykuyu engellemez).
+Gözlem (yeni, karar gerekmez): 2. ligde sezon başına arşiv ~%50 (ör. 2. Bundesliga 2024/25 141/306) — H2H ≥5 kuralı arşivi de
+yarıya indiriyor; takım gücü eğitimi bu yüzden az veriyle. P2 liglerinde de aynısı beklenir.
