@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { formatTime, isRecentScoreDate, resolvePageDate } from "@/lib/dates";
+import { formatTime, isRecentScoreDate, istanbulDate, resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import RetryButton from "@/components/RetryButton";
@@ -110,7 +110,7 @@ async function MatchList({ date, locale, shadow }: { date: string; locale: Local
   let error = "";
   try {
     const now = new Date();
-    const today = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+    const today = istanbulDate(now);
     matches = (await getFixture(date, shadow))
       .filter((match) => showBulletinMatch(match, now.getTime(), today, date))
       .filter((match) => match.has_prediction);
@@ -338,7 +338,7 @@ async function MatchList({ date, locale, shadow }: { date: string; locale: Local
 
 export default async function BultenPage({ searchParams }: Props) {
   const params = await searchParams;
-  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+  const today = istanbulDate();
   const date = resolvePageDate(params.date, today, true);
   if (date === null) redirect("/bulten");
 

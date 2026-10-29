@@ -18,7 +18,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import math
+
+from app.analysis.poisson_utils import pmf
 
 from app.analysis.live_poisson import PoissonModel, dc_tau
 from app.analysis.live_poisson import team_model_fingerprint
@@ -77,7 +78,7 @@ def ledger_rows_v51(probabilities: dict | None, prior: dict[str, float], common:
 
 
 def _pmf(lam: float, n: int) -> list[float]:
-    return [math.exp(-lam) * lam ** k / math.factorial(k) for k in range(n + 1)]
+    return pmf(lam, n, tail=False)
 
 
 def score_grid(model: PoissonModel, league: str, home: str, away: str) -> list[tuple[int, int, float]] | None:

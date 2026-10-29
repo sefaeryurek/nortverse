@@ -24,6 +24,8 @@ import hashlib
 import json
 import logging
 import math
+
+from app.analysis.poisson_utils import pmf
 import time
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
@@ -284,9 +286,7 @@ def fit_model(rows: list[TrainMatch], as_of: datetime) -> PoissonModel:
 
 
 def _pmf(lam: float) -> list[float]:
-    probs = [math.exp(-lam) * lam ** k / math.factorial(k) for k in range(MAX_EXTRA)]
-    probs.append(max(0.0, 1.0 - sum(probs)))  # kuyruk son hücrede
-    return probs
+    return pmf(lam, MAX_EXTRA, tail=True)  # kuyruk son hücrede
 
 
 def final_grid(model: PoissonModel, league: str, home: str, away: str, ht: tuple[int, int]) -> dict | None:

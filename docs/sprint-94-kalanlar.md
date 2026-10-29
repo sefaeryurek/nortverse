@@ -69,7 +69,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [ ] L5 küçük UI düzeltmeleri
 - [ ] L6 degerlendirme/page.tsx bölme
 - [x] M4 engines/.nvmrc, requirements notu, vite-tsconfig-paths kaldırıldı — 94.42
-- [ ] M5 tekrar eden kod (poisson_utils, RESULT_KNOWN_DELAY, istanbulToday, repair kopyası, ölü fonksiyonlar)
+- [x] M5 tekrar eden kod (poisson_utils, RESULT_KNOWN_DELAY, istanbulDate/ISTANBUL_TZ, audit-db skor kopyası, ölü fonksiyonlar) — 94.43
 
 ### Sonra — denetim notlarındaki küçük öneriler
 `docs/audit-2026-10-28/01..11` içinde plana girmemiş her öneri tek tek taranıp buraya eklenecek.

@@ -1,4 +1,5 @@
 "use client";
+import { istanbulDate, ISTANBUL_TZ } from "@/lib/dates";
 
 import { fmtNum } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,9 +11,9 @@ import CouponMatchPicker from "@/components/CouponMatchPicker";
 import CouponLeaderboard from "@/components/CouponLeaderboard";
 import type { Dict, Draft } from "@/components/CouponOddsPanel";
 
-function istanbulDate(offsetDays: number): string {
+function istanbulDay(offsetDays: number): string {
   const d = new Date(Date.now() + offsetDays * 86_400_000);
-  return d.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+  return istanbulDate(d);
 }
 
 const STATUS_COLOR: Record<CouponView["status"], string> = {
@@ -54,7 +55,7 @@ function CouponCard({ coupon, t, locale }: { coupon: CouponView; t: Dict; locale
     <article className="nv-card p-3 space-y-2 min-w-0" style={coupon.mine ? { borderColor: "var(--nv-accent-blue)" } : undefined}>
       <header className="flex flex-wrap items-center gap-2" style={{ fontSize: "var(--nv-text-xs)" }}>
         <span className="font-bold" style={{ color: "var(--nv-text-primary)" }}>{coupon.username}</span>
-        <span style={{ color: "var(--nv-text-tertiary)" }}>#{coupon.id} · {new Date(coupon.created_at).toLocaleString(locale === "en" ? "en-GB" : "tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+        <span style={{ color: "var(--nv-text-tertiary)" }}>#{coupon.id} · {new Date(coupon.created_at).toLocaleString(locale === "en" ? "en-GB" : "tr-TR", { timeZone: ISTANBUL_TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
         <span className="flex-1" />
         {coupon.live_state && (
           <span className="font-semibold" style={{ color: LIVE_COLOR[coupon.live_state] }}>{c.couponLive[coupon.live_state]}</span>
@@ -119,7 +120,7 @@ export default function KupondasPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getCouponMatches(istanbulDate(day))
+    getCouponMatches(istanbulDay(day))
       .then((list) => { if (!cancelled) setFixtureState({ day, list, error: null }); })
       .catch((err: unknown) => {
         if (!cancelled) setFixtureState({ day, list: [], error: err instanceof Error ? err.message : "" });

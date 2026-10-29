@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.analysis.market_resolver import RESOLVER_VERSION, resolve
 from app.db.connection import get_session
 from app.db.models import PredictionLedger, PredictionResolution
+from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 
 log = logging.getLogger(__name__)
 
@@ -149,7 +150,7 @@ async def void_unplayable(now: datetime | None = None) -> dict[str, int]:
     async with get_session() as session:
         rows = (await session.execute(_UNPLAYABLE_SQL, {
             "shift_s": RESCHEDULE_SHIFT.total_seconds(), "prematch": list(_PREMATCH_SOURCES),
-            "horizon_s": CAPTURE_HORIZON.total_seconds(), "started_before": now - timedelta(hours=3),
+            "horizon_s": CAPTURE_HORIZON.total_seconds(), "started_before": now - RESULT_KNOWN_DELAY,
         })).all()
         statuses = await fixture_statuses(session, sorted({r.match_id for r in rows}), now)
     by_reason: dict[str, list[int]] = {}

@@ -21,6 +21,22 @@ STRAY_MIN_AGE = timedelta(days=365)
 REPEAT_FORMAT_LEAGUES = frozenset({"Scottish Premiership", "Belgian Pro League"})
 
 
+def score_issue(row: dict[str, Any]) -> tuple[str, str] | None:
+    """Skor sorunları: aralık dışı (negatif / >15) → "bad_score", İY > MS → "inconsistent_half" (Sprint 94 M5:
+    `audit-db` bu kontrolleri satır içi kopyalıyordu)."""
+    for field in ("actual_ft_home", "actual_ft_away",
+                  "actual_ht_home", "actual_ht_away",
+                  "actual_h2_home", "actual_h2_away"):
+        val = row.get(field)
+        if val is not None and (val < 0 or val > 15):
+            return "bad_score", f"{field}={val}"
+    for side in ("home", "away"):
+        ht, ft = row.get(f"actual_ht_{side}"), row.get(f"actual_ft_{side}")
+        if ht is not None and ft is not None and ht > ft:
+            return "inconsistent_half", f"ht_{side}={ht} > ft_{side}={ft}"
+    return None
+
+
 def detect_issues(row: dict[str, Any]) -> tuple[str, str] | None:
     """Tek bir maç kaydında sorun tespit et.
 
@@ -43,24 +59,10 @@ def detect_issues(row: dict[str, Any]) -> tuple[str, str] | None:
     if not is_supported_league(league_name, league_code):
         return "non_league", f"league={league_code or league_name}"
 
-    # 3. Skor aralık kontrolü (negatif veya >15)
-    for field in ("actual_ft_home", "actual_ft_away",
-                  "actual_ht_home", "actual_ht_away",
-                  "actual_h2_home", "actual_h2_away"):
-        val = row.get(field)
-        if val is not None and (val < 0 or val > 15):
-            return "bad_score", f"{field}={val} ({label})"
-
-    # 4. Tutarsız yarılar: İY > MS
-    ht_home = row.get("actual_ht_home")
-    ft_home = row.get("actual_ft_home")
-    if ht_home is not None and ft_home is not None and ht_home > ft_home:
-        return "inconsistent_half", f"ht_home={ht_home} > ft_home={ft_home} ({label})"
-
-    ht_away = row.get("actual_ht_away")
-    ft_away = row.get("actual_ft_away")
-    if ht_away is not None and ft_away is not None and ht_away > ft_away:
-        return "inconsistent_half", f"ht_away={ht_away} > ft_away={ft_away} ({label})"
+    # 3–4. Skor aralığı ve yarı tutarlılığı (audit-db de aynı fonksiyonu sayar)
+    issue = score_issue(row)
+    if issue is not None:
+        return issue[0], f"{issue[1]} ({label})"
 
     return None
 

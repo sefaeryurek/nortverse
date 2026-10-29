@@ -1,3 +1,4 @@
+import { ISTANBUL_TZ } from "@/lib/dates";
 import { memo } from "react";
 import Link from "next/link";
 import type { FixtureMatch } from "@/lib/types";
@@ -19,7 +20,7 @@ export default memo(function BultenRow({ match, timeStr, patternStatus, t, dateL
   const leagueName = match.league_name || match.league_code;
   const checkedLabel = match.score_checked_at
     ? new Date(match.score_checked_at).toLocaleString(dateLocale, {
-      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul",
+      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: ISTANBUL_TZ,
     }) : null;
 
   const isLive = match.status === "live" && match.live_home !== null && match.live_away !== null;

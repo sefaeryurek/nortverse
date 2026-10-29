@@ -188,7 +188,3 @@ async def find_pattern_d_all_periods(
     return tuple(compute_stats(rows, period, weights=weights) for period in ("ht", "h2", "ft"))
 
 
-def invalidate_cache() -> None:
-    global _pool
-    _pool = None
-    _pool_watch.marker = None

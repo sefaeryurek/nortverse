@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import { HtMatchList } from "@/components/HtBoard";
 import { parseHtFilters } from "@/lib/ht-filters";
-import { resolvePageDate } from "@/lib/dates";
+import { istanbulDate, resolvePageDate } from "@/lib/dates";
 import { type Locale, COOKIE_NAME, defaultLocale, getDictionary, isLocale } from "@/lib/i18n";
 import { SHADOW_COOKIE, shadowFromCookie } from "@/lib/shadow";
 
@@ -21,7 +21,7 @@ interface Props {
 export default async function IyPage({ searchParams }: Props) {
   const params = await searchParams;
   const nowDate = new Date();
-  const today = nowDate.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+  const today = istanbulDate(nowDate);
   const date = resolvePageDate(params.date, today, true);
   if (date === null) redirect("/iy");
   const cookieStore = await cookies();

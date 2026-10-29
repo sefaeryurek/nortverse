@@ -186,3 +186,13 @@ def test_stray_old_league_season():
     recent = [_g("new", "Chile Primera B", "2026/2027", "A", "B", _NOW - _td(days=3))]
     found = {mid: reason for mid, reason, _ in detect_group_issues(rows + recent, now=_NOW)}
     assert found == {"88734": "stray_season"}  # yeni sezondaki tek maçlık küçük lig dokunulmaz
+
+
+def test_score_issue_shared_by_detect_and_audit():
+    """Sprint 94 M5: audit-db ve repair-archive aynı skor kontrolünü kullanır."""
+    from app.analysis.repair import score_issue
+
+    assert score_issue({"actual_ft_home": 16})[0] == "bad_score"
+    assert score_issue({"actual_ht_away": 2, "actual_ft_away": 1})[0] == "inconsistent_half"
+    assert score_issue({"actual_ht_home": 1, "actual_ft_home": 2}) is None
+    assert score_issue({}) is None

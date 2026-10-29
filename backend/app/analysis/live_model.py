@@ -311,5 +311,3 @@ async def get_cond_table(window_years: int | None = None) -> CondTable:
     return _tables[window_years][0]
 
 
-def invalidate_cond_table() -> None:
-    _tables.clear()

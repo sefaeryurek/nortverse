@@ -9,6 +9,7 @@ import typer
 
 from app.cli._helpers import _setup_logging, console
 from app.cli._long_jobs import backoff_delay, paced_delay, parse_until, past_deadline
+from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 
 POST_MATCH = timedelta(hours=2)  # bundan önce çekilen geçmişte kapanış ve canlı satırlar eksik olabilir
 
@@ -53,7 +54,7 @@ async def _backfill(start: datetime, scope: str, limit: int | None, delay: float
     from app.db.models import Match, MatchOdds
     from app.scraper.odds import load_or_fetch
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
+    cutoff = datetime.now(timezone.utc) - RESULT_KNOWN_DELAY
     async with get_session() as session:
         rows = (await session.execute(
             select(Match.match_id, Match.league_name)

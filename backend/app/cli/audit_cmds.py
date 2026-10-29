@@ -208,21 +208,11 @@ def audit_db_cmd(
                     Match.actual_ht_home, Match.actual_ht_away,
                 ).where(Match.deleted_at.is_(None))
             )).all()
-            bad_scores = 0
-            inconsistent_halves = 0
-            for sr in score_rows:
-                for val in (sr.actual_ft_home, sr.actual_ft_away,
-                            sr.actual_ht_home, sr.actual_ht_away):
-                    if val is not None and (val < 0 or val > 15):
-                        bad_scores += 1
-                        break
-                else:
-                    if (sr.actual_ht_home is not None and sr.actual_ft_home is not None
-                            and sr.actual_ht_home > sr.actual_ft_home):
-                        inconsistent_halves += 1
-                    elif (sr.actual_ht_away is not None and sr.actual_ft_away is not None
-                            and sr.actual_ht_away > sr.actual_ft_away):
-                        inconsistent_halves += 1
+            from app.analysis.repair import score_issue
+
+            found = [score_issue(dict(sr._mapping)) for sr in score_rows]
+            bad_scores = sum(1 for f in found if f and f[0] == "bad_score")
+            inconsistent_halves = sum(1 for f in found if f and f[0] == "inconsistent_half")
 
             unnormalized = sum(
                 1 for r in active_rows

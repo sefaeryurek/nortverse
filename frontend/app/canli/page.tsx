@@ -6,7 +6,7 @@ import { getLiveHTMatches, getLivePrediction } from "@/lib/api";
 import type { LiveArchiveSource, LiveHTMatch } from "@/lib/api";
 import { ArchiveMatchList, ArchiveTable, HighlightList, PoissonDecisionList } from "@/components/LiveArchiveView";
 import { leagueDisplay } from "@/lib/leagues";
-import { formatTime } from "@/lib/dates";
+import { formatTime, ISTANBUL_TZ } from "@/lib/dates";
 import { minuteOrder } from "@/lib/live-order";
 import { useLiveWs } from "@/lib/use-live-ws";
 import type { WsStatus } from "@/lib/use-live-ws";
@@ -295,7 +295,7 @@ export default function CanliPage() {
             {source && (
               <span style={{ fontSize: "var(--nv-text-xs)", color: stale ? "var(--nv-accent-amber)" : "var(--nv-text-tertiary)", fontFamily: "var(--nv-font-mono)" }}
                 title={stale ? t.live.staleTooltip.replace("{s}", String(staleSeconds)) : undefined}>
-                {source.at.toLocaleTimeString(timeLocale, { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                {source.at.toLocaleTimeString(timeLocale, { timeZone: ISTANBUL_TZ, hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                 {stale && <> · <span aria-hidden="true">⚠</span> {t.live.staleData}</>}
               </span>
             )}

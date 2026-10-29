@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { formatTime, isRecentScoreDate, resolvePageDate } from "@/lib/dates";
+import { formatTime, isRecentScoreDate, ISTANBUL_TZ, resolvePageDate } from "@/lib/dates";
 import { Suspense } from "react";
 import DayTabs from "@/components/DayTabs";
 import AutoRefresh from "@/components/AutoRefresh";
@@ -279,7 +279,7 @@ async function ResultList({ date, q, locale }: { date: string; q: string; locale
   /* --- Boş durum --- */
   if (matches.length === 0) {
     const today = new Date().toLocaleDateString("sv-SE", {
-      timeZone: "Europe/Istanbul",
+      timeZone: ISTANBUL_TZ,
     });
     const isToday = date === today;
     return (
@@ -394,7 +394,7 @@ async function ResultList({ date, q, locale }: { date: string; q: string; locale
           >
             {t.results.lastCheck}{" "}
             {new Date(lastChecked).toLocaleString(locale === "tr" ? "tr-TR" : "en-GB", {
-              timeZone: "Europe/Istanbul",
+              timeZone: ISTANBUL_TZ,
               dateStyle: "short",
               timeStyle: "short",
             })}
@@ -497,7 +497,7 @@ async function ResultList({ date, q, locale }: { date: string; q: string; locale
 export default async function SonuclarPage({ searchParams }: Props) {
   const params = await searchParams;
   const today = new Date().toLocaleDateString("sv-SE", {
-    timeZone: "Europe/Istanbul",
+    timeZone: ISTANBUL_TZ,
   });
   const date = resolvePageDate(params.date, today);
   if (date === null) redirect("/sonuclar");

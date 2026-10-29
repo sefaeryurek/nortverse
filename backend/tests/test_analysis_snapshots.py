@@ -121,7 +121,7 @@ async def test_prepared_capture_writes_patterns_and_freezes_v4_bundle(monkeypatc
     assert "ft-display-v5" in str(calls[5].args[0].compile(dialect=postgresql.dialect()).params)
     assert "INSERT INTO prediction_ledger" in _sql(calls[6])
     # Sprint 94 M2: İY ve Ana Pazar v3 gölge savepoint'lerine gerçekten girildi (eskiden testte hiç çalışmıyordu)
-    assert capture_session.begin_nested.call_count == 2
+    assert capture_session.begin_nested.call_count == 3  # + v5.1 gölge (Sprint 94 O5)
 
 
 @pytest.mark.asyncio
@@ -151,7 +151,7 @@ async def test_db_first_analysis_freezes_missing_snapshot_before_kickoff(monkeyp
     _empty_cond_table(monkeypatch)
     _v5_model(monkeypatch)
     picks = await services._frozen_recommendations(row, {"pattern_ft_b": _pattern()})
-    assert session.begin_nested.call_count == 2  # İY + Ana Pazar v3 gölge savepoint'leri
+    assert session.begin_nested.call_count == 3  # İY + Ana Pazar v3 + v5.1 gölge savepoint'leri
 
     assert [pick["market"] for pick in picks] == ["result"]
     assert picks[0]["recommendation_id"].startswith("ft-display-v5")

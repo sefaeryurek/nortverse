@@ -8,7 +8,7 @@ import LiveCoverage from "@/components/LiveCoverage";
 import { BacktestOverview, LiveDayList, PerformanceOverview, PredictionDayList } from "@/components/PerformancePanel";
 import RetryButton from "@/components/RetryButton";
 import { getEvaluation } from "@/lib/api";
-import { resolvePageDate } from "@/lib/dates";
+import { ISTANBUL_TZ, resolvePageDate } from "@/lib/dates";
 import { leagueDisplay } from "@/lib/leagues";
 import type { DailyEvaluation, MatchEvaluation, PatternEvaluation } from "@/lib/types";
 import Link from "next/link";
@@ -210,7 +210,7 @@ function EvalRow({ match, t }: { match: MatchEvaluation; t: Dictionary }) {
           return new Date(match.kickoff_time).toLocaleTimeString(t.common.timeLocale, {
             hour: "2-digit",
             minute: "2-digit",
-            timeZone: "Europe/Istanbul",
+            timeZone: ISTANBUL_TZ,
           });
         } catch {
           return "--:--";
@@ -660,7 +660,7 @@ function TabBar({ active, date, range, t, scopeQuery }: { active: Tab; date: str
 export default async function DegerlendirmePage({ searchParams }: Props) {
   const params = await searchParams;
   const today = new Date().toLocaleDateString("sv-SE", {
-    timeZone: "Europe/Istanbul",
+    timeZone: ISTANBUL_TZ,
   });
   const date = resolvePageDate(params.date, today);
   if (date === null) redirect("/degerlendirme");

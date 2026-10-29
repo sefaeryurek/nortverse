@@ -37,6 +37,7 @@ from app.scraper.browser import browser_context
 from app.scraper.fixture import fetch_istanbul_fixture
 from app.scraper.fixture_scores import FixtureScore, fetch_fixture_scores
 from app.scraper.match_detail import fetch_match_detail
+from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 
 T = TypeVar("T")
 
@@ -661,7 +662,7 @@ async def pending_result_days(days: int) -> list[date]:
                 Match.actual_ft_home.is_(None),
                 Match.ft_scores_1.is_not(None),
                 Match.kickoff_time >= now - timedelta(days=days),
-                Match.kickoff_time <= now - timedelta(hours=3),
+                Match.kickoff_time <= now - RESULT_KNOWN_DELAY,
             )
         )).scalars().all()
     return sorted({k.astimezone(ISTANBUL_TZ).date() for k in kickoffs})

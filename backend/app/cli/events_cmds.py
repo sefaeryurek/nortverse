@@ -2,13 +2,14 @@
 
 import asyncio
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import typer
 
 from app.cli._helpers import _setup_logging, console
 from app.cli._long_jobs import backoff_delay, paced_delay, parse_until, past_deadline
+from app.analysis.pattern_b import RESULT_KNOWN_DELAY
 
 
 def backfill_goal_events_cmd(
@@ -36,7 +37,7 @@ async def _backfill(start: datetime, limit: int | None, delay: float, deadline: 
     from app.db.models import Match
     from app.scraper.goal_events import events_match_score, fetch_goal_events
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
+    cutoff = datetime.now(timezone.utc) - RESULT_KNOWN_DELAY
     async with get_session() as session:
         rows = (await session.execute(
             select(Match.match_id, Match.league_name, Match.actual_ft_home, Match.actual_ft_away)

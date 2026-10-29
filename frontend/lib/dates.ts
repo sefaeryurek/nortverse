@@ -1,3 +1,11 @@
+/** Uygulamanın saat dilimi (Sprint 94 M5: 10 dosyada elle yazılıydı). */
+export const ISTANBUL_TZ = "Europe/Istanbul";
+
+/** Verilen anın İstanbul'daki takvim günü, YYYY-MM-DD. */
+export function istanbulDate(at: Date = new Date()): string {
+  return at.toLocaleDateString("sv-SE", { timeZone: ISTANBUL_TZ });
+}
+
 export function isCalendarDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith("0000")) return false;
   const date = new Date(`${value}T12:00:00Z`);
@@ -26,7 +34,7 @@ export function formatTime(iso: string | null): string {
     return new Date(iso).toLocaleTimeString("tr-TR", {
       hour: "2-digit",
       minute: "2-digit",
-      timeZone: "Europe/Istanbul",
+      timeZone: ISTANBUL_TZ,
     });
   } catch {
     return "--:--";

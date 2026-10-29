@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
+
+from app.analysis.poisson_utils import pmf
 
 # v1.1 (Sprint 94 C2): λ'ları üreten takım gücü modeli parmak izine girdi (model değişse sürüm atlamıyordu).
 HT_RULE_VERSION = "ht-display-v1.1"
@@ -44,9 +45,7 @@ def rule_params_fingerprint() -> str:
 
 
 def _pmf(lam: float) -> list[float]:
-    probs = [math.exp(-lam) * lam ** k / math.factorial(k) for k in range(_N)]
-    probs.append(max(0.0, 1.0 - sum(probs)))
-    return probs
+    return pmf(lam, _N, tail=True)
 
 
 def ht_probabilities(lam_ft_home: float, lam_ft_away: float, share: tuple[float, float]) -> dict:

@@ -1,10 +1,11 @@
+import { istanbulDate } from "@/lib/dates";
 import Link from "next/link";
 import { type Locale, defaultLocale, getDictionary } from "@/lib/i18n";
 
 const DAYS_TR = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 const DAYS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export function getRollingDates(now = new Date(), todayIso = now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" }), range: "upcoming" | "past" = "upcoming", locale: Locale = defaultLocale): { label: string; date: string; today: boolean }[] {
+export function getRollingDates(now = new Date(), todayIso = istanbulDate(now), range: "upcoming" | "past" = "upcoming", locale: Locale = defaultLocale): { label: string; date: string; today: boolean }[] {
   const days = locale === "en" ? DAYS_EN : DAYS_TR;
   return Array.from({ length: 8 }, (_, i) => {
     const d = new Date(`${todayIso}T12:00:00Z`);
