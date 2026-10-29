@@ -88,3 +88,18 @@ it("shows an error card on failure and an empty message when there are no matche
   expect(document.body.textContent).not.toContain("yüklenemiyor");
   expect(document.body.textContent?.length).toBeGreaterThan(0);  // boş durum mesajı
 });
+
+it("labels half win / half loss and marks Asian line percentages as implied (Sprint 94 K-3)", async () => {
+  api.getHtStrategy.mockResolvedValue({ date: "2026-10-28", matches: [match("1", "Arsenal", {
+    kickoff_time: "2026-10-28T19:00:00+00:00", final_ht: "1-0",
+    options: [
+      { market: "ou", selection: "under", line: 1.25, odds: 1.9, pct: 52, margin_pct: 4, model_pct: null, outcome: "half_win" },
+      { market: "ou", selection: "over", line: 1.25, odds: 1.9, pct: 48, margin_pct: 4, model_pct: null, outcome: "half_loss" },
+    ],
+  })] });
+  render(await HtMatchList({ date: "2026-10-28", locale: "tr", shadow: false, now: Date.parse("2026-10-28T23:00:00Z") }));
+  const text = document.body.textContent ?? "";
+  expect(text).toContain("Yarım kazanç");
+  expect(text).toContain("Yarım kayıp");
+  expect(document.querySelector('[title^="İma olasılık"]')).not.toBeNull();
+});

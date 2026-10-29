@@ -134,15 +134,41 @@ def with_opening(options: list[dict], opening: dict[str, dict]) -> list[dict]:
 _resolved_base: str | None = None
 
 
+def power_devig(inverse: dict[str, float]) -> dict[str, float]:
+    """Bahis payını "power" yöntemiyle çıkarır: Σ (1/oran)^k = 1 olacak k bulunur, olasılık = (1/oran)^k.
+
+    Orantılı çıkarma payı bütün seçeneklere aynı oranda dağıtır; oysa pay sürpriz (yüksek oranlı) seçeneklerde
+    daha büyüktür (favori/sürpriz yanlılığı). Power yöntemi favorinin olasılığını biraz artırır (Sprint 94 K-3).
+    """
+    if not inverse or any(v <= 0 for v in inverse.values()):
+        return {}
+    lo, hi = 0.5, 3.0
+    for _ in range(60):
+        k = (lo + hi) / 2
+        if sum(v ** k for v in inverse.values()) > 1:
+            lo = k
+        else:
+            hi = k
+    k = (lo + hi) / 2
+    probs = {key: v ** k for key, v in inverse.items()}
+    total = sum(probs.values())
+    return {key: p / total for key, p in probs.items()}
+
+
 def market_options(odds: dict) -> list[dict]:
-    """Oranlardan seçenekler: oran + bahis payı çıkarılmış olasılık (yüzde). Pazar içinde olasılıklar toplamı 100."""
+    """Oranlardan seçenekler: oran + bahis payı çıkarılmış olasılık (yüzde). Pazar içinde olasılıklar toplamı 100.
+
+    1X2: power yöntemi (K-3). Asya Ü/A: orantılı — bu "ima olasılık"tır, iade ve yarım kazanç/kayıp ihtimalini de
+    içerir; gerçek kazanma olasılığı değildir (ekranda öyle etiketlenir).
+    """
     out: list[dict] = []
     op = odds.get("op")
     if op:
         inv = {k: 1 / op[k] for k in ("1", "X", "2")}
         total = sum(inv.values())
+        fair = power_devig(inv) or {k: v / total for k, v in inv.items()}
         out += [{"market": "result", "selection": k, "line": None, "odds": op[k],
-                 "pct": round(100 * inv[k] / total, 1), "margin_pct": round(100 * (total - 1), 1)} for k in inv]
+                 "pct": round(100 * fair[k], 1), "margin_pct": round(100 * (total - 1), 1)} for k in inv]
     ou = odds.get("ou")
     if ou:
         inv = {"over": 1 / ou["over"], "under": 1 / ou["under"]}

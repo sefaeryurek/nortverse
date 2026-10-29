@@ -222,3 +222,26 @@ def test_opening_prematch_and_movement_on_same_line_only():
     ], opening)
     assert [o["open_odds"] for o in options] == [2.1, None, 1.85]
     assert opening_prematch(None) == {}
+
+
+def test_power_devig_sums_to_one_and_favours_favourite():
+    """Sprint 94 K-3: 1X2 payı power yöntemiyle; favori orantılıdan biraz yüksek, toplam 1."""
+    from app.scraper.odds import market_options, power_devig
+
+    inv = {"1": 1 / 1.6, "X": 1 / 3.6, "2": 1 / 6.5}
+    fair = power_devig(inv)
+    assert abs(sum(fair.values()) - 1) < 1e-9
+    proportional = inv["1"] / sum(inv.values())
+    assert fair["1"] > proportional and fair["2"] < inv["2"] / sum(inv.values())
+    assert power_devig({}) == {} and power_devig({"1": 0.0}) == {}
+    opts = {o["selection"]: o["pct"] for o in market_options({"op": {"1": 1.6, "X": 3.6, "2": 6.5}})}
+    assert opts == {"1": 60.7, "X": 25.6, "2": 13.7}
+
+
+def test_ht_board_outcome_uses_coupon_classification():
+    """Yarım kazanç 'half_win', yarım kayıp 'half_loss' (eskiden ikisi de yanlış etiketleniyordu)."""
+    from app.analysis.coupons import leg_return
+
+    assert leg_return("ht", "ou", "over", 1.25, 1.9, (1, 0), None)[0] == "half_loss"
+    assert leg_return("ht", "ou", "under", 1.25, 1.9, (1, 0), None)[0] == "half_win"
+    assert leg_return("ht", "ou", "over", 1.0, 1.9, (1, 0), None)[0] == "push"

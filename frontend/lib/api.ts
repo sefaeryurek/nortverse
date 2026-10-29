@@ -526,7 +526,8 @@ export interface HtOption {
   model_pct: number | null;
   /** Aynı çizgideki açılış oranı (Sprint 94 K-2 oran hareketi rozeti); karşılaştırılamıyorsa null */
   open_odds?: number | null;
-  outcome?: "hit" | "miss" | "push" | "half";
+  /** Sprint 94 K-3: kupondaki sınıflandırma; "half" eski önbellekli yanıt (yarım kayıp) */
+  outcome?: "hit" | "miss" | "push" | "half_win" | "half_loss" | "half";
 }
 
 export interface HtMatch {

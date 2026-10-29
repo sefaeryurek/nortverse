@@ -39,11 +39,13 @@ function lineHint(line: number, t: Dictionary, locale: Locale): string | undefin
   return undefined;
 }
 
-const OUTCOME: Record<NonNullable<HtOption["outcome"]>, { icon: string; color: string; key: "won" | "lost" | "push" | "half" }> = {
+const OUTCOME: Record<NonNullable<HtOption["outcome"]>, { icon: string; color: string; key: "won" | "lost" | "push" | "half" | "halfWin" }> = {
   hit: { icon: "✓", color: "var(--nv-accent-green)", key: "won" },
   miss: { icon: "✕", color: "var(--nv-accent-red)", key: "lost" },
   push: { icon: "↺", color: "var(--nv-text-tertiary)", key: "push" },
-  half: { icon: "½", color: "var(--nv-accent-amber)", key: "half" },
+  half_win: { icon: "½✓", color: "var(--nv-accent-green)", key: "halfWin" },
+  half_loss: { icon: "½✕", color: "var(--nv-accent-amber)", key: "half" },
+  half: { icon: "½✕", color: "var(--nv-accent-amber)", key: "half" },
 };
 
 function OptionCell({ o, label, strongest, t, locale }: { o: HtOption; label: string; strongest: boolean; t: Dictionary; locale: Locale }) {
@@ -65,7 +67,8 @@ function OptionCell({ o, label, strongest, t, locale }: { o: HtOption; label: st
       </div>
       <div className="flex items-baseline justify-between gap-2" style={{ fontSize: "var(--nv-text-2xs)", fontVariantNumeric: "tabular-nums" }}>
         <span className="font-bold" style={{ fontFamily: "var(--nv-font-mono)", color: strongest ? "var(--nv-accent-green)" : "var(--nv-text-primary)" }}>
-          {pct(o.pct, locale)} <DropBadge o={o} t={t} locale={locale} />
+          <span title={o.market === "ou" ? t.ht.impliedTip : undefined}>{pct(o.pct, locale)}{o.market === "ou" && <sup aria-hidden="true">*</sup>}</span>{" "}
+          <DropBadge o={o} t={t} locale={locale} />
         </span>
         {out ? (
           <span className="font-semibold" style={{ color: out.color }}>

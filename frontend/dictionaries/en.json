@@ -615,7 +615,9 @@
     "oddsPending": "Loading odds…",
     "oddsDrop": "{pct}%",
     "oddsDropTip": "Opening odds {open} → now {now}: the market moved to this pick",
-    "noMatchFilter": "No matches fit the selected filters"
+    "noMatchFilter": "No matches fit the selected filters",
+    "halfWin": "Half win",
+    "impliedTip": "Implied probability: on Asian lines it includes refund and half win/loss chances; it is not the pure win probability."
   },
   "auth": {
     "title": "Sign in",

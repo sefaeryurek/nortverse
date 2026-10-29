@@ -67,7 +67,7 @@ async def test_model_note_only_on_result_market_and_outcome_for_finished(board):
     finished = next(m for m in out["matches"] if m["match_id"] == "3")
     assert finished["final_ht"] == "1-0"
     for o in finished["options"]:
-        assert o["outcome"] in ("hit", "miss", "push", "half")
+        assert o["outcome"] in ("hit", "miss", "push", "half_win", "half_loss")
         # Sprint 94 K-4: dondurulmuş kayıt yok → güncel model sonucu görmüş olabilir, gösterilmez
         assert o["model_pct"] is None
     home = next(o for o in finished["options"] if o["market"] == "result" and o["selection"] == "1")

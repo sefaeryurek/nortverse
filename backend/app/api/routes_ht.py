@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
-from app.analysis.ht_value import settle
+from app.analysis.coupons import leg_return
 from app.analysis.league_filter import is_main_league, is_shadow_league
 from app.analysis.live_poisson import get_poisson_model
 from app.analysis.prematch_ht import HT_RULE_VERSIONS, match_ht
@@ -219,8 +219,9 @@ async def ht_strategy(
         final = None if r.actual_ht_home is None else (r.actual_ht_home, r.actual_ht_away)
         if final is not None:
             for o in options:
-                profit = settle(o, final)
-                o["outcome"] = "hit" if profit > 0 else "push" if profit == 0 else "half" if profit > -1 else "miss"
+                # Sprint 94 K-3: kupondaki sınıflandırmayla aynı (yarım kazanç eskiden "Kazandı" görünüyordu)
+                result = leg_return("ht", o["market"], o["selection"], o.get("line"), o["odds"], final, None)
+                o["outcome"] = result[0] if result else None
         matches.append({
             "match_id": r.match_id, "home_team": r.home_team, "away_team": r.away_team,
             "league_name": r.league_name, "kickoff_time": r.kickoff_time.isoformat() if r.kickoff_time else None,

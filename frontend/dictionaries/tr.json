@@ -615,7 +615,9 @@
     "oddsPending": "Oran yükleniyor…",
     "oddsDrop": "%{pct}",
     "oddsDropTip": "Açılış oranı {open} → şimdi {now}: piyasa bu seçime kaydı",
-    "noMatchFilter": "Seçili süzgeçlere uyan maç yok"
+    "noMatchFilter": "Seçili süzgeçlere uyan maç yok",
+    "halfWin": "Yarım kazanç",
+    "impliedTip": "İma olasılık: Asya çizgide iade ve yarım kazanç/kayıp ihtimalini de içerir, saf kazanma olasılığı değildir."
   },
   "auth": {
     "title": "Giriş",
