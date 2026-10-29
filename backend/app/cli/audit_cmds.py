@@ -434,6 +434,10 @@ def recompute_patterns_cmd(
         help="Sadece ayar parmak izi eskimiş aileleri hesapla (kesilirse kaldığı yerden devam eder).",
     ),
     family: Optional[list[str]] = typer.Option(None, "--family", help="Sadece bu aile(ler): b, c, d"),
+    league: Optional[list[str]] = typer.Option(
+        None, "--league",
+        help="Sadece bu lig(ler) (tekrarlanabilir; kanonik ad ya da kısa kod). Yeni kurulan lig arşivi için.",
+    ),
     include_finished: bool = typer.Option(
         False, "--include-finished",
         help="Bitmiş maçları da yeniden hesapla (backtest verisi; o gün gösterilen değil). Varsayılan: sadece yaklaşanlar.",
@@ -457,6 +461,7 @@ def recompute_patterns_cmd(
     from app.analysis.persist import (
         FAMILIES, compute_all_patterns, pattern_as_of, pattern_hashes, update_match_patterns,
     )
+    from app.analysis.league_filter import canonical_league_name
     from app.pipeline.runner import _with_retry
 
     wanted = [f for f in FAMILIES if not family or f in family]
@@ -469,12 +474,16 @@ def recompute_patterns_cmd(
         hash_cols = {f: getattr(Match, f"pattern_{f}_hash") for f in FAMILIES}
         async with get_session() as session:
             filters = [Match.deleted_at.is_(None), Match.model_only.is_(False), Match.analyzed_at.is_not(None)]
+            if league:
+                # Yeni lig partisi (Sprint 94 P2): arşiv çekilirken λ henüz yoktu → A3 o ligde baştan hesaplanır
+                filters.append(Match.league_name.in_(sorted({canonical_league_name(x) for x in league})))
             if not include_finished:
                 filters.append(or_(Match.kickoff_time.is_(None), Match.kickoff_time > func.now()))
             else:
                 session.add(AuditLog(
                     operation="recompute_include_finished", actor="cli",
-                    details={"families": wanted, "stale_only": stale_only, "hashes": current},
+                    details={"families": wanted, "stale_only": stale_only, "hashes": current,
+                             "leagues": league or None},
                 ))
             if only_missing:
                 filters.append(Match.pattern_computed_at.is_(None))

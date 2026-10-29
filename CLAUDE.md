@@ -70,6 +70,7 @@ python -m app.cli.main normalize-leagues --apply     # Lig adlarını kanonik fo
 python -m app.cli.main recompute-patterns --stale-only            # Sadece ayarı eskimiş pattern'leri yenile (devam edebilir)
 python -m app.cli.main recompute-patterns --stale-only --family d # Sadece A3 (Pattern D)
 python -m app.cli.main recompute-patterns --stale-only --include-finished  # Bitmiş maçları da yenile (varsayılan: korunur, audit_log'a düşer)
+python -m app.cli.main recompute-patterns --include-finished --league "Greek Super League"  # sadece bu lig(ler) — yeni lig arşivinden sonra
 
 # Hesaplar ve paylaşım (Sprint 93–94) — kayıt sayfası yok, hesapları site sahibi açar
 python -m app.cli.main create-user arkadas              # yeni hesap (şifre verilmezse rastgele üretilir)
@@ -1732,6 +1733,10 @@ Kullanıcı kararı: K1–K22 plandaki önerilerle onaylı; küçük/büyük tü
 - **Lig adları (94.49, F7):** H2H kısa kodu ile bülten adı aynı kanonik ada gitmiyordu (DB'de "England League 1" ve
   "England League One" aynı lig) → League One/Two, La Liga 2, TFF 1. Lig, Eerste Divisie, Ekstraklasa (POL PR), Çekya,
   Yunanistan alias'ları; kaynaktan örneklenen (kod, ad) çiftleri testte; `normalize-leagues --apply` 65 satır.
+- **Lig partisi dosyası (94.50, P2):** `scripts/lig-partisi-cek.bat` (kullanıcı elle çalıştırır, kaldığı sezondan devam):
+  League Two (35), Çekya (137), Eerste Divisie (17), Yunanistan (32), Polonya (6) × 2022-23…2026-27, eskiden yeniye;
+  sonra λ + `recompute-patterns --league …`. Bitince bu ligler gölge listesine eklenecek (P3). Bekleyen gol dakikası +
+  MS oran geçmişi çekimi için `scripts/arka-plan-cek.bat` (gece görevinin aynısı, 00:45'te durur).
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down

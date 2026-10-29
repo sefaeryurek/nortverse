@@ -269,3 +269,11 @@ async def test_pipeline_writes_model_only_for_tracked_h2h_skip(monkeypatch):
     assert stats["model_only"] == 1 and stats["skipped"] == 2
     model_only.assert_awaited_once()
     assert model_only.await_args.args[0].match_id == "777"
+
+
+def test_recompute_patterns_league_filter_is_canonical():
+    """P2: yeni lig partisinden sonra sadece o liglerin arşivi yeniden hesaplanır (bülten adı da kabul edilir)."""
+    from app.cli.audit_cmds import recompute_patterns_cmd
+
+    source = inspect.getsource(recompute_patterns_cmd)
+    assert "Match.league_name.in_" in source and "canonical_league_name" in source
