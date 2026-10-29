@@ -69,6 +69,15 @@ describe("leagueDisplay", () => {
     expect(leagueDisplay("Turkey Super Lig").short).toBe("TUR");
   });
 
+  it("knows backend canonical names and bulletin names of second tiers (Sprint 94 F7)", () => {
+    expect(leagueDisplay("German 2. Bundesliga").short).toBe("GER2");
+    expect(leagueDisplay("Dutch Eredivisie").short).toBe("NED");
+    expect(leagueDisplay("England League 2").short).toBe("ENG4");
+    expect(leagueDisplay("Holland Eerste Divisie").short).toBe("NED2");
+    expect(leagueDisplay("Czech Republic Gambrinus Liga").short).toBe("CZE");
+    expect(leagueDisplay("Greece Super League A").short).toBe("GRE");
+  });
+
   it("returns fallback when both code and name are null", () => {
     const d = leagueDisplay(null, null);
     expect(d.flag).toBe("⚽");

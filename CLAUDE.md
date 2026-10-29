@@ -330,7 +330,7 @@ nortverse/
 │   │       ├── health_cmds.py     # health-report — health-check.ps1'in DB kontrolleri (Sprint 94 D4)
 │   │       └── users_cmds.py      # create-user, set-password, list-users, unlock (Sprint 93–94)
 │   ├── alembic/                   # DB migration (29 migration, head c3p6l1m7h885)
-│   ├── tests/                     # 1337 test (89 dosya)
+│   ├── tests/                     # 1358 test (89 dosya)
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -444,7 +444,7 @@ nortverse/
 │   ├── dictionaries/              # i18n dil dosyaları (Sprint 84)
 │   │   ├── tr.json                # Türkçe sözlük — 300+ anahtar
 │   │   └── en.json                # İngilizce sözlük — tam çeviri
-│   ├── __tests__/                 # 386 vitest test (49 dosya)
+│   ├── __tests__/                 # 394 vitest test (50 dosya)
 │   │   ├── fixtures.ts            # Test factory'leri
 │   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
 │   │   ├── cart.test.ts           # Sepet helper'ları (~14 test)
@@ -1729,6 +1729,9 @@ Kullanıcı kararı: K1–K22 plandaki önerilerle onaylı; küçük/büyük tü
   Ana liglerin oranları değişmesin diye bu satırlar COND, lig ortalaması, takım gücü eğitimi, A3/A1/A2 adayları,
   backtest ve ekran listelerinden (bülten, sonuçlar, analiz, canlı, İY, kalite) `Match.model_only.is_(False)` ile
   süzülür; skor güncelleme, defter çözümü ve canlı izleyici görür. Değerlendirmede `group_by=model_only` kırılımı.
+- **Lig adları (94.49, F7):** H2H kısa kodu ile bülten adı aynı kanonik ada gitmiyordu (DB'de "England League 1" ve
+  "England League One" aynı lig) → League One/Two, La Liga 2, TFF 1. Lig, Eerste Divisie, Ekstraklasa (POL PR), Çekya,
+  Yunanistan alias'ları; kaynaktan örneklenen (kod, ad) çiftleri testte; `normalize-leagues --apply` 65 satır.
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -2012,8 +2015,8 @@ Eski bulut kurulumu (Render + Vercel + Neon): yapılandırma duruyor, kullanılm
 
 | Katman | Araç | Test sayısı |
 |---|---|---|
-| Backend | pytest | 1337 |
-| Frontend birim | vitest | 386 |
+| Backend | pytest | 1358 |
+| Frontend birim | vitest | 394 |
 | Frontend E2E | Playwright | 17 × 2 görünüm (CI'da PostgreSQL + backend ile) |
 
 ### Ekrandaki kurallar (sürümler `rule_registry.py`)

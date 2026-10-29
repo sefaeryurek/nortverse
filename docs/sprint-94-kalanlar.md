@@ -42,7 +42,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
   test). İlk gerçek kayıt: 2993838 Frosinone–Lecce (H2H 2; avantaj 4,4 puan → kural gereği yayın yok).
   Not: "yalnız model" backtest'i (#12 tekrar oynatma bu maçlar için) arşivde bu satırlar olmadığından yapılamıyor;
   ölçüm gölge karneyle (`group_by=model_only`).
-- [ ] F7 lig alias'ları (P2 ön koşulu)
+- [x] F7 lig alias'ları — 94.49: 7 ligin kısa kod/bülten adı birleşti, kaynaktan örneklenen 20 (kod, ad) çifti testte, `normalize-leagues --apply` 65 satır; frontend bayrakları (German 2. Bundesliga, Eerste Divisie, League One/Two, TUR 1. Lig)
 - [ ] P2 lig partisi (K16): League Two, Çekya, Eerste Divisie, Yunanistan, Polonya — 5 sezon, gece görevinde
 - [ ] P3 DISPLAY_LEAGUES / POOL_LEAGUES ayrımı + terfi süreci
 - [ ] P4 Avrupa kupaları seçenek B (K17): arşiv + canlı COND gölge

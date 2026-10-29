@@ -137,3 +137,32 @@ def test_championship_leagues_are_not_cups(name):
                                    "Champions League Qualification"])
 def test_champions_competitions_still_rejected(name):
     assert not _supported(name)
+
+
+# Sprint 94 F7: kaynakta görülen (H2H kısa kodu, satır başlığı = bülten adı) çiftleri (29 Ekim örneklemi).
+# Takip edilen ve aday (K16) liglerde ikisi aynı kanonik ada gitmeli — yoksa DB'de aynı lig iki adla yazılır,
+# lig süzgeci yarım kalır (arşiv, takım gücü, ortalama).
+SOURCE_LEAGUE_PAIRS = [
+    ("ENG PR", "English Premier League"), ("SPA D1", "Spanish La Liga"), ("ITA D1", "Italy Serie A"),
+    ("GER D1", "German Bundesliga"), ("FRA D1", "France Ligue 1"), ("TUR D1", "Turkey Super Lig"),
+    ("HOL D1", "Holland Eredivisie"), ("ENG LCH", "England Championship"), ("GER D2", "German Bundesliga 2"),
+    ("POR D1", "Liga Portugal 1"), ("BEL D1", "Belgian Pro League"), ("SCO PR", "Scottish Premiership"),
+    ("ENG L1", "England League 1"), ("ENG L2", "England League 2"), ("SPA D2", "Spanish La Liga 2"),
+    ("TFF 1. Lig", "Turkey 1. Lig"), ("HOL D2", "Holland Eerste Divisie"), ("POL PR", "Poland Ekstraklasa"),
+    ("CZE D1", "Czech Republic Gambrinus Liga"), ("GRE D1", "Greece Super League A"),
+]
+
+
+@pytest.mark.parametrize("code,title", SOURCE_LEAGUE_PAIRS)
+def test_short_code_and_bulletin_name_share_canonical(code, title):
+    from app.analysis.league_filter import match_league_name
+
+    assert canonical_league_name(code) == canonical_league_name(title)
+    assert match_league_name(code, title) == match_league_name(None, title)
+
+
+def test_tracked_leagues_recognised_from_bulletin_name():
+    from app.analysis.league_filter import is_tracked_league
+
+    for _code, title in SOURCE_LEAGUE_PAIRS[:12]:
+        assert is_tracked_league(title), title

@@ -140,6 +140,7 @@ LEAGUE_ALIASES: dict[str, str] = {
     "spanish segunda": "Spanish Segunda",
     "spain segunda": "Spanish Segunda",
     "spa d2": "Spanish Segunda",
+    "spanish la liga 2": "Spanish Segunda",  # bülten adı (Sprint 94 F7)
     # İtalya 2. Lig
     "italy serie b": "Italy Serie B",
     "italian serie b": "Italy Serie B",
@@ -159,6 +160,25 @@ LEAGUE_ALIASES: dict[str, str] = {
     "eng l1": "England League One",
     "england league two": "England League Two",
     "eng l2": "England League Two",
+    # Bülten tam adları (Sprint 94 F7): DB'de "England League 1" (12) ve "England League One" (1) aynı lig iki adla
+    "england league 1": "England League One",
+    "england league 2": "England League Two",
+    # Türkiye 1. Lig (H2H kodu "TFF 1. Lig")
+    "turkey 1. lig": "Turkey 1. Lig",
+    "tff 1. lig": "Turkey 1. Lig",
+    # Hollanda 2. Lig
+    "holland eerste divisie": "Dutch Eerste Divisie",
+    "dutch eerste divisie": "Dutch Eerste Divisie",
+    "eerste divisie": "Dutch Eerste Divisie",
+    "hol d2": "Dutch Eerste Divisie",
+    # Çekya
+    "czech republic gambrinus liga": "Czech First League",
+    "czech first league": "Czech First League",
+    "cze d1": "Czech First League",
+    # Yunanistan
+    "greece super league a": "Greek Super League",
+    "greek super league": "Greek Super League",
+    "gre d1": "Greek Super League",
     # ABD
     "major league soccer": "Major League Soccer",
     "mls": "Major League Soccer",
@@ -198,6 +218,7 @@ LEAGUE_ALIASES: dict[str, str] = {
     "poland ekstraklasa": "Polish Ekstraklasa",
     "polish ekstraklasa": "Polish Ekstraklasa",
     "pol d1": "Polish Ekstraklasa",
+    "pol pr": "Polish Ekstraklasa",  # H2H kodu (Sprint 94 F7)
     # İsveç
     "sweden superettan": "Swedish Superettan",
     "swe d2": "Swedish Superettan",
