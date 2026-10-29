@@ -305,6 +305,11 @@ async def sync_kickoffs_from_cache(days: list[date]) -> int:
         return await sync_kickoffs(session, list(latest.values()))
 
 
+def shrunk_fixture_list(old_count: int, new_count: int) -> bool:
+    """Yeni kaynak listesi öncekinin yarısından küçük mü? (küçük günlerde gürültü olmasın diye ≥20 maç)"""
+    return old_count >= 20 and new_count < old_count / 2
+
+
 async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> int:
     """Keep compact source competition labels and already observed scores."""
     cache_date = cache_day.isoformat()
@@ -322,6 +327,11 @@ async def save_fixture_cache(cache_day: date, fixtures: list[FixtureMatch]) -> i
     async with get_session() as session:
         previous = await session.get(FixtureCache, cache_date)
         if previous is not None and isinstance(previous.matches_json, list):
+            old_source = sum(1 for item in previous.matches_json if isinstance(item, dict) and not item.get("carried"))
+            if shrunk_fixture_list(old_source, len(cache_json)):
+                # Sprint 94 F11: 16 Ekim kaydı 7 maçla kesik kaldı — düşen maçlar aşağıda "carried" olarak korunur
+                log.warning("Bülten listesi küçüldü (%s): önceki %d maç, şimdi %d — kaynak kesik olabilir",
+                            cache_date, old_source, len(cache_json))
             old_by_id = {item.get("match_id"): item for item in previous.matches_json
                          if isinstance(item, dict)}
             score_keys = ("score_status", "score_home", "score_away",
@@ -460,6 +470,14 @@ async def run_pipeline(
             await save_fixture_cache(cache_day, source_fixtures)
         except Exception as exc:
             log.warning("fixture_cache yazılamadı: %s", exc)
+        try:
+            from app.analysis.skip_cache import prune_old_skips
+
+            pruned = await prune_old_skips()
+            if pruned:
+                log.info("Eski atlanmış analiz kaydı silindi: %d", pruned)
+        except Exception as exc:
+            log.warning("skipped_analysis budanamadı: %s", exc)
 
         prepared = await _prepared_match_ids([f.match_id for f in fixtures]) if incremental else set()
         if prepared:

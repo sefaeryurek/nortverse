@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db.connection import get_session
@@ -16,6 +16,8 @@ from app.models import MatchRawData, SkipReason
 # Günlük pipeline saatlerce gecikebilir; filtre sonucu akşam bülteninde
 # geçerli kalsın, ertesi günkü çalışmada yenilensin.
 SKIP_CACHE_TTL = timedelta(hours=24)
+# Sprint 94 F11: canlı sayfa "kural dışı" sebebini gösterir; 90 günden eski satır işe yaramaz, tablo büyümesin
+SKIP_RETENTION = timedelta(days=90)
 
 
 @dataclass(frozen=True)
@@ -67,3 +69,11 @@ async def save_skip(raw: MatchRawData, reason: SkipReason) -> None:
     )
     async with get_session() as session:
         await session.execute(stmt)
+
+
+async def prune_old_skips(now: datetime | None = None) -> int:
+    """`SKIP_RETENTION`'dan eski atlanmış analiz kayıtlarını siler; silinen satır sayısı."""
+    cutoff = (now or datetime.now(timezone.utc)) - SKIP_RETENTION
+    async with get_session() as session:
+        result = await session.execute(delete(SkippedAnalysis).where(SkippedAnalysis.checked_at < cutoff))
+    return result.rowcount or 0

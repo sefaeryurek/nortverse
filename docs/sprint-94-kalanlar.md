@@ -55,7 +55,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [ ] F8 skor gecikmesi
 - [ ] F9 build-archive hata takibi
 - [ ] F10 canlı Playwright bütçesi
-- [ ] F11 fixture_cache koruması + skipped_analysis budama
+- [x] F11 fixture_cache koruması (küçülme uyarısı; düşenler zaten carried) + skipped_analysis 90 gün budama — 94.44
 - [ ] H4 piyasa olasılığı (market_prob.py)
 - [x] H5 v5 kademesi (O5 ile) — 94.37
 - [ ] I5 yedek bahisçi

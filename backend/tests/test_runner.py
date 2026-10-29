@@ -409,3 +409,38 @@ def test_pipeline_exit_code_rule():
     assert pipeline_failed({"analyzed": 0, "errors": 3})
     assert pipeline_failed({"analyzed": 20, "errors": 9})
     assert not pipeline_failed({"analyzed": 20, "errors": 5})
+
+
+def test_shrunk_fixture_list_threshold():
+    """Sprint 94 F11: yeni liste öncekinin yarısından küçükse uyarı (küçük günlerde gürültü yok)."""
+    from app.pipeline.runner import shrunk_fixture_list
+
+    assert shrunk_fixture_list(300, 7) is True
+    assert shrunk_fixture_list(300, 160) is False
+    assert shrunk_fixture_list(10, 2) is False
+
+
+def test_prune_old_skips_deletes_before_retention(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from app.analysis import skip_cache
+
+    seen = []
+
+    class _S:
+        async def execute(self, stmt):
+            seen.append(stmt)
+            return SimpleNamespace(rowcount=4)
+
+    @asynccontextmanager
+    async def fake_session():
+        yield _S()
+
+    monkeypatch.setattr(skip_cache, "get_session", fake_session)
+    now = datetime(2026, 10, 29, tzinfo=timezone.utc)
+    assert asyncio.run(skip_cache.prune_old_skips(now)) == 4
+    params = seen[0].compile().params
+    assert list(params.values()) == [now - skip_cache.SKIP_RETENTION]
