@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { useLocale } from "@/lib/locale-context";
+import { logoutAndLeave } from "@/lib/logout";
 import { setShadowEnabled, shadowEnabledInBrowser } from "@/lib/shadow";
 
 const noopSubscribe = () => () => {};
@@ -226,12 +227,7 @@ export default function Sidebar() {
             )}
           </button>
           <button
-            onClick={async () => {
-              try { await fetch("/api/auth/logout", { method: "POST" }); } catch { /* çerez yine de süresiyle düşer */ }
-              // Tam sayfa yükleme kasıtlı: çıkışta istemci yönlendirici önbelleğindeki kullanıcı verisi de silinsin
-              // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-              window.location.assign("/giris");
-            }}
+            onClick={() => void logoutAndLeave()}
             className="flex items-center gap-3 rounded-lg transition-all"
             style={{
               padding: expanded ? "8px 12px" : "8px 0",

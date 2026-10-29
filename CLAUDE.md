@@ -77,6 +77,8 @@ python -m app.cli.main create-user sefa --admin         # yönetici: yeni maç �
 python -m app.cli.main set-password arkadas             # şifre değiştir
 python -m app.cli.main list-users                       # hesaplar
 python -m app.cli.main unlock arkadas                   # çok hatalı denemeyle kilitlenen girişi aç (backend yeniden başlamaz)
+python -m app.cli.main disable-user arkadas             # hesabı kapat + oturumlarını sil (--enable ile geri aç)
+python -m app.cli.main logout-all                       # tüm açık oturumları kapat (şüpheli durumda; ad verilirse sadece o hesap)
 python -m app.cli.main health-report                    # DB sağlık kontrolleri (scripts/health-check.ps1 --json ile kullanır)
 
 # Ön hazırlık / doldurma (kesilirse kaldığı yerden devam eder)

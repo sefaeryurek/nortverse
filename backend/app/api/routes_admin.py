@@ -30,10 +30,16 @@ _ADMIN_KEY = os.environ.get("ADMIN_API_KEY", "")
 
 
 async def _require_admin(request: Request) -> None:
-    if not _ADMIN_KEY:
-        return
+    """Yönetici uçları: geçerli `X-Admin-Key` (sabit zamanlı karşılaştırma) ya da yönetici hesabıyla oturum
+    (Sprint 94 E8: anahtar tanımlı değilken giriş yapmış her kullanıcı erişebiliyordu)."""
+    import hmac
+
+    from app.auth import is_admin_request
+
     token = request.headers.get("X-Admin-Key", "")
-    if token != _ADMIN_KEY:
+    if _ADMIN_KEY and token and hmac.compare_digest(token.encode(), _ADMIN_KEY.encode()):
+        return
+    if not is_admin_request(request):
         raise HTTPException(403, "Yetkisiz erişim")
 
 
@@ -70,8 +76,12 @@ _SCORE_VALIDATION = text("""
 
 
 @router.api_route("/api/health", methods=["GET", "HEAD"], response_model=HealthResponse)
-async def health() -> HealthResponse:
-    """Sistem sağlık kontrolü — UptimeRobot/cron-job.org dış pinglerine uygun."""
+async def health(request: Request) -> HealthResponse:
+    """Sistem sağlık kontrolü — denetleyici ve sağlık betiği sadece 200'e bakar.
+
+    Sprint 94 E8: girişsiz istekte sadece durum (ok/degraded) döner; pipeline saati, kuyruk ve kazıyıcı sayaçları
+    oturum ister.
+    """
     db_ok = False
     last_pipeline: Optional[datetime] = None
     last_fixture_cached: Optional[datetime] = None
@@ -89,6 +99,12 @@ async def health() -> HealthResponse:
     except Exception as exc:
         log.warning("Health check DB sorgusu başarısız: %s", exc)
 
+    from app.auth import auth_required
+
+    if auth_required() and getattr(request.state, "user", None) is None:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"status": "ok" if db_ok else "degraded", "db_ok": db_ok})
     return HealthResponse(
         status="ok" if db_ok else "degraded",
         db_ok=db_ok,

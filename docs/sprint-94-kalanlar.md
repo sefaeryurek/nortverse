@@ -50,7 +50,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [ ] B6 kickoff yer tutucusu 15:59 (aday filtresi + sürüm; Faz G ile)
 - [x] C3 geçmiş isabet çipi sadece ana lig — 94.38
 - [x] C4 kapsama karnesi (/api/performance/coverage) — 94.40
-- [ ] E8 paylaşım sonrası sertleştirme (ADMIN_API_KEY + compare_digest, /docs kapalı, disable-user, logout-all, WS oturum kontrolü, sabit zamanlı giriş, Origin kontrolü, çerez secure, çıkışta sepet temizliği)
+- [x] E8 paylaşım sonrası sertleştirme — 94.46 (ADMIN_API_KEY değerini .env'ye yazmak kullanıcıda; anahtar yoksa admin uçları sadece yönetici hesabı) (ADMIN_API_KEY + compare_digest, /docs kapalı, disable-user, logout-all, WS oturum kontrolü, sabit zamanlı giriş, Origin kontrolü, çerez secure, çıkışta sepet temizliği)
 - [ ] F6 scrape-canary + gerçek sayfa örnekleri
 - [ ] F8 skor gecikmesi
 - [ ] F9 build-archive hata takibi

@@ -359,6 +359,9 @@ async def stop_ws_broadcaster() -> None:
         log.info("WebSocket broadcaster durduruldu")
 
 
+WS_SESSION_RECHECK_S = 60.0
+
+
 @router.websocket("/ws/live-ht")
 async def ws_live_ht(ws: WebSocket) -> None:
     """Canlı maç verisi WebSocket endpoint'i.
@@ -367,11 +370,19 @@ async def ws_live_ht(ws: WebSocket) -> None:
     sonra broadcaster periyodik güncelleme yapar.
     İstemci "ping" gönderirse "pong" döner. Giriş yapılmamışsa bağlantı reddedilir (4401).
     """
+    import time
+
+    from app.api.main import origin_allowed
     from app.auth import COOKIE_NAME, auth_required, resolve
 
-    if auth_required() and await resolve(ws.cookies.get(COOKIE_NAME)) is None:
+    token = ws.cookies.get(COOKIE_NAME)
+    if not origin_allowed(ws.headers.get("origin")):  # Sprint 94 E8: başka sitenin sayfası bağlanamaz
+        await ws.close(code=4403)
+        return
+    if auth_required() and await resolve(token) is None:
         await ws.close(code=4401)
         return
+    checked_at = time.monotonic()
     await _ws_manager.connect(ws)
     try:
         matches = await get_live_ht_matches()
@@ -390,6 +401,12 @@ async def ws_live_ht(ws: WebSocket) -> None:
                 await ws.send_text("pong")
             except WebSocketDisconnect:
                 break
+            if auth_required() and time.monotonic() - checked_at >= WS_SESSION_RECHECK_S:
+                # Sprint 94 E8: çıkış yapılan / kapatılan hesabın açık bağlantısı en geç ~1 dk sonra kapanır
+                checked_at = time.monotonic()
+                if await resolve(token) is None:
+                    await ws.close(code=4401)
+                    break
     except WebSocketDisconnect:
         pass
     except Exception:

@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 COOKIE_NAME = "nv_session"
 SESSION_DAYS = 30
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1}
-_CACHE_TTL = 60.0  # çözülmüş oturum bellekte (her istekte DB'ye gitmesin)
+_CACHE_TTL = 15.0  # çözülmüş oturum bellekte (her istekte DB'ye gitmesin); kapatılan hesap en geç 15 sn sonra düşer (E8)
 _cache: dict[str, tuple[float, "AuthUser | None"]] = {}
 
 # Kaba kuvvet koruması (Sprint 94 E3): kullanıcı adı başına 15 dk'da 8, toplamda 40 hatalı deneme.
@@ -128,14 +128,23 @@ async def last_unlock(session, username: str) -> float | None:
     return stamp.timestamp() if stamp else None
 
 
+# Kullanıcı yokken de aynı scrypt işi yapılır → yanıt süresinden "bu ad var mı" anlaşılmaz (Sprint 94 E8)
+_DUMMY_HASH = hash_password(secrets.token_urlsafe(16))
+
+
 async def login(session, username: str, password: str, user_agent: str | None) -> tuple[str, AuthUser] | None:
     """Doğruysa yeni oturum anahtarı (çereze yazılacak) ve kullanıcı."""
+    import asyncio
+
     from sqlalchemy import select
 
     from app.db.models import User, UserSession
 
     user = (await session.execute(select(User).where(User.username == username.strip().lower()))).scalar_one_or_none()
-    if user is None or user.disabled or not verify_password(password, user.password_hash):
+    stored = user.password_hash if user is not None else _DUMMY_HASH
+    # scrypt ~50 ms CPU: olay döngüsünü (canlı izleyici, diğer istekler) bekletmesin
+    ok = await asyncio.to_thread(verify_password, password, stored)
+    if user is None or user.disabled or not ok:
         return None
     token = secrets.token_urlsafe(32)
     session.add(UserSession(token_hash=token_hash(token), user_id=user.id, user_agent=(user_agent or "")[:200],

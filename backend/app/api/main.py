@@ -99,6 +99,8 @@ app = FastAPI(
     description="Futbol maçı istatistik ve analiz sistemi",
     version=__import__("app").__version__,
     lifespan=lifespan,
+    # Sprint 94 E8: /docs, /redoc ve /openapi.json kapalı — uçların listesi dışarıya açık durmasın
+    docs_url=None, redoc_url=None, openapi_url=None,
 )
 
 
@@ -180,6 +182,22 @@ async def add_cache_headers(request, call_next):
 # ─── Giriş zorunluluğu (Sprint 93) ───────────────────────────────────────────
 # En dıştaki katman: her /api isteği geçerli oturum ister (WebSocket kendi ucunda kontrol eder).
 _PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/me"}
+# Kendi sitemiz: yerel adresler, Tailscale (*.ts.net) ve CORS_ORIGINS. Origin başlığı yoksa (sunucu çizimi, curl) serbest.
+_LOCAL_ORIGIN_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def origin_allowed(origin: str | None) -> bool:
+    from urllib.parse import urlsplit
+
+    if not origin:
+        return True
+    if origin in _ALLOWED_ORIGINS:
+        return True
+    try:
+        host = (urlsplit(origin).hostname or "").lower()
+    except ValueError:
+        return False
+    return host in _LOCAL_ORIGIN_HOSTS or host.endswith(".ts.net")
 
 
 @app.middleware("http")
@@ -190,6 +208,9 @@ async def require_session(request, call_next):
 
     path = request.url.path
     request.state.user = None
+    if request.method == "POST" and not origin_allowed(request.headers.get("origin")):
+        # Sprint 94 E8: başka bir sitenin sayfasından gelen POST (çerez SameSite=lax ile zaten gitmez; ikinci kat)
+        return JSONResponse({"detail": "İzin verilmeyen kaynak"}, status_code=403, headers={"Cache-Control": "no-store"})
     if path.startswith("/api/"):
         request.state.user = await request_user(request.cookies.get(COOKIE_NAME),
                                                 request.headers.get(INTERNAL_HEADER))

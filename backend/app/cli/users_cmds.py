@@ -126,3 +126,60 @@ def unlock_cmd(
 
     asyncio.run(run())
     console.print(f"[green]Giriş kilidi açıldı:[/green] {'tüm hesaplar' if all_users else target}")
+
+
+async def _drop_sessions(user_name: str | None) -> int:
+    """Oturumları siler (bir kullanıcının ya da herkesin); silinen oturum sayısı."""
+    from sqlalchemy import delete, select
+
+    from app.db.connection import get_session
+    from app.db.models import User, UserSession
+
+    async with get_session() as session:
+        stmt = delete(UserSession)
+        if user_name is not None:
+            stmt = stmt.where(UserSession.user_id.in_(select(User.id).where(User.username == user_name)))
+        return (await session.execute(stmt)).rowcount or 0
+
+
+def disable_user_cmd(
+    username: str = typer.Argument(..., help="Kapatılacak hesap"),
+    enable: bool = typer.Option(False, "--enable", help="Kapatılmış hesabı yeniden aç"),
+) -> None:
+    """Hesabı kapatır (giriş yapamaz) ve açık oturumlarını siler; --enable ile geri açar (Sprint 94 E8).
+
+    Backend çözülmüş oturumları en fazla 15 sn bellekte tutar; açık canlı bağlantı en geç ~1 dk içinde kapanır.
+    """
+    name = username.strip().lower()
+
+    async def run() -> int | None:
+        from sqlalchemy import update
+
+        from app.db.connection import get_session
+        from app.db.models import AuditLog, User
+
+        async with get_session() as session:
+            result = await session.execute(update(User).where(User.username == name).values(disabled=not enable))
+            if not result.rowcount:
+                return None
+            session.add(AuditLog(operation="user_enable" if enable else "user_disable", actor="cli",
+                                 details={"username": name}))
+        return 0 if enable else await _drop_sessions(name)
+
+    dropped = asyncio.run(run())
+    if dropped is None:
+        console.print(f"[red]'{name}' bulunamadı[/red]")
+        raise typer.Exit(1)
+    if enable:
+        console.print(f"[green]Hesap yeniden açıldı:[/green] {name}")
+    else:
+        console.print(f"[yellow]Hesap kapatıldı:[/yellow] {name} — {dropped} oturum silindi")
+
+
+def logout_all_cmd(
+    username: str = typer.Argument(None, help="Sadece bu hesabın oturumları (boşsa herkes)"),
+) -> None:
+    """Tüm açık oturumları kapatır — herkes yeniden giriş yapar (şüpheli durumda, Sprint 94 E8)."""
+    name = username.strip().lower() if username else None
+    dropped = asyncio.run(_drop_sessions(name))
+    console.print(f"[yellow]{dropped} oturum kapatıldı[/yellow]{' (' + name + ')' if name else ' (tüm hesaplar)'}")

@@ -42,7 +42,11 @@ async def post_login(body: LoginBody, request: Request, response: Response) -> d
         record_login_failure(username)
         raise HTTPException(401, "Kullanıcı adı veya şifre hatalı")
     token, user = result
-    response.set_cookie(COOKIE_NAME, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/")
+    # Sprint 94 E8: Tailscale (HTTPS) üzerinden girildiyse çerez sadece HTTPS'te gider. Başlık taklit edilse bile
+    # çerez yalnızca daha sıkı olur (yerel http://127.0.0.1 girişinde secure kapalı kalır).
+    secure = request.headers.get("x-forwarded-proto", "").split(",")[0].strip() == "https"
+    response.set_cookie(COOKIE_NAME, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/",
+                        secure=secure)
     return {"username": user.username, "is_admin": user.is_admin}
 
 
