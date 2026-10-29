@@ -18,6 +18,7 @@ _TTL_SECONDS = 45
 _LIVE_FRESH_SECONDS = 120
 _COLD_WAIT_SECONDS = 2.0
 _RETRY_DELAY_SECONDS = 15.0
+_LIVE_BUDGET_SECONDS = 30.0  # pano + canlı sayfa toplam
 _lock = asyncio.Lock()
 _cached: "LiveSnapshot | None" = None
 _cached_at = 0.0
@@ -39,7 +40,6 @@ async def _refresh() -> LiveSnapshot | None:
     global _cached, _cached_at, _retry_after
     started_at = time.monotonic()
     today = datetime.now(ISTANBUL_TZ).date()
-    live_task = asyncio.create_task(fetch_live_scores())
     board_days = (today - timedelta(days=1), today, today + timedelta(days=1))
 
     async def fetch_day(day):
@@ -68,12 +68,16 @@ async def _refresh() -> LiveSnapshot | None:
                     _cached_at = time.monotonic()
         except asyncio.TimeoutError:
             log.debug("Skor panolarından biri 20 saniyede tamamlanmadı")
-        try:
-            remaining = max(0.001, 30 - (time.monotonic() - started_at))
-            live = await asyncio.wait_for(live_task, timeout=remaining)
-        except Exception as exc:
-            log.debug("Canlı dakika kaynağı okunamadı: %s", exc)
-            live = None
+        live = None
+        # Sprint 94 F10: canlı sayfa (Chromium) sadece panoda canlı maç varken — ya da pano hiç okunamadıysa yedek
+        # olarak — açılır; eskiden canlı maç yokken de 45 sn'de bir tarayıcı açılıyordu. Kalan bütçeye sığdırılır.
+        if not scores or any(score.status == "live" for score in scores.values()):
+            remaining = _LIVE_BUDGET_SECONDS - (time.monotonic() - started_at)
+            if remaining > 5:
+                try:
+                    live = await asyncio.wait_for(fetch_live_scores(budget_s=remaining - 1), timeout=remaining)
+                except Exception as exc:
+                    log.debug("Canlı dakika kaynağı okunamadı: %s", exc)
         if isinstance(live, dict):
             for match_id, observed in live.items():
                 base = scores.get(match_id)
@@ -105,12 +109,6 @@ async def _refresh() -> LiveSnapshot | None:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*board_tasks, return_exceptions=True)
-        if not live_task.done():
-            live_task.cancel()
-            try:
-                await live_task
-            except asyncio.CancelledError:
-                pass
 
 
 async def get_live_snapshot() -> LiveSnapshot | None:

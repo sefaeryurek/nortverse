@@ -51,13 +51,21 @@ def parse_live_scores(html: str) -> dict[str, FixtureScore]:
     return scores
 
 
-async def fetch_live_scores() -> dict[str, FixtureScore]:
+async def fetch_live_scores(budget_s: float | None = None) -> dict[str, FixtureScore]:
+    """Canlı sayfanın dakika ve skorları. `budget_s` verilirse tek deneme ve toplam süre bu bütçeye sığdırılır
+    (Sprint 94 F10: eskiden 3 deneme × 30 sn + 12 sn istiyordu, çağıran 30 sn veriyordu)."""
     async with browser_context() as ctx:
         page = await ctx.new_page()
         try:
             # Adres ayardan (SCRAPER_BASE_URL): kaynak alan adı değişirse tek yerden güncellenir.
-            await goto_with_retry(page, SCRAPER.base_url + "/")
-            await page.wait_for_selector('tr[id^="tr1_"]', timeout=12000)
+            if budget_s is None:
+                await goto_with_retry(page, SCRAPER.base_url + "/")
+                selector_ms = 12000
+            else:
+                goto_s = max(3.0, min(SCRAPER.page_timeout, budget_s * 0.6))
+                await page.goto(SCRAPER.base_url + "/", timeout=int(goto_s * 1000), wait_until="domcontentloaded")
+                selector_ms = int(max(2.0, min(12.0, budget_s - goto_s - 2.0)) * 1000)
+            await page.wait_for_selector('tr[id^="tr1_"]', timeout=selector_ms)
             # The score feed and minute clock are applied after the initial HTML.
             await page.wait_for_timeout(1500)
             html = await page.content()

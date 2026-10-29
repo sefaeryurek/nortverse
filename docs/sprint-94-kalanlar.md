@@ -54,7 +54,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [ ] F6 scrape-canary + gerçek sayfa örnekleri
 - [ ] F8 skor gecikmesi
 - [ ] F9 build-archive hata takibi
-- [ ] F10 canlı Playwright bütçesi
+- [x] F10 canlı Playwright bütçesi (tek deneme, kalan bütçe; canlı maç yoksa Chromium yok) — 94.45
 - [x] F11 fixture_cache koruması (küçülme uyarısı; düşenler zaten carried) + skipped_analysis 90 gün budama — 94.44
 - [ ] H4 piyasa olasılığı (market_prob.py)
 - [x] H5 v5 kademesi (O5 ile) — 94.37

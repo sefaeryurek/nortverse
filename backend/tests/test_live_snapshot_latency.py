@@ -21,7 +21,7 @@ async def test_cold_request_returns_quickly_and_single_refresh_finishes_later(mo
         await gate.wait()
         return {"101": FixtureScore("101", "finished", 2, 1)}
 
-    async def live():
+    async def live(budget_s=None):
         calls["live"] += 1
         await gate.wait()
         return {}
@@ -39,13 +39,14 @@ async def test_cold_request_returns_quickly_and_single_refresh_finishes_later(mo
         assert await snapshots.get_live_snapshot() is None
         assert time.monotonic() - start < 0.2
         assert await snapshots.get_live_snapshot() is None
-        assert calls == {"board": 3, "live": 1}
+        assert calls == {"board": 3, "live": 0}  # canlı sayfa panodan sonra, sadece gerekirse
 
         gate.set()
         await snapshots._refresh_task
         result = await snapshots.get_live_snapshot()
         assert result is not None
         assert result.scores["101"].status == "finished"
+        assert calls["live"] == 0  # Sprint 94 F10: panoda canlı maç yok → Chromium açılmaz
     finally:
         gate.set()
         await snapshots.shutdown_live_snapshot()
@@ -63,7 +64,7 @@ async def test_quick_board_scores_are_available_before_slow_minute_source(monkey
             await gate.wait()
         return {"102": FixtureScore("102", "live", 1, 0)}
 
-    async def live():
+    async def live(budget_s=None):
         await gate.wait()
         return {"102": FixtureScore("102", "live", 1, 0, minute="67")}
 
@@ -117,5 +118,31 @@ async def test_failed_source_uses_retry_backoff(monkeypatch):
         assert calls == 3
         assert await snapshots.get_live_snapshot() is None
         assert calls == 3
+    finally:
+        await snapshots.shutdown_live_snapshot()
+
+
+@pytest.mark.asyncio
+async def test_live_page_gets_remaining_budget_and_board_failure_falls_back(monkeypatch):
+    """Sprint 94 F10: pano okunamazsa canlı sayfa yedek olarak denenir ve kalan bütçe verilir."""
+    budgets = []
+
+    async def board(_day):
+        raise RuntimeError("pano yok")
+
+    async def live(budget_s=None):
+        budgets.append(budget_s)
+        return {"103": FixtureScore("103", "live", 0, 0, minute="12")}
+
+    monkeypatch.setattr(snapshots, "_cached", None)
+    monkeypatch.setattr(snapshots, "_cached_at", 0.0)
+    monkeypatch.setattr(snapshots, "_refresh_task", None)
+    monkeypatch.setattr(snapshots, "_retry_after", 0.0)
+    monkeypatch.setattr(snapshots, "fetch_source_board", board)
+    monkeypatch.setattr(snapshots, "fetch_live_scores", live)
+    try:
+        result = await snapshots._refresh()
+        assert result is not None and result.scores["103"].minute == "12"
+        assert budgets and 0 < budgets[0] < snapshots._LIVE_BUDGET_SECONDS
     finally:
         await snapshots.shutdown_live_snapshot()
