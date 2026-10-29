@@ -17,6 +17,8 @@ scikit-learn==1.5.2
 joblib==1.4.2
 # Sprint 91: canlı Poisson modeli (live_poisson.py) — scikit-learn zaten getiriyordu, sürüm sabitlendi (kullanıcı onaylı)
 scipy==1.17.1
+# DİKKAT (Sprint 94 M4): scikit-learn 1.5.2, SciPy 1.18'de kaldırılan L-BFGS-B `disp`/`iprint` seçeneklerini kullanıyor
+# (testlerde DeprecationWarning). SciPy 1.18'e geçilecekse scikit-learn ile BİRLİKTE yükseltilmeli.
 
 # Veritabanı
 sqlalchemy==2.0.36

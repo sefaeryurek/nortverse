@@ -68,7 +68,7 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [ ] L4 format.ts birleştirme, hata kodu çevirisi, ölü sözlük anahtarları, i18n parite testi
 - [ ] L5 küçük UI düzeltmeleri
 - [ ] L6 degerlendirme/page.tsx bölme
-- [ ] M4 engines/.nvmrc, requirements notu
+- [x] M4 engines/.nvmrc, requirements notu, vite-tsconfig-paths kaldırıldı — 94.42
 - [ ] M5 tekrar eden kod (poisson_utils, RESULT_KNOWN_DELAY, istanbulToday, repair kopyası, ölü fonksiyonlar)
 
 ### Sonra — denetim notlarındaki küçük öneriler
