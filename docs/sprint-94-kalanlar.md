@@ -9,6 +9,15 @@ Her madde bitince bu dosyada işaretlenir ve commit numarası yazılır.
 A1, A2 · B1, B2, B3, B4, B7 · C1, C2 · D1, D2, D4, D5, D3 (yerel kısım: D: kopyası + aylık geri yükleme) ·
 E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I3 · J1–J6, J8–J10 · K-1, K-2 · L1, L2 · M1–M3, M6
 
+## Kullanıcının yapması gereken (yönetici izni)
+
+- **`scripts/install-tasks.ps1`'i yönetici PowerShell ile yeniden çalıştır.** 29 Ekim tespiti: Windows'ta sadece
+  Backend, BackupDB, RunPipeline, UpdateScores1/2 var — Sprint 94'te eklenen **Frontend**, **HealthCheck**,
+  **LongJobs** görevleri hiç kurulmamış, D1'de silinecek UpdateScores2 duruyor. Sonuç: 29 Ekim 02:41'de oturum
+  kapanınca site (3000) durdu ve bilgisayar açılınca kendiliğinden başlamadı (11:59'da elle başlatıldı);
+  sağlık kontrolü ve uyarılar da çalışmıyor.
+- `backend/.env`'ye `ADMIN_API_KEY` (isteğe bağlı; yoksa admin uçları sadece yönetici hesabıyla).
+
 ## Bekleyen — dış koşula bağlı
 
 | Madde | Koşul |
