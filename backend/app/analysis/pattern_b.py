@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, cast, func, select
+from sqlalchemy import and_, case, cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.analysis.pattern_stats import PatternResult, compute_stats
@@ -21,6 +21,24 @@ log = logging.getLogger(__name__)
 
 # Bir maçın sonucu dünyada kickoff'tan ~3 saat sonra kesin bilinir.
 RESULT_KNOWN_DELAY = timedelta(hours=3)
+# Sprint 94 B6: kaynak saati açıklanmamış maçları 15:59 UTC ile (kaynağın UTC+8 gün sonu 23:59) yazıyor. Ana ligde
+# 1.707 tarihsel satır; aynı gün 3–9 saat sonraki maçlara aday olarak sızıyordu (gerçekte henüz oynanmamışlardı).
+# Aday kesiminde böyle bir saat "o günün sonu" sayılır: Avrupa'daki son başlama saatinden (≈21:00 UTC) sonrası.
+PLACEHOLDER_KICKOFF_UTC = (15, 59)
+PLACEHOLDER_SHIFT = timedelta(hours=8)
+
+
+def effective_kickoff(kickoff: datetime) -> datetime:
+    """Aday kesimi için başlama saati: yer tutucu 15:59 UTC → aynı günün 23:59 UTC'si."""
+    utc = kickoff.astimezone(timezone.utc) if kickoff.tzinfo else kickoff.replace(tzinfo=timezone.utc)
+    return kickoff + PLACEHOLDER_SHIFT if (utc.hour, utc.minute) == PLACEHOLDER_KICKOFF_UTC else kickoff
+
+
+def effective_kickoff_sql():
+    """`effective_kickoff`'un SQL karşılığı (aday sorgularında)."""
+    utc_time = func.to_char(func.timezone("UTC", Match.kickoff_time), "HH24:MI")
+    placeholder = "%02d:%02d" % PLACEHOLDER_KICKOFF_UTC
+    return case((utc_time == placeholder, Match.kickoff_time + PLACEHOLDER_SHIFT), else_=Match.kickoff_time)
 
 
 def candidate_filters(as_of: datetime) -> list:
@@ -34,7 +52,7 @@ def candidate_filters(as_of: datetime) -> list:
     return [
         Match.deleted_at.is_(None),
         Match.model_only.is_(False),
-        Match.kickoff_time <= as_of - RESULT_KNOWN_DELAY,
+        effective_kickoff_sql() <= as_of - RESULT_KNOWN_DELAY,  # B6: yer tutucu saat gün sonu sayılır
         known_at > Match.kickoff_time,
     ]
 

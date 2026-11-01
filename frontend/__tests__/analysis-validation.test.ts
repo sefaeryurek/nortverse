@@ -88,3 +88,11 @@ it("accepts future rule versions but rejects unknown formats", () => {
   expect(validAnalysis({ ...analysis(), recommendation_rule_version: "other" }, "123")).toBe(false);
 });
 
+
+it("accepts null only for FT-only fields in HT/2H archives (Sprint 94 B5)", () => {
+  const data = analysis();
+  const ht = { ...makePatternResult({ match_count: 5 }), iy_ust_05_pct: null, ht_result_1_pct: null, iy_ms_xx_pct: null };
+  expect(validAnalysis({ ...data, ht_b: ht }, "123")).toBe(true);
+  const broken = { ...makePatternResult({ match_count: 5 }), result_1_pct: null };
+  expect(validAnalysis({ ...data, ht_b: broken }, "123")).toBe(false);
+});

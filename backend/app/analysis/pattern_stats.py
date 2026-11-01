@@ -10,6 +10,63 @@ from app.analysis.outcomes import (
 from pydantic import BaseModel, PrivateAttr
 
 
+# Sprint 94 B5: sadece MS periyodunda anlamlı alanlar (İY/2Y skorundan türetilir). İY ve 2Y periyodunda
+# eskiden 0.0 (sahte "hiç olmadı") yazılıyordu; artık None. Pazar kataloğunda `ft_only=True`.
+FT_ONLY_FIELDS: tuple[str, ...] = (
+    "dep_encok_1y_pct",
+    "dep_encok_2y_pct",
+    "dep_encok_esit_pct",
+    "dep_ht_alt_05_pct",
+    "dep_ht_ust_05_pct",
+    "dep_iki_yari_gol_pct",
+    "encok_gol_1y_pct",
+    "encok_gol_2y_pct",
+    "encok_gol_esit_pct",
+    "ev_encok_1y_pct",
+    "ev_encok_2y_pct",
+    "ev_encok_esit_pct",
+    "ev_ht_alt_05_pct",
+    "ev_ht_ust_05_pct",
+    "ev_iki_yari_gol_pct",
+    "h2_kg_var_pct",
+    "h2_kg_yok_pct",
+    "h2_result_1_pct",
+    "h2_result_2_pct",
+    "h2_result_x_pct",
+    "ht_alt_15_pct",
+    "ht_dc_12_pct",
+    "ht_dc_1x_pct",
+    "ht_dc_x2_pct",
+    "ht_kg_var_pct",
+    "ht_kg_yok_pct",
+    "ht_result_1_pct",
+    "ht_result_2_pct",
+    "ht_result_x_pct",
+    "ht_ust_15_pct",
+    "iki_yari_alt15_pct",
+    "iki_yari_ust15_pct",
+    "iy_alt_05_pct",
+    "iy_alt_15_pct",
+    "iy_alt_25_pct",
+    "iy_h2_kg_vv_pct",
+    "iy_h2_kg_vy_pct",
+    "iy_h2_kg_yv_pct",
+    "iy_h2_kg_yy_pct",
+    "iy_ms_11_pct",
+    "iy_ms_12_pct",
+    "iy_ms_1x_pct",
+    "iy_ms_21_pct",
+    "iy_ms_22_pct",
+    "iy_ms_2x_pct",
+    "iy_ms_x1_pct",
+    "iy_ms_x2_pct",
+    "iy_ms_xx_pct",
+    "iy_ust_05_pct",
+    "iy_ust_15_pct",
+    "iy_ust_25_pct",
+)
+
+
 class PatternResult(BaseModel):
     # Eşleşen arşiv maçları — API yanıtına girmez, persist JSONB'ye ayrıca yazar.
     _matched_ids: list[str] = PrivateAttr(default_factory=list)
@@ -105,10 +162,10 @@ class PatternResult(BaseModel):
     dep_ust_25_pct: float = 0.0
 
     # Ev/Dep 1. Yarı 0.5 Alt/Üst (FT pattern için)
-    ev_ht_alt_05_pct: float = 0.0
-    ev_ht_ust_05_pct: float = 0.0
-    dep_ht_alt_05_pct: float = 0.0
-    dep_ht_ust_05_pct: float = 0.0
+    ev_ht_alt_05_pct: float | None = 0.0
+    ev_ht_ust_05_pct: float | None = 0.0
+    dep_ht_alt_05_pct: float | None = 0.0
+    dep_ht_ust_05_pct: float | None = 0.0
 
     # Toplam Gol Aralığı
     gol_01_pct: float = 0.0
@@ -117,74 +174,74 @@ class PatternResult(BaseModel):
     gol_6p_pct: float = 0.0
 
     # En Çok Gol Olacak Yarı (FT için)
-    encok_gol_1y_pct: float = 0.0
-    encok_gol_esit_pct: float = 0.0
-    encok_gol_2y_pct: float = 0.0
+    encok_gol_1y_pct: float | None = 0.0
+    encok_gol_esit_pct: float | None = 0.0
+    encok_gol_2y_pct: float | None = 0.0
 
     # 1. Yarı Alt/Üst (FT için)
-    iy_alt_05_pct: float = 0.0
-    iy_ust_05_pct: float = 0.0
-    iy_alt_15_pct: float = 0.0
-    iy_ust_15_pct: float = 0.0
-    iy_alt_25_pct: float = 0.0
-    iy_ust_25_pct: float = 0.0
-    iki_yari_alt15_pct: float = 0.0
-    iki_yari_ust15_pct: float = 0.0
+    iy_alt_05_pct: float | None = 0.0
+    iy_ust_05_pct: float | None = 0.0
+    iy_alt_15_pct: float | None = 0.0
+    iy_ust_15_pct: float | None = 0.0
+    iy_alt_25_pct: float | None = 0.0
+    iy_ust_25_pct: float | None = 0.0
+    iki_yari_alt15_pct: float | None = 0.0
+    iki_yari_ust15_pct: float | None = 0.0
 
     # 2. Yarı KG (FT için)
-    h2_kg_var_pct: float = 0.0
-    h2_kg_yok_pct: float = 0.0
+    h2_kg_var_pct: float | None = 0.0
+    h2_kg_yok_pct: float | None = 0.0
 
     # İY/2Y KG kombine (FT için)
-    iy_h2_kg_vv_pct: float = 0.0
-    iy_h2_kg_vy_pct: float = 0.0
-    iy_h2_kg_yv_pct: float = 0.0
-    iy_h2_kg_yy_pct: float = 0.0
+    iy_h2_kg_vv_pct: float | None = 0.0
+    iy_h2_kg_vy_pct: float | None = 0.0
+    iy_h2_kg_yv_pct: float | None = 0.0
+    iy_h2_kg_yy_pct: float | None = 0.0
 
     # Ev/Dep İki Yarıda da Gol (FT için)
-    ev_iki_yari_gol_pct: float = 0.0
-    dep_iki_yari_gol_pct: float = 0.0
+    ev_iki_yari_gol_pct: float | None = 0.0
+    dep_iki_yari_gol_pct: float | None = 0.0
 
     # Ev Hangi Yarıda Daha Çok Gol Atar (FT için)
-    ev_encok_1y_pct: float = 0.0
-    ev_encok_esit_pct: float = 0.0
-    ev_encok_2y_pct: float = 0.0
+    ev_encok_1y_pct: float | None = 0.0
+    ev_encok_esit_pct: float | None = 0.0
+    ev_encok_2y_pct: float | None = 0.0
 
     # Dep Hangi Yarıda Daha Çok Gol Atar (FT için)
-    dep_encok_1y_pct: float = 0.0
-    dep_encok_esit_pct: float = 0.0
-    dep_encok_2y_pct: float = 0.0
+    dep_encok_1y_pct: float | None = 0.0
+    dep_encok_esit_pct: float | None = 0.0
+    dep_encok_2y_pct: float | None = 0.0
 
     # İY/MS Kombine (FT için)
-    iy_ms_11_pct: float = 0.0
-    iy_ms_1x_pct: float = 0.0
-    iy_ms_12_pct: float = 0.0
-    iy_ms_x1_pct: float = 0.0
-    iy_ms_xx_pct: float = 0.0
-    iy_ms_x2_pct: float = 0.0
-    iy_ms_21_pct: float = 0.0
-    iy_ms_2x_pct: float = 0.0
-    iy_ms_22_pct: float = 0.0
+    iy_ms_11_pct: float | None = 0.0
+    iy_ms_1x_pct: float | None = 0.0
+    iy_ms_12_pct: float | None = 0.0
+    iy_ms_x1_pct: float | None = 0.0
+    iy_ms_xx_pct: float | None = 0.0
+    iy_ms_x2_pct: float | None = 0.0
+    iy_ms_21_pct: float | None = 0.0
+    iy_ms_2x_pct: float | None = 0.0
+    iy_ms_22_pct: float | None = 0.0
 
     # Skor sıklığı
     score_freq: dict
 
     # HT alt istatistikleri (FT pattern için)
-    ht_result_1_pct: float = 0.0
-    ht_result_x_pct: float = 0.0
-    ht_result_2_pct: float = 0.0
-    ht_dc_1x_pct: float = 0.0
-    ht_dc_x2_pct: float = 0.0
-    ht_dc_12_pct: float = 0.0
-    ht_alt_15_pct: float = 0.0
-    ht_ust_15_pct: float = 0.0
-    ht_kg_var_pct: float = 0.0
-    ht_kg_yok_pct: float = 0.0
+    ht_result_1_pct: float | None = 0.0
+    ht_result_x_pct: float | None = 0.0
+    ht_result_2_pct: float | None = 0.0
+    ht_dc_1x_pct: float | None = 0.0
+    ht_dc_x2_pct: float | None = 0.0
+    ht_dc_12_pct: float | None = 0.0
+    ht_alt_15_pct: float | None = 0.0
+    ht_ust_15_pct: float | None = 0.0
+    ht_kg_var_pct: float | None = 0.0
+    ht_kg_yok_pct: float | None = 0.0
 
     # H2 alt istatistikleri (FT pattern için)
-    h2_result_1_pct: float = 0.0
-    h2_result_x_pct: float = 0.0
-    h2_result_2_pct: float = 0.0
+    h2_result_1_pct: float | None = 0.0
+    h2_result_x_pct: float | None = 0.0
+    h2_result_2_pct: float | None = 0.0
 
 
 # Geriye uyumluluk: eski adlar outcomes modülüne yönlenir.
@@ -508,6 +565,10 @@ def compute_stats(rows: list, period: str, *, weights: list[float] | None = None
         result.iy_ms_22_pct = fp(iy_ms_ctr.get("22", 0.0))
 
     # Liste ile match_count aynı geçerli satırlardan üretilir → asla ayrışmaz.
+    if period != "ft":
+        # B5: İY/2Y periyodunda yalnız-MS alanları hesaplanmaz → None (eskiden sahte 0.0)
+        for name in FT_ONLY_FIELDS:
+            setattr(result, name, None)
     result._matched_ids = [str(r.match_id) for r, _, _ in valid if getattr(r, "match_id", None) is not None]
     result._matched_sims = [float(r.similarity) for r, _, _ in valid if getattr(r, "similarity", None) is not None]
     return result

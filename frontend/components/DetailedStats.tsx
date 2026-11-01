@@ -26,13 +26,17 @@ function pctStyle(pct: number) {
 
 interface OddCellProps {
   label: string;
-  value: number;
+  /** null: bu periyotta hesaplanmayan alan (Sprint 94 B5 — eskiden sahte %0) */
+  value: number | null;
   sub?: string;
 }
+/** Yalnız-MS alanların toplam kontrolü için: null → 0 */
+const nz = (value: number | null) => value ?? 0;
+
 function OddCell({ label, value, sub }: OddCellProps) {
   const { locale } = useLocale();
-  const pct = Math.round(value);
-  const s = pctStyle(pct);
+  const pct = value === null ? null : Math.round(value);
+  const s = pctStyle(pct ?? 0);
   return (
     <div
       className="flex flex-col gap-1 px-1.5 py-2 text-center"
@@ -59,13 +63,13 @@ function OddCell({ label, value, sub }: OddCellProps) {
         className="text-sm font-extrabold leading-none"
         style={{ fontFamily: "var(--nv-font-mono)", color: s.color }}
       >
-        %{pct}
+        {pct === null ? "—" : `%${pct}`}
       </span>
       {/* Mini pct bar */}
       <div className="nv-pct-bar mx-auto w-full" style={{ height: "3px" }}>
         <div
           className="nv-pct-bar-fill"
-          style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: s.barBg }}
+          style={{ width: `${Math.min(pct ?? 0, 100)}%`, backgroundColor: s.barBg }}
         />
       </div>
     </div>
@@ -296,7 +300,7 @@ function ArchiveDetailCard({
                 { label: "Üst 1.5", sub: "Dep", value: result.dep_ust_15_pct },
               ]
         } />
-        {isFT && (result.ev_ht_ust_05_pct + result.ev_ht_alt_05_pct > 0) && (
+        {isFT && (nz(result.ev_ht_ust_05_pct) + nz(result.ev_ht_alt_05_pct) > 0) && (
           <>
             <SubLabel text={t.detailedStats.firstHalf} />
             <Row items={[
@@ -317,7 +321,7 @@ function ArchiveDetailCard({
           { label: "4-5 Gol", value: result.gol_45_pct },
           { label: "6+ Gol", value: result.gol_6p_pct },
         ]} />
-        {isFT && (result.encok_gol_1y_pct + result.encok_gol_2y_pct + result.encok_gol_esit_pct > 0) && (
+        {isFT && (nz(result.encok_gol_1y_pct) + nz(result.encok_gol_2y_pct) + nz(result.encok_gol_esit_pct) > 0) && (
           <>
             <SubLabel text={t.detailedStats.mostGoalsHalf} />
             <Row items={[
@@ -329,7 +333,7 @@ function ArchiveDetailCard({
         )}
       </Section>
 
-      {isFT && (result.iy_ust_05_pct + result.iy_alt_05_pct > 0) && (
+      {isFT && (nz(result.iy_ust_05_pct) + nz(result.iy_alt_05_pct) > 0) && (
         <Section title={t.detailedStats.halfOverUnder}>
           <SubLabel text={t.detailedStats.firstHalf} />
           <Row items={[
@@ -392,7 +396,7 @@ function ArchiveDetailCard({
         ]} />
       </Section>
 
-      {isFT && (result.ht_kg_var_pct + result.ht_kg_yok_pct > 0) && (
+      {isFT && (nz(result.ht_kg_var_pct) + nz(result.ht_kg_yok_pct) > 0) && (
         <Section title={t.detailedStats.halfBttsDetail}>
           <SubLabel text={t.detailedStats.ht1Btts} />
           <Row items={[
@@ -431,9 +435,9 @@ function ArchiveDetailCard({
         </Section>
       )}
 
-      {isFT && ((result.ht_result_1_pct + result.ht_result_x_pct + result.ht_result_2_pct > 0) || (result.h2_result_1_pct + result.h2_result_x_pct + result.h2_result_2_pct > 0)) && (
+      {isFT && ((nz(result.ht_result_1_pct) + nz(result.ht_result_x_pct) + nz(result.ht_result_2_pct) > 0) || (nz(result.h2_result_1_pct) + nz(result.h2_result_x_pct) + nz(result.h2_result_2_pct) > 0)) && (
         <Section title={t.detailedStats.halfResults}>
-          {(result.ht_result_1_pct + result.ht_result_x_pct + result.ht_result_2_pct > 0) && (
+          {(nz(result.ht_result_1_pct) + nz(result.ht_result_x_pct) + nz(result.ht_result_2_pct) > 0) && (
             <>
               <SubLabel text={t.detailedStats.htResult} />
               <Row items={[
@@ -452,7 +456,7 @@ function ArchiveDetailCard({
               ]} />
             </>
           )}
-          {(result.h2_result_1_pct + result.h2_result_x_pct + result.h2_result_2_pct > 0) && (
+          {(nz(result.h2_result_1_pct) + nz(result.h2_result_x_pct) + nz(result.h2_result_2_pct) > 0) && (
             <>
               <SubLabel text={t.detailedStats.h2Result} />
               <Row items={[

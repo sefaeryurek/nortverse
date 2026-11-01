@@ -13,7 +13,7 @@ interface MarketSpec {
   fields: FieldSpec[];
   ftOnly?: boolean;       // sadece FT periyodunda hesaplanır
   excludePeriods?: Period[]; // bu periyotlarda hiç gösterilme (iddaa'da 1.01 olan ya da açılmayan pazarlar)
-  ftZeroCheck?: keyof PatternResult; // bu alan 0 ise pazarı atla (HT verisi yoksa)
+  requiresHtData?: boolean; // pazarın hiçbir alanı > 0 değilse (İY verisi yok / null) pazarı atla
   minPctOverride?: number; // bu pazarda dynamicMinPct yerine sabit eşik (backtest bazlı kalibrasyon)
 }
 
@@ -67,7 +67,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "İY / MS",
     weight: 0.9,
     ftOnly: true,
-    ftZeroCheck: "iy_ms_xx_pct",
+    requiresHtData: true,
     fields: [
       { field: "iy_ms_11_pct", selection: "1/1" },
       { field: "iy_ms_1x_pct", selection: "1/X" },
@@ -244,7 +244,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "İY 0.5 Alt/Üst",
     weight: 0.6,
     ftOnly: true,
-    ftZeroCheck: "iy_ust_05_pct",
+    requiresHtData: true,
     fields: [
       { field: "iy_alt_05_pct", selection: "İY Alt 0.5" },
       { field: "iy_ust_05_pct", selection: "İY Üst 0.5" },
@@ -255,7 +255,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "İY 1.5 Alt/Üst",
     weight: 0.6,
     ftOnly: true,
-    ftZeroCheck: "iy_ust_05_pct",
+    requiresHtData: true,
     fields: [
       { field: "iy_alt_15_pct", selection: "İY Alt 1.5" },
       { field: "iy_ust_15_pct", selection: "İY Üst 1.5" },
@@ -266,7 +266,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "İki Yarı 1.5 Alt/Üst",
     weight: 0.5,
     ftOnly: true,
-    ftZeroCheck: "iy_ust_05_pct",
+    requiresHtData: true,
     fields: [
       { field: "iki_yari_alt15_pct", selection: "İki Yarı Alt" },
       { field: "iki_yari_ust15_pct", selection: "İki Yarı Üst" },
@@ -277,7 +277,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "1. Yarı Sonucu",
     weight: 0.7,
     ftOnly: true,
-    ftZeroCheck: "ht_result_1_pct",
+    requiresHtData: true,
     fields: [
       { field: "ht_result_1_pct", selection: "İY 1" },
       { field: "ht_result_x_pct", selection: "İY X" },
@@ -289,7 +289,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "1. Yarı Çifte Şans",
     weight: 0.7,
     ftOnly: true,
-    ftZeroCheck: "ht_result_1_pct",
+    requiresHtData: true,
     fields: [
       { field: "ht_dc_1x_pct", selection: "İY 1X" },
       { field: "ht_dc_x2_pct", selection: "İY X2" },
@@ -301,7 +301,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "2. Yarı Sonucu",
     weight: 0.7,
     ftOnly: true,
-    ftZeroCheck: "h2_result_1_pct",
+    requiresHtData: true,
     fields: [
       { field: "h2_result_1_pct", selection: "2Y 1" },
       { field: "h2_result_x_pct", selection: "2Y X" },
@@ -313,7 +313,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "1. Yarı KG",
     weight: 0.6,
     ftOnly: true,
-    ftZeroCheck: "ht_kg_var_pct",
+    requiresHtData: true,
     fields: [
       { field: "ht_kg_var_pct", selection: "İY KG Var" },
       { field: "ht_kg_yok_pct", selection: "İY KG Yok" },
@@ -324,7 +324,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "2. Yarı KG",
     weight: 0.6,
     ftOnly: true,
-    ftZeroCheck: "h2_kg_var_pct",
+    requiresHtData: true,
     fields: [
       { field: "h2_kg_var_pct", selection: "2Y KG Var" },
       { field: "h2_kg_yok_pct", selection: "2Y KG Yok" },
@@ -348,7 +348,7 @@ const MARKETS: MarketSpec[] = [
     label: () => "En Çok Gol Olacak Yarı",
     weight: 0.4,
     ftOnly: true,
-    ftZeroCheck: "encok_gol_1y_pct",
+    requiresHtData: true,
     fields: [
       { field: "encok_gol_1y_pct", selection: "1. Yarı" },
       { field: "encok_gol_esit_pct", selection: "Eşit" },
@@ -382,7 +382,10 @@ const MARKETS: MarketSpec[] = [
 function isMarketActive(market: MarketSpec, period: Period, sample: PatternResult): boolean {
   if (market.ftOnly && period !== "ft") return false;
   if (market.excludePeriods?.includes(period)) return false;
-  if (market.ftZeroCheck && !market.fields.some((f) => (sample[f.field] as number) > 0)) return false;
+  if (market.requiresHtData && !market.fields.some((f) => {
+    const value = sample[f.field];
+    return typeof value === "number" && value > 0;
+  })) return false;
   return true;
 }
 

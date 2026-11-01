@@ -22,14 +22,14 @@ def _blob(mc=40, r1=70.0, rx=15.0, r2=15.0, **kw):
 
 def test_rule_version_fingerprint_is_pinned():
     # Kural parametresi veya arşiv algoritması (PATTERN_ALGO_VERSION) değişirse kırılır: sabiti güncelle VE V4_RULE_VERSION'ı artır.
-    assert (V4_RULE_VERSION, rule_params_fingerprint()) == ("ft-display-v4.1", "6eb9a5a2aca8")
+    assert (V4_RULE_VERSION, rule_params_fingerprint()) == ("ft-display-v4.2", "3fb73b1635db")
 
 
 def test_publishes_home_pick_with_edge():
     picks = build_v4_recommendations({"pattern_ft_b": _blob(), "pattern_ft_c": _blob(mc=20)}, PRIOR)
     assert len(picks) == 1
     pick = picks[0]
-    assert pick["recommendation_id"] == "ft-display-v4.1:result:1"
+    assert pick["recommendation_id"] == "ft-display-v4.2:result:1"
     assert pick["archive"] == "archive_1+archive_2"
     assert pick["archive_3_frequency_pct"] is None and pick["archive_3_match_count"] is None
     assert pick["calibrated_pct"] > pick["prior_pct"] + 5
@@ -77,7 +77,7 @@ def test_market_summary_tie_keeps_first_option_like_frontend():
 
 
 def test_module_constant_names():
-    assert prematch_v4.MARKET_SUMMARY_RULE_VERSION == "market-summary-v2"
+    assert prematch_v4.MARKET_SUMMARY_RULE_VERSION == "market-summary-v2.1"
 
 
 def test_hash_string_format_and_recommendation_hash():

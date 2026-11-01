@@ -59,7 +59,8 @@ def rule_params_fingerprint() -> str:
 # Sprint 94 C1+C2 (K9): v2'nin parmak izinde arşiv algoritması (A2 c4 / A3 d4 olduğunda sürüm atlamadı) ve
 # COND alt sınırı yoktu; COND tablosu penceresizdi. v2.1 = aynı kural + 10 yıllık COND, GÖLGEDE
 # (ekranda v2; ayrı sabit — LIVE_ARCHIVE_RULE_VERSIONS'a girmez, yoksa ekranda kararlar iki kez görünür).
-LIVE_ARCHIVE_SHADOW_VERSION = "live-arch-v2.1"
+# v2.2 (Sprint 94 B5/B6): arşiv algoritması b3/c5/d5.
+LIVE_ARCHIVE_SHADOW_VERSION = "live-arch-v2.2"
 
 
 def shadow_params_fingerprint() -> str:

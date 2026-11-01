@@ -38,7 +38,9 @@ PATTERN_B_MIN_MATCHES = 5
 # Algoritma (kod) değişince ilgili ailenin sürümünü artır → o aile bayat sayılır.
 # c3: adaptive minimumun altında sonuç yok. c4: sabit ±1.0 (Sprint 91).
 # d4: kosinüs yerine takım gücü (λ) uzayında en yakın K maç (Sprint 91, live_poisson modeli).
-PATTERN_ALGO_VERSION = {"b": 2, "c": 4, "d": 4}
+# Sprint 94: b3/c5/d5 — B5 (İY/2Y periyodunda yalnız-MS alanları None) + B6 (yer tutucu saat gün sonu);
+# b ayrıca K19 (Sprint 90'da eklenen ust_05/alt_05 alanları eski satırlarda yoktu)
+PATTERN_ALGO_VERSION = {"b": 3, "c": 5, "d": 5}
 
 
 class PatternComputationError(RuntimeError):

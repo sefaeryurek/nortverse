@@ -48,8 +48,8 @@ E1–E7, E9 · F1–F5 · H1, H2, H3 (94.34) · I1 (gece görevi kuruldu), I2, I
 - [x] P4 Avrupa kupaları seçenek B (K17) — 94.52: `cup_results` + `build-cup-archive` + `live-cup-cond-v1` gölge, `scope=cup`. KULLANICI: `scripts/kupa-arsivi-cek.bat` (migration d4q7m2n8i996 + 3 kupa × 5 sezon; birkaç dakika)
 
 ### 20 — Kalan Orta/Düşük
-- [ ] B5 İY arşiv alanları "hep 0" (Optional + sürüm + recompute)
-- [ ] B6 kickoff yer tutucusu 15:59 (aday filtresi + sürüm; Faz G ile)
+- [x] B5 İY arşiv alanları "hep 0" — 94.53: İY/2Y'de 51 yalnız-MS alan null, frontend doğrulayıcı + DetailedStats null-güvenli, `requiresHtData`; sürüm b3/c5/d5 → v4.2, market-summary-v2.1, live-arch-v2.2. KULLANICI: `scripts/arsiv-yeniden-hesapla.bat` (bitmiş maçlar, 1 saat+)
+- [x] B6 kickoff yer tutucusu 15:59 — 94.53 (aynı sürüm artışı; A1/A2 SQL + A3 havuzu `effective_kickoff`). K19 (B sürümü 3) de bu artışla yapıldı (Faz G adım 6)
 - [x] C3 geçmiş isabet çipi sadece ana lig — 94.38
 - [x] C4 kapsama karnesi (/api/performance/coverage) — 94.40
 - [x] E8 paylaşım sonrası sertleştirme — 94.46 (ADMIN_API_KEY değerini .env'ye yazmak kullanıcıda; anahtar yoksa admin uçları sadece yönetici hesabı) (ADMIN_API_KEY + compare_digest, /docs kapalı, disable-user, logout-all, WS oturum kontrolü, sabit zamanlı giriş, Origin kontrolü, çerez secure, çıkışta sepet temizliği)

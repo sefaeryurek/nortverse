@@ -337,7 +337,7 @@ nortverse/
 │       ├── league_cmds.py     # league-promotion-report — gölge → ekran terfi ölçütleri (Sprint 94 P3)
 │   │       └── users_cmds.py      # create-user, set-password, list-users, unlock (Sprint 93–94)
 │   ├── alembic/                   # DB migration (30 migration, head d4q7m2n8i996)
-│   ├── tests/                     # 1377 test (91 dosya)
+│   ├── tests/                     # 1383 test (92 dosya)
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -451,7 +451,7 @@ nortverse/
 │   ├── dictionaries/              # i18n dil dosyaları (Sprint 84)
 │   │   ├── tr.json                # Türkçe sözlük — 300+ anahtar
 │   │   └── en.json                # İngilizce sözlük — tam çeviri
-│   ├── __tests__/                 # 394 vitest test (50 dosya)
+│   ├── __tests__/                 # 395 vitest test (50 dosya)
 │   │   ├── fixtures.ts            # Test factory'leri
 │   │   ├── confidence.test.ts     # Confidence hesaplama (~33 test)
 │   │   ├── cart.test.ts           # Sepet helper'ları (~14 test)
@@ -1754,6 +1754,11 @@ Kullanıcı kararı: K1–K22 plandaki önerilerle onaylı; küçük/büyük tü
   aynı kupa + aynı İY ≥30 maç (yoksa üç kupa ortak), ≥%85, live-arch-v2'nin 6 pazarı. Ana liglerin hiçbir havuzuna
   girmez; değerlendirme `scope=cup`. İlk kurulum `scripts/kupa-arsivi-cek.bat` (alembic + `build-cup-archive`).
   `pipeline/model_only.py` ayrıldı (runner.py 1000 satırı geçmesin); prune/repair yalnız model satırlarını silmez.
+- **Arşiv algoritması b3/c5/d5 (94.53, B5 + B6 + K19):** İY/2Y periyodunda yalnız-MS 51 alan artık `null` (eskiden sahte
+  0.0; `pattern_stats.FT_ONLY_FIELDS`, frontend `FT_ONLY_PATTERN_FIELDS` aynı liste — test eder); kaynak saati açıklanmamış
+  maçlar (15:59 UTC) aday kesiminde gün sonu sayılır (`pattern_b.effective_kickoff`, A1/A2 SQL + A3). Arşive dayanan
+  kurallar yeni sürüm: `ft-display-v4.2`, `market-summary-v2.1` (ekranda), `live-arch-v2.2`. `confidence.ts`
+  `ftZeroCheck` → `requiresHtData`. Bitmiş maçların saklı değerleri `scripts/arsiv-yeniden-hesapla.bat` ile (1 saat+).
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -2037,13 +2042,13 @@ Eski bulut kurulumu (Render + Vercel + Neon): yapılandırma duruyor, kullanılm
 
 | Katman | Araç | Test sayısı |
 |---|---|---|
-| Backend | pytest | 1377 |
-| Frontend birim | vitest | 394 |
+| Backend | pytest | 1383 |
+| Frontend birim | vitest | 395 |
 | Frontend E2E | Playwright | 17 × 2 görünüm (CI'da PostgreSQL + backend ile) |
 
 ### Ekrandaki kurallar (sürümler `rule_registry.py`)
 
-- **Maç öncesi:** `ft-display-v5` (Dixon-Coles); v4 ve `market-summary-v3` gölgede; İY `ht-display-v1.1` sadece defterde
+- **Maç öncesi:** `ft-display-v5` (Dixon-Coles); Ana Pazar `market-summary-v2.1`; `ft-display-v4.2` ve `market-summary-v3` gölgede; İY `ht-display-v1.1` sadece defterde
 - **Canlı:** `live-poisson-v1.1` ana karar, `live-arch-v2` onay rozeti; `live-2h-v1.1` ve Avrupa kupaları `live-cup-cond-v1` gölge; `live-ms-v1` kaydı durduruldu (K10)
 - **İY sayfası:** oran panosu (Bet365, pay çıkarılmış olasılık) — "değer" iddiası yok
 - **Kupondaş:** sadece maç öncesi; günün tüm bülteni (kupa dahil); canlı durum; puan tablosu

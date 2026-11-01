@@ -28,10 +28,11 @@ from app.db.models import AnalysisSnapshot, Match
 
 log = logging.getLogger(__name__)
 
-# Arşiv algoritması (A2 c4, A3 d4) Sprint 91.4'te değişti → arşive dayanan iki kural yeni sürüm (Sprint 92.4).
-V4_RULE_VERSION = "ft-display-v4.1"
-MARKET_SUMMARY_RULE_VERSION = "market-summary-v2"
-LEGACY_V4_RULE_VERSIONS = ("ft-display-v4",)  # o gün gösterilen eski seçimler okunabilsin
+# Arşiv algoritması değişince arşive dayanan iki kural yeni sürüm: Sprint 92.4 (A2 c4, A3 d4) ve Sprint 94 B5/B6
+# (b3/c5/d5 — İY/2Y'de yalnız-MS alanları None, yer tutucu saat gün sonu).
+V4_RULE_VERSION = "ft-display-v4.2"
+MARKET_SUMMARY_RULE_VERSION = "market-summary-v2.1"
+LEGACY_V4_RULE_VERSIONS = ("ft-display-v4", "ft-display-v4.1")  # o gün gösterilen eski seçimler okunabilsin
 RULE_PARAMS = {
     "k": 20.0, "min_archive_matches": 10, "min_pooled": 30, "min_edge": 0.05,
     "exclude": ["X"], "tier_high_edge": 0.15, "tier_medium_edge": 0.10,

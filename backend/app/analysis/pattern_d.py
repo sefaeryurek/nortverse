@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 
 from app.analysis.freshness import ResultsWatch, results_marker
-from app.analysis.pattern_b import RESULT_KNOWN_DELAY
+from app.analysis.pattern_b import RESULT_KNOWN_DELAY, effective_kickoff
 from app.analysis.pattern_stats import PatternResult, compute_stats
 from app.config import ANALYSIS
 from app.db.connection import get_session
@@ -143,7 +143,7 @@ def nearest(candidates: list[_Candidate], target: tuple[float, float], *, cutoff
     th, ta = math.log(target[0]), math.log(target[1])
     scored = (
         (math.hypot(c.log_h - th, c.log_a - ta), c)
-        for c in candidates if c.kickoff_time <= cutoff and c.match_id != exclude_match_id
+        for c in candidates if effective_kickoff(c.kickoff_time) <= cutoff and c.match_id != exclude_match_id
     )
     return heapq.nsmallest(top_k, scored, key=lambda item: item[0])
 

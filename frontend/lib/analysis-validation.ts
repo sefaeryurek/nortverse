@@ -1,4 +1,4 @@
-import { PATTERN_PERCENT_FIELDS } from "./pattern-fields";
+import { FT_ONLY_PATTERN_FIELDS, PATTERN_PERCENT_FIELDS } from "./pattern-fields";
 import type { AnalyzeResponse } from "./types";
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -23,7 +23,8 @@ function period(value: unknown): boolean {
 
 function pattern(value: unknown): boolean {
   return value === null || record(value) && count(value.match_count) && (value.match_count as number) > 0
-    && Object.keys(PATTERN_PERCENT_FIELDS).every((key) => percentage(value[key]))
+    && Object.keys(PATTERN_PERCENT_FIELDS).every((key) =>
+      percentage(value[key]) || (value[key] === null && FT_ONLY_PATTERN_FIELDS.has(key)))
     && record(value.score_freq) && Object.entries(value.score_freq).every(([key, frequency]) =>
       scoreLabel(key) && finite(frequency) && (frequency as number) >= 0
       && (frequency as number) <= (value.match_count as number));
