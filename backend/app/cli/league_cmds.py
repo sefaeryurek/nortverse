@@ -186,3 +186,25 @@ def league_promotion_report_cmd(
                   if passed else "[yellow]Terfi için eksik ölçüt var.[/yellow]")
     if save:
         console.print("[dim]Rapor audit_log'a yazıldı.[/dim]")
+
+
+def build_cup_archive_cmd(
+    seasons: int = typer.Option(5, "--seasons", "-s", help="Her kupa için kaç sezon (güncel dahil)"),
+) -> None:
+    """Avrupa kupaları arşivi (Sprint 94 P4): UCL/UEL/UECL lig (grup) aşaması maçlarının İY + 90 dk skoru.
+
+    Kupa başına sezon başına tek dosya (maç sayfası çekilmez) → birkaç dakika. Tekrar çalıştırılabilir (var olan
+    maçın skoru güncellenir). Sadece canlı gölge kural live-cup-cond-v1 kullanır; ana liglerin havuzlarına girmez.
+    """
+    from app.pipeline.runner import refresh_cup_archive
+    from app.scraper.browser import browser_context
+
+    async def _run() -> int:
+        async with browser_context() as ctx:
+            return await refresh_cup_archive(ctx, seasons=seasons)
+
+    written = asyncio.run(_run())
+    console.print(f"[green]Kupa arşivi: {written} maç yazıldı/güncellendi.[/green]" if written
+                  else "[yellow]Kupa arşivine maç yazılamadı (kaynak yanıt vermedi mi?).[/yellow]")
+    if not written:
+        raise typer.Exit(1)

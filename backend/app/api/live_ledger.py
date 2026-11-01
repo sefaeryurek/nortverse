@@ -14,8 +14,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.analysis import live_2h, live_archive, live_comeback, live_cond_filter, live_poisson
-from app.analysis.league_filter import is_tracked_league
+from app.analysis import live_2h, live_archive, live_comeback, live_cond_filter, live_cup, live_poisson
+from app.analysis.league_filter import is_tracked_cup, is_tracked_league, tracked_cup_name
 from app.analysis.ledger import record_predictions
 from app.analysis.live_model import COND_WINDOW_YEARS, LIVE_RULE_VERSION, get_cond_table, predict_live
 from app.analysis.persist import hash_string
@@ -223,6 +223,15 @@ async def _live_2h_shadow(match: Match, fs: FixtureScore) -> tuple[list[dict], d
         return [], None, []
 
 
+async def _cup_shadow(match: Match, fs: FixtureScore, cup: str) -> list[dict]:
+    """Kupa maçında live-cup-cond-v1 kararları; tablo yoksa (arşiv kurulmamış) ya da hata → karar yok."""
+    try:
+        return live_cup.decide(await live_cup.get_cup_table(), cup, observed_ht(fs))
+    except Exception:
+        log.warning("Kupa gölge kararları hesaplanamadı [%s]", match.match_id, exc_info=True)
+        return []
+
+
 MARKET_SNAPSHOT_TIMEOUT = 10.0
 
 
@@ -264,6 +273,8 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
     # Yalnız model maçı (P1): arşivi yok; ekrandaki kararlar (live-poisson-v1.1, live-arch-v2) yazılmaz,
     # sadece gölge sürümler (pencereli Poisson, COND uyarısı, 2. yarı, geri dönüş).
     model_only = bool(getattr(match, "model_only", False))
+    # Avrupa kupası (P4): takım gücü modeli yok → sadece live-cup-cond-v1 (aynı kupa + aynı İY geçmişi)
+    cup = tracked_cup_name(match.league_name, getattr(match, "league_code", None))
     view = None
     if status == "ready" and not model_only:
         try:
@@ -273,10 +284,12 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
         except Exception:
             # Arşiv görünümü hatası ana kaydı ve İY gözlemini engellemez (eskiden tüm dondurma düşüyordu).
             log.warning("Canlı arşiv görünümü hesaplanamadı [%s]", match.match_id, exc_info=True)
-    shadow_pred, shadow_picks = await _poisson_shadow(match, fs) if status == "ready" else (None, [])
-    h2_picks, h2_lambdas, comeback = await _live_2h_shadow(match, fs) if status == "ready" else ([], None, [])
+    league_ready = status == "ready" and cup is None
+    shadow_pred, shadow_picks = await _poisson_shadow(match, fs) if league_ready else (None, [])
+    h2_picks, h2_lambdas, comeback = await _live_2h_shadow(match, fs) if league_ready else ([], None, [])
     view_w, poisson_w, cond_warns = (await _windowed_shadows(match, fs, shadow_pred, with_view=not model_only)
-                                     if status == "ready" else (None, [], []))
+                                     if league_ready else (None, [], []))
+    cup_picks = await _cup_shadow(match, fs, cup) if status == "ready" and cup else []
     if report is not None:
         report["prediction"] = prediction
         report["view"] = view
@@ -322,6 +335,8 @@ async def freeze_live_prediction(match: Match, fs: FixtureScore, *, dry_run: boo
             rows += live_2h.ledger_rows(h2_picks, common, lambdas=h2_lambdas, late=phase == "2h")
         if window_ok and comeback:
             rows += live_comeback.ledger_rows(comeback, common, lambdas=h2_lambdas, late=phase == "2h")
+        if window_ok and cup_picks:
+            rows += live_cup.ledger_rows(cup_picks, common, cup=cup, late=phase == "2h")
         if not window_ok:
             log.info("Arşiv/gölge işaretleri yazılmadı (2. yarı %s. dk) [%s]", fs.minute, match.match_id)
         elif view is None and not model_only:
@@ -362,7 +377,8 @@ async def run_tick(*, dry_run: bool = False, snapshot=None) -> list[dict]:
         )).scalars().all()
         # 7 ana lig + gölgedeki ligler (arşivi olanlar); diğer küçük liglerin arşivi yok, kayıt gürültü olur.
         # Gölge liglerin kayıtları ekranda görünmez, değerlendirmede ayrı karne (scope=shadow).
-        candidates = [m for m in candidates if is_tracked_league(m.league_name, m.league_code)]
+        candidates = [m for m in candidates if is_tracked_league(m.league_name, m.league_code)
+                      or is_tracked_cup(m.league_name, m.league_code)]  # Avrupa kupaları: sadece gölge (P4)
         if not candidates:
             return []
         # Değerlendirilmiş maç = izleyicinin İY gözlemi var (kararlarla aynı işlemde yazılır).

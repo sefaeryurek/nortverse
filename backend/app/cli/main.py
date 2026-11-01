@@ -24,7 +24,7 @@ from app.cli.archive_cmds import (
 from app.cli.events_cmds import backfill_goal_events_cmd
 from app.cli.odds_cmds import backfill_odds_cmd, backtest_ht_value_cmd
 from app.cli.health_cmds import health_report_cmd
-from app.cli.league_cmds import league_promotion_report_cmd
+from app.cli.league_cmds import build_cup_archive_cmd, league_promotion_report_cmd
 from app.cli.users_cmds import (
     create_user_cmd,
     disable_user_cmd,
@@ -90,6 +90,7 @@ app.command("disable-user")(disable_user_cmd)
 app.command("logout-all")(logout_all_cmd)
 app.command("list-leagues")(list_leagues_cmd)
 app.command("league-promotion-report")(league_promotion_report_cmd)
+app.command("build-cup-archive")(build_cup_archive_cmd)
 app.command("repair-archive")(repair_archive_cmd)
 app.command("normalize-leagues")(normalize_leagues_cmd)
 

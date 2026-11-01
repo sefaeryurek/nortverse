@@ -10,7 +10,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Awaitable, Callable, Optional, TypeVar
 
-from sqlalchemy import and_, func, or_, select, update as sa_update
+from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import load_only
 
@@ -38,6 +38,9 @@ from app.scraper.fixture import fetch_istanbul_fixture
 from app.scraper.fixture_scores import FixtureScore, fetch_fixture_scores
 from app.scraper.match_detail import fetch_match_detail
 from app.analysis.pattern_b import RESULT_KNOWN_DELAY
+from app.pipeline.model_only import (  # noqa: F401 — runner üzerinden de kullanılıyor (testler)
+    _model_only_row, _prepare_cups, _write_model_only_row, cup_match_row, refresh_cup_archive, upsert_model_only,
+)
 
 T = TypeVar("T")
 
@@ -258,67 +261,6 @@ async def _upsert(
     return picks
 
 
-def _model_only_row(raw: MatchRawData, analyzed_at: datetime) -> dict:
-    """H2H yetersiz takip maçının yalnız model satırı (Sprint 94 P1, K15): takım, lig, saat, skor.
-
-    Katman A, arşivler (A1/A2/A3) ve trendler boş; λ kayıttan sonra yazılır. `model_only` satırları ortak
-    havuzlara ve ekran listelerine girmez.
-    """
-    from app.analysis.engine import _current_season
-
-    league = canonical_league_name(raw.league_code)
-    row = {
-        "match_id": raw.match_id, "home_team": raw.home_team, "away_team": raw.away_team,
-        "league_code": league, "league_name": league, "season": _current_season(raw.kickoff_time),
-        "analyzed_at": analyzed_at, "kickoff_time": raw.kickoff_time, "model_only": True,
-        "actual_ft_home": raw.actual_ft_home, "actual_ft_away": raw.actual_ft_away,
-        "actual_ht_home": raw.actual_ht_home, "actual_ht_away": raw.actual_ht_away,
-        "actual_h2_home": raw.actual_h2_home, "actual_h2_away": raw.actual_h2_away,
-    }
-    if raw.actual_ft_home is not None and raw.kickoff_time:
-        row["result_fetched_at"] = raw.kickoff_time + timedelta(hours=2)
-    return row
-
-
-async def upsert_model_only(raw: MatchRawData, captured_at: datetime | None = None) -> int:
-    """Yalnız model satırını yazar, λ'yı hesaplar, gölge v5.1 kararını dondurur. Yazılan defter satırı sayısı.
-
-    Tam analizli satır varsa ona dokunulmaz (yalnız model onun yerini almaz); silinmiş satır geri açılmaz.
-    """
-    analyzed_at = datetime.now(timezone.utc)
-    row = _model_only_row(raw, analyzed_at)
-    ok, reason = _validate_row(row)
-    if not ok:
-        raise ValueError(f"Yalnız model satırı reddedildi [{raw.match_id}]: {reason}")
-    updates = dict(row)
-    for key in ("kickoff_time", "actual_ft_home", "actual_ft_away", "actual_ht_home",
-                "actual_ht_away", "actual_h2_home", "actual_h2_away"):
-        updates[key] = func.coalesce(row[key], getattr(Match, key))
-    stmt = insert(Match).values(**row).on_conflict_do_update(
-        index_elements=["match_id"], set_=updates,
-        where=and_(Match.model_only.is_(True), Match.deleted_at.is_(None)),
-    )
-
-    async def _write() -> int:
-        async with get_session() as session:
-            return (await session.execute(stmt)).rowcount or 0
-
-    if not await _with_retry(_write, label=f"upsert_model_only[{raw.match_id}]"):
-        return 0
-    from app.analysis.live_poisson import team_lambdas_for_match
-    from app.analysis.prematch_v5 import capture_model_only
-
-    try:
-        await team_lambdas_for_match(raw.match_id, pattern_as_of(analyzed_at, raw.kickoff_time))
-    except Exception as exc:
-        log.warning("Takım gücü λ yazılamadı [%s]: %s", raw.match_id, exc)
-    async with get_session() as session:
-        return await capture_model_only(
-            session, match_id=raw.match_id, captured_at=captured_at or datetime.now(timezone.utc),
-            kickoff_time=raw.kickoff_time, league=row["league_name"], home=raw.home_team, away=raw.away_team,
-        )
-
-
 async def sync_kickoffs(session, items: list[dict]) -> int:
     """Bültendeki güncel başlama saatini, henüz bitmemiş analizli maçlara yazar.
 
@@ -504,11 +446,12 @@ async def run_pipeline(
 
     `scope`: "tracked" (varsayılan, K14) sadece 7 ana + 5 gölge lig — 24 Ekim'de 263 analizin 36'sı takipteydi,
     iş 86 dk sürdü; "all" bültendeki tüm lig maçları (haftada bir, aday ligler için veri biriktirir).
-    Dönüş: {"analyzed", "skipped", "errors", "missed_started", "model_only", "source_empty", "h2h_alarm"}
+    Dönüş: {"analyzed", "skipped", "errors", "missed_started", "model_only", "cup_matches", "source_empty",
+    "h2h_alarm"}
     """
     if scope not in ("tracked", "all"):
         raise ValueError(f"Geçersiz kapsam: {scope}")
-    stats = {"analyzed": 0, "skipped": 0, "errors": 0, "missed_started": 0, "model_only": 0,
+    stats = {"analyzed": 0, "skipped": 0, "errors": 0, "missed_started": 0, "model_only": 0, "cup_matches": 0,
              "source_empty": False, "h2h_alarm": False}
     main_checked = 0
     main_h2h = 0
@@ -541,6 +484,7 @@ async def run_pipeline(
                 log.info("Eski atlanmış analiz kaydı silindi: %d", pruned)
         except Exception as exc:
             log.warning("skipped_analysis budanamadı: %s", exc)
+        await _prepare_cups(source_fixtures, ctx, stats)
 
         prepared = await _prepared_match_ids([f.match_id for f in fixtures]) if incremental else set()
         if prepared:

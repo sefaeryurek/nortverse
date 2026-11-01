@@ -32,6 +32,8 @@ def prune_non_league_cmd(
             rows = (await session.execute(
                 select(Match.match_id, Match.home_team, Match.away_team,
                        Match.league_code, Match.league_name, Match.deleted_at)
+                # Yalnız model satırları (H2H yetersiz maç, takip edilen Avrupa kupası — P1/P4) arşiv değil
+                .where(Match.model_only.is_(False))
             )).all()
 
         non_league = [

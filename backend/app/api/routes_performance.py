@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import text
 
-from app.analysis.league_filter import is_display_league, is_shadow_league
+from app.analysis.league_filter import is_display_league, is_shadow_league, is_tracked_cup
 from app.analysis.market_resolver import resolve
 from app.analysis.performance import (
     GROUP_FIELDS,
@@ -28,14 +28,16 @@ router = APIRouter()
 
 Source = Literal["live_ht", "top_pick", "market_summary"]
 Informational = Literal["all", "main", "info"]
-# Ekrandaki 7 ana lig ya da gölgedeki yeni ligler (Sprint 92) — karneleri birbirine karışmaz.
-Scope = Literal["main", "shadow"]
+# Ekrandaki 7 ana lig, gölgedeki yeni ligler (Sprint 92) ya da Avrupa kupaları (P4) — karneleri birbirine karışmaz.
+Scope = Literal["main", "shadow", "cup"]
 
 
 def _in_scope(league_name: str | None, scope: str, at: datetime | None = None) -> bool:
     """`at` = kaydın yazıldığı an: terfi edilen ligin terfiden önceki kayıtları gölge karnede kalır (P3)."""
     if scope == "shadow":
         return is_shadow_league(league_name, at=at)
+    if scope == "cup":
+        return is_tracked_cup(league_name)
     return is_display_league(league_name, at=at)
 
 _LEDGER_SQL = """

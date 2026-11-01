@@ -323,6 +323,34 @@ def is_main_league(*names: str | None) -> bool:
     return is_display_league(*names)
 
 
+# Sprint 94 P4 (K17 seçenek B): Avrupa kupaları sadece canlı "aynı kupa + aynı İY" gölge kuralıyla izlenir.
+# Lig sayılmazlar (is_supported_league False kalır; LEAGUE_ALIASES'a eklenmez — eklenirse pipeline lig gibi analiz
+# etmeye kalkar); takip ligi de değildir (ekran, v5, Poisson, ortak havuzlar bunları görmez).
+TRACKED_CUPS: dict[str, int] = {  # kanonik ad → kaynak lig numarası
+    "UEFA Champions League": 103,
+    "UEFA Europa League": 113,
+    "UEFA Conference League": 2187,
+}
+CUP_ALIASES: dict[str, str] = {
+    "uefa champions league": "UEFA Champions League", "uefa cl": "UEFA Champions League",
+    "uefa europa league": "UEFA Europa League", "uefa el": "UEFA Europa League",
+    "uefa conference league": "UEFA Conference League", "uefa europa conference league": "UEFA Conference League",
+    "uefa ecl": "UEFA Conference League", "uefa cfl": "UEFA Conference League",
+}
+
+
+def tracked_cup_name(*names: str | None) -> str | None:
+    """Takip edilen Avrupa kupasının kanonik adı (yoksa None)."""
+    for n in names:
+        if n and (canonical := CUP_ALIASES.get(n.lower().strip())):
+            return canonical
+    return None
+
+
+def is_tracked_cup(*names: str | None) -> bool:
+    return tracked_cup_name(*names) is not None
+
+
 def match_league_name(league_code: str | None, league_name: str | None) -> str:
     """Maçın pattern/defter için lig adı — tek kaynak.
 

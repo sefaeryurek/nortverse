@@ -52,6 +52,7 @@ python -m app.cli.main build-archive 36              # güncel sezon
 python -m app.cli.main build-multi-archive 36 39 78  # birden fazla lig — sırayla
 python -m app.cli.main list-leagues                  # mevcut tüm lig ID'leri ve isimleri
 python -m app.cli.main league-promotion-report "English Championship"  # gölge lig ekrana alınabilir mi (P3 ölçütleri)
+python -m app.cli.main build-cup-archive --seasons 5    # Avrupa kupaları lig aşaması arşivi (P4; scripts/kupa-arsivi-cek.bat)
 
 # FastAPI sunucusu
 python -m app.cli.main serve                         # http://localhost:8000
@@ -255,6 +256,7 @@ nortverse/
 │   │   │   ├── status.py          # Kaynak durum etiketi → finished / finished_extra / live / postponed / abandoned (Sprint 94 B2)
 │   │   │   ├── goal_events.py     # Gol dakikaları + kırmızı kartlar (live-{id} sayfası, Playwright yok — Sprint 93)
 │   │   │   ├── odds.py            # Bet365 oranları (nowgoal SoccerAjax): geçmiş, güncel, açılış; kalıcı bağlantı + istek kapısı (Sprint 93–94)
+│   │   │   ├── cup.py             # Avrupa kupası sezon dosyası → lig aşaması İY/MS skorları (Sprint 94 P4)
 │   │   │   └── league.py          # Lig sayfasından maç ID listesi (arşiv için)
 │   │   ├── analysis/
 │   │   │   ├── scores.py          # ALL_SCORES sabiti
@@ -287,6 +289,7 @@ nortverse/
 │   │   │   ├── live_archive.py    # Canlı İY arşiv görünümü + live-arch-v2 kararları (COND kapısı) (Sprint 90–91)
 │   │   │   ├── live_poisson.py    # Takım gücü Poisson/Dixon-Coles — canlı ana karar live-poisson-v1.1 + maç öncesi λ (Sprint 91–93)
 │   │   │   ├── live_2h.py         # Canlı 2. yarı işaretleri live-2h-v1.1 — GÖLGE (Sprint 92)
+│   │   │   ├── live_cup.py        # Avrupa kupaları canlı live-cup-cond-v1 (aynı kupa + aynı İY) — GÖLGE (Sprint 94 P4)
 │   │   │   ├── prematch_v5.py     # Maç öncesi ekrandaki strateji ft-display-v5 (Dixon-Coles) + dondurma (Sprint 91 Faz 3)
 │   │   │   ├── prematch_ht.py     # Maç öncesi İY tahmini ht-display-v1.1 — sadece deftere (Sprint 93)
 │   │   │   ├── ht_value.py        # İY değer kuralı + Asya Ü/A getiri hesabı (total_return) (Sprint 93)
@@ -316,7 +319,8 @@ nortverse/
 │   │   │   └── ratelimit.py       # Kullanıcı başına kayan pencere hız sınırı (Sprint 94 E3/E9)
 │   │   ├── auth.py                # Kullanıcı + oturum: scrypt, nv_session httpOnly çerez, DB'de SHA-256 özeti (Sprint 93)
 │   │   ├── pipeline/
-│   │   │   └── runner.py          # run_pipeline + update_results: fetch → analiz → upsert
+│   │   │   ├── runner.py          # run_pipeline + update_results: fetch → analiz → upsert
+│   │   │   └── model_only.py      # Yalnız model satırları (H2H yetersiz, P1) + takip edilen kupa maçları (P4)
 │   │   └── cli/
 │   │       ├── main.py            # Hub — import + app.command() kayıtları (Sprint 21)
 │   │       ├── _helpers.py        # Ortak yardımcılar: console, logging, render (Sprint 21)
@@ -332,8 +336,8 @@ nortverse/
 │   │       ├── health_cmds.py     # health-report — health-check.ps1'in DB kontrolleri (Sprint 94 D4)
 │       ├── league_cmds.py     # league-promotion-report — gölge → ekran terfi ölçütleri (Sprint 94 P3)
 │   │       └── users_cmds.py      # create-user, set-password, list-users, unlock (Sprint 93–94)
-│   ├── alembic/                   # DB migration (29 migration, head c3p6l1m7h885)
-│   ├── tests/                     # 1366 test (90 dosya)
+│   ├── alembic/                   # DB migration (30 migration, head d4q7m2n8i996)
+│   ├── tests/                     # 1377 test (91 dosya)
 │   │   ├── conftest.py            # Test DB izolasyonu — prod credentials kullanılmaz
 │   │   ├── test_analysis.py       # Katman A oran hesaplama
 │   │   ├── test_league_filter.py  # Lig filtresi (28 test)
@@ -1744,6 +1748,12 @@ Kullanıcı kararı: K1–K22 plandaki önerilerle onaylı; küçük/büyük tü
   (sadece ekran değişir; değerlendirmede o tarihten önceki kayıtlar gölge karnede). Ölçütler `league-promotion-report`:
   ≥5 sezon, son 3 sezon λ/A3 ≥%95, H2H geçişi ≥%60, skor p90 <6 sa, alias, oran ≥%80, backtest ≥300 karar ±2 puan,
   gölge havuzu ≥100 karar yolunda + lig ≥30 karar altında değil; karar sahibin (`--kaydet` audit_log'a yazar).
+- **Avrupa kupaları (94.52, P4, K17 seçenek B):** UCL (103), UEL (113), UECL (2187) lig/grup aşaması İY + 90 dk skoru
+  ayrı `cup_results` tablosunda (migration `d4q7m2n8i996`; eleme turları alınmaz — uzatma/rövanş). Pipeline bültendeki
+  kupa maçlarına yalnız model satırı yazar ve güncel sezonu yeniler; canlıda devre arası `live-cup-cond-v1` gölge:
+  aynı kupa + aynı İY ≥30 maç (yoksa üç kupa ortak), ≥%85, live-arch-v2'nin 6 pazarı. Ana liglerin hiçbir havuzuna
+  girmez; değerlendirme `scope=cup`. İlk kurulum `scripts/kupa-arsivi-cek.bat` (alembic + `build-cup-archive`).
+  `pipeline/model_only.py` ayrıldı (runner.py 1000 satırı geçmesin); prune/repair yalnız model satırlarını silmez.
 
 ### Sprint 8.10 — TAMAMLANDI ✅ (ACİL — Supabase Egress Optimizasyonu)
 - **Problem:** Production'da Supabase egress 25,567 MB / 5 GB (%511) — Fair Use Policy aşıldı, tüm DB istekleri 402 dönüyor, servisimiz down
@@ -2016,7 +2026,7 @@ Kullanıcının Excel'i: `Claude.xlsm` (projeyle gelmiyor, kullanıcıda).
 |---|---|---|
 | **Frontend** | `next start` (üretim modu) | `127.0.0.1:3000`, denetleyici görev (Sprint 94 E6) |
 | **Backend** | FastAPI | `127.0.0.1:8000`, denetleyici görev; tüm `/api` ve `/ws` giriş ister |
-| **Veritabanı** | Docker PostgreSQL | Port 5433, 43.812 aktif maç, migration head `c3p6l1m7h885` |
+| **Veritabanı** | Docker PostgreSQL | Port 5433, 43.812 aktif maç, migration head `d4q7m2n8i996` |
 | **Otomasyon** | Windows Task Scheduler | pipeline, skor (+ oran kaydı), yedek (D: dahil), sağlık kontrolü, gece uzun işleri |
 | **Paylaşım** | Tailscale | `scripts/paylasim-ac.bat`; link Faz A3 (DB portu) bitmeden verilmez |
 | **CI** | GitHub Actions | `quality.yml` (ruff, pytest, vitest, tsc, build, E2E); cron'lar kapalı |
@@ -2027,14 +2037,14 @@ Eski bulut kurulumu (Render + Vercel + Neon): yapılandırma duruyor, kullanılm
 
 | Katman | Araç | Test sayısı |
 |---|---|---|
-| Backend | pytest | 1366 |
+| Backend | pytest | 1377 |
 | Frontend birim | vitest | 394 |
 | Frontend E2E | Playwright | 17 × 2 görünüm (CI'da PostgreSQL + backend ile) |
 
 ### Ekrandaki kurallar (sürümler `rule_registry.py`)
 
 - **Maç öncesi:** `ft-display-v5` (Dixon-Coles); v4 ve `market-summary-v3` gölgede; İY `ht-display-v1.1` sadece defterde
-- **Canlı:** `live-poisson-v1.1` ana karar, `live-arch-v2` onay rozeti; `live-2h-v1.1` gölge; `live-ms-v1` kaydı durduruldu (K10)
+- **Canlı:** `live-poisson-v1.1` ana karar, `live-arch-v2` onay rozeti; `live-2h-v1.1` ve Avrupa kupaları `live-cup-cond-v1` gölge; `live-ms-v1` kaydı durduruldu (K10)
 - **İY sayfası:** oran panosu (Bet365, pay çıkarılmış olasılık) — "değer" iddiası yok
 - **Kupondaş:** sadece maç öncesi; günün tüm bülteni (kupa dahil); canlı durum; puan tablosu
 

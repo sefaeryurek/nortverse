@@ -312,7 +312,7 @@ def repair_archive_cmd(
                     Match.actual_ft_home, Match.actual_ft_away,
                     Match.actual_ht_home, Match.actual_ht_away,
                     Match.actual_h2_home, Match.actual_h2_away,
-                ).where(Match.deleted_at.is_(None))
+                ).where(Match.deleted_at.is_(None), Match.model_only.is_(False))  # yalnız model satırları arşiv değil
             )).all()
 
         # Tek satır kuralları (repair.detect_issues) + lig-sezon grubu kuralları (iptal / play-off / başıboş)
